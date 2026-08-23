@@ -76,13 +76,24 @@ test asks for the stronger thing. What it therefore drops is structure that stil
 stopped describing the neuron's recent situation — which is the adaptation D26 is for, not an error in the
 estimate.
 
-**On D13 — a contribution is a bid's net, settled.** `cover − price` is what a bid states at the election
-(R20, R21); `credited − price` is the same quantity on the same members, re-measured after the board spoke.
-For a promoted use it is what the unit actually held; for any other it is what the board left unspoken for.
-So the benefit R12 sums is a ledger of per-use nets, and every term in it is either the neuron's own record or
-the machine's — the machine's part being exactly the part the neuron could not know. The machine considers the
-past once per use, when it writes the adjustment, and the one test is the sum of the machine's own verdicts.
-The neuron keeps the ledger; it cannot invent a line of it.
+**On D13 — a contribution is a bid's net, completed.** `cover − price` is what a bid states at the election
+(R20, R21), over the backward half alone, because that is all a bid has seen. `credited − price` is the same
+members re-measured after the board spoke, over the *whole* span — the same backward terms plus the forward
+mismatch the bid could not know. So the ledger's price is strictly the larger, and a use the election took can
+still settle negative. That is not a disagreement between the two: it is the half of the span the election
+never saw, arriving when it can be measured.
+
+So the benefit R12 sums is a ledger of per-use nets — **not a tally of the election's verdicts**, which it
+re-prices over a span the election never had. What the machine supplies is one fact per use, the adjustment
+(D29); everything else is the neuron measuring its own completed observation against its own neighborhood. The
+neuron keeps the ledger and can invent no line of it, because the one term it cannot derive is the one the
+machine hands it.
+
+**On D13 — the floor is on acceptance, never on the sign.** A use the election would have declined cost the
+file nothing, so it contributes nothing. A use it *would* have taken is one whose line and corrections were
+really written, so its contribution stands as it falls — negative when the entry covered the chunk and got its
+future wrong, which is the only way a bad predictor pays for itself. Flooring the sign instead would make an
+actively harmful entry indistinguishable from an unused one.
 
 **Why the history is not a second file.** A neuron's history is evidence, not an encoding: it records what was
 seen so the collapse can center on it (R4), and it states nothing a decoder would read. It never prices
@@ -93,10 +104,10 @@ crosses between scopes to keep the arithmetic honest.
 
 **Why predictive coding is load-bearing.** Under a literal history, a prediction that comes true saves nothing,
 so no test could ever value prediction. Under predictive coding, being right is free and being wrong costs
-corrections, so prediction error *is* file length, and it needs no term of its own anywhere. It enters twice,
-in the same currency both times: the one test measures it directly against the neuron's own observations (R12,
-R16), and the bid's price carries the entry's forward mismatch into the election (R21), where it is set
-against the credited members that one symbol discharges.
+corrections, so prediction error *is* file length, and it needs no term of its own anywhere. It enters in one
+place only — D13's per-observation price, where the one test measures it against the neuron's own completed
+observations (R12, R16). The election never prices it, because the election never sees a completed span
+(R21).
 
 ---
 
@@ -265,8 +276,8 @@ backward contexts and reads pre-summed tallies.
 > **T10 — Every loop in the design is bounded, and none is capped.** A bill is a fixed number of scans and no
 > iteration to a fixed point (R19). The pruning pass removes an entry from competition and creates none, so it
 > runs at most once per entry; a retirement is collected within `R − 1` frames and takes its whole subtree in
-> one step (R18). The election is two passes and no iteration (R28). The level stack is bounded by the base
-> activity behind a frame (T15) and by the run so far against `H` (T16), which together also bound the
+> one step (R18). The election is two decisions and a settling, none of them repeated (R28). The level stack is
+> bounded by the base activity behind a frame (T15) and by the run so far against `H` (T16), which together also bound the
 > settlement walk (R26) and the depth of an assertion's expansion. Every bound falls out of a quantity the
 > design already counts, so nothing has to be chosen to make the machine halt.
 
@@ -507,10 +518,33 @@ measurement taken now (D22).
 
 # 10. Contraction
 
-**On R21 — why the price carries a forward term.** `m` is backward-only by construction, so a price stopping
-there quietly assumes the forward half will be free, and since the election is never revisited (R27) every bid
-would look cheaper than it turns out to be. The neuron already holds the honest figure, so nothing new is
-measured and no constant is chosen.
+**On R21 — there is one error term, not a backward one and a forward one.** `m` counts what an entry names
+that the observation does not bear out, on the slots it owns, and that is the whole of what corrections cost
+(D17, D10). Splitting it by direction was an artifact of *when* it is read, not of what it is: a bid at age 0
+has only the backward half, so its `m` runs over that; the bill has the completed span, so its `m` runs over
+all of it, less whatever the adjustment supersedes. Same quantity, D18's cut.
+
+**On R21 — why the bid carries no estimate of the half it has not seen.** It could have carried the entry's
+mismatch averaged over what it serves, and for a while it did. Three arguments against. R27 already promotes on
+the backward match and lets corrections price the completed claim afterwards, so the estimate contradicts the
+rule it sits beside. D18 forbids evaluating any quantity over a partial span, and a bid at age 0 has seen
+exactly half of one. And the cost is charged anyway, measured rather than estimated, in D13's price at the bill
+— so the estimate was a second charge for the same thing at a coarser scope.
+
+**On R21 — so overlap eats surplus, not existence.** An entry naming ten members with eight present bids
+`cover 9` at `price 3` — it can concede five of its nine slots and still clear. Chronic overlap is priced at
+the symbol instead: every conceded member is credit the observation does not carry, the ledger drains, and R12
+retires the entry. Occasional conflict costs a little; chronic conflict costs the line.
+
+**On R21 — what dropping it costs, and why that is little.** The estimate acted as a fast brake: an entry
+predicting badly had its individual bids priced up and lost them at once. Without it the brake is the ledger,
+which is slower but exact. R16 will not mint a candidate whose measured forward errors on its own win set sink
+it below `1 + |C|`, so a bad predictor mostly never exists; one that *turns* bad has each bad use subtract at
+that use's bill, `R − 1` frames after firing, and R19 runs the pruning pass at exactly that bill, since a badly
+predicting server is what a nonzero residual *is*. What remains is an entry with banked surplus that starts
+predicting badly and keeps winning bids until the surplus drains — which is the right answer, not a lag: while
+its net over the window is still positive the file really is shorter for promoting it. A fast per-use brake
+would be overriding a correct aggregate with a local one.
 
 **On R21 — with the line in this price, promotion would be impossible outright.** A cover is at most the named
 backward members plus the bidder, so it never exceeds `|e| + 1`; a price carrying the line starts at `1 + |e|`.
@@ -633,6 +667,24 @@ implicitly, by processing order, which is why it needs a tie-break clause to be 
 cannot be run in parallel. Resolving each slot on its own merits makes the assignment explicit,
 order-independent by construction, and parallel across slots. It also makes contraction the fourth use of one
 primitive rather than a mechanism of its own (§5.2).
+
+**On R28 — why the third step is not optional.** A promoted unit's neighborhood *is* its dictionary line
+(R20), so expanding it recovers every member it names, whether or not that member was assigned to it. Coverage
+is therefore a fact about what the accepted units expand to, and the assignment has no power over it: writing a
+correction for a neuron some accepted unit already names would write a symbol the file already contains. Step 3
+makes the bookkeeping match what expansion already did. Without it, a slot held by a rejected bid reads as
+uncovered, its neuron credits itself for territory an accepted unit already holds, and R12's ledger runs hot.
+
+**On R28 — nothing iterates, and the pass can only under-accept.** Steps 1 and 2 decide; step 3 only allocates
+credit among decisions already made, so no acceptance can flip and there is nothing to converge to. A bid whose
+territory is taken stops clearing its price on its own. The consequence is that the election can leave a neuron
+to a correction a second look would have covered, and can never promote two units for one chunk — which is the
+failure contraction exists to prevent.
+
+**On R28 — a ratio that ranks is not a price.** `cover / price` is a selection score over two counts: it
+estimates nothing, prices nothing, and no cost anywhere is set by it, so §14's claim is untouched. Both are
+counts and a price is at least 1, so the score is a ratio of positive integers and the winner is simply the
+largest.
 
 **On R28 — why the coordinate tie-break is not decoration.** Two activations of one neuron bid with one
 creation order, and in a solid region that is the common case, so without it the pass would have nothing left

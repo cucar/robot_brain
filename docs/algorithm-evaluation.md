@@ -141,7 +141,8 @@ observation, per level, against the constant the invariant predicts.
 them slightly less independent, and D8 makes the neuron population smaller and each member busier — every
 position sharing a type now folds into one routing table, so the parallelism available shifts from
 across-neuron toward across-activation, and re-centering becomes the contended point. The election is not
-sequential: R28 is two passes, each over every slot or every bid at once, with nothing revisited. The adjustment
+sequential: R28 is two decisions and a settling, each over every slot or every bid at once, with nothing
+revisited. The adjustment
 adds one ordering constraint and no message traffic: a level's bets must all be in before its election runs, and
 that election must have run before any of its bills read the board. Both fall inside one frame (T14) and neither
 crosses a level, but on much larger inputs than MNIST all three judgements need revisiting.

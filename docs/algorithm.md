@@ -14,9 +14,9 @@ everything else is derived from, so it comes before the mechanisms that optimize
 **Notation.** `f, g, h` are frame numbers. `R` is the radius, `W` the buffer depth, `H` the history size
 (D26), `dim` the count of a channel's activation dimensions (D1), and `δ` a raw coordinate difference before
 D16 resolves it. `O` is an observation — what a neuron saw — and `C` a candidate neighborhood; `nbhd(e)` is an
-entry's neighborhood and `|e|` its size (D19). `d` is distance, `n` a count of observations, `m` a bid's miss
-count, `L` the file length, `S` an accepted set of bids, `D` a hierarchy depth, `N_D` the activation count at
-depth `D`.
+entry's neighborhood and `|e|` its size (D19). `d` is distance, `n` a count of observations, `m` a miss count —
+the members an entry names that the observation does not bear out, over the slots it owns. `L` is the file
+length, `S` an accepted set of bids, `D` a hierarchy depth, `N_D` the activation count at depth `D`.
 
 ---
 
@@ -176,14 +176,17 @@ is honoured is settled where the file is, not where the proposal was made (R12).
 > *fact* — these members were not credited to me — never the number that came out of it.
 > ```
 > contribution of e to one observation o
->       =  credited(o)  −  price(e, o)       if that is positive; otherwise 0,
->                                            since the election would decline such a use  (R28)
+>       =  credited(o)  −  price(e, o)       if the election would have taken the bid at all,
+>                                            meaning cover(o) > 1 + m;  otherwise 0     (R21, R28)
 >
 > credited(o)  =  the use's covered set as the board left it: the named members present in o, and the
 >                 neuron itself, less everything o's adjustment marks covered   (R20, D29)
 >
-> price(e, o)  =  1  +  m  +  mismatch over the forward slots o's adjustment leaves e owning   (R21)
+> price(e, o)  =  1  +  m       over the whole span, on the slots o's adjustment leaves e owning
 > ```
+> **The floor is on acceptance, never on the sign**: a use the election would have taken contributes what it
+> falls to, negative included.
+>
 > **Every term but the adjustment is measured now** (R2): `nbhd(e)` is wherever re-centering has put it, `m`
 > and the mismatch follow it. The adjustment is the only frozen part. **§7's test is a conservative estimate of
 > the derivative of `L` with respect to holding one entry**: these contributions summed over the `H`
@@ -572,7 +575,7 @@ The line brackets the symbol's life, and the elections fill in the middle:
 
 ```
 mint      would past uses, as adjusted, have summed past 1 + |C|?     the line, prospectively    (R16)
-elect     does this use cover more than 1 + m + forward?              one use, no line           (R28)
+elect     does this use cover more than 1 + m, backward half only?    one use, no line           (R28)
 adjust    what did the board actually credit this use?                the fact, recorded         (D29)
 retire    do the credited uses still sum past 1 + |e|?                the line, retrospectively  (R18)
 ```
@@ -841,23 +844,17 @@ within the frame.
 > **The election reads the covered set and nothing else.** Covering means subsuming a neuron that fired, and a
 > member at `+2` has not fired. The forward half rides along as definition, not as evidence.
 
-> **R21 — The neuron prices the bid.** Three terms, the first two of them D11's:
+> **R21 — The neuron prices the bid.** Two terms, both D11's:
 > ```
-> 1          the unit's line in the history
-> m          members named in the observed backward portion that are absent
-> forward    the entry's mismatch over the offsets ahead, per observation it serves
+> 1   the unit's line in the history
+> m   the miss count, over the backward half — all a bid has seen
 > ```
-> The first two are what this activation has cost so far. The third is what it will probably cost — the entry's
-> forward mismatch summed over everything it serves, divided by that count, both maintained already (D23, T2).
+> **The same `1 + m` D13 prices an observation with**, evaluated at age 0 instead of at the bill, so `m` runs
+> over the backward half alone. That is D18's cut applied to a price rather than to a distance: one quantity,
+> whatever span is in hand. **A bid is backward throughout**, exactly as recognition is (D20).
 >
 > **This is a price for one *use*, not for the symbol.** The dictionary line `1 + |e|` is weighed by the one
 > test (R12). It appears nowhere in this price and nowhere in the election.
->
-> **So overlap eats surplus, not existence.** An entry naming ten members, eight of them present, with a
-> forward record of one, bids `cover 9` at `price 4` — it can concede four of its nine slots and still clear.
-> Chronic overlap is priced at the symbol instead: every conceded member is credit the observation does not
-> carry, the ledger drains, and R12 retires the entry. **Occasional conflict costs a little; chronic conflict
-> costs the line.**
 
 > **R22 — The objective.** Accept a subset `S` of bids. Each accepted bid propagates one unit at its price
 > (R21); every active neuron that no accepted bid covers is a correction, at cost 1.
@@ -974,31 +971,32 @@ numbers are final.
 Set cover is NP-hard, but contraction mints nothing that lasts, so it is settled cheaply. **Every neuron a bid
 covers has to end up credited to exactly one bid** — that is what stops one chunk being paid for twice.
 
-> **R28 — The election assigns slots, then bids settle up.** Two passes, each over every slot or every bid at
-> once, and neither runs twice.
+> **R28 — The election assigns slots, then bids settle up.** Two decisions and a settling, each over every slot
+> or every bid at once, and none of them runs twice.
 >
 > 1. **Resolve each free slot.** A slot here is one active activation of the level below, at its own full
 >    coordinate — frame and position — that some bid this frame claims. Bids arrive naming relative offsets, so
 >    a bid's claims are resolved against its own coordinate before this pass runs. Slots already assigned by an
 >    earlier election are not in play (R23).
->    The slot goes to the claimant with the most **covered neurons per unit of price**: compare
->    `cover₁ · price₂` against `cover₂ · price₁`, cross-multiplied, so this is an integer comparison and nothing
->    is divided (§14). **Ties go to the older symbol, then to the earlier coordinate** — creation order for a
->    pattern and declaration order (D1) for a base neuron, then frame, then position in declaration order.
->    **Every slot resolves independently of every other.**
+>    **The slot goes to the claimant with the highest `cover / price`** — the most covered neurons per unit of
+>    price. **Ties go to the older symbol, then to the earlier coordinate** — creation order for a pattern and
+>    declaration order (D1) for a base neuron, then frame, then position in declaration order. **Every slot
+>    resolves independently of every other.**
 > 2. **Tally and test.** Each bid counts the slots it holds and is accepted iff it holds strictly more than its
 >    price. **This is the bid in its modified form**: the collapse may have taken slots from it, so the benefit
 >    it stated is not the benefit it delivers.
+> 3. **Settle the assignment over the accepted.** A slot whose holder was rejected passes to the best-rationed
+>    accepted bid that names it, by step 1's rule; a slot no accepted bid names is a correction. This decides
+>    nothing: an accepted bid can only gain here, gaining cannot un-accept, and a rejected bid is never looked
+>    at again.
 >
-> **Nothing iterates and nothing is revisited.** A bid rejected in step 2 does not hand its slots back. The pass
-> can therefore **under-accept but never over-accept**.
->
-> **The assignment is a partition, and that is the whole of the inhibition.** A neuron belongs to one bid, so a
-> chunk is never paid for twice, and no bid is ever edited or forbidden — **overlap is legal and priced**. A bid
-> whose territory is taken stops clearing its price on its own.
+> **The assignment is a partition of the neurons the accepted bids name**, and that is the whole of the
+> inhibition: a chunk is never paid for twice, and no bid is ever edited or forbidden — **overlap is legal and
+> priced**. **Held by an accepted bid** and **named by an accepted bid** are therefore the same set, so
+> coverage, credit and the apex frontier (R31) are one question with one answer.
 >
 > **Outcome**: accepted bids are promoted, one unit each, and the neurons assigned to them are subsumed. Every
-> active neuron no accepted bid holds is a correction. **The election delivers nothing to anyone**: it writes
+> active neuron no accepted bid covers is a correction. **The election delivers nothing to anyone**: it writes
 > the assignment and stops. What a neuron makes of that it reads for itself, once, when a span closes (D29).
 
 > **R29 — Subsumption is recorded beside a neuron's evidence, never inside it.** A neuron covered by a
@@ -1136,11 +1134,12 @@ Distribution of reward over time is a separable policy ([global-rewards.md](glob
 
 # 14. Estimation
 
-**No probability sets a cost, and nothing anywhere is divided.** Distance, cost and benefit are all counts of
-neighbors, so the pricing never leaves whole numbers and no estimator, smoothing or boundary correction is
-needed. The only frequencies are the counts, used raw, and the only test applied to them is the collapse's
-`2 · count(p) > n` — an integer comparison against one population, never a share weighed against another's
-(§5.2). Estimators return only in [forgetting.md](forgetting.md), where the file is re-priced by how often each
+**No probability sets a cost.** Distance, cost and benefit are all counts of neighbors, so every price in the
+design is a whole number and no estimator, smoothing or boundary correction is needed. The only frequencies
+are the counts, used raw, and the only test applied to them is the collapse's `2 · count(p) > n` — an integer
+comparison against one population, never a share weighed against another's (§5.2).
+
+Estimators return only in [forgetting.md](forgetting.md), where the file is re-priced by how often each
 symbol occurs — the one variable-length code in which probabilities set costs.
 
 ---
@@ -1151,7 +1150,7 @@ symbol occurs — the one variable-length code in which probabilities set costs.
 flowchart TD
     A["Frame: the machine calls the neuron at each of its<br/>coordinates. The neuron holds its own open<br/>activations, one per (age, position)"] --> D["AGE 0 — THE BET: route on d_backward.<br/>Closest entry wins (retired entries do not compete)<br/>and the activation COMMITS to it for the window.<br/>Writes ONLY the open activation"]
     D --> E["Serve: the committed entry fires and bids.<br/>Its forward members are asserted.<br/>Nothing comes back here"]
-    E -.->|"the bid goes up"| X["CONTRACTION, two passes, no iteration:<br/>ASSIGN each free slot to the claimant with the most<br/>covered neurons per unit of price, every slot<br/>independently; then ACCEPT each bid that still holds<br/>more slots than it costs. The dictionary line is never<br/>charged here. Overlap is legal and priced"]
+    E -.->|"the bid goes up"| X["CONTRACTION, two decisions and a settling, no iteration:<br/>ASSIGN each free slot to the claimant with the most<br/>covered neurons per unit of price, every slot<br/>independently; ACCEPT each bid that still holds more slots<br/>than it costs; then SETTLE a rejected holder's slots onto<br/>the best accepted bid that names them — credit only,<br/>nothing flips. The dictionary line is never charged here.<br/>Overlap is legal and priced"]
     E --> C["AGES IN BETWEEN — collect: write the arriving offset<br/>into the activation's forward half, re-read the<br/>committed entry and assert. Nothing else"]
     C --> B["AGE R−1 — THE BILL, once per (neuron, frame), over<br/>every activation that reached this age. FOLD each:<br/>READ the ADJUSTMENT off the coverage set and assertion<br/>map; both enter the bin and the whole span folds into<br/>that bin's server. Then evict the oldest, one per<br/>arrival (R9). Only now, DECIDE — once"]
     X -.->|"the board is READ here, once"| B
