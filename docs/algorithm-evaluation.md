@@ -67,6 +67,15 @@ itself. Re-centering largely defuses it — the neighborhood is pulled toward wh
 starves. **Fallback if it still churns:** require the win set to span at least two distinct bins. Exact, and
 costs one recurrence of latency.
 
+**A use the election took can settle negative, by construction.** The election accepts on the backward half —
+all a bid has seen (R21) — and the price lands on the whole span (D13), so the forward misses arrive after the
+acceptance and nothing retracts it (R27). The claim is that this state is transient or terminal, never an
+equilibrium: re-centering votes out members wrong more often than right, the add test splits off
+distinguishable demand, and an entry negative in sum is retired (remarks, on D13). **Diagnostic:** the
+fraction of uses settling negative, per neuron, over exposure. It should fall to the minority tail of entries
+positive in sum; an entry persistently negative in sum that survives the pruning pass is a bug in the pass,
+not a basin.
+
 **The adjustment is a snapshot of one board, reused against many tables.** It is frozen at its frame (R2) while
 everything priced against it keeps moving: neighborhoods re-center, entries are minted and retired, and the
 covering unit that made a member uncredited may itself be long gone. The record still says that member was

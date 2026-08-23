@@ -89,11 +89,25 @@ re-prices over a span the election never had. What the machine supplies is one f
 neuron keeps the ledger and can invent no line of it, because the one term it cannot derive is the one the
 machine hands it.
 
-**On D13 — the floor is on acceptance, never on the sign.** A use the election would have declined cost the
+**On D13 — the gate zeroes a use, it never clamps one.** A use the election would have declined cost the
 file nothing, so it contributes nothing. A use it *would* have taken is one whose line and corrections were
 really written, so its contribution stands as it falls — negative when the entry covered the chunk and got its
 future wrong, which is the only way a bad predictor pays for itself. Flooring the sign instead would make an
 actively harmful entry indistinguishable from an unused one.
+
+**On D13 — a negative settlement is transient or terminal, never an equilibrium.** Three mechanisms answer
+one. Re-centering drops any forward member wrong more often than right: R4's `1/2` is exactly where D10's
+prices break even (T6), so every member that keeps its majority is worth naming in expectation over the served
+set, and what still settles negative is the minority tail of an entry positive in sum. The add test peels off
+demand whose backward context is distinguishable, and both collapses come out cleaner for it. And an entry
+that stays negative in sum falls below its line and is retired (R18). What none of them can reach is one
+backward context genuinely leading to different futures: those observations share a bin (R7), so no mint can
+ever separate them — the disambiguating information is not in the box at this level. There the collapse votes
+the contested slots to silence, the entry stops asserting them, and the events fall through as corrections on
+the frontier (R31) — D27's cover-not-reconstruct, applied where the stream is incompressible at this reach. A
+level above, with wider reach, is what gets to hold the missing context. The one negative the vote cannot
+shed is a member another unit reliably covers — presence keeps its majority while the credit is gone — which
+is the open seam in [algorithm-evaluation.md](algorithm-evaluation.md).
 
 **Why the history is not a second file.** A neuron's history is evidence, not an encoding: it records what was
 seen so the collapse can center on it (R4), and it states nothing a decoder would read. It never prices

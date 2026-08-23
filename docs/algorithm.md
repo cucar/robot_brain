@@ -184,8 +184,12 @@ is honoured is settled where the file is, not where the proposal was made (R12).
 >
 > price(e, o)  =  1  +  m       over the whole span, on the slots o's adjustment leaves e owning
 > ```
-> **The floor is on acceptance, never on the sign**: a use the election would have taken contributes what it
-> falls to, negative included.
+> **The gate and the price count `m` over different spans, and that is why the sign can go negative.** The
+> gate is the election's own test, so its `m` runs over the backward half — all a bid has seen (R21, R28) —
+> while the price's `m` runs over the whole span. A use taken on its backward showing can therefore settle
+> negative once the forward misses land. **The `otherwise 0` is the gate deciding whether the use counts at
+> all, never a clamp on its value**: a use the election would have taken contributes what it falls to, negative
+> included.
 >
 > **Every term but the adjustment is measured now** (R2): `nbhd(e)` is wherever re-centering has put it, `m`
 > and the mismatch follow it. The adjustment is the only frozen part. **§7's test is a conservative estimate of
