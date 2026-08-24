@@ -73,7 +73,7 @@ against the neuron's own evidence.
 **On D13 — conservative, and in a stated direction.** The line is paid once over the whole run, so an entry
 that pays for itself within `H` of its neuron's own firings pays for itself many times over in the file. The
 test asks for the stronger thing. What it therefore drops is structure that still describes the run but has
-stopped describing the neuron's recent situation — which is the adaptation D26 is for, not an error in the
+stopped describing the neuron's recent situation — which is the adaptation D25 is for, not an error in the
 estimate.
 
 **On D13 — a contribution is a bid's net, completed.** `cover − price` is what a bid states at the election
@@ -85,7 +85,7 @@ never saw, arriving when it can be measured.
 
 So the benefit R12 sums is a ledger of per-use nets — **not a tally of the election's verdicts**, which it
 re-prices over a span the election never had. What the machine supplies is one fact per use, the adjustment
-(D29); everything else is the neuron measuring its own completed observation against its own neighborhood. The
+(D28); everything else is the neuron measuring its own completed observation against its own neighborhood. The
 neuron keeps the ledger and can invent no line of it, because the one term it cannot derive is the one the
 machine hands it.
 
@@ -104,7 +104,7 @@ that stays negative in sum falls below its line and is retired (R18). What none 
 backward context genuinely leading to different futures: those observations share a bin (R7), so no mint can
 ever separate them — the disambiguating information is not in the box at this level. There the collapse votes
 the contested slots to silence, the entry stops asserting them, and the events fall through as corrections on
-the frontier (R31) — D27's cover-not-reconstruct, applied where the stream is incompressible at this reach. A
+the frontier (R31) — D26's cover-not-reconstruct, applied where the stream is incompressible at this reach. A
 level above, with wider reach, is what gets to hold the missing context. The one negative the vote cannot
 shed is a member another unit reliably covers — presence keeps its majority while the credit is gone — which
 is the open seam in [algorithm-evaluation.md](algorithm-evaluation.md).
@@ -203,16 +203,27 @@ when it called — and which no comparison, price, count or vote ever reads.
 shares, so the bin tallies it slot by slot exactly as it tallies the forward half. A settled observation having
 no server of its own is what keeps a bin homogeneous (T3) however long its observations have sat there.
 
-**On D22 — why the adjustment can price a newborn.** It stands in relation to no entry, so a candidate that
-did not exist when it was recorded still reads it. That is legitimate because coverage subsumes a **neuron**
-(D28): the adjustment would have been the same whichever entry the neuron had been holding. Holding the three
-lifetimes in one field is what made them look like one thing.
+**On D21 — three lifetimes, and why they must not be confused.** Three notions of an entry stand in relation
+to an observation, and they expire at different times.
+```
+committed entry   one activation, R frames    frozen at age 0    what it bid on and asserts from
+server            until the distances move    the closest entry  what an observation costs
+served bins       until the served set moves  inverse of server  what an entry aggregates over
+```
+An observation whose bin is handed to another entry is priced against the new one (R14), while the activation
+that recorded it goes on asserting what it committed to. Holding the three in one field is what made them look
+like one thing.
 
-**On D23 — why handover is arithmetic.** The distance rows are the reverse index R6 says is unnecessary — an
-entry that moved is one column, and every bin reaching for it is current again. A bin moves whole (T3), so its
-tallies are subtracted from one entry and added to another in `O(offsets)`, not `O(observations)`. The offset
-grid grows with the level, since D15's reach does, while the number of members in it stays fixed by
-construction — that is the invariant the reach is chosen to hold.
+**On D21 — the adjustment is not a fourth lifetime**, because it stands in relation to no entry. It is a fact
+about the board, recorded on the observation and read by whatever entry is being priced against it — including
+entries that did not exist when it was recorded. That is what lets it price a newborn: coverage subsumes a
+**neuron** (D27), so the adjustment would have been the same whichever entry the neuron had been holding.
+
+**On D22 — why handover is arithmetic.** The distances the bins hold are the index R6 says nothing has to be
+added to — an entry that moved recomputes its own distance to each of them, and every bin reaching for it is
+current again. A bin moves whole (T3), so its tallies are subtracted from one entry and added to another in
+`O(offsets)`, not `O(observations)`. The offset grid grows with the level, since D15's reach does, while the
+number of members in it stays fixed by construction — that is the invariant the reach is chosen to hold.
 
 ---
 
@@ -243,18 +254,18 @@ nothing and being surprised costs 1.
 
 # 6. The history
 
-**On D26 — one count, so one denominator.** What R12 needs is not a shared clock but a shared divisor: an
+**On D25 — one count, so one denominator.** What R12 needs is not a shared clock but a shared divisor: an
 entry's benefit is a sum over the observations it serves, and for two neurons' tests to mean the same thing
 that sum must be over comparably much evidence. A uniform `H` gives that directly. A shared *window* gave it
 only for neurons firing at similar rates, and gave a rare neuron almost nothing to decide on.
 
-**On D26 — this is adaptation, not forgetting.** A neuron that keeps firing sheds its old observations as new
+**On D25 — this is adaptation, not forgetting.** A neuron that keeps firing sheds its old observations as new
 ones arrive, so entries describing a situation that has passed stop being served, drain their ledger and are
 retired at the next bill (§8.2, R18). A neuron that falls silent sheds nothing: it holds its `H` observations
 and its entries intact, indefinitely, and resumes from them when its situation returns. An active neuron
 adapts exactly as fast as its evidence turns over, and a silent one simply waits.
 
-**On D26 — `H` does three jobs.** It is the memory, it is R12's selectivity — double it and every entry's
+**On D25 — `H` does three jobs.** It is the memory, it is R12's selectivity — double it and every entry's
 benefit roughly doubles against an unchanged line, so more survive — and it is the rate at which the stack
 deepens (T15). One number, three effects, all monotone in it, and it should be tuned knowing that.
 
@@ -283,7 +294,7 @@ tie would go to the older `id` every time and the younger could never serve.
 > Nothing may assume the server was closest overall.
 
 **On R8 — why records and not a summary.** An error total cannot answer retirement: when an entry goes, the new
-server for its bins must be found afresh, which needs the bins and their distance rows — a single number per
+server for its bins must be found afresh, which needs the bins and the distances they hold — a single number per
 entry could not produce it. Keeping the ring is not a storage saving; it buys that the add test scans distinct
 backward contexts and reads pre-summed tallies.
 
@@ -352,7 +363,7 @@ the server was the right choice overall, and would mint against a pattern it has
 is the size of what recurs — which matters over a span `2R − 1` frames wide.
 
 **On R16 — pricing `C` against a lagging server** would credit it a saving a third, closer entry already
-delivers. The scan that corrects it costs nothing: the row is already there (D23), and T8 puts the
+delivers. The scan that corrects it costs nothing: the distances are already there (D22), and T8 puts the
 re-derivation on exactly the passes that consume it.
 
 **On R16 — why deciding the win set on full distance would be wrong.** It would count a candidate as winning
@@ -394,8 +405,8 @@ would need a third move with a formula of its own, joint over an add and a retir
 Re-centering pulls an off-center entry to its cluster without being asked, and a straddling pair survives only
 until drift or eviction starves one of them.
 
-**On R18 — observations left behind need no repair**: a row holds the distance to every entry, so the next
-reader takes `argmin` over what remains (R6). An entry starved by eviction has no evidence left, and waits on
+**On R18 — observations left behind need no repair**: a bin holds its distance to every entry, so the next
+reader takes the closest of what remains (R6). An entry starved by eviction has no evidence left, and waits on
 the neighborhood recurring.
 
 **On R19 — two kinds of count movement, and only one of them waits.** Evidence moves counts in step 1 and its
@@ -409,13 +420,13 @@ an entry serving three can swallow one whole, which is exactly the case where a 
 
 > **T8 — The tests are the assignment.** The only consumer of a table-wide picture of servers is the add test's
 > win set (R16), and the delete test reads it only through `served bins`. Both scan the whole table anyway.
-> Everything else wants one bin's server: recognition takes `argmin` over that bin's row (§9.1), the fold reads
+> Everything else wants one bin's server: recognition takes the closest of that bin's distances (§9.1), the fold reads
 > it for one bin, eviction reads it per departing observation. **So no pass exists to keep a global assignment
 > current, and none is needed** — the scan that prices a move is the scan that makes it.
 
 > **T11 — Nothing between bills can change an answer.** Counts move exactly when an observation completes, is
 > evicted, or a served set changes (R3), and all three happen at a bill. Between bills every neighborhood is
-> fixed, so every row is fixed, so every `argmin` and every price returns what it returned before. **A neuron
+> fixed, so every distance is fixed, so every closest and every price returns what it returned before. **A neuron
 > between bills has nothing to recompute.**
 
 **This is Lloyd's algorithm, interleaved with the data.** Assign points to the nearest centre, move each centre
@@ -428,7 +439,7 @@ structural decision and re-centers once: one improvement step, not a fixed point
 steps 3 and 4 fixed who serves what, so a bin can end a bill preferring an entry other than the one it holds.
 Nothing repairs that inside the bill. Iterating would settle the table against counts the next bill moves
 anyway, and every bill moves them. The table is never optimal over the ring and does not need to be. It needs
-to be current for the next recognition, and that is one row.
+to be current for the next recognition, and that is one bin's distances.
 
 ---
 
@@ -526,7 +537,7 @@ if still open, goes on asserting `K`, because it bid on `K` and that bid may be 
 
 Neither is a revision of anything — it is the current table being scored against remembered evidence, which is
 the only question the one test asks. The commitment is a fact about what was already done; the price is a
-measurement taken now (D22).
+measurement taken now (R2, D22).
 
 ---
 
@@ -568,19 +579,19 @@ A test that asks one use to pay an aggregate charge declines every use.
 **On R21 — there are not two clocks to reconcile.** R12 optimizes the dictionary against a neuron's own
 history; this price optimizes one use against the board's coverage. They answer different questions over
 different evidence, and neither needs the other's span. What R12 does need is a denominator, and `H` is that
-directly (D26).
+directly (D25).
 
 **On R22 — why the board goes back down, and not the number.** A neuron can price its own entries — it knows
 what the file pays for a neighborhood it names badly (D13) — and the only term it gets wrong is the one that
 depends on what else was accepted. Contraction pricing the outcome and saying so is what keeps it a filter
 rather than a second learner while still being the only authority on what was already covered.
 
-**On D28 — these two windows are the whole of what a neuron ever learns from the machine.** D29 is a read off
+**On D27 — these two windows are the whole of what a neuron ever learns from the machine.** D28 is a read off
 them and nothing more, which is why it adds no state and no message anywhere: the machine already had to hold
 both to run the election and resolve the assertion, and a neuron consults them once per span. Neither window
 introduces a parameter or a second buffer.
 
-**On D29 — nothing is ever decided twice.** An election settles its own frame's assignment and is never
+**On D28 — nothing is ever decided twice.** An election settles its own frame's assignment and is never
 revisited (R23), so there is no in-flight coverage to maintain and no report to deliver between the bet and the
 bill. The assignment simply fills in as later frames elect, and the activation reads it when its span closes.
 
@@ -671,7 +682,7 @@ nothing needs it in advance.
 **Exact settlement of a single frame would need `4R − 3`.** Frame `g` can be claimed by units firing anywhere
 in `[g − (R−1), g + (R−1)]`, and those reach `[g − 2(R−1), g + 2(R−1)]`. `2R − 1` therefore scores bids at the
 leading edge against partially-visible competition. This is accepted — contraction mints nothing that lasts,
-and it is the same shortfall D29 accepts when it reads `superseded` at the bill.
+and it is the same shortfall D28 accepts when it reads `superseded` at the bill.
 
 ## The election
 
@@ -750,14 +761,14 @@ that loses that neuron simply counts one fewer.
 > needs extent, not just breadth.
 
 > **T16 — Depth is bounded by the run, logarithmically.** A neuron decides nothing until it has evidence, and
-> `H` is how much (D26, R12). A level-`D` neuron fires at `2^(−D)` of the base rate (T9), so filling its ring
+> `H` is how much (D25, R12). A level-`D` neuron fires at `2^(−D)` of the base rate (T9), so filling its ring
 > takes `H · 2^D` of its channel's frames. After `F` frames the stack has therefore reached at most
 > ```
 > D   ≤   log₂( F / H )
 > ```
 > **This holds at every `dim`, and it is what bounds the temporal case where T15 does not.** It is the reason
 > an unbounded file does not license an unbounded stack. Raising `H` makes the machine both more selective and
-> shallower for a given run, which is one of the three effects D26 attributes to it.
+> shallower for a given run, which is one of the three effects D25 attributes to it.
 
 > **T6 — Why a strict majority, again.** Resolving a slot in the assertion is R4's third population (§5.2), and
 > the cut is the same. For an entry's neighborhood it is required by L1 minimization (T1); here it falls out of
@@ -779,7 +790,7 @@ that loses that neuron simply counts one fewer.
 selected by elections that counts had produced, and the loop would close on itself with no fixed point — an
 entry that wins would sharpen and win more, while a covered neuron's neighborhood froze at whatever it held
 when it was last promoted, going stale by exactly the amount the world moved, and having nothing to bid when
-its coverer is later retired. It would also break D26: the neuron's history would stop being a record of what
+its coverer is later retired. It would also break D25: the neuron's history would stop being a record of what
 it saw, which is the identity that lets there be one file.
 
 **What contraction builds.** Each surviving bid contributes one unit above. The reduction is set by the data,

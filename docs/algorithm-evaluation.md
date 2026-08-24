@@ -29,8 +29,8 @@ takes one improvement step rather than iterating (R19). Both are bounded, and ne
 **Diagnostic:** the election's gap is already covered by the ILP comparison below.
 
 **The table is never settled.** A bill absorbs its evidence, makes at most one structural decision and
-re-centers once, so a bin can sit with a server that is no longer its `argmin` until something reads its row.
-Lloyd converges to a local optimum and this design does not even run Lloyd to convergence — deliberately, since
+re-centers once, so a bin can sit with a server that is no longer its closest entry until something reads its
+distances. Lloyd converges to a local optimum and this design does not even run Lloyd to convergence — deliberately, since
 every bill moves the counts that a converged table would have been converged against. Add and delete are what
 move the table between basins, and they are error-triggered, so a neuron whose situations are all explained
 sits in whatever basin it landed in. **Diagnostic:** on a small neuron, compare the standing service cost
@@ -167,7 +167,7 @@ otherwise. **Diagnostic:** mean spacing per activation dimension, per level, aga
 **The pattern does not learn what the price learns.** A member some other unit reliably covers earns an entry
 nothing, and the contributions say so (D13) — but the collapse votes on presence, so the member stays in the
 neighborhood and the line keeps paying for it, and the entry can only shed it by dying whole. The tallies to
-change this already exist: a credited-presence vote is `presence − covered`, per slot, off D23. What it would
+change this already exist: a credited-presence vote is `presence − covered`, per slot, off D22. What it would
 cost is the seam — letting the candidate's collapse read election outcomes lets the board shape a *claim* (R29
 guards evidence, and a claim is not evidence, so it may be legal), and it changes what T1's center means.
 Whether structure should learn creditedness, or only prices should, is open.
