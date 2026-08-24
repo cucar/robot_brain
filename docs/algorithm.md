@@ -430,10 +430,13 @@ therefore has no server of its own**; it is priced against its bin's, whatever t
 > **D24 — Counts.** Each entry keeps, over exactly the observations it currently serves,
 > `count(neuron, offset)` = how often that neighbor was present.
 
-> **R3 — What moves counts.** An observation completes and enters the history → its server increments. A
-> served observation is evicted → decrement. A new child captures a bin → old server decrements, child
-> increments. A retired entry's bins fall to whichever entry is next closest → that entry increments. **Nothing
-> else, and never a fraction of an observation** — counts move by whole spans or not at all.
+> **R3 — What moves counts.** Three events, and every one of them moves a whole span or a whole bin.
+> ```
+> an observation completes         its bin's server increments, by the whole span
+> a served observation is evicted  that server decrements by it
+> a bin's server changes           the old decrements by the bin's tallies, the new increments by them
+> ```
+> A server changes when a child captures the bin, when the entry holding it retires, or when its distances change (R6).
 
 **An entry counts only its own observations.** Every observation is served by exactly one entry, and no entry
 learns from another's. Two of R3's four moves transfer a whole bin, which is arithmetic on tallies —
@@ -489,6 +492,9 @@ never shared between two populations.
 > and nothing else is repaired. The closest is then taken from **the distances the bin holds** whenever that
 > bin is used — by recognition when it fires (§9.1), and by the tests when they scan the table (R19). Nothing
 > has to be indexed the other way, because those distances are already the index (D22).
+>
+> **A bin whose closest entry has changed takes its counts with it** (R3), so the entry that received a span
+> is always the entry that gives it back. Like every count movement, the transfer happens at a bill (R5).
 
 **Cold start is silence.** An entry with no observations has no counts and no neighborhood. That is the initial
 case, not an error.
