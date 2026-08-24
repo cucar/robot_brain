@@ -701,10 +701,11 @@ retired while its evidence is still in the ring is rebuilt by the add test the m
 
 > **R19 — The bill's pass.** Once per bill, in order:
 > 1. **Fold and age.** The completed observation joins its bin, carrying the adjustment it collected across its
->    span (D29); a new bin starts at the normal, its only defined server before it has ever been compared. The
->    whole span folds into that bin's server's counts at once and the bin's adjustment tallies move with it; an
->    evicted observation leaves theirs (R9). Counts moving carries its collapse (R5), so every entry this step
->    touched is centered before anything is priced.
+>    span (D29); a bin that opens here computes its row against every entry — the comparison recognition makes
+>    at every firing (§9.1), re-made because the table may have moved during the window — and its server is the
+>    argmin like any other bin's (D22). The whole span folds into that bin's server's counts at once and the
+>    bin's adjustment tallies move with it; an evicted observation leaves theirs (R9). Counts moving carries
+>    its collapse (R5), so every entry this step touched is centered before anything is priced.
 > 2. **Read the residual.** `d` between the observation and its bin's server, as that server now stands. Zero,
 >    and the bill is over.
 > 3. **Add.** Collapse the demand into `C` (R15) and price it (R16). If it pays, `C` enters the table
@@ -786,11 +787,13 @@ run **once**, after every fold is in. This is R19, walked through:
 1. **Enter the history.** Record the final offset, **read the adjustment** off the level's coverage set and the
    assertion map (D29), and the observation now exists. It joins the bin for its own backward half, **opening
    that bin if this is the first time that context has completed** — bins are created here and nowhere else,
-   and destroyed in step 2 when the last observation they hold is evicted. **A new bin starts with the normal
-   as its server.** The bin's count rises by one, its tallies take one increment per forward offset, its
-   adjustment tallies take the mask just read, and **the whole span folds into the bin's server's counts at
-   once**. The server re-centers, and its column is recomputed. **This is where prediction is scored.** **The
-   fold is unconditional**: a neuron another unit subsumed records exactly as one that was promoted does (R29).
+   and destroyed in step 2 when the last observation they hold is evicted. **A bin that opens computes its row
+   against every entry, and its server is the argmin like any other bin's** — before the table holds any
+   child, that is the normal (D24). The bin's count rises by one, its tallies take one increment per forward
+   offset, its adjustment tallies take the mask just read, and **the whole span folds into the bin's server's
+   counts at once**. The server re-centers, and its column is recomputed. **This is where prediction is
+   scored.** **The fold is unconditional**: a neuron another unit subsumed records exactly as one that was
+   promoted does (R29).
 2. **Age.** If the ring is full, each arriving observation evicts the oldest (D26, R9) — one out for one in.
    Each departing span leaves its server's counts, that server re-centers the same way, and its adjustment
    leaves the bin's tallies with it. **Nothing is priced here.**
