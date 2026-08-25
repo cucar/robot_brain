@@ -55,8 +55,8 @@ is simply re-encoded without that symbol, and the frames it used to cover are ex
 dictionary now offers, with corrections where that is worse. An unbounded file costs nothing because nothing
 was ever going to write it.
 
-**On D12 — where compression is actually paid out.** A unit firing at `h` names `[h − (R−1), h + (R−1)]`, so
-writing it discharges up to `2R − 1` frames of the run at once. That is why a wider reach is worth paying a
+**On D12 — where compression is actually paid out.** A unit firing at `h` names `[h − reach, h + reach]`, so
+writing it discharges up to `2·reach + 1` frames of the run at once. That is why a wider reach is worth paying a
 wider line for, and it is why the normal is free and a child is not.
 
 **On D13 — the two sums are what the two mechanisms minimize, and that is the whole division of labor.**
@@ -138,13 +138,14 @@ from per-dimension spacing, and costs no parameter either way.
 
 **On D15 — why a schedule here does not cost the depth bound.** T9's span widens by the reach at each level,
 so a reach that is a function of the level enters T15's unrolling. In `dim ≥ 2` the span grows as `2^(D/dim)`,
-slower than the `2^D` on the other side, and the bound still resolves — for MNIST it lands near `D ≤ 24`, far
-above the depth the data supports, so **activity is what limits depth and not the theorem**. In `dim = 1` the
-two sides grow together and T15 stops binding; there T16 bounds depth instead, out of how long a level takes
-to fill its ring.
+slower than the `2^D` on the other side, and the bound still resolves. In `dim = 1` the two sides grow
+together and T15 stops binding; there T16 bounds depth instead, out of how long a level takes to fill its
+ring. A channel with `R = 1` in time has no span to widen at all, and T15's spatial form carries it —
+on MNIST that is `D ≤ 9`, far above the depth the data supports, so **activity is what limits depth and not
+the theorem**.
 
-**On D15 — the buffer walk is the whole of D6.** The activation is open for `R − 1` frames because that is how
-long frame 10 takes to fall out of an `R`-deep buffer. A firing at 11 opens while this one is still open, so
+**On D15 — the buffer walk is the whole of D6.** The activation is open for `reach` frames because that is how
+long frame 10 takes to fall out of a `reach + 1`-deep buffer. A firing at 11 opens while this one is still open, so
 several activations of one neuron are in flight at once, each at a different position in the buffer.
 
 **On D16 — what made coarse offsets safe.** One neighbor per offset was a consequence of atomic offsets,
@@ -289,7 +290,7 @@ tie would go to the older `id` every time and the younger could never serve.
 > **T3 — The win test is per bin.** A candidate wins on `d_backward`, a property of the bin, so a bin is won
 > whole. No bin is ever split.
 
-> **T4 — The server is not the closest entry.** Routing chose on `d_backward`; the total is known `R − 1`
+> **T4 — The server is not the closest entry.** Routing chose on `d_backward`; the total is known `reach`
 > frames later, and the entry that won the prefix can end up further in full distance than one that lost it.
 > Nothing may assume the server was closest overall.
 
@@ -300,7 +301,7 @@ backward contexts and reads pre-summed tallies.
 
 > **T10 — Every loop in the design is bounded, and none is capped.** A bill is a fixed number of scans and no
 > iteration to a fixed point (R19). The pruning pass removes an entry from competition and creates none, so it
-> runs at most once per entry; a retirement is collected within `R − 1` frames and takes its whole subtree in
+> runs at most once per entry; a retirement is collected within `reach` frames and takes its whole subtree in
 > one step (R18). The election is two decisions and a settling, none of them repeated (R28). The level stack is
 > bounded by the base activity behind a frame (T15) and by the run so far against `H` (T16), which together also bound the
 > settlement walk (R26) and the depth of an assertion's expansion. Every bound falls out of a quantity the
@@ -339,7 +340,8 @@ retires it. Both endings are decided by the machine's own records.
 > rather than a term of `L`, so it carries no guarantee about the file; re-centering minimizes it over the
 > served set while `|e|` may grow, so a single collapse can lengthen `L` outright. Nothing rests on descent
 > either: a bill is a single improvement step and not an iteration to a fixed point (R19). Cross-frame churn is
-> bounded by the negative-contribution trigger, the strict margin, and the fact that structure moves only at age `R − 1`
+> bounded by the negative-contribution trigger, the strict margin, and the fact that structure moves only at
+age `reach`
 > (R14) — and it is measured, not assumed.
 
 ---
@@ -355,12 +357,12 @@ followed by delete inside one bill — the child takes the bins, and the entry i
 a moment later.
 
 **On R14 — neither decision could sit at the other's age.** Recognition cannot wait, because the neuron has to
-represent the frame it is in. Structure cannot come early, because a child is a name for a whole `2R − 1` chunk
+represent the frame it is in. Structure cannot come early, because a child names a whole `2·reach + 1` chunk
 and that chunk does not exist yet — a test at age 0 would react to a recognition miss before knowing whether
 the server was the right choice overall, and would mint against a pattern it has only half seen.
 
 **On R15 — why the candidate is a center.** Incidental neighbors lose their slots and never enter `C`, so `|C|`
-is the size of what recurs — which matters over a span `2R − 1` frames wide.
+is the size of what recurs — which matters over a span `2·reach + 1` frames wide.
 
 **On R16 — pricing `C` against a lagging server** would credit it a saving a third, closer entry already
 delivers. The scan that corrects it costs nothing: the distances are already there (D22), and T8 puts the
@@ -452,7 +454,7 @@ to be current for the next recognition, and that is one bin's distances.
 **On §9.1 — why nothing comes back at the bet.** What the election settles about this activation is not settled
 yet (T12), and nothing between now and the bill would use it. A neuron the entries describe only in general
 therefore contributes nothing above it, which is R30's "fire no children" read one neuron at a time. At age 0
-the neuron has seen `R` frames of a `2R − 1` chunk, which is enough to recognize it and not enough to record
+the neuron has seen `reach + 1` frames of a `2·reach + 1` chunk, which is enough to recognize it and not enough to record
 it, let alone judge it.
 
 **On §9.2 — why the board is not read mid-span.** Coverage of the activation is still moving and stays so until
@@ -495,7 +497,7 @@ That is the entire frame. `K`'s counts do not move, `K` does not re-center, no d
 board is not consulted. `K` looks wrong here, but **"wrong" is not yet a quantity**: the chunk is half-seen,
 and a half-seen chunk has no distance to anything (D18). `K` may yet be right at `+2` where `N` is wrong.
 
-**Frame 12 — age `R − 1`, the bill.** `+2` lands and the observation is complete — `{(a,−2), (b,−1), (e,+1),
+**Frame 12 — age `reach`, the bill.** `+2` lands and the observation is complete — `{(a,−2), (b,−1), (e,+1),
 (d,+2)}`. Now, and only now, it becomes evidence: it finds the bin keyed on `{(a,−2), (b,−1)}`, whose server is
 `K`, and the whole span folds into `K`'s counts in one step. `K` re-centers over all four offsets at once — if
 most of its observations carry `e` at `+1`, the neighborhood flips `c → e`; if they are split, the slot loses
@@ -514,7 +516,7 @@ all, and the candidate priced against this bin would fail on its own arithmetic 
 anywhere in the bill.
 
 ```
-   frame 10  (age 0)         frame 11  (age 1)        frame 12  (age R−1)
+   frame 10  (age 0)         frame 11  (age 1)        frame 12  (age reach)
    ────────────────────────  ───────────────────────  ──────────────────────
    fire                      +1 arrives               +2 arrives
    route on d_backward       write (e,+1) into        observation complete
@@ -569,7 +571,7 @@ retires the entry. Occasional conflict costs a little; chronic conflict costs th
 predicting badly had its individual bids priced up and lost them at once. Without it the brake is the ledger,
 which is slower but exact. R16 will not mint a candidate whose measured forward errors on its own win set sink
 it below `1 + |C|`, so a bad predictor mostly never exists; one that *turns* bad has each bad use subtract at
-that use's bill, `R − 1` frames after firing, and R19 runs the pruning pass at that bill as it does at every
+that use's bill, `reach` frames after firing, and R19 runs the pruning pass at that bill as it does at every
 other one. What remains is an entry with banked surplus that starts
 predicting badly and keeps winning bids until the surplus drains — which is the right answer, not a lag: while
 its net over the window is still positive the file really is shorter for promoting it. A fast per-use brake
@@ -600,21 +602,22 @@ revisited (R23), so there is no in-flight coverage to maintain and no report to 
 bill. The assignment simply fills in as later frames elect, and the activation reads it when its span closes.
 
 > **T12 — The bill is the one frame at which the adjustment can be read.** An activation firing at `g` names
-> backward neighbors across `[g − (R−1), g]`. A neighbor at `f` can be covered by a bid firing anywhere in
-> `[f, f + R−1]`, so the last bid that can touch any of them fires at `g + (R−1)` — and the neuron itself, at
-> `g`, is coverable until exactly the same frame. **So backward coverage is settled at `g + (R−1)`, which is
-> the bill**, and the bill runs after that frame's election (R30).
+> backward neighbors across `[g − reach, g]`. A neighbor at `f` can be covered by a bid firing anywhere in
+> `[f, f + reach]`, so the last bid that can touch any of them fires at `g + reach` — and the neuron itself, at
+> `g`, is coverable until exactly the same frame. **So backward coverage is settled at `g + reach`, which is
+> the bill**, and the bill runs after that frame's election (R30). Every bid in the argument is at this
+> neuron's own level, so one `reach` governs throughout.
 >
-> It is also the last frame at which the read is possible. The coverage set spans `2R − 1` and ages with the
-> clock, so at `g + (R−1)` it holds `[g − (R−1), g + (R−1)]` — the activation's oldest neighbor sits on its
+> It is also the last frame at which the read is possible. The coverage set spans `2·reach + 1` and ages with
+> the clock, so at `g + reach` it holds `[g − reach, g + reach]` — the activation's oldest neighbor sits on its
 > oldest frame. One frame later it is gone.
 >
 > **Settled and expiring at the same instant, so the read has exactly one legal moment.** That is a third
 > argument for the age the bill already sat at, alongside the observation being complete (D18) and the chunk
 > existing to be named (R14).
 
-**On T12 — the forward half is not settled there, and is read anyway.** A slot at `g + (R−1)` can still be
-claimed until `g + 2R − 2`, which is `R − 1` frames past the bill — the same leading-edge shortfall §10.3
+**On T12 — the forward half is not settled there, and is read anyway.** A slot at `g + reach` can still be
+claimed until `g + 2·reach`, which is `reach` frames past the bill — the same leading-edge shortfall §10.3
 accepts for the election itself. Reading late is reading as much as exists, and reading per frame would buy
 nothing: the assertion map is exclusive and re-resolved, so a later read supersedes an earlier one rather than
 adding to it.
@@ -662,13 +665,13 @@ costs to say.**
 **How long after frame `g` before the file's statement about `g` can no longer change.** With `R = 3`, a base
 neuron firing at 100 can be covered by a bid firing at 100, 101 or 102, so whether the history states it as an
 apex unit or omits it as subsumed is not known until 102 has elected. If a level-1 unit took it, whether *that*
-unit is itself apex is not known until `R − 1` after it fired, and so on upward. The file has a complete
+unit is itself apex is not known until its own `reach` after it fired, and so on upward. The file has a complete
 encoding of the run at every moment, since D9 re-derives it — what is unsettled is not missing, it is still
 liable to move. Coverage is elected once and never re-elected (R23); it is the assertion map that keeps
 re-resolving (R25), and that is what the settlement condition is actually waiting on.
 
 **On R26 — since the reach grows with the level (D15), the levels that settle last are also the ones that reach
-furthest.** A bid accepted at `g + (R−1)` can add a level after the fact, so `D` is not available at `g` — and
+furthest.** A bid accepted at `g + reach` can add a level after the fact, so `D` is not available at `g` — and
 nothing needs it in advance.
 
 > **T13 — What settles is a slot, and the settled ones are not a prefix.** Each slot settles once and stays
@@ -683,10 +686,10 @@ nothing needs it in advance.
 > structure (D9), so an unsettled frame is not a gap — it has an encoding like any other, one still liable to
 > change. "Settled" says what can no longer move, never what has been emitted.
 
-**Exact settlement of a single frame would need `4R − 3`.** Frame `g` can be claimed by units firing anywhere
-in `[g − (R−1), g + (R−1)]`, and those reach `[g − 2(R−1), g + 2(R−1)]`. `2R − 1` therefore scores bids at the
-leading edge against partially-visible competition. This is accepted — contraction mints nothing that lasts,
-and it is the same shortfall D28 accepts when it reads `superseded` at the bill.
+**Exact settlement of a single frame would need `4·reach + 1`.** Frame `g` can be claimed by units firing
+anywhere in `[g − reach, g + reach]`, and those reach `[g − 2·reach, g + 2·reach]`. `2·reach + 1` therefore
+scores bids at the leading edge against partially-visible competition. This is accepted — contraction mints
+nothing that lasts, and it is the same shortfall D28 accepts when it reads `superseded` at the bill.
 
 ## The election
 
@@ -754,11 +757,13 @@ that loses that neuron simply counts one fewer.
 > the radii, both already given.**
 >
 > **Whether it binds depends on `dim`.** With D15's schedule the span grows as `2^(D/dim)`, so for `dim ≥ 2` it
-> grows slower than the `2^D` opposite it and the inequality resolves — on MNIST near `D ≤ 24`, far above what
-> the data supports. For `dim = 1` the two sides grow together and this stops binding; T16 bounds depth there.
+> grows slower than the `2^D` opposite it and the inequality resolves. For `dim = 1` the two sides grow
+> together and this stops binding; T16 bounds depth there.
 >
 > **At `R = 1` in time the temporal span collapses and the spatial box carries it.** `2^D ≤ A_0[box]`, where
-> the box is the region D15's reaches admit around `f`.
+> the box is the region D15's reaches admit around `f`. MNIST is this case — `dim = 2`, one event dimension
+> laid out over 28×28, so `B = 784` and `2^D ≤ 784` gives `D ≤ 9` once the box covers the frame. On real
+> digits it binds tighter still, since about a fifth of the frame is ever active.
 >
 > **Deeper levels cost proportionally more base activity**, since each one adds its own reach to the span that
 > has to supply the doubling. That is why a rich frame in a quiet stretch does not build deep: the exponent

@@ -11,12 +11,14 @@ are the machine. Theorems, worked examples and all commentary on why the design 
 questions live in [algorithm-evaluation.md](algorithm-evaluation.md). Section 2 states the objective
 everything else is derived from, so it comes before the mechanisms that optimize it.
 
-**Notation.** `f, g, h` are frame numbers. `R` is the radius, `W` the buffer depth, `H` the history size
-(D25), `dim` the count of a channel's activation dimensions (D1), and `δ` a raw coordinate difference before
-D16 resolves it. `O` is an observation — what a neuron saw — and `C` a candidate neighborhood; `nbhd(e)` is an
-entry's neighborhood and `|e|` its size (D19). `d` is distance, `n` a count of observations, `m` a miss count —
-the neighbors an entry names that the observation does not bear out, over the slots it owns. `L` is the file
-length, `S` an accepted set of bids, `D` a hierarchy depth, `N_D` the activation count at depth `D`.
+**Notation.** `f, g, h` are frame numbers. `R` is the radius, `reach` a level's reach in time (D15), `W` the buffer
+depth, `H` the history size (D25), `dim` the count of a channel's activation dimensions with reach (D15),
+and `δ` a raw
+coordinate difference before D16 resolves it. `O` is an observation — what a neuron saw — and `C` a candidate
+neighborhood; `nbhd(e)` is an entry's neighborhood and `|e|` its size (D19). `d` is distance, `n` a count of
+observations, `m` a miss count — the neighbors an entry names that the observation does not bear out, over the
+slots it owns. `L` is the file length, `S` an accepted set of bids, `D` a hierarchy depth, `N_D` the activation
+count at depth `D`.
 
 ---
 
@@ -62,7 +64,7 @@ length, `S` an accepted set of bids, `D` a hierarchy depth, `N_D` the activation
 > declares which channels may see which**: what a channel is laid out over settles it.
 >
 > Neighbors are always at the neuron's own level, since a neighborhood is written over the symbols that level
-> offers. **The rule is identical at every level.** What differs is the radius, and D15 says what sets that.
+> offers. **The rule is identical at every level.** What differs is the reach, and D15 says what sets that.
 
 ## 1.2 Firing
 
@@ -80,15 +82,16 @@ carries the action executing in that same frame — if one is.
 > same column of the grid, so an action is not a reply appended to a frame — it runs alongside that frame's
 > events, and both are in hand together (§13).
 
-> **D6 — An activation stays open.** A firing at frame `f` remains open through `f + (R−1)`, which is how long
-> its observation takes to fill. While open it **collects and nothing more**: arriving neighbors are written
+> **D6 — An activation stays open.** A firing at frame `f` remains open through `f + reach`, where `reach` is
+> the neuron's own reach in time (D15) — `R − 1` at the base, wider above it. That is how long its observation
+> takes to fill. While open it **collects and nothing more**: arriving neighbors are written
 > into it, and it is not counted, priced or compared until its span closes. The activation does not re-fire —
 > it is one firing, not a state — and it enters other neurons' neighborhoods only at its firing frame. The
 > neuron may fire afresh while an earlier activation is open, so several can be open at once, each collecting
 > its own observation.
 >
 > **Age is per activation, and a neuron carries several ages at once.** An activation's age is the frames
-> elapsed since it fired, `0` through `R − 1`. When the machine hands the neuron a frame it hands it **every
+> elapsed since it fired, `0` through `reach`. When the machine hands the neuron a frame it hands it **every
 > open activation**, and each is processed by the same rules at its own age. Nothing distinguishes them but
 > age: a new firing is simply the activation whose age is 0.
 
@@ -153,10 +156,10 @@ symbol — and whether that claim is honored is settled where the file is, not w
 
 > **D12 — What the file holds.** The dictionary, and the history encoded against it. A child's neighborhood
 > must be written: it is the collapse of observations no ring still holds, so there is nothing in the file to
-> recover it from. **A symbol is not one line per frame** — a unit firing at `h` names `[h − (R−1), h + (R−1)]`,
-> so writing it discharges up to `2R − 1` frames of the run at once. What the machine holds and the file does
-> not is search state — counts, tallies, distances, margins — because expanding an apex unit needs the
-> neighborhoods and nothing else.
+> recover it from. **A symbol is not one line per frame** — a unit firing at `h` names
+> `[h − reach, h + reach]`, so writing it discharges up to `2·reach + 1` frames of the run at once. What the
+> machine holds and the file does not is search state — counts, tallies, distances, margins — because expanding
+> an apex unit needs the neighborhoods and nothing else.
 
 > **D13 — File length, and what a symbol is worth.** Over the run the file is
 > ```
@@ -228,7 +231,7 @@ offset, with one activation dimension and `R = 3`:
         dim C        q      ·      ·      c      ·        ·  silent
         dim D        ·      ·      ·      ·      d
                     ╰──── d_backward ────╯╰─── still arriving ───╯
-                     in hand at age 0        lands over the next R−1 frames
+                     in hand at age 0        lands over the next reach frames
                      recognition uses this   nothing is measured until it is complete
                     ╰──────────────────── d ────────────────────╯
                      the whole span, priced from the bill onward
@@ -238,14 +241,18 @@ Everything the design prices is a count of neighbors: the fit is the neighbors a
 disagree about, and a child's dictionary line is the neighbors the entry names.
 
 > **D15 — Radius.** A radius is declared **per activation dimension** (D1). A radius of `R` along a dimension
-> gives a reach of `R − 1` either way along it, so a channel with time alone declares one number and an image
-> channel declares three. In time, `W = R` is the depth of the frame buffer: an activation sits at its newest
-> edge when it fires, with `R − 1` frames of context behind it, and slides to the oldest edge as its
-> neighborhood completes.
+> gives a reach of `R − 1` either way along it at the base, so a channel with time alone declares one number
+> and an image channel declares three. **The radius is declared; the reach is derived**, and it is the reach
+> that varies by level. In time, `W = reach + 1` is the depth of the frame buffer — `R` at the base: an
+> activation sits at its newest edge when it fires, with `reach` frames of context behind it, and slides to
+> the oldest edge as its neighborhood completes.
 >
 > **The reach grows with the level, and nothing declares the rate.** Each level holds at most half the
 > activations of the one below (T9), so across `dim` activation dimensions its units stand `2^(1/dim)` further
-> apart. Holding the expected number of neighbors fixed:
+> apart. **`dim` counts the dimensions the units can spread along** — those declared with a radius above 1. A
+> dimension at radius 1 has zero reach, contributes a factor of 1 to the box, and carries none of the halving,
+> so counting it would grow the reach slower than the units actually separate and the neighbor count would
+> fall with depth. Holding the expected number of neighbors fixed:
 > ```
 > reach_D   =   (R − 1) · (N₀ / N_D)^(1/dim)   =   (R − 1) · 2^(D/dim)    under T9's halving
 > ```
@@ -257,7 +264,7 @@ disagree about, and a child's dictionary line is the neighbors the entry names.
 > and under-reaches wherever a level consolidates harder than it must.
 
 The buffer is a sliding window over frames; an activation enters at its newest edge and walks to its oldest.
-With `R = 3`, a firing at frame 10:
+With a reach of 2 — the base, where `R = 3` — a firing at frame 10:
 
 ```
                  frame 10        frame 11        frame 12        frame 13
@@ -288,7 +295,9 @@ With `R = 3`, a firing at frame 10:
 
 **Spatial processing is a configuration, not a subsystem.** A channel declaring `R = 1` in time has zero reach
 there, so every neighbor sits at temporal offset 0, the forward half is empty, and what is left is the same
-machinery with one dimension flattened — at every level of one stack (R30).
+machinery with one dimension flattened — at every level of one stack (R30). The flattened dimension drops out
+of the schedule as well as out of the box: an image channel processed this way has `dim = 2`, and its reach
+doubles every two levels rather than every three (D15).
 
 **One neighborhood per firing, and at most one entry serves it.** If a neuron could activate several children,
 each dimension would carry several active units and the count would square at every level.
@@ -314,7 +323,7 @@ each dimension would carry several active units and the count would square at ev
 > **The cut is on time alone.** Spatial components never enter it: a neighbor three positions to the right
 > arrives in the same frame as one three positions to the left.
 >
-> Nothing is ever measured in between. An observation is incomplete until age `R − 1`, and an incomplete
+> Nothing is ever measured in between. An observation is incomplete until age `reach`, and an incomplete
 > observation is not priced, not counted and not compared (R2).
 
 > **R1 — Two comparisons, kept apart.** Which entry an activation **commits to** is decided at age 0 on
@@ -359,7 +368,7 @@ decided to keep, and the commitments its open activations have already acted on.
 
 > **D20 — Halves.** Cut either at the firing frame, on the temporal component alone. The **backward half**,
 > `Δt ≤ 0`, is in hand when the neuron fires and is what recognition compares (R7). The **forward half**,
-> `Δt > 0`, arrives over the next `R − 1` frames and can key nothing, because it does not exist when the choice
+> `Δt > 0`, arrives over the next `reach` frames and can key nothing, because it does not exist when the choice
 > is made. **The split is availability, so only time can produce it**; a channel with `R = 1` in time has no
 > forward half at all.
 >
@@ -601,10 +610,10 @@ in the design.
 > an adjustment saying exactly that, so any candidate priced against its bin claims no credit for them and
 > fails on its own price.
 
-> **R14 — Two decision points: the bet at age 0, the bill at age `R − 1`.** At age 0 the neuron recognizes —
+> **R14 — Two decision points: the bet at age 0, the bill at age `reach`.** At age 0 the neuron recognizes —
 > it picks an entry on backward evidence alone, **commits to it**, bids on it and asserts from it. That entry
 > is the activation's `committed entry` (D21) and **the commitment is locked for the whole window**; the frames
-> that follow only collect. At age `R − 1` the activation has seen its full `2R − 1` frames and the bill comes
+> that follow only collect. At age `reach` the activation has seen its full `2·reach + 1` frames and the bill comes
 > due: this is where the neuron asks whether to add and whether to delete. Every structural move happens there
 > and nowhere else.
 >
@@ -683,7 +692,7 @@ in the design.
 >
 > **Deleting** removes the entry and its pattern neuron together, the moment no open activation is committed to
 > that entry. Usually that is the same pass. Otherwise the entry stays retired, and the delete processing of
-> every later bill re-checks the retired entries — so a retirement is collected within `R − 1` frames, the
+> every later bill re-checks the retired entries — so a retirement is collected within `reach` frames, the
 > longest an open activation lives.
 
 **A commitment survives its entry's retirement.** An activation committed to a retired entry goes on asserting
@@ -692,7 +701,7 @@ still expands through that same neighborhood (R32). The activation's own observa
 whatever now serves its bin (D22).
 
 **A deletion takes the subtree, and takes it at once.** A pattern neuron with no open activations has not fired
-within `R − 1` frames; if it has not fired, none of its children has fired either, so none of them has open
+within `reach` frames; if it has not fired, none of its children has fired either, so none of them has open
 activations, and so on to the bottom. There is no staged cascade and nothing to wait on at any level.
 
 **The normal is never retired**: it has no dictionary line to refund. And nothing irreplaceable dies — an entry
@@ -779,9 +788,9 @@ For every open activation whose next forward frame has arrived:
 **This band decides nothing and learns nothing.** The commitment cannot change (R14), no count can move (R3),
 and no price exists yet (R2).
 
-## 9.3 Age `R − 1` — the bill
+## 9.3 Age `reach` — the bill
 
-The last forward frame arrives for every activation that fired at `f − (R−1)`, so their observations are
+The last forward frame arrives for every activation that fired at `f − reach`, so their observations are
 complete. **There is one bill per `(neuron, frame)` and it covers all of them** — they are instances of one
 type at one age, differing only in position (D2, D5).
 
@@ -825,7 +834,7 @@ election is the last thing to move (T12).
 
 ## 9.4 At `R = 1` in time the bet and the bill are the same frame
 
-The span is one frame, so an activation is born at age 0 and reaches age `R − 1 = 0` immediately. §9.2 does not
+The span is one frame, so an activation is born at age 0 and reaches age `reach = 0` immediately. §9.2 does not
 exist, and the observation is complete the moment it is recognized. **The election is what separates the two
 halves of that pass**: the bet and the bill fall in one frame, but not in one step, because the bill reads a
 board the bet has not finished making. This is what makes spatial-only processing a matter of setting `R = 1`
@@ -962,8 +971,8 @@ numbers are final.
 
 > **R26 — Settlement is a condition to detect, not a schedule to predict.**
 >
-> **Frontier membership settles one level, in `R − 1` frames.** Whether an activation at frame `h` is covered
-> is decided by bids firing no later than `h + (R−1)` (T12).
+> **Frontier membership settles one level, in `reach` frames.** Whether an activation at frame `h` is covered
+> is decided by bids firing no later than `h + reach` (T12).
 >
 > **A frame's encoding settles at the top of whatever stack reached it.** A unit one level up, firing later,
 > can name a lower unit that names frame `g`. **Frame `g` is settled when no level holds a live unit that could
@@ -1167,7 +1176,7 @@ flowchart TD
     D --> E["Serve: the committed entry fires and bids.<br/>Its forward neighbors are asserted.<br/>Nothing comes back here"]
     E -.->|"the bid goes up"| X["CONTRACTION, two decisions and a settling, no iteration:<br/>ASSIGN each free slot to the claimant with the most<br/>covered neurons per unit of price, every slot<br/>independently; ACCEPT each bid that still holds more slots<br/>than it costs; then SETTLE a rejected holder's slots onto<br/>the best accepted bid that names them — credit only,<br/>nothing flips. The dictionary line is never charged here.<br/>Overlap is legal and priced"]
     E --> C["AGES IN BETWEEN — collect: write the arriving offset<br/>into the activation's forward half, re-read the<br/>committed entry and assert. Nothing else"]
-    C --> B["AGE R−1 — THE BILL, once per (neuron, frame), over<br/>every activation that reached this age. FOLD each:<br/>READ the ADJUSTMENT off the coverage set and assertion<br/>map; both enter the bin and the whole span folds into<br/>that bin's server. Then evict the oldest, one per<br/>arrival (R9). Only now, DECIDE — once"]
+    C --> B["AGE reach — THE BILL, once per (neuron, frame), over<br/>every activation that reached this age. FOLD each:<br/>READ the ADJUSTMENT off the coverage set and assertion<br/>map; both enter the bin and the whole span folds into<br/>that bin's server. Then evict the oldest, one per<br/>arrival (R9). Only now, DECIDE — once"]
     X -.->|"the board is READ here, once"| B
     B --> L{"Contribution < 0?"}
     L -->|yes| M["ADD: collapse the demand to C, benefit > 1+|C|?<br/>Benefit counts only CREDITED neighbors and OWNED slots,<br/>off the bins' adjustment tallies. If it pays, C enters<br/>provisionally and TAKES every bin it wins. ONE candidate"]

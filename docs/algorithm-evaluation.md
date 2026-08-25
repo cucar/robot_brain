@@ -38,7 +38,7 @@ a small neuron, compare the standing service cost against an exact assignment so
 bins and entry count, and separately against the same
 table iterated to a fixed point. The first gap is the basin, the second is what not iterating costs.
 
-**Neighborhood growth over long spans.** `|e|` can grow as an entry accumulates stable slots across `2R − 1`
+**Neighborhood growth over long spans.** `|e|` can grow as an entry accumulates stable slots across `2·reach + 1`
 frames, and cost grows with it, so an entry can price itself out by learning too much. **Fallback:** cap `|e|`,
 dropping lowest-vote neighbors first. The vote already ranks them.
 
