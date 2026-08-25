@@ -30,11 +30,12 @@ takes one improvement step rather than iterating (R19). Both are bounded, and ne
 
 **The table is never settled.** A bill absorbs its evidence, makes at most one structural decision and
 re-centers once, so a bin can sit with a server that is no longer its closest entry until something reads its
-distances. Lloyd converges to a local optimum and this design does not even run Lloyd to convergence — deliberately, since
-every bill moves the counts that a converged table would have been converged against. Add and delete are what
-move the table between basins, and they are error-triggered, so a neuron whose situations are all explained
-sits in whatever basin it landed in. **Diagnostic:** on a small neuron, compare the standing service cost
-against an exact assignment solved offline over the same bins and entry count, and separately against the same
+distances. Lloyd converges to a local optimum and this design does not even run Lloyd to convergence —
+deliberately, since every bill moves the counts that a converged table would have been converged against. Add
+and delete are what move the table between basins, and the add is triggered only by a negative contribution
+(R13), so a neuron whose situations are all explained sits in whatever basin it landed in. **Diagnostic:** on
+a small neuron, compare the standing service cost against an exact assignment solved offline over the same
+bins and entry count, and separately against the same
 table iterated to a fixed point. The first gap is the basin, the second is what not iterating costs.
 
 **Neighborhood growth over long spans.** `|e|` can grow as an entry accumulates stable slots across `2R − 1`
@@ -154,7 +155,7 @@ sequential: R28 is two decisions and a settling, each over every slot or every b
 revisited. The adjustment
 adds one ordering constraint and no message traffic: a level's bets must all be in before its election runs, and
 that election must have run before any of its bills read the board. Both fall inside one frame (T14) and neither
-crosses a level, but on much larger inputs than MNIST all three judgements need revisiting.
+crosses a level, but on much larger inputs than MNIST all three judgments need revisiting.
 
 **Asymmetric reach, and isotropic growth.** Backward and forward reach both emerge from the vote, bounded by
 the same `R`. Whether one radius is right — "how much do I need to recognize myself" and "how far can I

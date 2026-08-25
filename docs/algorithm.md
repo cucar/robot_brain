@@ -122,16 +122,16 @@ what it has seen.
 >
 > **It is the current optimum encoding of the run, not a log of how the machine got there.** The file is
 > re-derived from the structure as it now stands, exactly as a price is (R2), so no past decision has to be
-> honoured: an entry that goes is not a line the file must keep alive, because the run is simply re-encoded
+> honored: an entry that goes is not a line the file must keep alive, because the run is simply re-encoded
 > without that symbol. Nothing is retained that the machine could not expand.
 >
 > **Nothing ever materializes it.** D27's two windows are `2·reach + 1` wide and a neuron's history is `H`
 > observations deep (D25), so no pass anywhere walks the run.
 
-**One file, one dictionary.** A neuron's history (§6) is a neuron's own record of what it saw; it is not a
-second file and it has no dictionary of its own. An entry in a routing table is a **standing claim on a
-dictionary line** — a proposal that the file would be shorter for holding this symbol — and whether that claim
-is honoured is settled where the file is, not where the proposal was made (R12).
+**One file, one dictionary.** A neuron's history (§6) is its own record of what it saw. An entry in a routing
+table is a **standing claim on a dictionary line** — a proposal that the file would be shorter for holding this
+symbol — and whether that claim is honored is settled where the file is, not where the proposal was made
+(R12).
 
 > **D10 — Predictive coding.** The decoder runs the same model as the encoder, so it already knows what each
 > active unit predicts about the frames ahead. **The encoder writes only the surprise.**
@@ -163,8 +163,8 @@ is honoured is settled where the file is, not where the proposal was made (R12).
 > L  =  Σ over dictionary (1 + |e|)  written once
 >    +  Σ over history (1 + errors)  written every activation
 > ```
-> summing D11's prices over what D12 says the file holds. **There is one `L`.** A neuron has a history but no
-> file and no dictionary of its own.
+> summing D11's prices over what D12 says the file holds. **There is one `L`**, and every neuron's structure
+> is priced against it.
 >
 > **`L` grows without bound and nothing in the design ever reads it.** Every quantity that is actually used is
 > a **difference** in `L` — whether the file is longer or shorter for holding one entry — and a difference is
@@ -215,7 +215,7 @@ is honoured is settled where the file is, not where the proposal was made (R12).
 >
 > **A neuron can be its own neighbor.** Two activations of one type at different positions each name the other
 > at a nonzero spatial offset. Only offset zero in every component is the activation itself, and that is the
-> centre, not a member.
+> center, not a member.
 
 A neighborhood is a slice of the `(dimension, offset)` grid, one cell per offset tuple. With one activation
 dimension and `R = 3`:
@@ -586,9 +586,11 @@ in the design.
 
 ## 8.1 Add — creating a child
 
-> **R13 — The trigger is an error, nothing else.** No background process proposes candidates. A neighborhood
-> the entries already describe costs nothing to serve however often it recurs; surprise is the size of the
-> bill, not a gate on it.
+> **R13 — The trigger is a negative contribution, nothing else.** No background process proposes candidates.
+> An observation whose contribution is positive left the file shorter (D13), so there is nothing for
+> structure to correct however imperfect the fit was; a neighborhood the entries already describe costs
+> nothing to serve however often it recurs. **The trigger is in the one test's currency**, so nothing
+> anywhere is decided on a count of mismatched cells.
 >
 > **Nothing gates the trigger on coverage.** An activation whose neighbors another unit already covered carries
 > an adjustment saying exactly that, so any candidate priced against its bin claims no credit for them and
@@ -609,7 +611,8 @@ in the design.
 > propagate on the activation that created it. **Structure never pays off on the evidence that created it, only
 > on recurrence.**
 
-> **R15 — The candidate is a center, not a sample.** Two passes over the bins, both only on error:
+> **R15 — The candidate is a center, not a sample.** Two passes over the bins, both only on a negative
+> contribution:
 > 1. **Find the demand.** With the triggering observation `O` as probe, collect the bins routing would hand
 >    it: `d_backward(b, O) < d_backward(b, b.server)`, taking each bin's server as its closest entry **now**
 >    (R6), not the value cached from the last time it was read.
@@ -693,31 +696,35 @@ retired while its evidence is still in the ring is rebuilt by the add test the m
 ## 8.3 The bill's pass
 
 > **R19 — The bill's pass.** Once per bill, in order:
-> 1. **Fold and age.** The completed observation joins its bin, carrying the adjustment it collected across its
->    span (D28); a bin that opens here measures its distance to every entry — the comparison recognition makes
->    at every firing (§9.1), re-made because the table may have moved during the window — and its server is the
+> 1. **Fold.** The completed observation joins its bin, carrying the adjustment it collected across its span
+>    (D28); a bin that opens here measures its distance to every entry — the comparison recognition makes at
+>    every firing (§9.1), re-made because the table may have moved during the window — and its server is the
 >    closest, like any other bin's (D22). The whole span folds into that bin's server's counts at once and the
->    bin's adjustment tallies move with it; an evicted observation leaves theirs (R9). Counts moving carries
->    its collapse (R5), so every entry this step touched is centered before anything is priced.
-> 2. **Read the residual.** `d` between the observation and its bin's server, as that server now stands. Zero,
->    and the bill is over.
-> 3. **Add.** Collapse the demand into `C` (R15) and price it (R16). If it pays, `C` enters the table
+>    bin's adjustment tallies move with it. **A contribution is settled here and nowhere else**, which is the
+>    only point at which it means anything: everything free has already happened, so what is left, when it is
+>    left, is a negative one.
+> 2. **Age.** A full ring evicts its oldest observation, one out for one in (R9). That span leaves its bin's
+>    server's counts and its adjustment leaves the bin's tallies. **The entry that loses a span here is rarely
+>    the one that just gained one**, which is why a bill can settle an observation well and still leave some
+>    other entry below its line. Counts moved in either step collapse where they move (R5), so every entry the
+>    two touched is centered before anything is priced.
+> 3. **Add**, when a completed observation's contribution is negative (D13) — the fold worked it out, so nothing has
+>    to read it. Collapse the demand into `C` (R15) and price it (R16). If it pays, `C` enters the table
 >    provisionally and takes every bin it wins.
-> 4. **Retire and delete.** The pruning pass over the whole table, `C` included (R18): retire every strictly
->    negative margin, and delete each retired entry that nothing is committed to — this bill's retirements and
->    any older ones still waiting.
-> 5. **Re-center, once.** Every entry whose served set changed in step 3 or 4 recomputes its collapse, and its
->    `d_backward` to every bin is recomputed with it, so every bin's distances are current again.
+> 4. **Retire and delete**, at every bill and on no condition at all. **A bill always moves counts** — a span
+>    folds in, usually another is evicted, and either can hand a bin to a different server (R3) — so every
+>    margin the pass reads is a different number than it was, and whether each entry still earns its line is an
+>    open question at every bill. The pruning pass over the whole table, `C` included (R18): retire every
+>    strictly negative margin, and delete each retired entry that nothing is committed to — this bill's
+>    retirements and any older ones still waiting.
+> 5. **Re-center.** Structure collapses at the end (R5), so every entry whose served set moved in step 3 or 4
+>    collapses again, and its `d_backward` to every bin is recomputed with it. **Nothing gates this either**: a
+>    collapse follows its counts, and what varies between bills is only which entries had counts move.
 > 6. **One request to the machine.** The add if `C` survived, and the release of every symbol deleted in step
->    4. Nothing else in the bill reaches another level, and the bill ends on it.
-
-**The cost is read after the fold and before the restructuring**, which is the only point at which it means
-anything. Everything free has already happened, so what is left is the error that only structure can remove.
-
-**Nothing sends to the machine until the neuron has finished.** The add request and the releases go in one
-interaction, last, after both tests have run *and* the table has re-centered. Sending last also settles what
-the request carries: a candidate can inherit bins from an entry the pruning pass retired, so the definition on
-the request is the final one, not the one the add test happened to price.
+>    4, in one interaction, after both tests have run *and* the table has re-centered. Sending last settles
+>    what the request carries: a candidate can inherit bins from an entry the pruning pass retired, so the
+>    definition on the request is the final one, not the one the add test happened to price. Nothing else in
+>    the bill reaches another level, and the bill ends on it.
 
 # 9. The frame, per neuron
 
@@ -790,16 +797,19 @@ run **once**, after every fold is in. This is R19, walked through:
 2. **Age.** If the ring is full, each arriving observation evicts the oldest (D25, R9) — one out for one in.
    Each departing span leaves its server's counts, that server re-centers the same way, and its adjustment
    leaves the bin's tallies with it. **Nothing is priced here.**
-3. **Add**, on **any nonzero residual** — the observation against its bin's server, as that server now stands
-   after step 1. It makes no difference whether the server is the normal or a child. Collapse the demand into
-   `C` (R15) and price it (R16). **At most one candidate per bill.** A passing test installs `C` provisionally
-   and hands it every bin it wins.
-4. **Retire and delete.** The pruning pass over the whole table, `C` included: retire every strictly negative
-   margin, sequentially (R18). Their bins fall to whichever entry is next closest and the neighborhoods they
-   held freeze. Then delete every retired entry — this bill's and any older one still waiting — that no open
-   activation is committed to, taking its pattern neuron and that neuron's subtree with it.
-5. **Re-center.** Every entry whose served set changed in step 3 or 4 collapses again, and its distance to
-   every bin is recomputed with it.
+3. **Add**, when **a completed observation's contribution is negative** (D13) — measured against its bin's
+   server as that server stands after step 1, and worked out by the fold itself. It makes no difference whether the
+   server is the normal or a child. Collapse the demand into `C` (R15) and price it (R16). **At most one
+   candidate per bill.** A passing test installs `C` provisionally and hands it every bin it wins.
+4. **Retire and delete**, at every bill and on no condition at all — steps 1 and 2 moved counts, so every
+   margin is a different number than it was and whether each entry still earns its line is open again. The
+   pruning pass over the whole table, `C` included: retire every strictly negative margin, sequentially (R18).
+   Their bins fall to whichever entry is next closest and the neighborhoods they held freeze. Then delete every
+   retired entry — this bill's and any older one still waiting — that no open activation is committed to,
+   taking its pattern neuron and that neuron's subtree with it.
+5. **Re-center.** Every entry whose served set moved in step 3 or 4 collapses again, and its distance to every
+   bin is recomputed with it. Steps 1 and 2 collapsed what they moved as they moved it (R5), so between them
+   this step leaves nothing stale.
 6. **One request, and the bill returns.** If `C` survived, the machine returns its identity and the neuron
    registers it as an entry — a passing test **requests** rather than creates, because a pattern is a symbol at
    the level above and that alphabet belongs to the machine. The same request releases every symbol deleted in
@@ -1154,14 +1164,13 @@ flowchart TD
     E --> C["AGES IN BETWEEN — collect: write the arriving offset<br/>into the activation's forward half, re-read the<br/>committed entry and assert. Nothing else"]
     C --> B["AGE R−1 — THE BILL, once per (neuron, frame), over<br/>every activation that reached this age. FOLD each:<br/>READ the ADJUSTMENT off the coverage set and assertion<br/>map; both enter the bin and the whole span folds into<br/>that bin's server. Then evict the oldest, one per<br/>arrival (R9). Only now, DECIDE — once"]
     X -.->|"the board is READ here, once"| B
-    B --> L{"Residual > 0?"}
+    B --> L{"Contribution < 0?"}
     L -->|yes| M["ADD: collapse the demand to C, benefit > 1+|C|?<br/>Benefit counts only CREDITED members and OWNED slots,<br/>off the bins' adjustment tallies. If it pays, C enters<br/>provisionally and TAKES every bin it wins. ONE candidate"]
-    M --> DEL["RETIRE + DELETE: prune the whole table, C included,<br/>same formula as the add test. Retire every strictly<br/>negative margin, one at a time, re-checking after each.<br/>Their bins fall to whichever entry is next closest<br/>and their neighborhoods freeze. Delete every retired entry<br/>nothing is committed to, subtree and all"]
+    M --> DEL["RETIRE + DELETE, EVERY BILL: prune the whole table,<br/>C included, same formula as the add test. Retire every strictly<br/>negative margin, one at a time, re-checking after each.<br/>Their bins fall to whichever entry is next closest<br/>and their neighborhoods freeze. Delete every retired entry<br/>nothing is committed to, subtree and all"]
     DEL --> Q["RE-CENTER, once for the frame: every entry whose served<br/>set changed collapses again and its distance to every<br/>bin is recomputed"]
     Q --> P["ONE request to the machine, and the bill returns:<br/>the add if C survived, plus the release of every symbol<br/>deleted this bill. Newborn serves NEXT time"]
-    L -->|no| N["Nothing to reconsider"]
+    L -->|no| DEL
     P --> O["Next level up, one stack, radius from D15<br/>(until a level fires no children — that frontier<br/>is the apex)"]
-    N --> O
     X --> O
     O --> Y["§12 After the last level: every active neuron asserts.<br/>Expand to base symbols, then per slot work DOWN from<br/>the highest level claiming it — within a level the<br/>COLLAPSE over the claims decides (count &gt; n/2); no<br/>majority and that level is silent, so the next one down<br/>resolves it. Events → scored; actions → executed"]
 ```

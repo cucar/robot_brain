@@ -31,8 +31,8 @@ then 1 and 3 in the next, and so on.
 
 - **Blank regions cost nothing** — no activation, no history, no dictionary, no compute.
 - **A frame is a set** — variable-size, containing only what happened.
-- **Absence still discriminates** — a pattern naming a ring is measurably wrong on a filled disk, because the
-  neurons inside the ring are present-but-unnamed and the distance counts them. Offness carries information
+- **Absence still discriminates** — a pattern naming a hollow circle is measurably wrong on a filled disk,
+  because the neurons inside the outline are present-but-unnamed and the distance counts them. Offness carries information
   without ever costing storage.
 
 **On D7 — where sparsity comes from.** Whether a 0 pixel is a black event or nothing-to-see is the encoder's
@@ -50,7 +50,7 @@ coordinate gains.
 
 # 2. The objective
 
-**On D9 — why nothing has to be honoured.** An entry that goes is not a line the file must keep alive: the run
+**On D9 — why nothing has to be honored.** An entry that goes is not a line the file must keep alive: the run
 is simply re-encoded without that symbol, and the frames it used to cover are expressed by whatever the
 dictionary now offers, with corrections where that is worse. An unbounded file costs nothing because nothing
 was ever going to write it.
@@ -59,7 +59,7 @@ was ever going to write it.
 writing it discharges up to `2R − 1` frames of the run at once. That is why a wider reach is worth paying a
 wider line for, and it is why the normal is free and a child is not.
 
-**On D13 — the two sums are what the two mechanisms minimize, and that is the whole division of labour.**
+**On D13 — the two sums are what the two mechanisms minimize, and that is the whole division of labor.**
 Contraction minimizes the second over a given dictionary — R22 is exactly `Σ price + # uncovered`, the history
 half of `L` for the frames it can see. The one test decides the first, entry by entry (R12). Neither can do
 the other's job: the election cannot create or destroy a symbol, and a neuron cannot see what its symbol
@@ -109,12 +109,11 @@ level above, with wider reach, is what gets to hold the missing context. The one
 shed is a member another unit reliably covers — presence keeps its majority while the credit is gone — which
 is the open seam in [algorithm-evaluation.md](algorithm-evaluation.md).
 
-**Why the history is not a second file.** A neuron's history is evidence, not an encoding: it records what was
-seen so the collapse can center on it (R4), and it states nothing a decoder would read. It never prices
-anything. The one place a price is needed — does this entry earn its dictionary line — is a drop in `L` the
-neuron works out for itself, over its own evidence, corrected by the one fact it could not have: which of its
-claims the rest of the level had already taken. So there is exactly one `L`, and exactly one thing that
-crosses between scopes to keep the arithmetic honest.
+**Why a neuron's history states nothing.** It is evidence, not an encoding: it records what was seen so the
+collapse can center on it (R4), and a decoder never reads it. The one place a price is needed — does this
+entry earn its dictionary line — is a drop in `L` the neuron works out for itself, over its own evidence,
+corrected by the one fact it could not have: which of its claims the rest of the level had already taken. So
+exactly one thing crosses between scopes, and it is what keeps the arithmetic honest.
 
 **Why predictive coding is load-bearing.** Under a literal history, a prediction that comes true saves nothing,
 so no test could ever value prediction. Under predictive coding, being right is free and being wrong costs
@@ -336,10 +335,10 @@ retires it. Both endings are decided by the machine's own records.
 
 > **T5 — `L` is the objective, not a potential.** Nothing in the design descends it monotonically and nothing
 > needs to. A handoff lowers the neuron's service cost, but service cost is a fit against remembered evidence
-> rather than a term of `L`, so it carries no guarantee about the file; re-centering minimises it over the
+> rather than a term of `L`, so it carries no guarantee about the file; re-centering minimizes it over the
 > served set while `|e|` may grow, so a single collapse can lengthen `L` outright. Nothing rests on descent
 > either: a bill is a single improvement step and not an iteration to a fixed point (R19). Cross-frame churn is
-> bounded by the error-only trigger, the strict margin, and the fact that structure moves only at age `R − 1`
+> bounded by the negative-contribution trigger, the strict margin, and the fact that structure moves only at age `R − 1`
 > (R14) — and it is measured, not assumed.
 
 ---
@@ -372,7 +371,8 @@ most likely to disappoint. A bin can contribute zero because `C` claims too litt
 which is the honest cost of a child routing will hand neighborhoods it serves badly: those bins pay for nothing
 and the win set is smaller than it looks.
 
-**On R16 — a candidate rejected today is not lost.** Every future error offers a new probe, and re-centering
+**On R16 — a candidate rejected today is not lost.** Every future negative contribution offers a new probe,
+and re-centering
 means a child that does get minted improves with exposure rather than freezing at whatever the probe happened
 to be.
 
@@ -411,12 +411,15 @@ the neighborhood recurring.
 
 **On R19 — two kinds of count movement, and only one of them waits.** Evidence moves counts in step 1 and its
 collapse follows immediately, because the tests have to price against centers that already hold the new
-observation: measuring against a stale center reports an error that re-centering was about to absorb, and mints
-a child to remove it. Structure moves counts in steps 3 and 4, and those collapses wait for step 5.
+observation: measuring against a stale center reports a negative contribution that re-centering was about to
+absorb, and mints
+a child to remove it. Structure moves counts in steps 2 and 3, and those collapses wait for step 4.
 
 **On R19 — the trigger is a way to skip the scans rather than a gate on them**, and it is self-correcting in
-the right direction: an entry serving many observations barely moves for one, so its residual is the surprise;
-an entry serving three can swallow one whole, which is exactly the case where a child should not be minted.
+the right direction: an entry serving many observations barely moves for one, so a contribution that is still
+negative under it is a genuine miss; an entry serving three can swallow one whole, which is exactly the case
+where a child should not be minted. **Only the add is skipped.** The pruning pass reads margins the fold and
+the eviction have already moved, so it runs whatever the contribution was (R19).
 
 > **T8 — The tests are the assignment.** The only consumer of a table-wide picture of servers is the add test's
 > win set (R16), and the delete test reads it only through `served bins`. Both scan the whole table anyway.
@@ -429,10 +432,10 @@ an entry serving three can swallow one whole, which is exactly the case where a 
 > fixed, so every distance is fixed, so every closest and every price returns what it returned before. **A neuron
 > between bills has nothing to recompute.**
 
-**This is Lloyd's algorithm, interleaved with the data.** Assign points to the nearest centre, move each centre
-to the minimiser over its assigned points: Lloyd 1957, better known as k-means. This is its L1 variant over
-sets, with the collapse as the minimiser (T1), and `k` moves as add and delete change the entry count — which
-is why those moves exist alongside it, since Lloyd only optimises assignment for a given set of centres.
+**This is Lloyd's algorithm, interleaved with the data.** Assign points to the nearest center, move each center
+to the minimizer over its assigned points: Lloyd 1957, better known as k-means. This is its L1 variant over
+sets, with the collapse as the minimizer (T1), and `k` moves as add and delete change the entry count — which
+is why those moves exist alongside it, since Lloyd only optimizes assignment for a given set of centers.
 
 **What the design does not do is alternate to stability.** A bill absorbs its evidence, makes at most one
 structural decision and re-centers once: one improvement step, not a fixed point. Step 5 moves centers after
@@ -504,7 +507,7 @@ by a neighbor's accepted bid, and the assertion map shows the slot at `+2` held 
 against this observation claims no credit for `a` and pays nothing for being wrong at `+2` — including entries
 that do not exist yet.
 
-Then the neuron decides. The residual is nonzero — `K` named `c` and got `e` — so §9.3 runs in full. Had a
+Then the neuron decides. The contribution is negative — `K` named `c` and got `e` — so §9.3 runs in full. Had a
 neighbor's unit covered this neuron outright, the adjustment would say so, `K` would claim no credit here at
 all, and the candidate priced against this bin would fail on its own arithmetic — no rule about coverage
 anywhere in the bill.
@@ -565,8 +568,8 @@ retires the entry. Occasional conflict costs a little; chronic conflict costs th
 predicting badly had its individual bids priced up and lost them at once. Without it the brake is the ledger,
 which is slower but exact. R16 will not mint a candidate whose measured forward errors on its own win set sink
 it below `1 + |C|`, so a bad predictor mostly never exists; one that *turns* bad has each bad use subtract at
-that use's bill, `R − 1` frames after firing, and R19 runs the pruning pass at exactly that bill, since a badly
-predicting server is what a nonzero residual *is*. What remains is an entry with banked surplus that starts
+that use's bill, `R − 1` frames after firing, and R19 runs the pruning pass at that bill as it does at every
+other one. What remains is an entry with banked surplus that starts
 predicting badly and keeps winning bids until the surplus drains — which is the right answer, not a lag: while
 its net over the window is still positive the file really is shorter for promoting it. A fast per-use brake
 would be overriding a correct aggregate with a local one.
@@ -718,7 +721,7 @@ to decide with.
 **What is given up.** Greedy is the classical approximation for set cover, with slack against R22's optimum
 bounded by `ln n`. Two fixed passes have no such guarantee, so the slack becomes unmeasured rather than
 bounded. The case it loses is a boundary one — a bid that sheds most of its territory to better ratios, falls
-under its price, and takes down a neighbour that would have cleared with the slot it took. Accepted
+under its price, and takes down a neighbor that would have cleared with the slot it took. Accepted
 deliberately: **contraction mints nothing that lasts**, so a marginal cover costs a bounded handful of
 corrections and nothing structural. Two chunks sharing a boundary neuron is how a stream tiles, and the bid
 that loses that neuron simply counts one fewer.
