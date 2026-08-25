@@ -40,7 +40,7 @@ table iterated to a fixed point. The first gap is the basin, the second is what 
 
 **Neighborhood growth over long spans.** `|e|` can grow as an entry accumulates stable slots across `2R − 1`
 frames, and cost grows with it, so an entry can price itself out by learning too much. **Fallback:** cap `|e|`,
-dropping lowest-vote members first. The vote already ranks them.
+dropping lowest-vote neighbors first. The vote already ranks them.
 
 **The readout is unvalidated, and the position now lives outside the symbol.** Compressing harder can produce a
 worse classifier, because a readout may be living on exactly the position-and-class-specific duplicates that
@@ -71,7 +71,7 @@ costs one recurrence of latency.
 **A use the election took can settle negative, by construction.** The election accepts on the backward half —
 all a bid has seen (R21) — and the price lands on the whole span (D13), so the forward misses arrive after the
 acceptance and nothing retracts it (R27). The claim is that this state is transient or terminal, never an
-equilibrium: re-centering votes out members wrong more often than right, the add test splits off
+equilibrium: re-centering votes out neighbors wrong more often than right, the add test splits off
 distinguishable demand, and an entry negative in sum is retired (remarks, on D13). **Diagnostic:** the
 fraction of uses settling negative, per neuron, over exposure. It should fall to the minority tail of entries
 positive in sum; an entry persistently negative in sum that survives the pruning pass is a bug in the pass,
@@ -79,14 +79,14 @@ not a basin.
 
 **The adjustment is a snapshot of one board, reused against many tables.** It is frozen at its frame (R2) while
 everything priced against it keeps moving: neighborhoods re-center, entries are minted and retired, and the
-covering unit that made a member uncredited may itself be long gone. The record still says that member was
+covering unit that made a neighbor uncredited may itself be long gone. The record still says that neighbor was
 taken. So an entry can be under-credited for territory that has since been released, until the observations
-carrying the stale adjustment are evicted. **Diagnostic:** how often a covered member's coverer is retired
+carrying the stale adjustment are evicted. **Diagnostic:** how often a covered neighbor's coverer is retired
 while the adjustment is still held, and what the margins would have been without those adjustments.
 
 **Adjustment cost at high fan-out.** Every activation reads the board once at its bill, sized by its
 neighborhood, and a neuron brings every one of a frame's activations to a single bill. The per-read size is
-held down by D15's invariant, which fixes the expected member count at every level; what grew is the number of
+held down by D15's invariant, which fixes the expected neighbor count at every level; what grew is the number of
 reads per neuron per frame. Each is a lookup into a structure the machine already maintains, and the bill scans
 the routing table once for all of them — so it should disappear into the pass it sits in. **Diagnostic:** read
 volume against routing cost, per level, and against activations per bill.
@@ -139,16 +139,16 @@ where a constructive variant would pay first.
 
 # 3. Open questions
 
-**Neighborhood space at higher levels.** Above level 0 the members are patterns, and the per-dimension alphabet
+**Neighborhood space at higher levels.** Above level 0 the neighbors are patterns, and the per-dimension alphabet
 grows as patterns are created, so the space expands with the structure even though D5 holds each
 `(dimension, position)` to a single state. What no longer expands is `|O|`: adjacency is a radius at every level
-(D4), and D15 sets that radius precisely to hold the expected member count fixed as the level thins. So the open
+(D4), and D15 sets that radius precisely to hold the expected neighbor count fixed as the level thins. So the open
 measurement is narrower than it was — not whether `|O|` explodes, but whether the invariant holds in practice,
-since it rests on T9's halving being close to what contraction actually achieves. **Diagnostic:** members per
+since it rests on T9's halving being close to what contraction actually achieves. **Diagnostic:** neighbors per
 observation, per level, against the constant the invariant predicts.
 
 **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering makes
-them slightly less independent, and D8 makes the neuron population smaller and each member busier — every
+them slightly less independent, and D8 makes the neuron population smaller and each neuron busier — every
 position sharing a type now folds into one routing table, so the parallelism available shifts from
 across-neuron toward across-activation, and re-centering becomes the contended point. The election is not
 sequential: R28 is two decisions and a settling, each over every slot or every bid at once, with nothing
@@ -165,8 +165,8 @@ same doubt applies across activation dimensions**: D15 grows every one of them a
 if contraction thins them equally, and a channel whose patterns chunk harder in time than in space would want
 otherwise. **Diagnostic:** mean spacing per activation dimension, per level, against the isotropic prediction.
 
-**The pattern does not learn what the price learns.** A member some other unit reliably covers earns an entry
-nothing, and the contributions say so (D13) — but the collapse votes on presence, so the member stays in the
+**The pattern does not learn what the price learns.** A neighbor some other unit reliably covers earns an entry
+nothing, and the contributions say so (D13) — but the collapse votes on presence, so the neighbor stays in the
 neighborhood and the line keeps paying for it, and the entry can only shed it by dying whole. The tallies to
 change this already exist: a credited-presence vote is `presence − covered`, per slot, off D22. What it would
 cost is the seam — letting the candidate's collapse read election outcomes lets the board shape a *claim* (R29

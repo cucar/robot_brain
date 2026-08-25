@@ -15,7 +15,7 @@ everything else is derived from, so it comes before the mechanisms that optimize
 (D25), `dim` the count of a channel's activation dimensions (D1), and `δ` a raw coordinate difference before
 D16 resolves it. `O` is an observation — what a neuron saw — and `C` a candidate neighborhood; `nbhd(e)` is an
 entry's neighborhood and `|e|` its size (D19). `d` is distance, `n` a count of observations, `m` a miss count —
-the members an entry names that the observation does not bear out, over the slots it owns. `L` is the file
+the neighbors an entry names that the observation does not bear out, over the slots it owns. `L` is the file
 length, `S` an accepted set of bids, `D` a hierarchy depth, `N_D` the activation count at depth `D`.
 
 ---
@@ -173,13 +173,13 @@ symbol — and whether that claim is honored is settled where the file is, not w
 > **What an entry is worth is the drop in `L`, and the neuron computes it.** The one thing the neuron cannot
 > know is overlap: a bid claims to cover `{a, b, c, d}` when `a` and `b` were already covered by another
 > accepted bid. **So the machine reports the overlap and the neuron records it** (D28). What is recorded is the
-> *fact* — these members were not credited to me — never the number that came out of it.
+> *fact* — these neighbors were not credited to me — never the number that came out of it.
 > ```
 > contribution of e to one observation o
 >       =  credited(o)  −  price(e, o)       if the election would have taken the bid at all,
 >                                            meaning cover(o) > 1 + m;  otherwise 0     (R21, R28)
 >
-> credited(o)  =  the use's covered set as the board left it: the named members present in o, and the
+> credited(o)  =  the use's covered set as the board left it: the named neighbors present in o, and the
 >                 neuron itself, less everything o's adjustment marks covered   (R20, D28)
 >
 > price(e, o)  =  1  +  m       over the whole span, on the slots o's adjustment leaves e owning
@@ -215,10 +215,10 @@ symbol — and whether that claim is honored is settled where the file is, not w
 >
 > **A neuron can be its own neighbor.** Two activations of one type at different positions each name the other
 > at a nonzero spatial offset. Only offset zero in every component is the activation itself, and that is the
-> center, not a member.
+> center, not a neighbor.
 
-A neighborhood is a slice of the `(dimension, offset)` grid, one cell per offset tuple. With one activation
-dimension and `R = 3`:
+A neighborhood is a set of neighbors, each at its own offset. Drawn with a row per dimension and a column per
+offset, with one activation dimension and `R = 3`:
 
 ```
                                 offset
@@ -234,8 +234,8 @@ dimension and `R = 3`:
                      the whole span, priced from the bill onward
 ```
 
-Everything the design prices is a count of cells in that grid: the fit is the cells where an entry and the
-observation disagree, and a child's dictionary line is the cells the entry names.
+Everything the design prices is a count of neighbors: the fit is the neighbors an entry and the observation
+disagree about, and a child's dictionary line is the neighbors the entry names.
 
 > **D15 — Radius.** A radius is declared **per activation dimension** (D1). A radius of `R` along a dimension
 > gives a reach of `R − 1` either way along it, so a channel with time alone declares one number and an image
@@ -274,16 +274,16 @@ With `R = 3`, a firing at frame 10:
 > offset(δ)   =   sign(δ) · R^g · ⌊ |δ| / R^g ⌋            g = max(0, ⌊ log_R |δ| ⌋)
 > ```
 > With `R = 3` the reachable offsets are `0, ±1, ±2, ±3, ±6, ±9, ±18, ±27, …`. Near offsets come out exact;
-> distant ones are named coarsely. `G` groups give `R + G(R−1)` cells per direction across a reach of
+> distant ones are named coarsely. `G` groups give `R + G(R−1)` offsets per direction across a reach of
 > `R^G(R−1)`, so **reach is exponential in the alphabet**.
 >
-> **Nothing is cut off; precision decays instead.** A level whose units stand one cell apart uses the exact end
-> and votes the coarse cells away for want of a majority; a level whose units stand twenty apart does the
-> reverse.
+> **Nothing is cut off; precision decays instead.** A level whose units stand one position apart uses the
+> exact end and votes the coarse offsets away for want of a majority; a level whose units stand twenty apart
+> does the reverse.
 >
-> **A coarse cell may hold more than one member**, since it spans a range and several activations of one
+> **A coarse offset may carry more than one neighbor**, since it spans a range and several activations of one
 > dimension can fall inside it. A count is per `(neuron, offset)` (D24), `d` is a symmetric difference over
-> members (D17), and `|e|` counts members. D5's exclusion is about **firing**, one per `(dimension, position)`,
+> neighbors (D17), and `|e|` counts them. D5's exclusion is about **firing**, one per `(dimension, position)`,
 > and that is untouched.
 
 **Spatial processing is a configuration, not a subsystem.** A channel declaring `R = 1` in time has zero reach
@@ -304,15 +304,15 @@ each dimension would carry several active units and the count would square at ev
 > It is literally the corrections that would follow the activation in the file. Service cost and match distance
 > are one number, dimension-free and offset-blind.
 
-> **D18 — Only two distances.** `d_backward` is `d(O, C)` restricted to members whose **temporal** offset is
+> **D18 — Only two distances.** `d_backward` is `d(O, C)` restricted to neighbors whose **temporal** offset is
 > `≤ 0` — the half in hand the frame a neuron fires, and all recognition ever sees. `d` is the whole thing,
 > over every offset, and it is what an observation costs.
 > ```
 > d_backward   Δt ≤ 0       available at age 0        decides which entry an activation commits to
 > d            all offsets  available at the bill     decides what that observation costs
 > ```
-> **The cut is on time alone.** Spatial components never enter it: a neighbor three cells to the right arrives
-> in the same frame as one three cells to the left.
+> **The cut is on time alone.** Spatial components never enter it: a neighbor three positions to the right
+> arrives in the same frame as one three positions to the left.
 >
 > Nothing is ever measured in between. An observation is incomplete until age `R − 1`, and an incomplete
 > observation is not priced, not counted and not compared (R2).
@@ -364,7 +364,7 @@ decided to keep, and the commitments its open activations have already acted on.
 > forward half at all.
 >
 > **The adjustment cuts the same way and means something different in each half** (D28). Backward it says which
-> members another unit already covered, so they earn this neuron nothing. Forward it says which slots this
+> neighbors another unit already covered, so they earn this neuron nothing. Forward it says which slots this
 > neuron's assertion does not own, so being right or wrong there costs the file nothing.
 
 > **D21 — Neuron state.** `°` marks a total: recoverable by a walk, kept to avoid one.
@@ -377,7 +377,7 @@ decided to keep, and the commitments its open activations have already acted on.
 > history          = (bins, ring)                  complete observations only
 > ring             = observations, oldest first
 > observation      = (position, backward half, forward half, adjustment)
-> adjustment       = (covered:    which backward members another unit took,
+> adjustment       = (covered:    which backward neighbors another unit took,
 >                     superseded: which forward slots this activation does not own)
 > bin              = (backward half, observation count,
 >                     tallies°, covered tallies°, superseded tallies°,
@@ -405,18 +405,18 @@ therefore has no server of its own**; it is priced against its bin's, whatever t
 >                       Σ over served bins:  observation count × the bin's key (backward)
 > entry.served bins  =  { b : b.server = this entry }
 >
-> bin.tallies        =  Σ over its observations, per forward offset cell
+> bin.tallies        =  Σ over its observations, per (neuron, forward offset)
 > bin.distance[e]    =  d_backward(bin's key, e.neighborhood)
 > bin.server         =  the entry with the smallest such distance
 > bin.Σ mismatch     =  d(bin, that neighborhood), summed off the tallies
-> bin.covered[k]     =  # observations whose adjustment took key member k       (D28)
+> bin.covered[k]     =  # observations whose adjustment took key neighbor k       (D28)
 > bin.superseded[o]  =  # observations whose adjustment took forward slot o
 > ```
-> Credited members are the key's members less `covered`, and the priced forward slots are the offsets less
+> Credited neighbors are the key's neighbors less `covered`, and the priced forward slots are the offsets less
 > `superseded`. Those two tallies move when an observation joins the bin or is evicted and at no other time.
 >
-> **The tallies are sparse**: indexed by the cells actually occupied, not by the cells the box admits. Only the
-> forward half needs tallies; backward, every observation carries the key, so the count *is* the tally.
+> **The tallies are sparse**: indexed by the neighbors actually seen, not by everything the box admits. Only
+> the forward half needs tallies; backward, every observation carries the key, so the count *is* the tally.
 
 > **D23 — Entries are one kind of thing.** The normal and every child are the same object. The normal is the
 > entry whose child is null, so it has no dictionary line to pay for. One structure serves the whole routing
@@ -447,29 +447,34 @@ learns from another's. Two of R3's four moves transfer a whole bin, which is ari
 Routing needs a set, not a distribution. So does the file: every slot it states holds one symbol or nothing.
 The collapse is the only operation anywhere that decides what goes in a slot.
 
-> **R4 — The collapse.** Over a population that each has something to say about a slot, let `n` be the size of
-> that population and `count(p)` the number of it naming neuron `p` there. **The slot takes `p` exactly when
-> `count(p) > n / 2`; otherwise it is empty.**
+> **R4 — The collapse.** Over a population that each has something to say about one neuron at one offset, let
+> `n` be the size of that population and `count(p)` the number of it naming `p` there. **`p` is taken exactly
+> when `count(p) > n / 2`; otherwise it is left out.**
 >
-> Nothing is divided: `2 · count(p) > n` is an integer comparison. A slot cannot hold two neurons (D5), so at
-> most one candidate can hold a strict majority, and the leftover — `n − Σ count(p)` — is the alternative that
-> wins by default.
+> Nothing is divided: `2 · count(p) > n` is an integer comparison. The alternative is `p`'s absence, which the
+> remaining `n − count(p)` vote for, so the two are decided against one denominator and silence needs no vote
+> of its own.
 >
-> **The three populations.** One arithmetic, three times, and nothing else in the design puts a symbol in a
-> slot.
+> **Uniqueness is a consequence, not an assumption.** At an offset that names one position, D5 lets an
+> observation hold one neuron of a dimension, so those counts sum to at most `n` and only one can clear the
+> half. At a coarse offset an observation may hold several (D16), several clear, and the neighborhood names
+> them all — which is what `|e|` counts.
+>
+> **The three populations.** One arithmetic, three times, and nothing else in the design decides what a
+> neighborhood names or what a slot holds.
 > ```
 > an entry's neighborhood   the observations it serves         R4, at every bill (R5)
 > a candidate's             the bins it would win              R15, when the add test fires
 > a slot's owner            the claims landing on it, at one   R25, when the assertion resolves one level at a time
 > ```
-> **An observation cannot abstain; a claim can.** An observation held a neuron at that slot or it held silence,
-> and either way it is in the population — which is why R4's silence needs no vote of its own. A unit naming
+> **An observation cannot abstain; a claim can.** An observation held that neuron at that offset or it did
+> not, and either way it is in the population — which is why absence needs no vote of its own. A unit naming
 > nothing at a slot has **no opinion about it**, so a unit that could have claimed a slot and did not is not in
 > `n` at all.
 
 **One denominator, every offset.** An observation enters the history only when its whole span is complete
 (D21), so every observation an entry serves has something to say at every offset — a neuron or a silence. The
-outermost forward slot is decided by exactly the same population as offset 0.
+outermost forward offset is decided by exactly the same population as offset 0.
 
 There is no tunable threshold, smoothing, or probability estimate anywhere in this, and the denominator is
 never shared between two populations.
@@ -590,7 +595,7 @@ in the design.
 > An observation whose contribution is positive left the file shorter (D13), so there is nothing for
 > structure to correct however imperfect the fit was; a neighborhood the entries already describe costs
 > nothing to serve however often it recurs. **The trigger is in the one test's currency**, so nothing
-> anywhere is decided on a count of mismatched cells.
+> anywhere is decided on a count of mismatched neighbors.
 >
 > **Nothing gates the trigger on coverage.** An activation whose neighbors another unit already covered carries
 > an adjustment saying exactly that, so any candidate priced against its bin claims no credit for them and
@@ -643,7 +648,7 @@ in the design.
 > Winning and pricing are different questions. A bin is **won** on `d_backward`, because that is what routing
 > will compare when the neighborhood recurs; it is **priced** on the full `d`.
 >
-> Everything is summed off the bin's tallies — the credited members off `covered`, the priced forward slots off
+> Everything is summed off the bin's tallies — the credited neighbors off `covered`, the priced forward slots off
 > `superseded` (D22). There is no special term for the triggering observation: it sits in its bin like any
 > other.
 
@@ -754,7 +759,7 @@ The neuron fired this frame, and the backward half of its observation, `O⁻`, i
    — an offer to represent its chunk one level up. **An activation committed to the normal makes no bid** (D23).
    The bid is the pipeline's only output to the election, and **nothing comes back here**. **Creation never
    bids.**
-3. **Assert.** The committed entry's forward members are the neuron's prediction, read off the neighborhood,
+3. **Assert.** The committed entry's forward neighbors are the neuron's prediction, read off the neighborhood,
    not computed. The read is repeated at every age until the window closes (§9.2). What the *machine* asserts
    is settled once every level has resolved (§12).
 
@@ -767,7 +772,7 @@ For every open activation whose next forward frame has arrived:
 1. **Record.** Write the neighbors at that offset into the activation's forward half. That is all. **Nothing is
    folded, re-centered, re-priced or compared** (D18). **The board is not read here either**: coverage of this
    activation is still moving and stays so until the bill (T12).
-2. **Assert.** Read the committed entry's members at the offsets still ahead and assert them. **It is a read,
+2. **Assert.** Read the committed entry's neighbors at the offsets still ahead and assert them. **It is a read,
    not a decision.** The entry may have re-centered since — from some *other* activation's bill — and if so the
    neuron simply asserts what it now names.
 
@@ -844,7 +849,7 @@ within the frame.
 > **R20 — Recognition bids only.** One bid per firing, carrying three things:
 > ```
 > the neighborhood   the committed entry's whole span, backward and forward
-> the covered set    the backward members that are actually present, bidder included
+> the covered set    the backward neighbors that are actually present, bidder included
 > the price          R21
 > ```
 > The **whole** neighborhood travels, because it *is* the dictionary line for the symbol being proposed (D9).
@@ -852,7 +857,7 @@ within the frame.
 > normal bids nothing** (D23). **Creation never bids.**
 >
 > **The election reads the covered set and nothing else.** Covering means subsuming a neuron that fired, and a
-> member at `+2` has not fired. The forward half rides along as definition, not as evidence.
+> neighbor at `+2` has not fired. The forward half rides along as definition, not as evidence.
 
 > **R21 — The neuron prices the bid.** Two terms, both D11's:
 > ```
@@ -908,7 +913,7 @@ the board comes down, and neither is an arithmetic the other performs.**
 > for. It is a read off the two windows of D27 — **nothing is computed for it, pushed to it, or held on its
 > behalf.**
 > ```
-> covered      backward, off the coverage set:  members of this activation's neighborhood — its own slot,
+> covered      backward, off the coverage set:  neighbors of this activation's neighborhood — its own slot,
 >              the one holding the neuron itself, among them — that the assignment gave to an accepted
 >              bid other than this one
 >
@@ -971,7 +976,7 @@ numbers are final.
 > The assertion map is one global map over base slots, holding units from every level by construction — so the
 > delay stacks and the memory does not.
 
-> **R27 — Best-effort promotion.** A unit is promoted on its backward match and asserts its forward members on
+> **R27 — Best-effort promotion.** A unit is promoted on its backward match and asserts its forward neighbors on
 > faith. When the future disagrees, corrections are appended and price the completed claim; they do not revise
 > the election that made it. **There is no retraction and nothing is held back waiting** — the file is exact
 > either way, because a wrong assertion is simply a longer file.
@@ -1014,7 +1019,7 @@ covers has to end up credited to exactly one bid** — that is what stops one ch
 > unconditional, so the collapse stays the L1 center of what the neuron *saw* rather than of what it was elected
 > on.
 >
-> **What subsumption governs is every price read against that observation.** It removes the covered members from
+> **What subsumption governs is every price read against that observation.** It removes the covered neighbors from
 > any entry's claim, so nothing is ever credited for describing a chunk the file already states some other way.
 > **The observation says what was seen; the adjustment says what was already spoken for; every price is measured
 > against both.**
@@ -1065,7 +1070,7 @@ connection formed there joins it to the event patterns that chose it one frame e
 # 12. The assertion
 
 When the last level has settled, every active neuron at every level has committed to an entry, and every
-committed entry has forward members. **All of them assert** — being covered silences a neuron in the machine's
+committed entry has forward neighbors. **All of them assert** — being covered silences a neuron in the machine's
 history, not in its own model. The machine must resolve the resulting stack of claims, because the file scores
 corrections against an asserted set.
 
@@ -1115,7 +1120,7 @@ already executed.
 > f + 2  reward    what the action earned arrives as input, and updates that connection
 > ```
 > The action is at offset `+1` from the events that chose it, so **the event→action relation is an ordinary
-> forward member**. It could not be at offset 0: the events at `f` are recognized before the action is chosen.
+> forward neighbor**. It could not be at offset 0: the events at `f` are recognized before the action is chosen.
 
 > **R36 — Credit lands on the apex active action of the executing frame** — the highest action pattern in
 > control of its dimension at `f + 1`, not at the frame the reward arrives in — falling back to the base action
@@ -1159,13 +1164,13 @@ symbol occurs — the one variable-length code in which probabilities set costs.
 ```mermaid
 flowchart TD
     A["Frame: the machine calls the neuron at each of its<br/>coordinates. The neuron holds its own open<br/>activations, one per (age, position)"] --> D["AGE 0 — THE BET: route on d_backward.<br/>Closest entry wins (retired entries do not compete)<br/>and the activation COMMITS to it for the window.<br/>Writes ONLY the open activation"]
-    D --> E["Serve: the committed entry fires and bids.<br/>Its forward members are asserted.<br/>Nothing comes back here"]
+    D --> E["Serve: the committed entry fires and bids.<br/>Its forward neighbors are asserted.<br/>Nothing comes back here"]
     E -.->|"the bid goes up"| X["CONTRACTION, two decisions and a settling, no iteration:<br/>ASSIGN each free slot to the claimant with the most<br/>covered neurons per unit of price, every slot<br/>independently; ACCEPT each bid that still holds more slots<br/>than it costs; then SETTLE a rejected holder's slots onto<br/>the best accepted bid that names them — credit only,<br/>nothing flips. The dictionary line is never charged here.<br/>Overlap is legal and priced"]
     E --> C["AGES IN BETWEEN — collect: write the arriving offset<br/>into the activation's forward half, re-read the<br/>committed entry and assert. Nothing else"]
     C --> B["AGE R−1 — THE BILL, once per (neuron, frame), over<br/>every activation that reached this age. FOLD each:<br/>READ the ADJUSTMENT off the coverage set and assertion<br/>map; both enter the bin and the whole span folds into<br/>that bin's server. Then evict the oldest, one per<br/>arrival (R9). Only now, DECIDE — once"]
     X -.->|"the board is READ here, once"| B
     B --> L{"Contribution < 0?"}
-    L -->|yes| M["ADD: collapse the demand to C, benefit > 1+|C|?<br/>Benefit counts only CREDITED members and OWNED slots,<br/>off the bins' adjustment tallies. If it pays, C enters<br/>provisionally and TAKES every bin it wins. ONE candidate"]
+    L -->|yes| M["ADD: collapse the demand to C, benefit > 1+|C|?<br/>Benefit counts only CREDITED neighbors and OWNED slots,<br/>off the bins' adjustment tallies. If it pays, C enters<br/>provisionally and TAKES every bin it wins. ONE candidate"]
     M --> DEL["RETIRE + DELETE, EVERY BILL: prune the whole table,<br/>C included, same formula as the add test. Retire every strictly<br/>negative margin, one at a time, re-checking after each.<br/>Their bins fall to whichever entry is next closest<br/>and their neighborhoods freeze. Delete every retired entry<br/>nothing is committed to, subtree and all"]
     DEL --> Q["RE-CENTER, once for the frame: every entry whose served<br/>set changed collapses again and its distance to every<br/>bin is recomputed"]
     Q --> P["ONE request to the machine, and the bill returns:<br/>the add if C survived, plus the release of every symbol<br/>deleted this bill. Newborn serves NEXT time"]

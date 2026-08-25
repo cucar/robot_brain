@@ -11,12 +11,12 @@ keyed by the D, R or section they belong to, in the order the specification intr
 
 **On D2 — why a child sits at offset zero.** A neighborhood is written relative to the parent's firing, so the
 child sits at offset zero by construction. A centroid over what the child covers would leave the level above
-differencing coordinates from origins its members were never measured against.
+differencing coordinates from origins its neighbors were never measured against.
 
 **On D4 — a neighborhood is a box.** Adjacency is a conjunction, so something far away in one dimension is not
 a neighbor however close it is in another, and no dimension can rescue what another has ruled out.
 
-**On D4 — receptive fields grow with depth two ways at once.** Through composition, because a member is itself
+**On D4 — receptive fields grow with depth two ways at once.** Through composition, because a neighbor is itself
 a chunk. And through the radius, because each level's units are sparser than the one below and have to reach
 further to find each other at all. Neither is declared per level: the first is what a pattern *is*, and D15
 derives the second from the first.
@@ -78,7 +78,7 @@ estimate.
 
 **On D13 — a contribution is a bid's net, completed.** `cover − price` is what a bid states at the election
 (R20, R21), over the backward half alone, because that is all a bid has seen. `credited − price` is the same
-members re-measured after the board spoke, over the *whole* span — the same backward terms plus the forward
+neighbors re-measured after the board spoke, over the *whole* span — the same backward terms plus the forward
 mismatch the bid could not know. So the ledger's price is strictly the larger, and a use the election took can
 still settle negative. That is not a disagreement between the two: it is the half of the span the election
 never saw, arriving when it can be measured.
@@ -96,8 +96,8 @@ future wrong, which is the only way a bad predictor pays for itself. Flooring th
 actively harmful entry indistinguishable from an unused one.
 
 **On D13 — a negative settlement is transient or terminal, never an equilibrium.** Three mechanisms answer
-one. Re-centering drops any forward member wrong more often than right: R4's `1/2` is exactly where D10's
-prices break even (T6), so every member that keeps its majority is worth naming in expectation over the served
+one. Re-centering drops any forward neighbor wrong more often than right: R4's `1/2` is exactly where D10's
+prices break even (T6), so every neighbor that keeps its majority is worth naming in expectation over the served
 set, and what still settles negative is the minority tail of an entry positive in sum. The add test peels off
 demand whose backward context is distinguishable, and both collapses come out cleaner for it. And an entry
 that stays negative in sum falls below its line and is retired (R18). What none of them can reach is one
@@ -106,7 +106,7 @@ ever separate them — the disambiguating information is not in the box at this 
 the contested slots to silence, the entry stops asserting them, and the events fall through as corrections on
 the frontier (R31) — D26's cover-not-reconstruct, applied where the stream is incompressible at this reach. A
 level above, with wider reach, is what gets to hold the missing context. The one negative the vote cannot
-shed is a member another unit reliably covers — presence keeps its majority while the credit is gone — which
+shed is a neighbor another unit reliably covers — presence keeps its majority while the credit is gone — which
 is the open seam in [algorithm-evaluation.md](algorithm-evaluation.md).
 
 **Why a neuron's history states nothing.** It is evidence, not an encoding: it records what was seen so the
@@ -147,7 +147,8 @@ to fill its ring.
 long frame 10 takes to fall out of an `R`-deep buffer. A firing at 11 opens while this one is still open, so
 several activations of one neuron are in flight at once, each at a different position in the buffer.
 
-**On D16 — what made coarse cells safe.** One-per-cell was a consequence of atomic offsets, never a rule.
+**On D16 — what made coarse offsets safe.** One neighbor per offset was a consequence of atomic offsets,
+never a rule.
 Logarithmic offsets make reach exponential in the alphabet, which is what makes the reaches D15 schedules
 affordable to write down at all. Neither end of the offset alphabet is told which to use, and neither declares
 anything (R4).
@@ -222,14 +223,14 @@ entries that did not exist when it was recorded. That is what lets it price a ne
 added to — an entry that moved recomputes its own distance to each of them, and every bin reaching for it is
 current again. A bin moves whole (T3), so its tallies are subtracted from one entry and added to another in
 `O(offsets)`, not `O(observations)`. The offset grid grows with the level, since D15's reach does, while the
-number of members in it stays fixed by construction — that is the invariant the reach is chosen to hold.
+number of neighbors in it stays fixed by construction — that is the invariant the reach is chosen to hold.
 
 ---
 
 # 5. Counts, the collapse, re-centering
 
 > **T1 — The collapse is the L1 center.** The result minimizes `Σ d(O, C)` over all sets, and the sum is over
-> the whole span for every observation in it, because no partial observation is ever a member. It is a
+> the whole span for every observation in it, because no partial observation is ever a neighbor. It is a
 > *center*, not a medoid: synthesized, possibly a set the neuron has never seen. That is the point — it is the
 > typical neighborhood, not a sample of one.
 
@@ -282,7 +283,7 @@ tie would go to the older `id` every time and the younger could never serve.
 > at `+1` came with `d` at `+2`.
 >
 > **Adjustments tally the same way**, one counter per slot: how many of the bin's observations had that
-> backward member already covered, and how many had that forward slot taken. So a contribution (D13) is summed
+> backward neighbor already covered, and how many had that forward slot taken. So a contribution (D13) is summed
 > over a bin off the tallies exactly as a distance is.
 
 > **T3 — The win test is per bin.** A candidate wins on `d_backward`, a property of the bin, so a bin is won
@@ -314,14 +315,14 @@ evidence is no longer read as evidence the structure died.
 
 # 7. The one test
 
-**On R12 — the adjustment is what makes a local test honest.** Without it the neuron counts members another
-unit has already covered and over-states every entry it holds. With it, the same sum is over credited members
+**On R12 — the adjustment is what makes a local test honest.** Without it the neuron counts neighbors another
+unit has already covered and over-states every entry it holds. With it, the same sum is over credited neighbors
 only, so a neuron whose territory a neighbor's unit took prices its entries at what they are actually worth:
 near zero, because there is nothing left there to save. That is the whole of the correction the machine
 supplies, and it supplies a fact rather than a number.
 
 **On R12 — a contribution can be zero for two different reasons**, and both are the signal. Zero because the
-members were already covered — the file states this chunk some other way, and no sharper child here would
+neighbors were already covered — the file states this chunk some other way, and no sharper child here would
 shorten it. Zero because the entry claims too little against its price — it would not clear the election. An
 entry accumulating either drags itself toward retirement, and neither needs a mechanism aimed at it.
 
@@ -387,7 +388,7 @@ on an event, and at a bill there are three.
 1. **A child took its bins.** The add test's takeover strips it, and this is the pass that collects it.
 2. **Eviction.** Served observations leave as demand drifts, and the entry is starved.
 3. **The observation and its adjustment.** Both folded into the bin its server holds. The observation may be
-   one the entry describes badly; the adjustment may say another unit had already taken the members the entry
+   one the entry describes badly; the adjustment may say another unit had already taken the neighbors the entry
    was claiming credit for.
 
 Re-centering moves margins too, but it is not a fourth event: it is what those three do to the counts (R5).
@@ -559,9 +560,9 @@ rule it sits beside. D18 forbids evaluating any quantity over a partial span, an
 exactly half of one. And the cost is charged anyway, measured rather than estimated, in D13's price at the bill
 — so the estimate was a second charge for the same thing at a coarser scope.
 
-**On R21 — so overlap eats surplus, not existence.** An entry naming ten members with eight present bids
+**On R21 — so overlap eats surplus, not existence.** An entry naming ten neighbors with eight present bids
 `cover 9` at `price 3` — it can concede five of its nine slots and still clear. Chronic overlap is priced at
-the symbol instead: every conceded member is credit the observation does not carry, the ledger drains, and R12
+the symbol instead: every conceded neighbor is credit the observation does not carry, the ledger drains, and R12
 retires the entry. Occasional conflict costs a little; chronic conflict costs the line.
 
 **On R21 — what dropping it costs, and why that is little.** The estimate acted as a fast brake: an entry
@@ -575,7 +576,7 @@ its net over the window is still positive the file really is shorter for promoti
 would be overriding a correct aggregate with a local one.
 
 **On R21 — with the line in this price, promotion would be impossible outright.** A cover is at most the named
-backward members plus the bidder, so it never exceeds `|e| + 1`; a price carrying the line starts at `1 + |e|`.
+backward neighbors plus the bidder, so it never exceeds `|e| + 1`; a price carrying the line starts at `1 + |e|`.
 `cover > price` could then never hold — not on a perfect match with nothing contested, let alone under overlap.
 A test that asks one use to pay an aggregate charge declines every use.
 
@@ -599,13 +600,13 @@ revisited (R23), so there is no in-flight coverage to maintain and no report to 
 bill. The assignment simply fills in as later frames elect, and the activation reads it when its span closes.
 
 > **T12 — The bill is the one frame at which the adjustment can be read.** An activation firing at `g` names
-> backward members across `[g − (R−1), g]`. A member at `f` can be covered by a bid firing anywhere in
+> backward neighbors across `[g − (R−1), g]`. A neighbor at `f` can be covered by a bid firing anywhere in
 > `[f, f + R−1]`, so the last bid that can touch any of them fires at `g + (R−1)` — and the neuron itself, at
 > `g`, is coverable until exactly the same frame. **So backward coverage is settled at `g + (R−1)`, which is
 > the bill**, and the bill runs after that frame's election (R30).
 >
 > It is also the last frame at which the read is possible. The coverage set spans `2R − 1` and ages with the
-> clock, so at `g + (R−1)` it holds `[g − (R−1), g + (R−1)]` — the activation's oldest member sits on its
+> clock, so at `g + (R−1)` it holds `[g − (R−1), g + (R−1)]` — the activation's oldest neighbor sits on its
 > oldest frame. One frame later it is gone.
 >
 > **Settled and expiring at the same instant, so the read has exactly one legal moment.** That is a third
@@ -627,7 +628,7 @@ having nothing to say. Nothing is compared across populations: two claims are co
 
 ## The assertion map, mid-run
 
-Each cell is one base `(dimension, frame, position)` slot and holds the unit that currently owns it; the drawing
+Each square is one base `(dimension, frame, position)` slot and holds the unit that currently owns it; the drawing
 fixes a position and varies the other two. The coverage set is a different object and is not drawn here:
 
 ```
@@ -697,7 +698,7 @@ order-independent by construction, and parallel across slots. It also makes cont
 primitive rather than a mechanism of its own (§5.2).
 
 **On R28 — why the third step is not optional.** A promoted unit's neighborhood *is* its dictionary line
-(R20), so expanding it recovers every member it names, whether or not that member was assigned to it. Coverage
+(R20), so expanding it recovers every neighbor it names, whether or not that neighbor was assigned to it. Coverage
 is therefore a fact about what the accepted units expand to, and the assignment has no power over it: writing a
 correction for a neuron some accepted unit already names would write a symbol the file already contains. Step 3
 makes the bookkeeping match what expansion already did. Without it, a slot held by a rejected bid reads as
@@ -804,7 +805,7 @@ collapses at all, which is the correct outcome for it.
 
 # 11. The order of a frame
 
-> **T14 — One pass still resolves inside the frame.** A bid carries only backward members (R20), so every
+> **T14 — One pass still resolves inside the frame.** A bid carries only backward neighbors (R20), so every
 > election runs on frames already in hand, and it settles before the level's bills read it — bet, election and
 > bill are all inside the level and inside the frame, which is why nothing in the loop costs latency in the
 > stack. A unit promoted at `f` is available as an offset-0 neighbor to the level above at `f`, and its own
