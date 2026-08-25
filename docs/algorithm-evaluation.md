@@ -73,7 +73,7 @@ all a bid has seen (R21) — and the price lands on the whole span (D13), so the
 acceptance and nothing retracts it (R27). The claim is that this state is transient or terminal, never an
 equilibrium: re-centering votes out neighbors wrong more often than right, the add test splits off
 distinguishable demand, and an entry negative in sum is retired (remarks, on D13). **Diagnostic:** the
-fraction of uses settling negative, per neuron, over exposure. It should fall to the minority tail of entries
+fraction of observations settling negative, per neuron, over exposure. It should fall to the minority tail of entries
 positive in sum; an entry persistently negative in sum that survives the pruning pass is a bug in the pass,
 not a basin.
 

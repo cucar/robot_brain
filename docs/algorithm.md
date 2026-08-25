@@ -27,9 +27,8 @@ O          an observation — what a neuron saw around one firing               
 C          a candidate neighborhood                                             R15
 nbhd(e)    an entry's neighborhood, |e| its size                                D19
 d          distance, d_backward its temporal-backward half                      D17, D18
+m          d's named-but-absent half — what the election charges a bid for      R21
 n          a count of observations
-m          a miss count — the neighbors an entry names that the observation
-           does not bear out, over the slots it owns                            D13, R21
 
 L          the file length                                                      D13
 S          an accepted set of bids                                              R22
@@ -200,22 +199,20 @@ symbol — and whether that claim is honored is settled where the file is, not w
 >       =  credited(o)  −  price(e, o)       if the election would have taken the bid at all,
 >                                            meaning cover(o) > 1 + m;  otherwise 0     (R21, R28)
 >
-> credited(o)  =  the use's covered set as the board left it: the named neighbors present in o, and the
+> credited(o)  =  the bid's covered set as the board left it: the named neighbors present in o, and the
 >                 neuron itself, less everything o's adjustment marks covered   (R20, D28)
 >
-> price(e, o)  =  1  +  m       over the whole span, on the slots o's adjustment leaves e owning
+> price(e, o)  =  1  +  d       over the whole span, on the slots o's adjustment leaves e owning
 > ```
-> **The gate and the price count `m` over different spans, and that is why the sign can go negative.** The
-> gate is the election's own test, so its `m` runs over the backward half — all a bid has seen (R21, R28) —
-> while the price's `m` runs over the whole span. A use taken on its backward showing can therefore settle
-> negative once the forward misses land. **The `otherwise 0` is the gate deciding whether the use counts at
-> all, never a clamp on its value**: a use the election would have taken contributes what it falls to, negative
-> included.
+> **The gate charges `m` and the price charges `d`, and that is why the sign can go negative.** The gate is the
+> election's own test, over the backward half (R21, R28). The price is the file's, and D10 charges a symbol for
+> a correction either way round, so it charges the whole of D17's distance. **The `otherwise 0` is the gate
+> deciding whether the observation counts at all, never a clamp on its value.**
 >
-> **Every term but the adjustment is measured now** (R2): `nbhd(e)` is wherever re-centering has put it, `m`
-> and the mismatch follow it. The adjustment is the only frozen part. **§7's test is a conservative estimate of
-> the derivative of `L` with respect to holding one entry**: these contributions summed over the `H`
-> observations the neuron holds, against the `1 + |e|` its line costs.
+> **Every term but the adjustment is measured now** (R2): `nbhd(e)` is wherever re-centering has put it, and `d`
+> follows it — it is the bin's summed mismatch, already maintained (D22). The adjustment is the only frozen
+> part. **§7's test is a conservative estimate of the derivative of `L` with respect to holding one entry**:
+> these contributions summed over the `H` observations the neuron holds, against the `1 + |e|` its line costs.
 
 ---
 
@@ -624,10 +621,10 @@ observation joins or is evicted, or its neighborhood re-centers. **No test needs
 The line brackets the symbol's life, and the elections fill in the middle:
 
 ```
-mint      would past uses, as adjusted, have summed past 1 + |C|?     the line, prospectively    (R16)
-elect     does this use cover more than 1 + m, backward half only?    one use, no line           (R28)
-adjust    what did the board actually credit this use?                the fact, recorded         (D28)
-retire    do the credited uses still sum past 1 + |e|?                the line, retrospectively  (R18)
+mint      would past observations, as adjusted, have summed past 1 + |C|?   the line, prospectively    (R16)
+elect     does this bid cover more than 1 + m, backward misses only?        one bid, no line         (R28)
+adjust    what did the board actually credit this activation?               the fact, recorded       (D28)
+retire    do the credited observations still sum past 1 + |e|?              the line, retrospectively (R18)
 ```
 
 # 8. The two moves
@@ -910,13 +907,13 @@ within the frame.
 > **R21 — The neuron prices the bid.** Two terms, both D11's:
 > ```
 > 1   the unit's line in the history
-> m   the miss count, over the backward half — all a bid has seen
+> m   the miss count — the neighbors the entry names that are absent, over the backward half
 > ```
-> **The same `1 + m` D13 prices an observation with**, evaluated at age 0 instead of at the bill, so `m` runs
-> over the backward half alone. That is D18's cut applied to a price rather than to a distance: one quantity,
-> whatever span is in hand. **A bid is backward throughout**, exactly as recognition is (D20).
+> **`m` is one-sided**: the other side of `d` is not a fact about any bidder, so R22 counts it once over `S`
+> instead. It runs over the backward half alone because that is all a bid has seen — D18's cut applied to a
+> price rather than to a distance. **A bid is backward throughout**, exactly as recognition is (D20).
 >
-> **This is a price for one *use*, not for the symbol.** The dictionary line `1 + |e|` is weighed by the one
+> **This is a price for one bid, not for the symbol.** The dictionary line `1 + |e|` is weighed by the one
 > test (R12). It appears nowhere in this price and nowhere in the election.
 
 > **R22 — The objective.** Accept a subset `S` of bids. Each accepted bid propagates one unit at its price
@@ -926,6 +923,16 @@ within the frame.
 > ```
 > Minimize it. This is prize-collecting set cover, and it is **the history half of `L`** (D13) over the frames
 > the election can see. The dictionary half is R12's, and neither test touches the other's sum.
+>
+> **The two terms are the two directions of D17's distance.** Expanding `S` produces the neighbors its units
+> name; the file corrects that against what was actually active, and D10 charges a symbol either way round.
+> **Nothing is left out of `cost(S)` — the halves are split by what each can be attributed to.**
+> ```
+> named, not active     turn off    a phantom the naming bid carries alone     per bid, in its price   (R21)
+> active, not named     turn on     costs 1 unless SOME bid names it           per set, the uncovered term
+> ```
+> **A neuron no bid names is not a cost any bid causes.** There is no bidder to charge it to, so it is counted
+> once over the whole of `S`, and R21's price is one-sided for that reason and no other.
 >
 > **Savings is not a property of a bid.** What one bid is worth is `cost(S) − cost(S ∪ {bid})`, so it depends
 > on what has already been accepted. A neuron can state what it covers and what it costs, both of which are

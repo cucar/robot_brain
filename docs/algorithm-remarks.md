@@ -79,21 +79,35 @@ estimate.
 **On D13 — a contribution is a bid's net, completed.** `cover − price` is what a bid states at the election
 (R20, R21), over the backward half alone, because that is all a bid has seen. `credited − price` is the same
 neighbors re-measured after the board spoke, over the *whole* span — the same backward terms plus the forward
-mismatch the bid could not know. So the ledger's price is strictly the larger, and a use the election took can
+mismatch the bid could not know. So the ledger's price is strictly the larger, and a bid the election took can
 still settle negative. That is not a disagreement between the two: it is the half of the span the election
 never saw, arriving when it can be measured.
 
-So the benefit R12 sums is a ledger of per-use nets — **not a tally of the election's verdicts**, which it
-re-prices over a span the election never had. What the machine supplies is one fact per use, the adjustment
+So the benefit R12 sums is a ledger of per-observation nets — **not a tally of the election's verdicts**, which it
+re-prices over a span the election never had. What the machine supplies is one fact per activation, the adjustment
 (D28); everything else is the neuron measuring its own completed observation against its own neighborhood. The
 neuron keeps the ledger and can invent no line of it, because the one term it cannot derive is the one the
 machine hands it.
 
-**On D13 — the gate zeroes a use, it never clamps one.** A use the election would have declined cost the
-file nothing, so it contributes nothing. A use it *would* have taken is one whose line and corrections were
-really written, so its contribution stands as it falls — negative when the entry covered the chunk and got its
-future wrong, which is the only way a bad predictor pays for itself. Flooring the sign instead would make an
-actively harmful entry indistinguishable from an unused one.
+**On D13 — the gate zeroes an observation, it never clamps one.** One whose bid the election would have
+declined cost the file nothing, so it contributes nothing. One whose bid it *would* have taken had its line
+and its corrections really written, so its contribution stands as it falls — negative when the entry covered
+the chunk and got its future wrong, which is the only way a bad predictor pays for itself. Flooring the sign
+instead would make an actively harmful entry indistinguishable from an unused one.
+
+**On D13 — two independent things push a contribution negative, and only one of them needs a forward half.**
+Over the span, a claim the future contradicts. Over either half, `d`'s other side: `credited` counts the
+neighbors the entry names and finds, `m` the ones it names and misses, and a neighbor **present that the entry
+never named** is in `d` alone. So a naming narrower than what it sees settles negative on its own evidence, and
+at `R_t = 1` — where `d_backward` is `d` and the two spans are one measurement — that is the whole of the
+trigger. **The two sides of `d` have different owners**: over-claiming is the vote's, and re-centering drops it
+(R5); demand no entry names is the add test's, and a child could take it (R13).
+
+**On R13 — the commonest negative is an entry that names too little.** It needs no forward half to show up:
+`d` is symmetric, so neighbors present that the entry never named price against it while crediting it nothing
+(D13). Restricted to the slots the adjustment leaves the entry owning, that half is exactly the demand no
+accepted bid took — so the trigger fires on corrections the level actually paid for, and R15's two passes go
+looking for whoever else has them.
 
 **On D13 — a negative settlement is transient or terminal, never an equilibrium.** Three mechanisms answer
 one. Re-centering drops any forward neighbor wrong more often than right: R4's `1/2` is exactly where D10's
@@ -176,7 +190,9 @@ same way.
 
 **At `R_t = 1` the vocabulary collapses.** `d_backward` **is** `d`, so the two distances of D18 are one;
 `server_distance` **is** the minimum; nothing is ever in flight; the recording step has nothing to do; the bet
-and the bill fall in the same frame; and bins key on the whole neighborhood. Contraction loses its cross-frame
+and the bill fall in the same frame; and bins key on the whole neighborhood. What does **not** collapse is
+the gap between the gate and the price, because that one is a difference of currency and not of span
+(D13, R21). Contraction loses its cross-frame
 contention, since every claim spans one frame. Read the document with the temporal parts struck out and it is
 the spatial algorithm, unchanged — the whole machine, not a stage of it, which is what makes a radius a
 configuration rather than an architecture.
@@ -550,11 +566,32 @@ measurement taken now (R2, D22).
 
 # 10. Contraction
 
-**On R21 — there is one error term, not a backward one and a forward one.** `m` counts what an entry names
-that the observation does not bear out, on the slots it owns, and that is the whole of what corrections cost
-(D17, D10). Splitting it by direction was an artifact of *when* it is read, not of what it is: a bid at age 0
-has only the backward half, so its `m` runs over that; the bill has the completed span, so its `m` runs over
-all of it, less whatever the adjustment supersedes. Same quantity, D18's cut.
+**On R21 — the price is a difference, and that is what makes it one-sided.** What a bid is worth is what the
+file loses by not accepting it. Decline it and the neurons it covers fall through as corrections, a symbol
+each; accept it and they cost one unit plus its phantoms. **Neighbors it never named cost the same in both
+worlds**, so they are not in the difference at all — they cancel. The one-sidedness is not an approximation of
+a two-sided quantity. It is what the two-sided quantity comes to once the counterfactual cancels, which is why
+R22 can hold the other half in a term of its own without anything going missing.
+
+**On R21 — `m` for a while stood for both sides at once, and that broke the add trigger.** Reading D13's
+price as the miss count made the gate and the contribution the same expression whenever their spans coincided,
+so at `R_t = 1` the contribution could not come out negative and R13 fired on adjustment overlap alone —
+hierarchy growth stalled, on exactly the configuration §9.4 says is the whole machine. The span asymmetry was
+carrying the mechanism, and the span is what spatial processing removes.
+
+**On R21 — the price is one-sided because only one side of `d` can be charged to a bidder.** A neighbor the
+entry names and does not find is a phantom this bid alone carries, so it belongs in this bid's price. A
+neighbor present that the entry never named costs a symbol unless *some* bid names it — a fact about the
+accepted set, not about any bidder — so it is counted once over `S` instead, in R22's uncovered term. **Both
+halves of `d` are in `cost(S)`.** What differs is what each can be attributed to.
+
+**On R22 — `Σ price` overcounts the turn-off half when two bids name the same phantom.** Each is charged for
+it and the file turns that slot off once. The bound is conservative in the safe direction: it makes bids look
+more expensive than they are, so it accepts fewer of them.
+
+**On R22 — the uncovered term is never computed.** It is what *not* accepting costs, so it stands on the other
+side of R28's comparison rather than inside it: `cover > price` is exactly *replacing these corrections with
+one unit and its phantoms is a shorter file*. The election reads it off the inequality and never sums it.
 
 **On R21 — why the bid carries no estimate of the half it has not seen.** It could have carried the entry's
 mismatch averaged over what it serves, and for a while it did. Three arguments against. R27 already promotes on
@@ -581,10 +618,10 @@ would be overriding a correct aggregate with a local one.
 **On R21 — with the line in this price, promotion would be impossible outright.** A cover is at most the named
 backward neighbors plus the bidder, so it never exceeds `|e| + 1`; a price carrying the line starts at `1 + |e|`.
 `cover > price` could then never hold — not on a perfect match with nothing contested, let alone under overlap.
-A test that asks one use to pay an aggregate charge declines every use.
+A test that asks one bid to pay an aggregate charge declines every bid.
 
 **On R21 — there are not two clocks to reconcile.** R12 optimizes the dictionary against a neuron's own
-history; this price optimizes one use against the board's coverage. They answer different questions over
+history; this price optimizes one bid against the board's coverage. They answer different questions over
 different evidence, and neither needs the other's span. What R12 does need is a denominator, and `H` is that
 directly (D25).
 
