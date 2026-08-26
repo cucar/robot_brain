@@ -27,11 +27,10 @@ O          an observation — what a neuron saw around one firing               
 C          a candidate neighborhood                                             R15
 nbhd(e)    an entry's neighborhood, |e| its size                                D19
 d          distance, d_backward its temporal-backward half                      D17, D18
-m          d's named-but-absent half — what the election charges a bid for      R21
 n          a count of observations
 
 L          the file length                                                      D13
-S          an accepted set of bids                                              R22
+S          an accepted set of bids                                              R28
 D          a hierarchy depth, N_D the activation count there                    D15, T15
 H          the history size                                                     D25
 ```
@@ -196,19 +195,13 @@ symbol — and whether that claim is honored is settled where the file is, not w
 > *fact* — these neighbors were not credited to me — never the number that came out of it.
 > ```
 > contribution of e to one observation o
->       =  credited(o)  −  price(e, o)       if the election would have taken the bid at all,
->                                            meaning cover(o) > 1 + m;  otherwise 0     (R21, R28)
+>       =  credited(o)  −  price(e, o)                                          (R20, R21)
 >
 > credited(o)  =  the bid's covered set as the board left it: the named neighbors present in o, and the
 >                 neuron itself, less everything o's adjustment marks covered   (R20, D28)
 >
 > price(e, o)  =  1  +  d       over the whole span, on the slots o's adjustment leaves e owning
 > ```
-> **The gate charges `m` and the price charges `d`, and that is why the sign can go negative.** The gate is the
-> election's own test, over the backward half (R21, R28). The price is the file's, and D10 charges a symbol for
-> a correction either way round, so it charges the whole of D17's distance. **The `otherwise 0` is the gate
-> deciding whether the observation counts at all, never a clamp on its value.**
->
 > **Every term but the adjustment is measured now** (R2): `nbhd(e)` is wherever re-centering has put it, and `d`
 > follows it — it is the bin's summed mismatch, already maintained (D22). The adjustment is the only frozen
 > part. **§7's test is a conservative estimate of the derivative of `L` with respect to holding one entry**:
@@ -452,7 +445,7 @@ therefore has no server of its own**; it is priced against its bin's, whatever t
 >
 > bin.tallies        =  Σ over its observations, per (neuron, forward offset)
 > bin.distance[e]    =  d_backward(bin's key, e.neighborhood)
-> bin.server         =  the entry with the smallest such distance
+> bin.server         =  the closest entry clearing `cover > 1 + d_backward` there, else the normal (§9.1)
 > bin.Σ mismatch     =  d(bin, that neighborhood), summed off the tallies
 > bin.covered[k]     =  # observations whose adjustment took key neighbor k       (D28)
 > bin.superseded[o]  =  # observations whose adjustment took forward slot o
@@ -622,7 +615,7 @@ The line brackets the symbol's life, and the elections fill in the middle:
 
 ```
 mint      would past observations, as adjusted, have summed past 1 + |C|?   the line, prospectively    (R16)
-elect     does this bid cover more than 1 + m, backward misses only?        one bid, no line         (R28)
+commit    does this bid cover more than 1 + d, backward half only?          one bid, no line     (§9.1, R28)
 adjust    what did the board actually credit this activation?               the fact, recorded       (D28)
 retire    do the credited observations still sum past 1 + |e|?              the line, retrospectively (R18)
 ```
@@ -793,11 +786,13 @@ An activation is processed by its **age**, and there are three bands. Only the t
 
 The neuron fired this frame, and the backward half of its observation, `O⁻`, is in hand.
 
-1. **Route and commit.** Compare `O⁻` against every entry's own backward half and take the closest: the normal
-   and every child compete, ties to the older `id`, retired entries do not (R18). That entry becomes the
+1. **Route and commit.** Compare `O⁻` against every entry's own backward half and take the closest **that is
+   worth committing to**: `cover > 1 + d_backward` against that entry, R21's price on the half in hand. Children
+   compete, ties to the older `id`, retired entries do not (R18). **If none of them clears, the normal takes
+   it** — it costs no line and makes no bid, so it has nothing to clear (D23). That entry becomes the
    activation's **committed entry** (R14). If `O⁻` has been seen before it already has a bin, whose distances
-   are exactly these numbers (D22). **This is also where the bin's server is re-derived** (T8): the closest of
-   them is what the next fold and the next price will use. Open the activation at age 0 holding that
+   are exactly these numbers (D22). **This is also where the bin's server is re-derived** (T8): whichever entry
+   this routing takes is what the next fold and the next price will use. Open the activation at age 0 holding that
    commitment and an empty forward half. **Nothing is written but the open activation** — no bin is opened for
    `O⁻` if it has none.
 2. **Serve.** The committed entry fires. If it has a child, the neuron hands the machine a **recognition bid**
@@ -838,8 +833,9 @@ run **once**, after every fold is in. This is R19, walked through:
    assertion map (D28), and the observation now exists. It joins the bin for its own backward half, **opening
    that bin if this is the first time that context has completed** — bins are created here and nowhere else,
    and destroyed in step 2 when the last observation they hold is evicted. **A bin that opens measures its
-   distance to every entry, and its server is the closest, like any other bin's** — before the table holds any
-   child, that is the normal (D23). The bin's count rises by one, its tallies take one increment per forward
+   distance to every entry, and its server is what §9.1's routing takes on it, like any other bin's** — before
+   the table holds any child, that is the normal (D23). The bin's count rises by one, its tallies take one
+   increment per forward
    offset, its adjustment tallies take the mask just read, and **the whole span folds into the bin's server's
    counts at once**. The server re-centers, and its distance to every bin is recomputed. **This is where
    prediction is scored.** **The fold is unconditional**: a neuron another unit subsumed records exactly as one
@@ -884,10 +880,13 @@ within the frame.
 # 10. Contraction
 
 > **D26 — Contraction.** The machine chooses the units at the level above that cover the level below most
-> cheaply. **Cover, not reconstruct**: R22 is prize-collecting, so a neuron no unit covers is allowed to fall
-> through as a correction whenever that is the shorter file. It is **axis-general** — a neighborhood names
-> neighbors at offsets, so a promoted unit replaces a chunk of spacetime. Spatial contraction is the case where
-> every offset is zero.
+> cheaply. **Covering everything is not the goal.** A neuron no unit covers is neither a failure nor a loss: it
+> stays in the file as itself, at cost 1 (D11), and that is the shorter file whenever no unit could hold it for
+> less. **An uncovered neuron does not make the file approximate**: it is stated, just not by a unit above.
+> What coverage varies is the file's length, never its fidelity.
+>
+> It is **axis-general** — a neighborhood names neighbors at offsets, so a promoted unit replaces a chunk of
+> spacetime. Spatial contraction is the case where every offset is zero.
 
 ## 10.1 Bids
 
@@ -907,37 +906,20 @@ within the frame.
 > **R21 — The neuron prices the bid.** Two terms, both D11's:
 > ```
 > 1   the unit's line in the history
-> m   the miss count — the neighbors the entry names that are absent, over the backward half
+> d   the error — neighbors it names that are absent, and neighbors present it does not name
 > ```
-> **`m` is one-sided**: the other side of `d` is not a fact about any bidder, so R22 counts it once over `S`
-> instead. It runs over the backward half alone because that is all a bid has seen — D18's cut applied to a
-> price rather than to a distance. **A bid is backward throughout**, exactly as recognition is (D20).
+> **The error is two-sided because a prediction is wrong either way** (D10, D17). A neighbor named and absent
+> must be turned off; a neighbor present and unnamed must be turned on; both cost one symbol, and both are
+> corrections this unit's expansion leaves behind. `d` runs over the backward half here because that is all a
+> bid has seen — D18's cut applied to a price rather than to a distance. **A bid is backward throughout**,
+> exactly as recognition is (D20).
+>
+> **The neuron states it raw; the election re-measures it on what the bid holds** (R28 step 2). A neighbor
+> another bid was given is that bid's to answer for, exactly as D13 restricts the bill's price to the slots the
+> adjustment leaves the entry owning.
 >
 > **This is a price for one bid, not for the symbol.** The dictionary line `1 + |e|` is weighed by the one
 > test (R12). It appears nowhere in this price and nowhere in the election.
-
-> **R22 — The objective.** Accept a subset `S` of bids. Each accepted bid propagates one unit at its price
-> (R21); every active neuron that no accepted bid covers is a correction, at cost 1.
-> ```
-> cost(S)  =  Σ over S of price  +  # active neurons S leaves uncovered
-> ```
-> Minimize it. This is prize-collecting set cover, and it is **the history half of `L`** (D13) over the frames
-> the election can see. The dictionary half is R12's, and neither test touches the other's sum.
->
-> **The two terms are the two directions of D17's distance.** Expanding `S` produces the neighbors its units
-> name; the file corrects that against what was actually active, and D10 charges a symbol either way round.
-> **Nothing is left out of `cost(S)` — the halves are split by what each can be attributed to.**
-> ```
-> named, not active     turn off    a phantom the naming bid carries alone     per bid, in its price   (R21)
-> active, not named     turn on     costs 1 unless SOME bid names it           per set, the uncovered term
-> ```
-> **A neuron no bid names is not a cost any bid causes.** There is no bidder to charge it to, so it is counted
-> once over the whole of `S`, and R21's price is one-sided for that reason and no other.
->
-> **Savings is not a property of a bid.** What one bid is worth is `cost(S) − cost(S ∪ {bid})`, so it depends
-> on what has already been accepted. A neuron can state what it covers and what it costs, both of which are
-> facts about itself. It cannot state what it saves. **So the machine returns the coverage, not the arithmetic**
-> (D28).
 
 **Contraction proposes nothing.** Every candidate comes from a neuron's own history, and the machine only ever
 accepts or declines one. It never edits a bid, never merges two, never invents a third. **Candidates go up,
@@ -1038,8 +1020,12 @@ numbers are final.
 
 ## 10.4 The election
 
-Set cover is NP-hard, but contraction mints nothing that lasts, so it is settled cheaply. **Every neuron a bid
-covers has to end up credited to exactly one bid** — that is what stops one chunk being paid for twice.
+**The file over one frame is the units promoted plus what they got wrong**, and this is what minimizes it:
+`Σ over the accepted (1 + d) + the neurons no unit covered`, the history half of `L` (D13) over the frames the
+election can see. The dictionary half is R12's, and neither test touches the other's sum. **Nothing anywhere
+forms a subset of bids and scores it** — every slot resolves at once on profitability, the bids that do not
+clear their price are dropped, and their slots go back to the accepted bids that named them. **Every neuron a
+bid covers has to end up credited to exactly one bid** — that is what stops one chunk being paid for twice.
 
 > **R28 — The election assigns slots, then bids settle up.** Two decisions and a settling, each over every slot
 > or every bid at once, and none of them runs twice.
@@ -1053,8 +1039,10 @@ covers has to end up credited to exactly one bid** — that is what stops one ch
 >    declaration order (D1) for a base neuron, then frame, then position in declaration order. **Every slot
 >    resolves independently of every other.**
 > 2. **Tally and test.** Each bid counts the slots it holds and is accepted iff it holds strictly more than its
->    price. **This is the bid in its modified form**: the collapse may have taken slots from it, so the benefit
->    it stated is not the benefit it delivers.
+>    price, **both re-measured on what step 1 left it** — the slots it holds, and its error over those slots
+>    alone. **This is the bid in its modified form**: the resolution may have taken slots from it, so neither
+>    the benefit nor the price it stated is the one it delivers. A neighbor another bid holds is that bid's to
+>    answer for.
 > 3. **Settle the assignment over the accepted.** A slot whose holder was rejected passes to the best-rationed
 >    accepted bid that names it, by step 1's rule; a slot no accepted bid names is a correction. This decides
 >    nothing: an accepted bid can only gain here, gaining cannot un-accept, and a rejected bid is never looked
@@ -1103,7 +1091,7 @@ covers has to end up credited to exactly one bid** — that is what stops one ch
 > Everything underneath it is recovered by expanding it.
 >
 > **Uncovered, not childless.** A neuron that fired a child and had its bid declined with nothing else covering
-> it is still on the frontier, because the decoder has no other way to recover it: R22 charges it as a
+> it is still on the frontier, because the decoder has no other way to recover it: the election charges it as a
 > correction. Coverage is the criterion, and being covered is exactly what the machine reports (D28).
 
 The frontier cuts across levels, not along one:

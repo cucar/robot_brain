@@ -24,7 +24,7 @@ and the pruning pass retires what is left.
 
 # 2. Risks
 
-**Neither the election nor the table finds the optimum.** Greedy (R28) is an approximation to R22, and a bill
+**Neither the election nor the table finds the optimum.** Greedy (R28) is an approximation to the objective, and a bill
 takes one improvement step rather than iterating (R19). Both are bounded, and neither is exact.
 **Diagnostic:** the election's gap is already covered by the ILP comparison below.
 
@@ -68,7 +68,7 @@ itself. Re-centering largely defuses it — the neighborhood is pulled toward wh
 starves. **Fallback if it still churns:** require the win set to span at least two distinct bins. Exact, and
 costs one recurrence of latency.
 
-**A use the election took can settle negative, by construction.** The election accepts on the backward half —
+**A bid the election took can settle negative, by construction.** The election accepts on the backward half —
 all a bid has seen (R21) — and the price lands on the whole span (D13), so the forward misses arrive after the
 acceptance and nothing retracts it (R27). The claim is that this state is transient or terminal, never an
 equilibrium: re-centering votes out neighbors wrong more often than right, the add test splits off
@@ -117,7 +117,7 @@ claims agreeing take the slot even where the level-0 neuron owning that dimensio
 cascade only steps down when a level cannot decide, never when it decides badly. **Diagnostic:** count
 cross-level contests and how often the holder was right against how often the level below it was.
 
-**Election slack, and now with no bound at all.** R28 is a heuristic for R22, and unlike the greedy it replaced
+**Election slack, and now with no bound at all.** R28 is a heuristic for the objective, and unlike the greedy it replaced
 it carries no approximation guarantee — two fixed passes over a static per-slot rule have no `ln n` backstop.
 Since apex-units-per-frame is the headline metric, slack and real structure are conflated, and the slack is now
 unmeasured rather than merely unmeasured-but-bounded. **Diagnostic:** solve one small window exactly (ILP) and
