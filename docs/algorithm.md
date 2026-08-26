@@ -1106,9 +1106,11 @@ The frontier cuts across levels, not along one:
    frontier  =  { L1 over (a,b),  L2 over (c,d),  L3 over (e,f,g,h),  i,  j }
 ```
 
-**Events and actions run in parallel within a level, and are connected there.** An action fires in the same
-column as the events it runs alongside (D5), so it meets them in that level's own processing — and the
-connection formed there joins it to the event patterns that chose it one frame earlier (R35).
+**Events and actions run in parallel within a level.** An action fires in the same column as the events it runs
+alongside (D5), so it is recognized and chunked by the rule they are, at the time they are. The event→action
+connection is not formed here. It names the action pattern that ends up in control of the dimension, and which
+one that is stays open until every level has settled, so the connection is recorded after the stack finishes
+(R35a).
 
 # 12. The assertion
 
@@ -1128,7 +1130,8 @@ corrections against an asserted set.
 > ```
 > **For each `(dimension, frame, position)` slot, work down from the highest level that claims it. Within a
 > level, the collapse over the claims landing there decides the slot (R4, R25). A level with no majority is
-> silent, and the next level down resolves it. A slot no level carries is a correction.**
+> silent, and the next level down resolves it. A slot no level carries is a correction.** On an action slot a
+> second kind of claim reaches the same level and takes it before the collapse runs (R38a).
 >
 > **Precedence chooses the electorate; the collapse decides the outcome.**
 >
@@ -1162,13 +1165,50 @@ already executed.
 >                  this frame's events — the connection is made here
 > f + 2  reward    what the action earned arrives as input, and updates that connection
 > ```
-> The action is at offset `+1` from the events that chose it, so **the event→action relation is an ordinary
-> forward neighbor**. It could not be at offset 0: the events at `f` are recognized before the action is chosen.
+> **The connection is not a neighbor.** Neighbors are same-kind and are learned inside a level's own processing:
+> events name events, actions name actions, at spatial and temporal offsets alike. An event→action connection is
+> none of those — it crosses kinds, it is temporal only, its two ends need not sit at the same level, and it is
+> formed after every level has settled. It could not sit at offset `0` in any case: the events at `f` are
+> recognized before the action is chosen.
 
-> **R36 — Credit lands on the apex active action of the executing frame** — the highest action pattern in
-> control of its dimension at `f + 1`, not at the frame the reward arrives in — falling back to the base action
-> when nothing higher covers it. Before any action pattern exists the apex is the base action, so the rule holds
-> across all of development.
+> **R35a — A connection is made when the action fires, at the distance the observer is open at.** What executes
+> at `f + 1` is not known at `f`: a committed action still has to survive R32, and which action pattern ends up
+> in control of the dimension is settled only once every level has run. The connection is therefore recorded at
+> `f + 1`, after the stack finishes, against what actually ran — **a neuron that argued for a different action
+> still learns from the one that ran.**
+>
+> **Every neuron active in that frame records one, at every age it is open at.** The distance is the age: the
+> offset from the frame that activation opened to the frame the action ran. A neuron open at ages 1, 2 and 3
+> holds three connections to the same action, one per distance, and selection reads the distance matching its
+> own age. Fan-out is bounded the way everything else here is — a neuron connects only toward the channels its
+> neighborhood already names.
+>
+> **Making and strengthening are one operation.** The first co-occurrence creates the connection at strength 1
+> and every later one increments it; the reward folds into the running mean when it arrives a frame after that,
+> weighted by `1 / strength`, so the stored value is the exact average over the connection's exposures and no
+> rate is chosen.
+>
+> **Every level holds them, not only the apex.** Structure is recoverable by expansion, which is what lets the
+> file record the frontier alone — policy is not. No operation derives what a pattern's children were worth from
+> what the pattern earned, so if only the frontier held connections, every mint would black out the policy
+> underneath it. Holding at every level is also what makes the ladder work: a base neuron fires in many contexts
+> and averages coarsely across all of them, a level-4 pattern fires rarely and averages sharply over one, and
+> R38a reads them specific-first.
+>
+> **A connection dies with either of its ends**, since a connection to something that no longer exists can
+> select nothing. Nothing else removes one: a connection is not in the file, so the one test never prices it,
+> and the history window never reaches it.
+
+> **R36 — Credit lands on the apex active action, and covers its whole span.** The credited object is the
+> highest action pattern in control of its dimension at the frame the action ran, not at the frame the reward
+> arrives in, falling back to the base action when nothing higher covers it. Before any action pattern exists
+> the apex is the base action, so the rule holds across all of development.
+>
+> **A pattern that occupies its dimension for several frames is credited with every reward that arrives while it
+> runs.** An expansion places base actions at `+1`, `+2` and beyond (R34), so a pattern has a span rather than a
+> frame, and which of those frames the credit lands on is the wrong question — it lands on the pattern. The
+> estimate that selects a chunk is what the chunk earned, not what its first step earned, which is the only
+> reading that makes a multi-frame candidate comparable to a single-frame one.
 
 > **R37 — Two objectives, meeting at one place.** Everything structural is priced in file length; reward prices
 > nothing structural and cannot. A policy is not a description — the decoder replays the actions the file
@@ -1177,11 +1217,41 @@ already executed.
 > event→action connection. Those connections are not in the file and are not priced by the one test.
 
 > **R38 — Selection.** No fit says which action to take; it says only what an action set looks like. Choosing
-> comes from the connection an active event pattern holds to the action patterns that have followed it. Each
-> connection carries the reward that arrived, averaged over its exposures, so it is a running estimate of what
-> that action is worth in that situation, and the machine executes the best. **Events infer actions this way and
-> actions never infer events** — the only asymmetry between the two hierarchies. The bootstrap is a declared
-> default action, which executes when there is no history to choose on.
+> comes from the connections held toward the action patterns that have followed, each carrying the reward that
+> arrived averaged over its exposures — a running estimate of what that action is worth in that situation — and
+> the machine executes the best. **A situation is one active neuron at one age.** The same frame is a different
+> situation to a base neuron and to the level-4 pattern covering it, and a different one again to the same
+> neuron two ages later; each holds its own estimate, and R38a is what reconciles them.
+>
+> **The asymmetry is in the targets, not the holders.** Any active neuron holds connections, an action neuron
+> included; what an action neuron may not do is point one at an event. **Events infer actions and actions never
+> infer events** — the only asymmetry between the two hierarchies. An action's connection to a following action
+> is an ordinary value claim and selects on equal footing with an event's.
+>
+> **The bootstrap is a connection, not a fallback.** Every neuron is born connected to the declared default
+> action at every distance it can vote at, at neutral reward, so selection always has something to read and
+> there is no separate no-history path.
+
+> **R38a — Two claims on one slot.** Both mechanisms claim the same action slot, and each finds its own
+> candidates: the assertion side from what the action hierarchy recognizes, the inference side from the
+> connections held plus R39's walk over the declared order. Neither supplies the other's alternatives, and
+> neither has priority by kind. The slot resolves the way every slot resolves (R32): work down from the highest
+> level that claims it, then expand.
+>
+> **Within a level an inference trumps an assertion.** A habit is built out of rewards that have already
+> arrived, so it lags the estimate it was built from; when the two disagree, the disagreement is the estimate
+> having moved and the habit not yet having followed. If any inference claims the slot at that level it decides
+> and the assertions there are silent; if none does, the assertions collapse among themselves as usual; if
+> neither does, the level is silent and the next one down resolves it.
+>
+> **Level is read on the action side.** An assertion's level is the asserting action pattern's, an inference's
+> is that of the action pattern it selects, and both expand to base actions the same way — so a higher claim
+> decides more of the timeline than a lower one, which is what R32's precedence is for.
+>
+> **Several inferences at one level take the largest estimate**, which is the ordinary meaning of executing the
+> best. Nothing corrects for how many exposures an estimate rests on, so a sharp claim on three exposures
+> outranks a coarse one on two hundred; the correction would be a confidence parameter with nothing to derive it
+> from, and R39's walk is what buys the thin estimates their exposures.
 
 > **R39 — Exploration.** The default policy resolves explore–exploit without randomness: **the action alphabet
 > is declared in order**, and while a situation's reward is negative the machine walks that order, trying the
@@ -1220,5 +1290,5 @@ flowchart TD
     L -->|no| DEL
     P --> O["Next level up, one stack, radius from D15<br/>(until a level fires no children — that frontier<br/>is the apex)"]
     X --> O
-    O --> Y["§12 After the last level: every active neuron asserts.<br/>Expand to base symbols, then per slot work DOWN from<br/>the highest level claiming it — within a level the<br/>COLLAPSE over the claims decides (count &gt; n/2); no<br/>majority and that level is silent, so the next one down<br/>resolves it. Events → scored; actions → executed"]
+    O --> Y["§12 After the last level: every active neuron asserts.<br/>Expand to base symbols, then per slot work DOWN from<br/>the highest level claiming it — within a level the<br/>COLLAPSE over the claims decides (count &gt; n/2); no<br/>majority and that level is silent, so the next one down<br/>resolves it. On an action slot an INFERENCE at a level<br/>beats an assertion there. Events → scored; actions →<br/>executed, and every active neuron records a connection<br/>to what ran, at the distance of its own age"]
 ```
