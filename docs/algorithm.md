@@ -17,11 +17,9 @@ everything else is derived from, so it comes before the mechanisms that optimize
 f, g, h    frame numbers
 δ          a raw coordinate difference, before D16 resolves it to an offset
 
-R_i        dimension i's declared radius                                        D15
-reach_i(k) dimension i's reach at level k, derived                              D15
+reach(k)   the reach at level k, derived                                        D15
 reach_t    the time dimension's reach at the neuron's own level — the window    D15
-W          the frame buffer's depth, reach_t + 1                                D15
-dim        a channel's activation dimensions that have reach                    D15
+W          the frame buffer's depth, reach_t + 1 — 2 at the base                D15
 
 O          an observation — what a neuron saw around one firing                 D19
 C          a candidate neighborhood                                             R15
@@ -47,11 +45,10 @@ H          the history size                                                     
 > dimension** and at most one **action dimension**, and each declares its **resolution**, its bucket count. A
 > base symbol is a dimension–bucket pair, so this declaration *is* the alphabet.
 >
-> **Activation dimensions are fleeting**: they say where one instance of a symbol happened. Each declares a
-> **radius** (D15). Every channel has **time**; what else it has is the shape of its input — an image channel
-> declares two more, a stream of prices declares none. The test for which is which is the side of the input a
-> dimension sits on: the input is *laid out over* its activation dimensions, and *reports* its neuron
-> dimensions at each point of that layout.
+> **Activation dimensions are fleeting**: they say where one instance of a symbol happened. Every channel has
+> **time**; what else it has is the shape of its input — an image channel declares two more, a stream of prices
+> one more. The test for which is which is the side of the input a dimension sits on: the input is *laid out
+> over* its activation dimensions, and *reports* its neuron dimensions at each point of that layout.
 
 > **D2 — Type and instance.** A **neuron is a type** and an **activation is an instance of it**, and each
 > carries the dimensions of its own kind (D1).
@@ -71,12 +68,12 @@ H          the history size                                                     
 > is therefore a fixed, enumerable index over the whole run, which is what lets `(dimension, offset)` name a
 > slot at any level.
 
-> **D4 — Adjacency.** Two activations are neighbors when they are **within radius in every activation
+> **D4 — Adjacency.** Two activations are neighbors when they are **within reach in every activation
 > dimension they share** (D1, D15). It is a conjunction, so a neighborhood is a box.
 >
 > Two channels sharing only time are related in time alone, and a channel whose one activation dimension is
-> time — a stream of prices, a stream of characters — stands in no spatial relation to anything. **Nothing
-> declares which channels may see which**: what a channel is laid out over settles it.
+> time — a stream of characters — stands in no spatial relation to anything. **Nothing declares which channels
+> may see which**: what a channel is laid out over settles it.
 >
 > Neighbors are always at the neuron's own level, since a neighborhood is written over the symbols that level
 > offers. **The rule is identical at every level.** What differs is the reach, and D15 says what sets that.
@@ -97,13 +94,13 @@ carries the action executing in that same frame — if one is.
 > same column of the grid, so an action is not a reply appended to a frame — it runs alongside that frame's
 > events, and both are in hand together (§13).
 
-> **D6 — An activation stays open.** A firing at frame `f` remains open through `f + reach_t`, where `reach_t` is
-> the neuron's own reach in time (D15) — `R_t − 1` at the base, wider above it. That is how long its observation
-> takes to fill. While open it **collects and nothing more**: arriving neighbors are written
-> into it, and it is not counted, priced or compared until its span closes. The activation does not re-fire —
-> it is one firing, not a state — and it enters other neurons' neighborhoods only at its firing frame. The
-> neuron may fire afresh while an earlier activation is open, so several can be open at once, each collecting
-> its own observation.
+> **D6 — An activation stays open.** A firing at frame `f` remains open through `f + reach_t`, where `reach_t`
+> is the neuron's own reach in time (D15) — 1 at the base, wider above it. That is how long its observation
+> takes to fill. While open it **collects and nothing more**: arriving neighbors are written into it, and it is
+> not counted, priced or compared until its span closes. The activation does not re-fire — it is one firing,
+> not a state — and it enters other neurons' neighborhoods only at its firing frame. The neuron may fire
+> afresh while an earlier activation is open, so several can be open at once, each collecting its own
+> observation.
 >
 > **Age is per activation, and a neuron carries several ages at once.** An activation's age is the frames
 > elapsed since it fired, `0` through `reach_t`. When the machine hands the neuron a frame it hands it **every
@@ -143,9 +140,8 @@ what it has seen.
 > honored: an entry that goes is not a line the file must keep alive, because the run is simply re-encoded
 > without that symbol. Nothing is retained that the machine could not expand.
 >
-> **Nothing ever materializes it.** D27's two windows span `2·reach_i + 1` in each activation dimension and a
-neuron's history is `H`
-> observations deep (D25), so no pass anywhere walks the run.
+> **Nothing ever materializes it.** D27's two windows span `2·reach(k) + 1` in each activation dimension and
+> a neuron's history is `H` observations deep (D25), so no pass anywhere walks the run.
 
 **One file, one dictionary.** A neuron's history (§6) is its own record of what it saw. An entry in a routing
 table is a **standing claim on a dictionary line** — a proposal that the file would be shorter for holding this
@@ -229,89 +225,63 @@ symbol — and whether that claim is honored is settled where the file is, not w
 > center, not a neighbor.
 
 A neighborhood is a set of neighbors, each at its own offset. Drawn with a row per dimension and a column per
-offset, with one activation dimension and `R_t = 3`:
+offset, with one activation dimension and a reach of 1:
 
 ```
-                                offset
-                    −2     −1      0     +1     +2
-        dim A        ·      a      ◉      ·      ·        ◉  the firing neuron
-        dim B        ·      b      ·      ·      ·        a  a named neighbor
-        dim C        q      ·      ·      c      ·        ·  silent
-        dim D        ·      ·      ·      ·      d
-                    ╰──── d_backward ────╯╰─── still arriving ───╯
-                     in hand at age 0        lands over the next reach frames
-                     recognition uses this   nothing is measured until it is complete
-                    ╰──────────────────── d ────────────────────╯
-                     the whole span, priced from the bill onward
+                          offset
+                   −1      0     +1
+        dim A       a      ◉      ·        ◉  the firing neuron
+        dim B       b      ·      ·        a  a named neighbor
+        dim C       ·      ·      c        ·  silent
+        dim D       ·      ·      d
+                  ╰─ d_backward ─╯╰ arriving ╯
+                   in hand at age 0        lands next frame
+                   recognition uses this   nothing is measured until it is complete
+                  ╰──────────── d ───────────╯
+                   the whole span, priced from the bill onward
 ```
 
 Everything the design prices is a count of neighbors: the fit is the neighbors an entry and the observation
 disagree about, and a child's dictionary line is the neighbors the entry names.
 
-> **D15 — Radius.** A radius is declared **per activation dimension** (D1). A radius of `R_i` along dimension
-> `i` gives a reach of `R_i − 1` either way along it at the base, so a channel with time alone declares one number
-> and an image channel declares three. **The radius is declared; the reach is derived**, and it is the reach
-> that varies by level. In time, `W = reach_t + 1` is the depth of the frame buffer — `R_t` at the base: an
-> activation sits at its newest edge when it fires, with `reach_t` frames of context behind it, and slides to
-> the oldest edge as its neighborhood completes.
->
-> **The reach grows with the level, and nothing declares the rate.** Each level holds at most half the
-> activations of the one below (T9), so across `dim` activation dimensions its units stand `2^(1/dim)` further
-> apart. **`dim` counts the dimensions the units can spread along** — those declared with a radius above 1. A
-> dimension at radius 1 has zero reach, contributes a factor of 1 to the box, and carries none of the halving,
-> so counting it would grow the reach slower than the units actually separate and the neighbor count would
-> fall with depth. What is held fixed is the expected number of neighbors, which is a level's density times
-> the volume of its box. Writing `R_i` for dimension `i`'s declared radius, `reach_i(k)` for its reach at level
-> `k` — `reach_t` throughout the rest of the document, since only the time dimension sets a window — and `N_k`
-> for the activation count there, one level up thins the count by `N_(k−1) / N_k`, density falls
-> by that factor, and the box has to grow by it for the product to stand still — spread across `dim`
-> dimensions, that is its `dim`-th root along each:
+> **D15 — Radius and reach.** The radius is **2**, in every activation dimension of every channel (D1).
+> Nothing declares it. The reach it gives is **1** either way along every dimension at the base, and it
+> **doubles every level**:
 > ```
-> reach_i(k)   =   reach_i(k−1) · (N_(k−1) / N_k)^(1/dim)                 one level, one dimension
->
-> reach_i(D)   =   (R_i − 1) · (N₀ / N_D)^(1/dim)   =   (R_i − 1) · 2^(D/dim)      unrolled, under T9
+> reach(k)   =   2^k          every activation dimension
+> reach(0)   =   1            the base
 > ```
-> **The closed form is the recurrence unrolled**: the intermediate counts cancel down the chain, leaving the
-> base's count over this level's, anchored at `R_i − 1` because that is the one reach declared rather than
-> derived.
+> Each level holds at most half the activations of the one below (T9), so its units stand twice as far apart
+> and the box has to double for the expected number of neighbors — a level's density times the volume of its
+> box — to stand still. **No level declares anything, and there is no rate to choose.**
 >
-> **One base per dimension, one factor per level.** Only `R_i` carries an `i`. A level has a single activation
-> count, so `N_(k−1) / N_k` is a property of the level and the same for every dimension of the channel: the
-> reaches all widen by the same factor and differ only in where they started. An image channel declaring three
-> radii therefore has three reaches, growing in step.
+> In time, `W = reach_t + 1` is the depth of the frame buffer — 2 at the base: an activation sits at its
+> newest edge when it fires, with `reach_t` frames of context behind it, and slides to the oldest edge as its
+> neighborhood completes.
 >
-> **`2` is a floor, not an estimate.** An accepted bid holds more slots than it costs and a price is at least
-> 1, so a promoted unit subsumed at least two below it and a level holds at most half the one beneath (T9).
-> Every ratio in the chain is therefore `≥ 2`, so `N₀ / N_D ≥ 2^D` and the true reach is **at least** what the
-> declared form returns.
->
-> **Reach doubles every `dim` levels.** The whole schedule is the radii and `dim`, both already declared —
-> **no level declares anything, and there is no rate to choose.**
->
-> **The schedule and the measurement are one expression.** Substitute T9's bound `2^D` and it is declared;
-> substitute the activations each level's election actually promotes and it is adaptive. The declared form is
-> the conservative case and under-reaches wherever a level consolidates harder than it must.
+> **The reach and the granularity are the same power of two.** D16 resolves offsets in base 2, so a level
+> reaching `2^k` names its outermost offsets in groups of `2^k`.
 
 The buffer is a sliding window over frames; an activation enters at its newest edge and walks to its oldest.
-With a reach of 2 — the base, where `R_t = 3` — a firing at frame 10:
+With a reach of 1 — the base — a firing at frame 10:
 
 ```
-                 frame 10        frame 11        frame 12        frame 13
-   buffer       [ 8  9 10]      [ 9 10 11]      [10 11 12]      [11 12 13]
-                       ▲               ▲               ▲
-   activation        fires          +1 lands       +2 lands         gone
-   at frame 10    newest edge                    oldest edge
-                  sees −2, −1                     complete
+                 frame 10        frame 11        frame 12
+   buffer        [ 9 10]        [10 11]         [11 12]
+                      ▲              ▲
+   activation       fires        +1 lands          gone
+   at frame 10   newest edge    oldest edge
+                   sees −1        complete
 ```
 
 > **D16 — Offsets are resolved logarithmically.** An offset component is the coordinate difference **kept to
-> one significant digit in base `R_i`**, the radius of the dimension it measures along:
+> one significant digit in base 2**, the radius (D15):
 > ```
-> offset(δ)   =   sign(δ) · R_i^g · ⌊ |δ| / R_i^g ⌋          g = max(0, ⌊ log_(R_i) |δ| ⌋)
+> offset(δ)   =   sign(δ) · 2^g · ⌊ |δ| / 2^g ⌋          g = max(0, ⌊ log_2 |δ| ⌋)
 > ```
-> At `R_i = 3` the reachable offsets are `0, ±1, ±2, ±3, ±6, ±9, ±18, ±27, …`. Near offsets come out exact;
-> distant ones are named coarsely. `G` groups give `R_i + G(R_i−1)` offsets per direction across a reach of
-> `R_i^G(R_i−1)`, so **reach is exponential in the alphabet**.
+> Above `g = 0` the multiplier is always 1, so this is `sign(δ) · 2^⌊ log_2 |δ| ⌋`, and the reachable offsets
+> are `0, ±1, ±2, ±4, ±8, ±16, …`. Near offsets come out exact; distant ones are named coarsely. `G` groups
+> give `2 + G` offsets per direction across a reach of `2^G`, and `reach(k) = 2^k`, so `G = k`.
 >
 > **Nothing is cut off; precision decays instead.** A level whose units stand one position apart uses the
 > exact end and votes the coarse offsets away for want of a majority; a level whose units stand twenty apart
@@ -321,12 +291,6 @@ With a reach of 2 — the base, where `R_t = 3` — a firing at frame 10:
 > dimension can fall inside it. A count is per `(neuron, offset)` (D24), `d` is a symmetric difference over
 > neighbors (D17), and `|e|` counts them. D5's exclusion is about **firing**, one per `(dimension, position)`,
 > and that is untouched.
-
-**Spatial processing is a configuration, not a subsystem.** A channel declaring `R_t = 1` has zero reach
-there, so every neighbor sits at temporal offset 0, the forward half is empty, and what is left is the same
-machinery with one dimension flattened — at every level of one stack (R30). The flattened dimension drops out
-of the schedule as well as out of the box: an image channel processed this way has `dim = 2`, and its reach
-doubles every two levels rather than every three (D15).
 
 **One neighborhood per firing, and at most one entry serves it.** If a neuron could activate several children,
 each dimension would carry several active units and the count would square at every level.
@@ -397,9 +361,8 @@ decided to keep, and the commitments its open activations have already acted on.
 
 > **D20 — Halves.** Cut either at the firing frame, on the temporal component alone. The **backward half**,
 > `Δt ≤ 0`, is in hand when the neuron fires and is what recognition compares (R7). The **forward half**,
-> `Δt > 0`, arrives over the next `reach_t` frames and can key nothing, because it does not exist when the choice
-> is made. **The split is availability, so only time can produce it**; a channel with `R_t = 1` has no
-> forward half at all.
+> `Δt > 0`, arrives over the next `reach_t` frames and can key nothing, because it does not exist when the
+> choice is made. **The split is availability, so only time can produce it.**
 >
 > **The adjustment cuts the same way and means something different in each half** (D28). Backward it says which
 > neighbors another unit already covered, so they earn this neuron nothing. Forward it says which slots this
@@ -410,7 +373,7 @@ decided to keep, and the commitments its open activations have already acted on.
 > neuron           = (coordinate, routing table, history, open activations)
 >
 > routing table    = set of entries
-> entry            = (id, neighborhood, child, retired?, counts°, served bins°)
+> entry            = (id, neighborhood, child, counts°, served bins°)
 >
 > history          = (bins, ring)                  complete observations only
 > ring             = observations, oldest first
@@ -574,22 +537,21 @@ slot, tallied.
 > frame — a neuron that does not fire evicts nothing. Recording is unconditional, and no election outcome ever
 > edits a history.
 
-> **R10 — Free parameters: the history size `H`, and one radius per activation dimension.** The alphabet
-> (channels, dimensions, resolutions) is not among them: a resolution defines what a base symbol *is*, so it is
-> the problem statement rather than a knob on the algorithm. How many radii there are is likewise the problem
-> statement — a stream declares one, an image three — so what is tuned is their values and nothing else.
+> **R10 — Free parameter: the history size `H`.** The alphabet (channels, dimensions, resolutions) is not one:
+> a resolution defines what a base symbol *is*, so it is the problem statement rather than a knob on the
+> algorithm.
 >
-> Everything about depth is derived from those. Adjacency is not declared (D4): it is the radius, read
-> conjunctively. The radius per level is not declared either (D15). The offset alphabet follows from the
-> radii as well (D16). **Nothing else in the design is tuned, and nothing anywhere is capped.**
+> Everything about depth is derived. Adjacency is not declared (D4): it is the reach, read conjunctively. The
+> reach per level is not declared either (D15), and neither is the offset alphabet (D16). **Nothing else in
+> the design is tuned, and nothing anywhere is capped.**
 
-> **R11 — There is no floor relating `H` to the radius.** They constrain nothing in each other. `H` counts
-> observations and a radius sets how wide one observation is. There is no window for a span to be wider than:
+> **R11 — There is no floor relating `H` to the reach.** They constrain nothing in each other. `H` counts
+> observations and the reach sets how wide one observation is. There is no window for a span to be wider than:
 > the file is the run (D9), so no span's corrections can fall outside it and every symbol is priceable at any
 > reach.
 >
 > **What the two do share is the collapse's evidence.** R4 votes per offset slot over the same `H`
-> observations, so every slot — innermost and outermost alike — is decided on the same count. A radius bigger
+> observations, so every slot — innermost and outermost alike — is decided on the same count. A reach wider
 > than the data supports simply finds no majority in its outer slots, and they drop.
 
 # 7. The one test
@@ -699,9 +661,9 @@ in the design.
 > parent now holds is a different object and takes counts at once — R19 step 3 hands it every bin it wins,
 > including the one holding the observation that triggered the test.
 >
-> **Release is the same shape reversed**: the parent releases, the machine reclaims. A deleted entry's pattern
-> neuron goes back on the same request that carries the add (R19), so a bill touches the alphabet once — in one
-> direction, both, or neither.
+> **Release is the same shape reversed**: the parent retires, the machine reclaims. A retired entry goes back on
+> the same request that carries the add (R19) and the machine reclaims its pattern neuron at the death frame
+> (R18), so a bill touches the alphabet once — in one direction, both, or neither.
 
 ## 8.2 Delete — pruning the table
 
@@ -714,24 +676,47 @@ in the design.
 > over the same bins. An entry only ever falls below its line by losing bins, by having its observations
 > evicted, or by its adjustments recording that another unit has taken the territory.
 >
-> **Retiring** takes the entry out of service that instant. It stops competing for recognition, so no further
-> activation may commit to it. Its bins fall to whichever entry is next closest (R6). Having no served set, it has
-> no margin and nothing to re-center — **the neighborhood it held stops moving**, and it is not a candidate for
-> anything again.
+> **Retiring is a deletion in the parent.** The entry leaves the routing table that instant. It stops competing
+> for recognition, so no further activation may commit to it, and its bins fall to whichever entry is next
+> closest (R6). Having no served set, it has no margin and nothing to re-center — **the neighborhood it held
+> stops moving**, and it is not a candidate for anything again. What leaves the table rides the bill's return
+> to the machine (§8.3), as a request to delete it. **The neuron keeps no retired state and re-checks nothing.**
 >
-> **Deleting** removes the entry and its pattern neuron together, the moment no open activation is committed to
-> that entry. Usually that is the same pass. Otherwise the entry stays retired, and the delete processing of
-> every later bill re-checks the retired entries — so a retirement is collected within `reach_t` frames, the
-> longest an open activation lives.
+> **The death frame is the machine's to set, and it can be this frame.** The neuron asks for the child to go
+> and says nothing about when — it sees its own open activations and not the units promoted off them. The
+> machine sees both: it hands every neuron its frames and it is what closes an activation when its span ends
+> (D6), so the frame is read off the board it already holds.
+> ```
+> death frame   =   when the last activation still able to name the entry closes
+>               =   this frame, when none is open
+> ```
+> That set only shrinks. A pattern neuron has one parent (D2), so once that parent stops routing to it nothing
+> can fire it again, and no level built afterward can name it either, because a level is built out of what is
+> firing (R30). Reach grows with the level (D15), so the last to close is the highest one and the wait is at
+> most `reach_t(D)` frames, `D` being the highest level the stack currently holds.
+>
+> **Deleting** is the machine's, on a pass of its own: **every frame, once the last level has billed**, it reads
+> the **death ledger** and takes everything due — the entry, its pattern neuron and that neuron's subtree
+> together, and what named them scrubbed with them. An entry retired this frame with nothing committed to it is
+> due this frame and dies on this frame's pass; one still being asserted from waits exactly as long as the stack
+> above it needs, and not a frame longer. **Nothing traces who is committed to what**: a back-pointer would be
+> structure the file does not hold, and the machine settles the question once, off the board it already keeps.
+>
+> **The ledger holds the entry, not a handle to it.** A pattern's neighborhood is stated in one place, the
+> parent's line for it (D9), and a claim on that pattern is expanded through that line (R32). Until the death
+> frame, units at its own level still name it and units above it still cover it, so the definition has to stay
+> readable after the table stops routing to it — and the ledger is where it is readable.
 
 **A commitment survives its entry's retirement.** An activation committed to a retired entry goes on asserting
-from it — the neighborhood is frozen, not gone — and if that bid was promoted, the unit above is still live and
-still expands through that same neighborhood (R32). The activation's own observation completes and folds into
-whatever now serves its bin (D22).
+from it — the neighborhood is frozen and the line it is stated in is in the ledger, not gone — and if that bid
+was promoted, the unit above is still live and still expands through that same neighborhood (R32). The
+activation's own observation completes and folds into whatever now serves its bin (D22).
 
-**A deletion takes the subtree, and takes it at once.** A pattern neuron with no open activations has not fired
-within `reach_t` frames; if it has not fired, none of its children has fired either, so none of them has open
-activations, and so on to the bottom. There is no staged cascade and nothing to wait on at any level.
+**A deletion takes the subtree, and takes it at once.** A retired entry's pattern neuron cannot fire again, so
+by the death frame it has no open activations; if it has not fired, none of its children has fired either, so
+none of them has open activations, and so on to the bottom. **Children outlive their parents** — reach grows
+with the level, so an activation above is still open when the one that fed it has closed — and the apex term in
+the death frame is what covers them. There is no staged cascade and nothing to wait on at any level.
 
 **The normal is never retired**: it has no dictionary line to refund. And nothing irreplaceable dies — an entry
 retired while its evidence is still in the ring is rebuilt by the add test the moment that evidence pays again.
@@ -754,17 +739,19 @@ retired while its evidence is still in the ring is rebuilt by the add test the m
 > 3. **Add**, when a completed observation's contribution is negative (D13) — the fold worked it out, so nothing has
 >    to read it. Collapse the demand into `C` (R15) and price it (R16). If it pays, `C` enters the table
 >    provisionally and takes every bin it wins.
-> 4. **Retire and delete**, at every bill and on no condition at all. **A bill always moves counts** — a span
->    folds in, usually another is evicted, and either can hand a bin to a different server (R3) — so every
->    margin the pass reads is a different number than it was, and whether each entry still earns its line is an
->    open question at every bill. The pruning pass over the whole table, `C` included (R18): retire every
->    strictly negative margin, and delete each retired entry that nothing is committed to — this bill's
->    retirements and any older ones still waiting.
+> 4. **Retire**, at every bill and on no condition at all. **A bill always moves counts** — a span folds in,
+>    usually another is evicted, and either can hand a bin to a different server (R3) — so every margin the pass
+>    reads is a different number than it was, and whether each entry still earns its line is an open question at
+>    every bill. The pruning pass over the whole table, `C` included (R18): retire every strictly negative
+>    margin, each leaving the table there and then. **Deleting is not the neuron's** — it happens on the
+>    machine's ledger pass, after the last level has billed, and an entry nothing is committed to is gone before
+>    this same frame ends (R18).
 > 5. **Re-center.** Structure collapses at the end (R5), so every entry whose served set moved in step 3 or 4
 >    collapses again, and its `d_backward` to every bin is recomputed with it. **Nothing gates this either**: a
 >    collapse follows its counts, and what varies between bills is only which entries had counts move.
-> 6. **One request to the machine.** The add if `C` survived, and the release of every symbol deleted in step
->    4, in one interaction, after both tests have run *and* the table has re-centered. Sending last settles
+> 6. **One request to the machine.** The add if `C` survived, and every entry step 4 retired, to be deleted when
+>    the machine works out that it can be, in one interaction, after both tests have run *and* the table has
+>    re-centered. Sending last settles
 >    what the request carries: a candidate can inherit bins from an entry the pruning pass retired, so the
 >    definition on the request is the final one, not the one the add test happened to price. Nothing else in
 >    the bill reaches another level, and the bill ends on it.
@@ -788,8 +775,9 @@ The neuron fired this frame, and the backward half of its observation, `O⁻`, i
 
 1. **Route and commit.** Compare `O⁻` against every entry's own backward half and take the closest **that is
    worth committing to**: `cover > 1 + d_backward` against that entry, R21's price on the half in hand. Children
-   compete, ties to the older `id`, retired entries do not (R18). **If none of them clears, the normal takes
-   it** — it costs no line and makes no bid, so it has nothing to clear (D23). That entry becomes the
+   compete, ties to the older `id`. **If none
+   of them clears, the normal takes it** — it costs no line and makes no bid, so it has nothing to clear
+   (D23). That entry becomes the
    activation's **committed entry** (R14). If `O⁻` has been seen before it already has a bin, whose distances
    are exactly these numbers (D22). **This is also where the bin's server is re-derived** (T8): whichever entry
    this routing takes is what the next fold and the next price will use. Open the activation at age 0 holding that
@@ -847,31 +835,23 @@ run **once**, after every fold is in. This is R19, walked through:
    server as that server stands after step 1, and worked out by the fold itself. It makes no difference whether the
    server is the normal or a child. Collapse the demand into `C` (R15) and price it (R16). **At most one
    candidate per bill.** A passing test installs `C` provisionally and hands it every bin it wins.
-4. **Retire and delete**, at every bill and on no condition at all — steps 1 and 2 moved counts, so every
-   margin is a different number than it was and whether each entry still earns its line is open again. The
-   pruning pass over the whole table, `C` included: retire every strictly negative margin, sequentially (R18).
-   Their bins fall to whichever entry is next closest and the neighborhoods they held freeze. Then delete every
-   retired entry — this bill's and any older one still waiting — that no open activation is committed to,
-   taking its pattern neuron and that neuron's subtree with it.
+4. **Retire**, at every bill and on no condition at all — steps 1 and 2 moved counts, so every margin is a
+   different number than it was and whether each entry still earns its line is open again. The pruning pass over
+   the whole table, `C` included: retire every strictly negative margin, sequentially (R18). Each leaves the
+   table at once, its bins falling to whichever entry is next closest and the neighborhood it held freezing.
+   **The neuron deletes nothing** — the machine takes the entry, its pattern neuron and that neuron's subtree
+   on the ledger pass at the death frame, which is this frame whenever nothing is committed to it (R18).
 5. **Re-center.** Every entry whose served set moved in step 3 or 4 collapses again, and its distance to every
    bin is recomputed with it. Steps 1 and 2 collapsed what they moved as they moved it (R5), so between them
    this step leaves nothing stale.
 6. **One request, and the bill returns.** If `C` survived, the machine returns its identity and the neuron
    registers it as an entry — a passing test **requests** rather than creates, because a pattern is a symbol at
-   the level above and that alphabet belongs to the machine. The same request releases every symbol deleted in
-   step 4. The newborn is installed **now, for later**.
+   the level above and that alphabet belongs to the machine. The same request hands over every entry step 4
+   retired and asks for it to be deleted; when it dies is the machine's to work out. The newborn is installed
+   **now, for later**.
 
 The bill is processed after the bets and after the level's election, since it reads a board that this frame's
 election is the last thing to move (T12).
-
-## 9.4 At `R_t = 1` the bet and the bill are the same frame
-
-The span is one frame, so an activation is born at age 0 and reaches age `reach_t = 0` immediately. §9.2 does not
-exist, and the observation is complete the moment it is recognized. **The election is what separates the two
-halves of that pass**: the bet and the bill fall in one frame, but not in one step, because the bill reads a
-board the bet has not finished making. This is what makes spatial-only processing a matter of setting
-`R_t = 1` and leaving the spatial radii to do the work: recognize, then record, then test, then re-center, all
-within the frame.
 
 ---
 
@@ -927,7 +907,7 @@ the board comes down, and neither is an arithmetic the other performs.**
 
 ## 10.2 Slots and claims
 
-> **D27 — Two windows, not one.** A bid at level `k` reaches `reach_i(k)` either way in every activation dimension
+> **D27 — Two windows, not one.** A bid at level `k` reaches `reach(k)` either way in every activation dimension
 > (D15), and its two halves are different objects the machine keeps separately.
 > ```
 > coverage set    per level, backward    which accepted bid holds each subsumed active activation
@@ -937,7 +917,7 @@ the board comes down, and neither is an arithmetic the other performs.**
 >                 exclusive              one owner per slot, re-resolved every frame (§12)
 > ```
 > **A slot is named by a full coordinate**, dimension and position together, so two activations of one neuron at
-> two positions are two slots and never contend. Level `k`'s coverage set spans `2·reach_i(k) + 1` in each
+> two positions are two slots and never contend. Level `k`'s coverage set spans `2·reach(k) + 1` in each
 > activation dimension and ages out with it. **The machine holds nothing on the scale of the run.**
 >
 > **The asymmetry is what the two halves are.** Backward, a neuron is a fact that needs accounting for exactly
@@ -1009,7 +989,7 @@ numbers are final.
 > **`D` is reached, not known.** The walk stops where a level accepts no bids and therefore produces none above
 > it. `Σ_(k<D) reach_t(k)` is a bound on a condition, not a countdown to run.
 >
-> Each level needs only its own **coverage set**, `2·reach_i(k) + 1` wide in each activation dimension (D15, D27).
+> Each level needs only its own **coverage set**, `2·reach(k) + 1` wide in each activation dimension (D15, D27).
 > The assertion map is one global map over base slots, holding units from every level by construction — so the
 > delay stacks and the memory does not.
 
@@ -1069,7 +1049,7 @@ bid covers has to end up credited to exactly one bid** — that is what stops on
 
 # 11. The order of a frame
 
-> **R30 — One stack, at the declared radii.** Base neurons build their neighborhoods, recognize them and bid;
+> **R30 — One stack, at the derived reach.** Base neurons build their neighborhoods, recognize them and bid;
 > contraction settles which propagate; the neurons then bill, reading off the settled board and minting children
 > where economical. The survivors are level 1 — the fewest that cover the active base neurons. Level 1 forms its
 > own neighborhoods and it happens again. **When a level's active neurons fire no children, nothing propagates
@@ -1080,7 +1060,11 @@ bid covers has to end up credited to exactly one bid** — that is what stops on
 > that this frame's election is the last to move (T12). Nothing in that order leaves the level or the frame
 > (T14). Nothing declares the depth and nothing caps it.
 >
-> Every level runs the same rule, and every level's radius comes out of the same expression (D15). There is no
+> **The frame ends with the machine's own pass.** Once the last level has billed, the machine reads the death
+> ledger and deletes everything due (R18) — including what this frame's bills retired, which is why a
+> retirement is usually collected in the frame that made it.
+>
+> Every level runs the same rule, and every level's reach comes out of the same expression (D15). There is no
 > spatial stack that resolves before a temporal one: a neighborhood names offsets, and a pattern at any level
 > may name neighbors in its own frame, in earlier ones, in later ones, beside it in space, or in a mix.
 > **Compression is spatio-temporal at every level, in one pass.**
@@ -1276,7 +1260,7 @@ symbol occurs — the one variable-length code in which probabilities set costs.
 
 ```mermaid
 flowchart TD
-    A["Frame: the machine calls the neuron at each of its<br/>coordinates. The neuron holds its own open<br/>activations, one per (age, position)"] --> D["AGE 0 — THE BET: route on d_backward.<br/>Closest entry wins (retired entries do not compete)<br/>and the activation COMMITS to it for the window.<br/>Writes ONLY the open activation"]
+    A["Frame: the machine calls the neuron at each of its<br/>coordinates. The neuron holds its own open<br/>activations, one per (age, position)"] --> D["AGE 0 — THE BET: route on d_backward.<br/>Closest entry wins (a retired entry has left the table)<br/>and the activation COMMITS to it for the window.<br/>Writes ONLY the open activation"]
     D --> E["Serve: the committed entry fires and bids.<br/>Its forward neighbors are asserted.<br/>Nothing comes back here"]
     E -.->|"the bid goes up"| X["CONTRACTION, two decisions and a settling, no iteration:<br/>ASSIGN each free slot to the claimant with the most<br/>covered neurons per unit of price, every slot<br/>independently; ACCEPT each bid that still holds more slots<br/>than it costs; then SETTLE a rejected holder's slots onto<br/>the best accepted bid that names them — credit only,<br/>nothing flips. The dictionary line is never charged here.<br/>Overlap is legal and priced"]
     E --> C["AGES IN BETWEEN — collect: write the arriving offset<br/>into the activation's forward half, re-read the<br/>committed entry and assert. Nothing else"]
@@ -1284,11 +1268,12 @@ flowchart TD
     X -.->|"the board is READ here, once"| B
     B --> L{"Contribution < 0?"}
     L -->|yes| M["ADD: collapse the demand to C, benefit > 1+|C|?<br/>Benefit counts only CREDITED neighbors and OWNED slots,<br/>off the bins' adjustment tallies. If it pays, C enters<br/>provisionally and TAKES every bin it wins. ONE candidate"]
-    M --> DEL["RETIRE + DELETE, EVERY BILL: prune the whole table,<br/>C included, same formula as the add test. Retire every strictly<br/>negative margin, one at a time, re-checking after each.<br/>Their bins fall to whichever entry is next closest<br/>and their neighborhoods freeze. Delete every retired entry<br/>nothing is committed to, subtree and all"]
+    M --> DEL["RETIRE, EVERY BILL: prune the whole table,<br/>C included, same formula as the add test. Retire every strictly<br/>negative margin, one at a time, re-checking after each.<br/>Each LEAVES THE TABLE at once; its bins fall to whichever<br/>entry is next closest and its neighborhood freezes.<br/>The machine deletes it on the LEDGER PASS at its DEATH<br/>FRAME — this same frame if nothing is committed to it"]
     DEL --> Q["RE-CENTER, once for the frame: every entry whose served<br/>set changed collapses again and its distance to every<br/>bin is recomputed"]
-    Q --> P["ONE request to the machine, and the bill returns:<br/>the add if C survived, plus the release of every symbol<br/>deleted this bill. Newborn serves NEXT time"]
+    Q --> P["ONE request to the machine, and the bill returns:<br/>the add if C survived, plus every entry retired this bill,<br/>to be deleted when the MACHINE works out that it can be.<br/>Newborn serves NEXT time"]
     L -->|no| DEL
-    P --> O["Next level up, one stack, radius from D15<br/>(until a level fires no children — that frontier<br/>is the apex)"]
+    P --> O["Next level up, one stack, reach from D15<br/>(until a level fires no children — that frontier<br/>is the apex)"]
     X --> O
-    O --> Y["§12 After the last level: every active neuron asserts.<br/>Expand to base symbols, then per slot work DOWN from<br/>the highest level claiming it — within a level the<br/>COLLAPSE over the claims decides (count &gt; n/2); no<br/>majority and that level is silent, so the next one down<br/>resolves it. On an action slot an INFERENCE at a level<br/>beats an assertion there. Events → scored; actions →<br/>executed, and every active neuron records a connection<br/>to what ran, at the distance of its own age"]
+    O --> Z["LEDGER PASS, after the last level has billed:<br/>delete everything the DEATH LEDGER says is due,<br/>subtree and all. Usually that includes what this<br/>frame's bills retired"]
+    Z --> Y["§12 After the last level: every active neuron asserts.<br/>Expand to base symbols, then per slot work DOWN from<br/>the highest level claiming it — within a level the<br/>COLLAPSE over the claims decides (count &gt; n/2); no<br/>majority and that level is silent, so the next one down<br/>resolves it. On an action slot an INFERENCE at a level<br/>beats an assertion there. Events → scored; actions →<br/>executed, and every active neuron records a connection<br/>to what ran, at the distance of its own age"]
 ```

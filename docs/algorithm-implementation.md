@@ -274,3 +274,55 @@ is tagged with the phase it lands in.
 
 18. **Watch for the one expected regression:** action wiring reaches a new child one recurrence later than
     today, since newborns no longer fire on their birth frame.
+
+## The MNIST frame protocol
+
+MNIST runs on R35's chain — infer, execute, reward — one example per three frames. Nothing in
+[algorithm.md](algorithm.md) changes for it. A base event neuron's reach in time is 1 (D15), so its
+observation spans the frame before and the frame after its own.
+
+```
+frame     carries              what happens
+-----     -------              ------------
+f         events only          base event neurons fire, bet and bid (§9.1);
+                               contraction runs; the assertion resolves (§12),
+                               committing the digit-call action for f + 1
+f + 1     the action only      the digit call executes and its neuron fires;
+                               events are silent. Every neuron open here
+                               records a connection to what ran, at the
+                               distance of its own age (R35a)
+f + 2     the reward only      the label arrives as input, not as a symbol
+                               (§13). Nothing fires. It folds into the
+                               connection's running mean (R35a)
+f + 3     next example         = the next example's f
+```
+
+**The image is presented once, at `f`.** Frames `f + 1` and `f + 2` carry no event symbols at all. Every event
+dimension is silent in them (D5).
+
+### What follows from that
+
+**Base event processing is spatial.** The backward slot at `−1` lands on the previous example's reward frame
+and the forward slot at `+1` on the action frame; both are silent. So every neighbor a base event neuron names
+sits at temporal offset `0`. The temporal slots are voted out for want of a majority (R4, R11) and cost nothing
+in `|e|`.
+
+**No action patterns form.** An action neuron's own backward and forward slots land on frames carrying no
+actions, so the action hierarchy stays flat. R36's apex active action is therefore always the base action,
+which R36 states explicitly holds before any action pattern exists.
+
+**Connections are recorded per frame, never at the bill.** R35a records one at every age a neuron is open at,
+and the reward folds in a frame later. Neither is gated on the observation completing, so the reward path does
+not wait on the window and does not vary with level. Do not couple connection recording to §9.3.
+
+**Classification is selection, not a readout.** The digit call is an action chosen by R38 off the event→action
+connections, scored by the reward at `f + 2`. R39 supplies exploration while a situation's reward is negative.
+The naive-Bayes consensus and the per-dimension vote in the current code have no counterpart in
+[algorithm.md](algorithm.md) and are retired, not ported.
+
+### Encoder changes
+
+- Emit the image on one frame only; emit nothing on the action and reward frames.
+- Sparse emission: an off pixel supplies no symbol (D5). No neuron is emitted for it.
+- Declare the digit calls as an action dimension, in a fixed order — R39 walks that order for exploration, so
+  it is part of the problem statement.
