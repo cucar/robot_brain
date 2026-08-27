@@ -495,11 +495,11 @@ never shared between two populations.
 
 > **R6 — Servers are re-derived, not patched.** A moved neighborhood changes every distance measured against
 > it. What is maintained is **one entry's distance to every bin**: an entry that re-centers recomputes those,
-> and nothing else is repaired. The closest is then taken from **the distances the bin holds** whenever that
+> and nothing else is repaired. The server is then taken from **the distances the bin holds** (D22) whenever that
 > bin is used — by recognition when it fires (§9.1), and by the tests when they scan the table (R19). Nothing
 > has to be indexed the other way, because those distances are already the index (D22).
 >
-> **A bin whose closest entry has changed takes its counts with it** (R3), so the entry that received a span
+> **A bin whose server has changed takes its counts with it** (R3), so the entry that received a span
 > is always the entry that gives it back. Like every count movement, the transfer happens at a bill (R5).
 
 **Cold start is silence.** An entry with no observations has no counts and no neighborhood. That is the initial
@@ -619,8 +619,8 @@ in the design.
 > **R15 — The candidate is a center, not a sample.** Two passes over the bins, both only on a negative
 > contribution:
 > 1. **Find the demand.** With the triggering observation `O` as probe, collect the bins routing would hand
->    it: `d_backward(b, O) < d_backward(b, b.server)`, taking each bin's server as its closest entry **now**
->    (R6), not the value cached from the last time it was read.
+>    it: `d_backward(b, O) < d_backward(b, b.server)`, taking each bin's server as it stands **now**
+>    (D22, R6), not the value cached from the last time it was read.
 > 2. **Collapse.** R4 over exactly those bins, summing tallies — the second of its three populations. The
 >    result is `C`.
 >
@@ -633,7 +633,7 @@ in the design.
 > benefit  =  Σ over the win set:  their observations' contributions under C     (D13)
 > commit iff  benefit > 1 + |C|
 > ```
-> **`b.server` is the bin's closest entry, re-derived as the scan reads it.** A bill re-centers after it
+> **`b.server` is the bin's server (D22), re-derived as the scan reads it.** A bill re-centers after it
 > restructures (R19 step 5), so a cached server can lag the distances until something reads them; the scan is
 > the read that corrects it.
 >
@@ -677,8 +677,8 @@ in the design.
 > evicted, or by its adjustments recording that another unit has taken the territory.
 >
 > **Retiring is a deletion in the parent.** The entry leaves the routing table that instant. It stops competing
-> for recognition, so no further activation may commit to it, and its bins fall to whichever entry is next
-> closest (R6). Having no served set, it has no margin and nothing to re-center — **the neighborhood it held
+> for recognition, so no further activation may commit to it, and its bins fall to whichever entry D22 takes
+> next (R6). Having no served set, it has no margin and nothing to re-center — **the neighborhood it held
 > stops moving**, and it is not a candidate for anything again. What leaves the table rides the bill's return
 > to the machine (§8.3), as a request to delete it. **The neuron keeps no retired state and re-checks nothing.**
 >
@@ -726,8 +726,8 @@ retired while its evidence is still in the ring is rebuilt by the add test the m
 > **R19 — The bill's pass.** Once per bill, in order:
 > 1. **Fold.** The completed observation joins its bin, carrying the adjustment it collected across its span
 >    (D28); a bin that opens here measures its distance to every entry — the comparison recognition makes at
->    every firing (§9.1), re-made because the table may have moved during the window — and its server is the
->    closest, like any other bin's (D22). The whole span folds into that bin's server's counts at once and the
+>    every firing (§9.1), re-made because the table may have moved during the window — and its server is
+>    what D22 takes, like any other bin's. The whole span folds into that bin's server's counts at once and the
 >    bin's adjustment tallies move with it. **A contribution is settled here and nowhere else**, which is the
 >    only point at which it means anything: everything free has already happened, so what is left, when it is
 >    left, is a negative one.
@@ -736,10 +736,11 @@ retired while its evidence is still in the ring is rebuilt by the add test the m
 >    the one that just gained one**, which is why a bill can settle an observation well and still leave some
 >    other entry below its line. Counts moved in either step collapse where they move (R5), so every entry the
 >    two touched is centered before anything is priced.
-> 3. **Add**, when a completed observation's contribution is negative (D13) — the fold worked it out, so nothing has
->    to read it. Collapse the demand into `C` (R15) and price it (R16). If it pays, `C` enters the table
->    provisionally and takes every bin it wins.
-> 4. **Retire**, at every bill and on no condition at all. **A bill always moves counts** — a span folds in,
+> 3. **Add**, for every completed observation whose contribution is negative (D13) — the fold worked it out, so nothing has
+>    to read it. Collapse the demand into `C` (R15) and price it (R16). If it pays, `C` enters the
+>    table provisionally and takes every bin it wins. **A bill can therefore add several children**, one per
+>    observation that pays. The observations are taken in the order the inputs give them.
+> 4. **Retire and delete**, at every bill and on no condition at all. **A bill always moves counts** — a span folds in,
 >    usually another is evicted, and either can hand a bin to a different server (R3) — so every margin the pass
 >    reads is a different number than it was, and whether each entry still earns its line is an open question at
 >    every bill. The pruning pass over the whole table, `C` included (R18): retire every strictly negative
@@ -831,14 +832,15 @@ run **once**, after every fold is in. This is R19, walked through:
 2. **Age.** If the ring is full, each arriving observation evicts the oldest (D25, R9) — one out for one in.
    Each departing span leaves its server's counts, that server re-centers the same way, and its adjustment
    leaves the bin's tallies with it. **Nothing is priced here.**
-3. **Add**, when **a completed observation's contribution is negative** (D13) — measured against its bin's
+3. **Add**, for **every completed observation whose contribution is negative** (D13) — measured against its bin's
    server as that server stands after step 1, and worked out by the fold itself. It makes no difference whether the
-   server is the normal or a child. Collapse the demand into `C` (R15) and price it (R16). **At most one
-   candidate per bill.** A passing test installs `C` provisionally and hands it every bin it wins.
+   server is the normal or a child. Collapse the demand into `C` (R15) and price it (R16).  **A bill can therefore add several children**,
+   one per observation that pays — it covers every position the neuron fired at, and each observation is taken in
+   the order the inputs give them. A passing test installs `C` provisionally and hands it every bin it wins.
 4. **Retire**, at every bill and on no condition at all — steps 1 and 2 moved counts, so every margin is a
    different number than it was and whether each entry still earns its line is open again. The pruning pass over
    the whole table, `C` included: retire every strictly negative margin, sequentially (R18). Each leaves the
-   table at once, its bins falling to whichever entry is next closest and the neighborhood it held freezing.
+   table at once, its bins falling to whichever entry D22 takes next and the neighborhoods they held freezing.
    **The neuron deletes nothing** — the machine takes the entry, its pattern neuron and that neuron's subtree
    on the ledger pass at the death frame, which is this frame whenever nothing is committed to it (R18).
 5. **Re-center.** Every entry whose served set moved in step 3 or 4 collapses again, and its distance to every
