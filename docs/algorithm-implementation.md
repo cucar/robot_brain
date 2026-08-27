@@ -54,10 +54,45 @@ On the temporal axis the same shape holds with two statistic tables per entry �
 outcome-side counts — both moved together when a record changes hands, and records completed one frame late
 (algorithm.md, "The history").
 
+## The machine–neuron interface
+
+**The machine owns the open activations; the neuron owns its table and its history** (algorithm.md, D6, D21).
+An open activation is `(position, age, forward half so far, committed entry)`, held one per
+`(neuron, age, position)` on the machine side. Nothing about a frame lives in the neuron.
+
+There are two calls and no others:
+
+```
+process frame   — made at age 0 and age reach_t only, never in between
+  age 0         in:  the backward half, and the frame's rewards
+                out: a RECOGNITION = (the committed entry's neighborhood,
+                                      a bid if that entry served a child — else none)
+  age reach_t   in:  every activation that reached this age, each with its completed
+                     forward half and the adjustment the machine read for it (D28)
+                out: add requests + delete requests
+
+process actions — after every level has settled, NOT age-banded
+                in:  what ran this frame, and each open activation's age
+                out: the inferences contending for the next action slot (R38a)
+                     — and the neuron records its connections to what ran (R35a)
+```
+
+**A neuron with reach `r` is called twice per activation, not `r + 1` times.** The intermediate frames are pure
+transcription: the machine writes the arriving offset into the forward half and calls nothing. Since reach
+doubles per level, this is the difference between two calls and thirty-three at level five.
+
+**The recognition is returned once and frozen.** It is not re-read as the entry re-centers; the standing
+recognition is the one the neuron handed back at age 0 (R14, R24). The machine keeps it until the span closes.
+
+**Coverage inhibits on the machine side, not in the neuron** (R31a). A covered neuron's recognition and
+inferences take no part in the §12 resolution, but nothing about its billing, folding, adjustment or connection
+recording changes — the neuron is never told it was covered except through the adjustment it is handed.
+
 ## Neuron methods
 
-In call order within a frame. All distances are the fit (algorithm.md, "The fit"); all sums run over the
-histogram, which never holds more entries than the horizon.
+In call order within a frame, on the **reach-collapsed spatial path** the early stages build, where the bet and
+the bill fall in one frame and the two calls above coincide. All distances are the fit (algorithm.md, "The
+fit"); all sums run over the histogram, which never holds more entries than the horizon.
 
 **`evict_if_full()`** — frame step 1. If the ring is at capacity: pop the oldest ref; decrement its histogram
 entry's count (drop the entry at zero). If its server was the normal: subtract the context from
@@ -72,12 +107,14 @@ same scan: push the ref, upsert the histogram entry — the server is routing's 
 or not. If the normal serves: add `O` to `connections`, increment `served`, mark dirty. Nothing recorded here
 is ever revoked — there is no pending state and no retraction.
 
-**`serve(server)`** — frame step 3. Child: **activate it** — it fires, and the thalamus gets the recognition
-bid: the active neurons the child's definition names correctly, bidder included, plus `f` = its
-named-but-absent count. **Then return — the neuron is done for the frame.** The record already carries the
+**`serve(server)`** — frame step 3, and the whole of what age 0 returns. It always yields the served entry's
+neighborhood; it additionally yields a bid when the server is a child. Child: **activate it** — it fires, and
+the thalamus gets the recognition bid: the active neurons the child's definition names correctly, bidder
+included, plus `f` = its named-but-absent count. **Then return — the neuron is done for the frame.** The record already carries the
 served distance as priced demand (a badly-served child frame is demand a future add can win); the add test
 never runs on this path — the context was recognized, and the description job went up a level with the
-child. Normal: no activation, no bid; fall through to the steps below.
+child. Normal: no activation and no bid, but **the normal's neighborhood is still returned** — the machine needs
+it for §12 whether or not anything was bid (algorithm.md, §9.1 step 3). Then fall through to the steps below.
 
 *(The election runs in the thalamus, concurrently as far as the neuron is concerned — see algorithm.md,
 "Contraction". It reads the bids and writes only the level above; none of the methods below depend on its
@@ -284,13 +321,14 @@ observation spans the frame before and the frame after its own.
 ```
 frame     carries              what happens
 -----     -------              ------------
-f         events only          base event neurons fire, bet and bid (§9.1);
-                               contraction runs; the assertion resolves (§12),
-                               committing the digit-call action for f + 1
+f         events only          base event neurons fire, bet, and return their
+                               recognitions (§9.1); contraction runs; process
+                               actions returns the inferences; the machine
+                               asserts (§12), committing the digit call for f + 1
 f + 1     the action only      the digit call executes and its neuron fires;
-                               events are silent. Every neuron open here
-                               records a connection to what ran, at the
-                               distance of its own age (R35a)
+                               events are silent. Process actions runs again and
+                               every neuron open here records a connection to
+                               what ran, at the distance of its own age (R35a)
 f + 2     the reward only      the label arrives as input, not as a symbol
                                (§13). Nothing fires. It folds into the
                                connection's running mean (R35a)
@@ -314,6 +352,12 @@ which R36 states explicitly holds before any action pattern exists.
 **Connections are recorded per frame, never at the bill.** R35a records one at every age a neuron is open at,
 and the reward folds in a frame later. Neither is gated on the observation completing, so the reward path does
 not wait on the window and does not vary with level. Do not couple connection recording to §9.3.
+
+**This is the one thing that survives on the intermediate frames, and it is why `process actions` is a second
+call.** `process frame` reaches a neuron at two ages only, so connection recording cannot ride on it — an
+activation at age 3 of a reach-8 span would never be reached. `process actions` is age-blind by construction: it
+walks every open activation the machine holds and hands each one what ran. It also runs after the stack has
+settled rather than during a level, because what ran is not known until then.
 
 **Classification is selection, not a readout.** The digit call is an action chosen by R38 off the event→action
 connections, scored by the reward at `f + 2`. R39 supplies exploration while a situation's reward is negative.

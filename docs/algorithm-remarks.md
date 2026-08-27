@@ -108,7 +108,7 @@ demand whose backward context is distinguishable, and both collapses come out cl
 that stays negative in sum falls below its line and is retired (R18). What none of them can reach is one
 backward context genuinely leading to different futures: those observations share a bin (R7), so no mint can
 ever separate them — the disambiguating information is not in the box at this level. There the collapse votes
-the contested slots to silence, the entry stops asserting them, and the events fall through as corrections on
+the contested slots to silence, the entry stops naming them, and the events fall through as corrections on
 the frontier (R31) — D26's covering-everything-is-not-the-goal, applied where the stream is incompressible at
 this reach. A
 level above, with wider reach, is what gets to hold the missing context. The one negative the vote cannot
@@ -216,12 +216,12 @@ no server of its own is what keeps a bin homogeneous (T3) however long its obser
 **On D21 — three lifetimes, and why they must not be confused.** Three notions of an entry stand in relation
 to an observation, and they expire at different times.
 ```
-committed entry   one activation, R frames    frozen at age 0    what it bid on and asserts from
+committed entry   one activation, R frames    frozen at age 0    what it bid on and recognized from
 server            until the distances move    the closest entry  what an observation costs
 served bins       until the served set moves  inverse of server  what an entry aggregates over
 ```
-An observation whose bin is handed to another entry is priced against the new one (R14), while the activation
-that recorded it goes on asserting what it committed to. Holding the three in one field is what made them look
+An observation whose bin is handed to another entry is priced against the new one (R14), while the recognition
+the machine still holds for that activation is the one returned at age 0. Holding the three in one field is what made them look
 like one thing.
 
 **On D21 — the adjustment is not a fourth lifetime**, because it stands in relation to no entry. It is a fact
@@ -478,6 +478,16 @@ evidence, and the design never measures anything over a partial span (D18) — s
 could be measured, and nothing that would be true a frame later. Everything the activation has to say, it says
 at once, when its span closes.
 
+**On §9.2 — why the neuron is not called at all.** The band's only two jobs were transcribing arriving neighbors
+and re-reading the committed entry, and neither is neuron work. Transcription is the machine's own frame data on
+the way in, held for a reader forbidden to touch it until the bill — escrow, not custody. The re-read was worse
+than idle: it let a standing recognition drift with counts moved by other activations' bills, which R24 already
+denies ("a promoted unit **has spoken**") and which R14 already contradicted, since the activation was said to go
+on naming *what it bid on*. Freezing the recognition settles that in R14's favour, and it is what §12 needs — a
+claim that moved with the counts could not be rebuilt by a decoder holding only the active set. The call
+disappears with the jobs: `process frame` reaches a neuron at ages 0 and `reach_t`, which at high levels is two
+calls where there were `reach_t + 1`.
+
 **On §9.3 — why the bill's decisions are once, not once per activation.** Deciding per activation would impose
 an order on observations that are simultaneous — the pixel at one position did not happen before the pixel at
 another — and the structure that came out would depend on it, which is the defect R28 removes one level up. The
@@ -498,15 +508,18 @@ N names  {(b,−1)}
 ```
 
 **Frame 10 — age 0, the bet.** `a` at −2 and `b` at −1 were present, so `K` matches the backward half exactly
-at `d_backward = 0` while `N` misses `a` at 1. `K` wins, and the activation opens committed to `K`, holding an
-empty forward half. `K` asserts `c` at frame 11 and `d` at frame 12, on faith. **No bin was touched and no
+at `d_backward = 0` while `N` misses `a` at 1. `K` wins, and the machine opens an activation committed to `K`,
+holding an empty forward half. The neuron returns its **recognition** — `K`'s neighborhood, and a bid on `K`'s
+child — so `c` is named at frame 11 and `d` at frame 12, on faith. **No bin was touched and no
 count moved** — there is no observation yet, only a backward half and two frames to go. From here the
 commitment is locked: the neuron has bid on `K` and may have been promoted on it. **The election resolves this
 frame and returns nothing.** Whether `a` at −2 ends up covered, and whether this neuron itself does, can still
 change for two more frames (T12).
 
-**Frame 11 — age 1. `c` does not come; `e` fires in that dimension instead.** One thing happens: `(e, +1)` is
-written into this activation's forward half. Then the neuron re-reads `K` and asserts `d` at frame 12.
+**Frame 11 — age 1. `c` does not come; `e` fires in that dimension instead.** One thing happens: the machine
+writes `(e, +1)` into this activation's forward half. **The neuron is not called.** The recognition it returned
+at frame 10 still stands and still names `d` at frame 12 — it is not fetched again, and it would not change if
+it were.
 
 That is the entire frame. `K`'s counts do not move, `K` does not re-center, no distance is computed, and the
 board is not consulted. `K` looks wrong here, but **"wrong" is not yet a quantity**: the chunk is half-seen,
@@ -535,17 +548,18 @@ anywhere in the bill.
    ────────────────────────  ───────────────────────  ──────────────────────
    fire                      +1 arrives               +2 arrives
    route on d_backward       write (e,+1) into        observation complete
-   commit to K, bid          re-read K, assert d      READ the adjustment — settled
-   assert c at 11, d at 12   nothing else               this frame, gone the next
-   nothing comes back                                 enters bin, folds into K
+   commit to K, bid          THE NEURON IS NOT        the ADJUSTMENT comes with it —
+   RETURN THE RECOGNITION:   CALLED. The recognition   settled this frame, gone the next
+   K's neighborhood, naming  returned at 10 stands     enters bin, folds into K
+   c at 11 and d at 12       and still names d
                                                       K re-centers, all offsets
                                                       add / delete / re-center
    ────────────────────────  ───────────────────────  ──────────────────────
    THE BET ─────────────── committed, collecting ───────────────── THE BILL ▶
 ```
 
-**What does not happen is re-recognition.** The activation committed to `K` and asserts from `K` to the end,
-however badly `K` does. Two things may still move underneath it once its observation is in the history, and
+**What does not happen is re-recognition.** The activation committed to `K`, and the recognition it returned
+names `K`'s neighbors to the end, however badly `K` does. Two things may still move underneath it once its observation is in the history, and
 neither is a re-recognition.
 
 The **price** moves: as `K` re-centers on later bills, this observation and every other one in the bins `K`
@@ -554,7 +568,8 @@ cost `K` nothing may cost it two after the flip.
 
 The **server** may move too: if a later bill mints an entry closer to this bin than `K`, or retires `K`
 outright, the bin is handed over and the observation is priced against the new server instead. The activation,
-if still open, goes on asserting `K`, because it bid on `K` and that bid may be a live unit one level up.
+if still open, keeps the recognition it returned on `K`, because it bid on `K` and that bid may be a live unit
+one level up.
 
 Neither is a revision of anything — it is the current table being scored against remembered evidence, which is
 the only question the one test asks. The commitment is a fact about what was already done; the price is a
@@ -623,12 +638,13 @@ rather than a second learner while still being the only authority on what was al
 
 **On D27 — these two windows are the whole of what a neuron ever learns from the machine.** D28 is a read off
 them and nothing more, which is why it adds no state and no message anywhere: the machine already had to hold
-both to run the election and resolve the assertion, and a neuron consults them once per span. Neither window
+both to run the election and resolve the assertion, and it hands the read down once per span. Neither window
 introduces a parameter or a second buffer.
 
 **On D28 — nothing is ever decided twice.** An election settles its own frame's assignment and is never
 revisited (R23), so there is no in-flight coverage to maintain and no report to deliver between the bet and the
-bill. The assignment simply fills in as later frames elect, and the activation reads it when its span closes.
+bill. The assignment simply fills in as later frames elect, and the machine hands the read over when the span
+closes.
 
 > **T12 — The bill is the one frame at which the adjustment can be read.** An activation firing at `g` names
 > backward neighbors across `[g − reach_t, g]`. A neighbor at `f` can be covered by a bid firing anywhere in
@@ -860,7 +876,7 @@ neighbor in its own frame and one two frames back is an ordinary pattern, and th
 would have been unrepresentable.
 
 **On R31 — why a flat top level would be none of those things.** The history writes exactly the frontier,
-rewards credit exactly the frontier, and the assertion (§12) resolves precedence over exactly the frontier. In
+rewards credit exactly the frontier, and the assertion (§12) is voted by exactly the frontier (R31a). In
 the worked drawing, `i` and `j` are covered by nothing, so they stand in the frontier beside a level-3 pattern
 — whether that is because they fired no child or because the child they fired lost its election makes no
 difference to the file.
@@ -872,17 +888,23 @@ difference to the file.
 **How the assertion composes with contraction.** The two divide by scope. A bid is *priced* on its backward
 half but a promoted unit *claims* its whole span, so contested forward slots within a level are settled by the
 collapse (R25). The cascade resolves what contraction cannot see: a level-3 claim and a level-0 claim landing
-on the same base slot once both are expanded. The backward half never enters this — coverage settles which unit
-*represents* an already-observed neuron, a different question from what is claimed about a frame nobody has
-seen.
+on the same base slot once both are expanded. The backward half enters at exactly one point and no other: it
+decides *who votes*. Coverage settles which unit represents an already-observed neuron, and R31a spends that
+answer twice — the represented neuron is silent in the file and silent in the assertion. What it never does is
+decide what is claimed about a frame nobody has seen; that is the collapse's, on the frontier's own terms.
 
 **Why a vote within a level and a cascade across them.** Within a level the claimants are independent:
-different neurons, different histories, and one does not contain another. Across levels they are not — the
-lower units are the higher one's own **constituents**, so letting three level-0 claims outvote the level-1 unit
-that subsumes them would count one body of evidence twice at two resolutions. That is what makes a vote
-legitimate in one direction and not the other, and it is why the cascade is not an override: a level that
-cannot decide hands the question to the finer description underneath it, which is the only place a genuinely
-independent second opinion lives.
+different neurons, different histories, and one does not contain another. Across levels the danger is that they
+are not — the lower units may be the higher one's own **constituents**, and letting three level-0 claims outvote
+the level-1 unit that subsumes them would count one body of evidence twice at two resolutions.
+
+**R31a removes that case rather than out-voting it.** The electorate is the frontier, and no member of the
+frontier subsumes another — a covered neuron is inhibited, so a constituent never stands beside its coverer in
+the first place. What the cascade is left resolving is two *uncovered* units at different levels landing on one
+base slot, which is a difference of granularity and not of nesting: the coarser description is heard first
+because it decides more of the timeline (R38a), and a level that cannot decide hands the question down to the
+finer one. So the double-counting argument is where the inhibition rule comes from, and precedence is what
+remains once the inhibition has done its work.
 
 **On R32 — the decoder can reproduce this.** No entry's statistics are read, no share is formed, and no two
 populations are compared, so R27's stance holds: structure self-corrects through corrections, and the assertion

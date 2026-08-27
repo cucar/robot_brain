@@ -102,10 +102,16 @@ carries the action executing in that same frame — if one is.
 > afresh while an earlier activation is open, so several can be open at once, each collecting its own
 > observation.
 >
+> **The machine holds the open activation, and the neuron does not see it until its span closes.** Collecting
+> is transcription, not judgement — the neuron is forbidden to fold, price or compare a partial span (D18), so
+> there is nothing it could do with one. The arriving neighbors are the machine's own frame data on the way in,
+> and it holds them for the neuron until the bill (§9.2).
+>
 > **Age is per activation, and a neuron carries several ages at once.** An activation's age is the frames
-> elapsed since it fired, `0` through `reach_t`. When the machine hands the neuron a frame it hands it **every
-> open activation**, and each is processed by the same rules at its own age. Nothing distinguishes them but
-> age: a new firing is simply the activation whose age is 0.
+> elapsed since it fired, `0` through `reach_t`, and it is the machine's counter. **The machine calls a neuron
+> at two of those ages and no others** — 0 and `reach_t` (R14) — so a neuron with a wide reach is silent
+> through most of every span. Nothing distinguishes activations but age: a new firing is simply the activation
+> whose age is 0.
 
 > **D7 — Exclusion is per level, and about firing.** D5's bound is declared for the base and preserved upward
 > by construction: one firing per `(dimension, position)` per level offers at most one bid, so contraction
@@ -370,7 +376,7 @@ decided to keep, and the commitments its open activations have already acted on.
 
 > **D21 — Neuron state.** `°` marks a total: recoverable by a walk, kept to avoid one.
 > ```
-> neuron           = (coordinate, routing table, history, open activations)
+> neuron           = (coordinate, routing table, history)
 >
 > routing table    = set of entries
 > entry            = (id, neighborhood, child, counts°, served bins°)
@@ -384,7 +390,8 @@ decided to keep, and the commitments its open activations have already acted on.
 >                     tallies°, covered tallies°, superseded tallies°,
 >                     distance to each entry°, server°, Σ server mismatch°)
 >
-> open activations = one per (age, position)       still collecting
+> held by the machine, not the neuron (D6):
+> open activations = one per (neuron, age, position)   still collecting
 > open activation  = (position, age, forward half so far, committed entry)
 > ```
 
@@ -392,11 +399,11 @@ An `id` is creation order — a handle that survives re-centering, and the tie-b
 for. A `neighborhood` is carried rather than derived because it is what an entry currently claims. An
 observation stores no backward half: every observation in a bin carries that bin's key exactly (R7), so the
 bin holds it once. A bin is an aggregate, not a container — it knows how many observations it has, never
-which. **No observation carries a frame number**, and **the neuron holds no absolute time anywhere**: an open
+which. **No observation carries a frame number**, and **nothing anywhere holds absolute time**: an open
 activation's `age` is a counter, not a clock.
 
-**An open activation ends at its bill.** Its forward half becomes the observation's, the bill reads the
-adjustment that goes beside it (D28), and its `committed entry` goes with it. **A settled observation
+**An open activation ends at its bill**, which is where the machine hands it over. Its forward half becomes the
+observation's, the adjustment the machine read comes beside it (D28), and its `committed entry` goes with it. **A settled observation
 therefore has no server of its own**; it is priced against its bin's, whatever that currently is.
 
 > **D22 — What the totals owe.** In dependency order, so the list also says what to recompute when something
@@ -602,15 +609,15 @@ in the design.
 > fails on its own price.
 
 > **R14 — Two decision points: the bet at age 0, the bill at age `reach_t`.** At age 0 the neuron recognizes —
-> it picks an entry on backward evidence alone, **commits to it**, bids on it and asserts from it. That entry
+> it picks an entry on backward evidence alone, **commits to it**, bids on it and returns its recognition. That entry
 > is the activation's `committed entry` (D21) and **the commitment is locked for the whole window**; the frames
 > that follow only collect. At age `reach_t` the activation has seen its full `2·reach_t + 1` frames and the bill comes
 > due: this is where the neuron asks whether to add and whether to delete. Every structural move happens there
 > and nowhere else.
 >
 > The lock binds the commitment, not the price. A bill in between may hand the activation's bin to a closer
-> entry, and that is what the observation is then priced against — but the activation goes on asserting from
-> what it bid on, because that bid may already be a live unit one level up (R18).
+> entry, and that is what the observation is then priced against — but the recognition the machine holds stays
+> the one the neuron returned, because that bid may already be a live unit one level up (R18).
 >
 > A child minted there first fires on the next activation its neighborhood recurs. It does not serve, cover or
 > propagate on the activation that created it. **Structure never pays off on the evidence that created it, only
@@ -698,8 +705,8 @@ in the design.
 > **Deleting** is the machine's, on a pass of its own: **every frame, once the last level has billed**, it reads
 > the **death ledger** and takes everything due — the entry, its pattern neuron and that neuron's subtree
 > together, and what named them scrubbed with them. An entry retired this frame with nothing committed to it is
-> due this frame and dies on this frame's pass; one still being asserted from waits exactly as long as the stack
-> above it needs, and not a frame longer. **Nothing traces who is committed to what**: a back-pointer would be
+> due this frame and dies on this frame's pass; one a standing recognition still names waits exactly as long as
+> the stack above it needs, and not a frame longer. **Nothing traces who is committed to what**: a back-pointer would be
 > structure the file does not hold, and the machine settles the question once, off the board it already keeps.
 >
 > **The ledger holds the entry, not a handle to it.** A pattern's neighborhood is stated in one place, the
@@ -707,9 +714,9 @@ in the design.
 > frame, units at its own level still name it and units above it still cover it, so the definition has to stay
 > readable after the table stops routing to it — and the ledger is where it is readable.
 
-**A commitment survives its entry's retirement.** An activation committed to a retired entry goes on asserting
-from it — the neighborhood is frozen and the line it is stated in is in the ledger, not gone — and if that bid
-was promoted, the unit above is still live and still expands through that same neighborhood (R32). The
+**A commitment survives its entry's retirement.** An activation committed to a retired entry keeps the
+recognition it already returned — the neighborhood was read once and the line it is stated in is in the ledger,
+not gone — and if that bid was promoted, the unit above is still live and still expands through that same neighborhood (R32). The
 activation's own observation completes and folds into whatever now serves its bin (D22).
 
 **A deletion takes the subtree, and takes it at once.** A retired entry's pattern neuron cannot fire again, so
@@ -762,13 +769,18 @@ retired while its evidence is still in the ring is rebuilt by the add test the m
 Two processes run over the same frame, and the split between them is **the neuron prices, the machine holds the
 board**. Every test the neuron runs is its own arithmetic over its own evidence; the one thing it cannot see is
 what the rest of the level already covered, and that sits in a structure contraction keeps anyway, which the
-neuron reads once when a span closes (D28).
+machine hands over when a span closes (D28).
 
-**The machine does not track activations; the neuron does.** The machine calls a neuron while it is active and
-nothing more. The neuron holds its own open activations, each with the forward neighborhood it is still filling
-in, and knows each one's age (D6).
+**An open activation is board, not price.** The machine holds every one of them — bidding or not — with the
+forward neighborhood still filling in and the age it stands at (D6). The neuron holds its table and its
+history, and nothing about the frame.
 
-An activation is processed by its **age**, and there are three bands. Only the two ends do anything at all.
+**The interface is one call, `process frame`, made at two ages and no others** (R14). At age 0 the neuron
+recognizes and returns a **recognition**; at age `reach_t` it bills and returns its structural requests. In
+between the machine does not call it at all. A second call, `process actions`, runs after every level has
+finished and is not age-banded — it is where connections are recorded and inferences returned (§13).
+
+An activation is processed by its **age**, and there are three bands. Only the two ends reach the neuron.
 
 ## 9.1 Age 0 — the bet
 
@@ -782,44 +794,52 @@ The neuron fired this frame, and the backward half of its observation, `O⁻`, i
    activation's **committed entry** (R14). If `O⁻` has been seen before it already has a bin, whose distances
    are exactly these numbers (D22). **This is also where the bin's server is re-derived** (T8): whichever entry
    this routing takes is what the next fold and the next price will use. Open the activation at age 0 holding that
-   commitment and an empty forward half. **Nothing is written but the open activation** — no bin is opened for
-   `O⁻` if it has none.
+   commitment and an empty forward half, and the machine opens it and holds it. **The neuron writes nothing** —
+   no bin is opened for `O⁻` if it has none.
 2. **Serve.** The committed entry fires. If it has a child, the neuron hands the machine a **recognition bid**
    — an offer to represent its chunk one level up. **An activation committed to the normal makes no bid** (D23).
    The bid is the pipeline's only output to the election, and **nothing comes back here**. **Creation never
    bids.**
-3. **Assert.** The committed entry's forward neighbors are the neuron's prediction, read off the neighborhood,
-   not computed. The read is repeated at every age until the window closes (§9.2). What the *machine* asserts
-   is settled once every level has resolved (§12).
+3. **Return the recognition.** The bet's whole output is the **recognition**: the committed entry's
+   neighborhood, and the bid if step 2 made one. The neighborhood is read off the entry, not computed, and it
+   is returned whether or not there is a bid — an activation committed to the normal still returns the normal's
+   neighborhood, because the machine needs it either way (§12). **The neuron asserts nothing.** A recognition
+   is what a neuron offers; an assertion is what the machine resolves out of the standing recognitions once
+   every level has run (§12), and it may resolve to nothing this one said.
 
 **No structure is created, retired or reconsidered at age 0**, and nothing is learned from either.
 
-## 9.2 Ages in between — collect
+## 9.2 Ages in between — the machine collects
 
-For every open activation whose next forward frame has arrived:
+**The neuron is not called.** For every open activation whose next forward frame has arrived, the machine
+writes the neighbors at that offset into the activation's forward half, and that is the entire band. **Nothing
+is folded, re-centered, re-priced or compared** (D18), and **the board is not read**: coverage of this
+activation is still moving and stays so until the bill (T12).
 
-1. **Record.** Write the neighbors at that offset into the activation's forward half. That is all. **Nothing is
-   folded, re-centered, re-priced or compared** (D18). **The board is not read here either**: coverage of this
-   activation is still moving and stays so until the bill (T12).
-2. **Assert.** Read the committed entry's neighbors at the offsets still ahead and assert them. **It is a read,
-   not a decision.** The entry may have re-centered since — from some *other* activation's bill — and if so the
-   neuron simply asserts what it now names.
+**The recognition is not fetched again.** It was returned once, at age 0, and it stands until the span
+completes (R24). The committed entry may re-center in between — from some *other* activation's bill — and the
+standing recognition does not follow it: the neuron bid on what it bid on, and that bid may already be a live
+unit one level up (R14). Freezing it is also what keeps §12 reproducible, because a recognition that drifted
+with the counts would be a claim the decoder could not rebuild from the active set alone.
 
 **This band decides nothing and learns nothing.** The commitment cannot change (R14), no count can move (R3),
-and no price exists yet (R2).
+and no price exists yet (R2). What does happen in these frames happens outside the band: a neuron open at any
+age records a connection to whatever action ran, in the pass that follows every level (R35a).
 
 ## 9.3 Age `reach_t` — the bill
 
 The last forward frame arrives for every activation that fired at `f − reach_t`, so their observations are
-complete. **There is one bill per `(neuron, frame)` and it covers all of them** — they are instances of one
+complete. The machine hands the neuron every one of them at once — the forward halves it has been holding,
+each with its adjustment already read off the two windows (D28). **There is one bill per `(neuron, frame)` and
+it covers all of them** — they are instances of one
 type at one age, differing only in position (D2, D5).
 
 **The bill has two halves with different units.** Steps 1 and 2 move records and totals, run **once per
 activation**, and commute. Steps 3 to 6 *read* those totals and are the only steps that move structure, so they
 run **once**, after every fold is in. This is R19, walked through:
 
-1. **Enter the history.** Record the final offset, **read the adjustment** off the level's coverage set and the
-   assertion map (D28), and the observation now exists. It joins the bin for its own backward half, **opening
+1. **Enter the history.** Record the final offset, **take the adjustment** the machine read off the level's
+   coverage set and the assertion map (D28), and the observation now exists. It joins the bin for its own backward half, **opening
    that bin if this is the first time that context has completed** — bins are created here and nowhere else,
    and destroyed in step 2 when the last observation they hold is evicted. **A bin that opens measures its
    distance to every entry, and its server is what §9.1's routing takes on it, like any other bin's** — before
@@ -928,9 +948,11 @@ the board comes down, and neither is an arithmetic the other performs.**
 > is why one is settled once and never revisited (R23) and the other keeps re-resolving until nothing can reach
 > it (R25).
 
-> **D28 — The adjustment.** At its bill, and nowhere else, an activation reads what it is not to be credited
-> for. It is a read off the two windows of D27 — **nothing is computed for it, pushed to it, or held on its
-> behalf.**
+> **D28 — The adjustment.** At its bill, and nowhere else, an activation is told what it is not to be credited
+> for. It is a lookup in the two windows of D27, made by the machine and handed over with the completed
+> observation — **nothing is computed for it and nothing is held on its behalf.** The windows exist for
+> contraction's own reasons; reading them is the last thing the board is used for and the neuron never touches
+> them itself.
 > ```
 > covered      backward, off the coverage set:  neighbors of this activation's neighborhood — its own slot,
 >              the one holding the neuron itself, among them — that the assignment gave to an accepted
@@ -995,8 +1017,8 @@ numbers are final.
 > The assertion map is one global map over base slots, holding units from every level by construction — so the
 > delay stacks and the memory does not.
 
-> **R27 — Best-effort promotion.** A unit is promoted on its backward match and asserts its forward neighbors on
-> faith. When the future disagrees, corrections are appended and price the completed claim; they do not revise
+> **R27 — Best-effort promotion.** A unit is promoted on its backward match and its recognition names forward
+> neighbors on faith. When the future disagrees, corrections are appended and price the completed claim; they do not revise
 > the election that made it. **There is no retraction and nothing is held back waiting** — the file is exact
 > either way, because a wrong assertion is simply a longer file.
 
@@ -1073,8 +1095,9 @@ bid covers has to end up credited to exactly one bid** — that is what stops on
 
 > **R31 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** — the
 > uncovered set of D28, at every level at once — so a base neuron nothing found worth chunking stands in it
-> beside a level-4 pattern. This is the same frontier the file's history writes and the same one rewards credit.
-> Everything underneath it is recovered by expanding it.
+> beside a level-4 pattern. This is the same frontier the file's history writes, the same one rewards credit,
+> and **the same one that asserts** (R31a) — the uncovered set does all three, and coverage silences a neuron in
+> every one of them at once. Everything underneath it is recovered by expanding it.
 >
 > **Uncovered, not childless.** A neuron that fired a child and had its bid declined with nothing else covering
 > it is still on the frontier, because the decoder has no other way to recover it: the election charges it as a
@@ -1095,23 +1118,47 @@ The frontier cuts across levels, not along one:
 **Events and actions run in parallel within a level.** An action fires in the same column as the events it runs
 alongside (D5), so it is recognized and chunked by the rule they are, at the time they are. The event→action
 connection is not formed here. It names the action pattern that ends up in control of the dimension, and which
-one that is stays open until every level has settled, so the connection is recorded after the stack finishes
-(R35a).
+one that is stays open until every level has settled, so the connection is recorded after the stack finishes,
+in the `process actions` pass (R35a).
 
 # 12. The assertion
 
-When the last level has settled, every active neuron at every level has committed to an entry, and every
-committed entry has forward neighbors. **All of them assert** — being covered silences a neuron in the machine's
-history, not in its own model. The machine must resolve the resulting stack of claims, because the file scores
-corrections against an asserted set.
+**Asserting is the machine's act and nothing else's.** A neuron returns a recognition (§9.1); the machine
+resolves the standing recognitions into one assertion — one owner per base slot — because the file scores
+corrections against an asserted set and two owners is an ambiguity the decoder cannot resolve (D27).
+
+**The electorate is the uncovered set, at every level at once** — R31's frontier, and the same object that
+writes the file's history. A recognition returned at an earlier frame still stands if its span has not closed
+(R24), and it is withdrawn the moment an accepted bid covers its neuron.
+
+> **R31a — Coverage inhibits.** A covered neuron's recognition takes no part in the resolution, and neither do
+> its inferences (R38a).
+>
+> **It could only duplicate or diverge, and both are wrong.** A covered neuron is recoverable solely by
+> expanding its coverer, and R32 expands a coverer through the units its neighborhood names, one level down,
+> repeating to base symbols — so the coverer's expansion already reaches everything the covered neuron would
+> have named. Either the covered neuron's claim is that same expansion, and counting it again inflates the
+> collapse with one unit's opinion cast many times; or it differs, and the encoder is voting with something the
+> decoder holds only as an expansion, which breaks the reproducibility this section rests on. This is the
+> forward form of §10.4's rule that no chunk is paid for twice.
+>
+> **Coverage silences a neuron in the machine, not in its own model.** The inhibited neuron still bills, still
+> folds its observation, still reads its adjustment (D28), and still records its connection to whatever ran
+> (R35a). It is denied a vote, not a life.
+>
+> **Coverage is acquired late and never revoked.** An activation firing at `g` is uncovered until some bid takes
+> it, and by T12 the last bid that can fires at `g + reach_t` — so the electorate over the slots it names only
+> ever shrinks, and stops moving at the same instant everything else about that activation does. **No accepted
+> bid is ever dropped** (R23, D27). R26 already states the closure this needs: a frame is settled when no level
+> holds a live unit that could still **join or leave** that set.
 
 > **R32 — Expand, then precedence.** A claim at level `k` names level-`k` units, which are not yet anything the
 > file can be wrong about. Expanding a unit recovers the neighbors its neighborhood names one level down, at
 > that unit's offset plus theirs — offsets compose because each is a difference of activation coordinates (D2) —
 > repeat to base symbols. Every claim then has the shape `(dimension, frame, position, symbol)`.
 > ```
-> a's entry asserts  (b, +1)                     → b's dimension at f+1
-> A's entry asserts  (C, +2)     expand it:
+> a's recognition names  (b, +1)                 → b's dimension at f+1
+> A's recognition names  (C, +2)  expand it:
 >   C names {(p, 0), (q, +1)}                    → p's dimension at f+2, q's dimension at f+3
 > ```
 > **For each `(dimension, frame, position)` slot, work down from the highest level that claims it. Within a
@@ -1125,8 +1172,8 @@ corrections against an asserted set.
 > procedure exactly from the active set.
 
 > **R33 — The assertion only reaches forward.** Expansion reaches both directions, so a claim at `+2` whose
-> neighborhood reaches `−3` lands at `−1`. Claims landing at or before the asserting neuron's own frame are
-> discarded, and nothing is lost: the decoder builds each frame from what was asserted *before* it.
+> neighborhood reaches `−3` lands at `−1`. Claims landing at or before the recognizing neuron's own frame are
+> discarded, and nothing is lost: the decoder builds each frame from what the machine asserted *before* it.
 
 > **R34 — Events and actions, one procedure.** The rule is identical on both sides. Only the consumer differs:
 > the asserted **event** set is what the machine expects to observe, scored as frames arrive; the asserted
@@ -1145,8 +1192,8 @@ already executed.
 
 > **R35 — Three frames: infer, execute, reward.** Selection spans a fixed chain, one frame per step.
 > ```
-> f      infer     the frame's events are recognized and the assertion resolves (§12),
->                  committing an action for the frame ahead
+> f      infer     the frame's events are recognized, `process actions` returns the inferences,
+>                  and the assertion resolves (§12), committing an action for the frame ahead
 > f + 1  execute   the action runs, and its neuron fires in this frame's column alongside
 >                  this frame's events — the connection is made here
 > f + 2  reward    what the action earned arrives as input, and updates that connection
@@ -1162,6 +1209,14 @@ already executed.
 > in control of the dimension is settled only once every level has run. The connection is therefore recorded at
 > `f + 1`, after the stack finishes, against what actually ran — **a neuron that argued for a different action
 > still learns from the one that ran.**
+>
+> **This is `process actions`, the machine's second call on a neuron and the only one that is not age-banded.**
+> `process frame` reaches a neuron at ages 0 and `reach_t` alone (R14); this one reaches every open activation
+> it has, at whatever age each stands at, and it does both action-side jobs at once — the neuron records its
+> connections to what ran and returns the inferences that contend for the next action slot (R38a). It is a
+> separate call because both halves need what only the settled stack knows. **It runs before §12 resolves**:
+> the connections it records are to the action already executing this frame, decided a frame ago, while the
+> inferences it returns are candidates for the slot §12 is about to settle.
 >
 > **Every neuron active in that frame records one, at every age it is open at.** The distance is the age: the
 > offset from the frame that activation opened to the frame the action ran. A neuron open at ages 1, 2 and 3
@@ -1219,18 +1274,22 @@ already executed.
 > there is no separate no-history path.
 
 > **R38a — Two claims on one slot.** Both mechanisms claim the same action slot, and each finds its own
-> candidates: the assertion side from what the action hierarchy recognizes, the inference side from the
+> candidates: the recognition side from what the action hierarchy recognizes, the inference side from the
 > connections held plus R39's walk over the declared order. Neither supplies the other's alternatives, and
 > neither has priority by kind. The slot resolves the way every slot resolves (R32): work down from the highest
 > level that claims it, then expand.
 >
-> **Within a level an inference trumps an assertion.** A habit is built out of rewards that have already
+> **Within a level an inference trumps a recognition.** A habit is built out of rewards that have already
 > arrived, so it lags the estimate it was built from; when the two disagree, the disagreement is the estimate
 > having moved and the habit not yet having followed. If any inference claims the slot at that level it decides
-> and the assertions there are silent; if none does, the assertions collapse among themselves as usual; if
+> and the recognitions there are silent; if none does, the recognitions collapse among themselves as usual; if
 > neither does, the level is silent and the next one down resolves it.
 >
-> **Level is read on the action side.** An assertion's level is the asserting action pattern's, an inference's
+> **A covered neuron supplies neither** (R31a). Coverage withdraws its inferences on exactly the grounds it
+> withdraws its recognition: the coverer's own connections speak for the chunk, and counting the parts again
+> would let one unit's policy vote several times.
+>
+> **Level is read on the action side.** A recognition's level is the recognizing action pattern's, an inference's
 > is that of the action pattern it selects, and both expand to base actions the same way — so a higher claim
 > decides more of the timeline than a lower one, which is what R32's precedence is for.
 >
@@ -1262,11 +1321,11 @@ symbol occurs — the one variable-length code in which probabilities set costs.
 
 ```mermaid
 flowchart TD
-    A["Frame: the machine calls the neuron at each of its<br/>coordinates. The neuron holds its own open<br/>activations, one per (age, position)"] --> D["AGE 0 — THE BET: route on d_backward.<br/>Closest entry wins (a retired entry has left the table)<br/>and the activation COMMITS to it for the window.<br/>Writes ONLY the open activation"]
-    D --> E["Serve: the committed entry fires and bids.<br/>Its forward neighbors are asserted.<br/>Nothing comes back here"]
+    A["Frame: the MACHINE holds the open activations, one per<br/>(neuron, age, position). It calls each neuron at TWO ages<br/>only — 0 and reach — through one interface, process frame"] --> D["AGE 0 — THE BET: route on d_backward.<br/>Closest entry wins (a retired entry has left the table)<br/>and the activation COMMITS to it for the window.<br/>The neuron writes nothing"]
+    D --> E["Serve, and RETURN THE RECOGNITION: the committed entry's<br/>neighborhood, plus a BID if that entry served a child.<br/>The normal returns a neighborhood and no bid.<br/>The neuron asserts nothing; nothing comes back here"]
     E -.->|"the bid goes up"| X["CONTRACTION, two decisions and a settling, no iteration:<br/>ASSIGN each free slot to the claimant with the most<br/>covered neurons per unit of price, every slot<br/>independently; ACCEPT each bid that still holds more slots<br/>than it costs; then SETTLE a rejected holder's slots onto<br/>the best accepted bid that names them — credit only,<br/>nothing flips. The dictionary line is never charged here.<br/>Overlap is legal and priced"]
-    E --> C["AGES IN BETWEEN — collect: write the arriving offset<br/>into the activation's forward half, re-read the<br/>committed entry and assert. Nothing else"]
-    C --> B["AGE reach — THE BILL, once per (neuron, frame), over<br/>every activation that reached this age. FOLD each:<br/>READ the ADJUSTMENT off the coverage set and assertion<br/>map; both enter the bin and the whole span folds into<br/>that bin's server. Then evict the oldest, one per<br/>arrival (R9). Only now, DECIDE — once"]
+    E --> C["AGES IN BETWEEN — the MACHINE collects: it writes the<br/>arriving offset into the activation's forward half.<br/>THE NEURON IS NOT CALLED. The recognition stands as<br/>returned and is never fetched again"]
+    C --> B["AGE reach — THE BILL, once per (neuron, frame). The machine<br/>hands over every activation that reached this age, each with<br/>the ADJUSTMENT it read off the coverage set and assertion<br/>map. FOLD each: both enter the bin and the whole span folds<br/>into that bin's server. Then evict the oldest, one per<br/>arrival (R9). Only now, DECIDE — once"]
     X -.->|"the board is READ here, once"| B
     B --> L{"Contribution < 0?"}
     L -->|yes| M["ADD: collapse the demand to C, benefit > 1+|C|?<br/>Benefit counts only CREDITED neighbors and OWNED slots,<br/>off the bins' adjustment tallies. If it pays, C enters<br/>provisionally and TAKES every bin it wins. ONE candidate"]
@@ -1277,5 +1336,6 @@ flowchart TD
     P --> O["Next level up, one stack, reach from D15<br/>(until a level fires no children — that frontier<br/>is the apex)"]
     X --> O
     O --> Z["LEDGER PASS, after the last level has billed:<br/>delete everything the DEATH LEDGER says is due,<br/>subtree and all. Usually that includes what this<br/>frame's bills retired"]
-    Z --> Y["§12 After the last level: every active neuron asserts.<br/>Expand to base symbols, then per slot work DOWN from<br/>the highest level claiming it — within a level the<br/>COLLAPSE over the claims decides (count &gt; n/2); no<br/>majority and that level is silent, so the next one down<br/>resolves it. On an action slot an INFERENCE at a level<br/>beats an assertion there. Events → scored; actions →<br/>executed, and every active neuron records a connection<br/>to what ran, at the distance of its own age"]
+    Z --> W["PROCESS ACTIONS — the second call, NOT age-banded:<br/>it reaches every open activation the machine holds.<br/>Each records a connection to WHAT RAN THIS FRAME, at the<br/>distance of its own age, and returns the INFERENCES that<br/>contend for the next action slot (R35a, R38a)"]
+    W --> Y["§12 THE MACHINE ASSERTS, over the<br/>standing recognitions of the UNCOVERED neurons only —<br/>coverage inhibits, recognitions and inferences alike (R31a).<br/>Expand to base symbols, then per slot work DOWN from<br/>the highest level claiming it — within a level the<br/>COLLAPSE over the claims decides (count &gt; n/2); no<br/>majority and that level is silent, so the next one down<br/>resolves it. On an action slot an INFERENCE at a level<br/>beats a recognition there. Events → scored; actions → executed at f+1"]
 ```
