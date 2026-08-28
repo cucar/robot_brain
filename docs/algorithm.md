@@ -1190,7 +1190,8 @@ it got wrong is written as corrections.
 A reward is an input, not a symbol: alongside what it reports observed, a frame may carry reward for an action
 already executed.
 
-> **R35 — Three frames: infer, execute, reward.** Selection spans a fixed chain, one frame per step.
+> **R35 — Three frames: infer, execute, reward.** What is chosen in one frame runs in the next and is paid for
+> after that.
 > ```
 > f      infer     the frame's events are recognized, `process actions` returns the inferences,
 >                  and the assertion resolves (§12), committing an action for the frame ahead
@@ -1253,7 +1254,7 @@ already executed.
 > **A pattern that occupies its dimension for several frames is credited with every reward that arrives while it
 > runs.** An expansion places base actions at `+1`, `+2` and beyond (R34), so a pattern has a span rather than a
 > frame, and which of those frames the credit lands on is the wrong question — it lands on the pattern. The
-> estimate that selects a chunk is what the chunk earned, not what its first step earned, which is the only
+> estimate that selects a pattern is what the pattern earned, not what its first step earned, which is the only
 > reading that makes a multi-frame candidate comparable to a single-frame one.
 
 > **R36a — A reward pays for the window, not for one frame.** What arrives is the payoff of everything the
