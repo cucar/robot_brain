@@ -372,7 +372,7 @@ decided to keep, and the commitments its open activations have already acted on.
 
 > **D21 — Neuron state.** `°` marks a total: recoverable by a walk, kept to avoid one.
 > ```
-> neuron           = (coordinate, routing table, history)
+> neuron           = (coordinate, routing table, history, connections)
 >
 > routing table    = set of entries
 > entry            = (id, neighborhood, child, counts°, served bins°)
@@ -386,6 +386,9 @@ decided to keep, and the commitments its open activations have already acted on.
 >                     tallies°, covered tallies°, superseded tallies°,
 >                     distance to each entry°, server°, Σ server mismatch°)
 >
+> connections      = one per (distance, action neuron)  toward what has followed (R35a)
+> connection       = (strength, estimate)               exposures, and the mean reward over them
+>
 > held by the machine, not the neuron (D6):
 > open activations = one per (neuron, age, position)   still collecting
 > open activation  = (position, age, forward half so far, committed entry)
@@ -397,6 +400,12 @@ observation stores no backward half: every observation in a bin carries that bin
 bin holds it once. A bin is an aggregate, not a container — it knows how many observations it has, never
 which. **No observation carries a frame number**, and **nothing anywhere holds absolute time**: an open
 activation's `age` is a counter, not a clock.
+
+**Connections hang off the neuron, beside the routing table rather than inside it.** An entry is the search
+structure: it re-centers whenever its counts move (R5) and retires the moment it stops earning its line (R18).
+A connection's estimate is an average over exposures and has to outlive both, so **nothing an entry does reaches
+one** — a connection dies only when one of its two neurons does (R35a). What refines a situation is not a
+finer entry but a minted pattern, which is a neuron and holds connections of its own (R38a).
 
 **An open activation ends at its bill**, which is where the machine hands it over. Its forward half becomes the
 observation's, the adjustment the machine read comes beside it (D28), and its `committed entry` goes with it. **A settled observation
@@ -804,7 +813,8 @@ The neuron fired this frame, and the backward half of its observation, `O⁻`, i
    this routing takes is what the next fold and the next price will use. Open the activation at age 0 holding that
    commitment and an empty forward half, and the machine opens it and holds it. **The neuron writes nothing** —
    no bin is opened for `O⁻` if it has none.
-2. **Serve.** The committed entry fires. If it has a child, the neuron hands the machine a **recognition bid**
+2. **Serve.** The committed entry serves the activation — **the neuron is what fired** (D5), and the entry is
+   what represents it. If it has a child, the neuron hands the machine a **recognition bid**
    — an offer to represent its chunk one level up. **An activation committed to the normal makes no bid** (D23).
    The bid is the pipeline's only output to the election, and **nothing comes back here**. **Creation never
    bids.**
@@ -1250,7 +1260,7 @@ already executed.
 >
 > **Making and strengthening are one operation.** The first co-occurrence creates the connection at strength 1
 > and every later one increments it; the share of reward due to it folds into the running mean when that
-> reward arrives (R36a), weighted by `1 / strength`, so the stored value is the exact average over the
+> reward arrives (R36a), weighted by `1 / strength`, so the stored estimate is the exact average over the
 > connection's exposures and no rate is chosen.
 >
 > **Every level holds them, not only the apex.** Structure is recoverable by expansion, which is what lets the
@@ -1317,7 +1327,7 @@ already executed.
 > **The asymmetry is in the targets, not the holders.** Any active neuron holds connections, an action neuron
 > included; what an action neuron may not do is point one at an event. **Events infer actions and actions never
 > infer events** — the only asymmetry between the two hierarchies. An action's connection to a following action
-> is an ordinary value claim and selects on equal footing with an event's.
+> carries an ordinary estimate and selects on equal footing with an event's.
 >
 > **The bootstrap is a connection, not a fallback.** Every neuron is born connected to the declared default
 > action at every distance it can vote at, at neutral reward, so selection always has something to read and
@@ -1335,7 +1345,7 @@ already executed.
 > action has followed the recent ones — conditioned on action context alone, marginal over every situation that
 > sequence occurred in, and firing only where its neighborhood is satisfied at its own level. An inference
 > estimates what an action is worth in *this* situation, from a holder at any level and toward a target at any
-> level. **Only the second is a reason to act.** Frequency of action is not value: a sequence recurs as readily
+> level. **Only the second is a reason to act.** Frequency of action is not worth: a sequence recurs as readily
 > because the default ran, because exploration was walking the order, or because nothing else was available.
 >
 > **Inferences resolve by level, then by estimate.** An inference's level is that of the action pattern it
@@ -1367,7 +1377,7 @@ already executed.
 > regression. Other strategies drop into the same slot and swapping them changes no structure.
 >
 > **A reward is signed, and zero is where everything starts.** The environment reports an action as good or bad
-> — strictly greater than zero or strictly less — and zero is neither. It is also the value every connection is
+> — strictly greater than zero or strictly less — and zero is neither. It is also the estimate every connection is
 > created at, the declared default's included, and that is what makes the walk work: a connection at zero has
 > not been judged, so it outranks anything negative and yields to anything positive. The machine moves off a
 > bad action onto an untried one and stops moving the moment it finds one that pays.
