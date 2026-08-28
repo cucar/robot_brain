@@ -24,7 +24,7 @@ and the pruning pass retires what is left.
 
 # 2. Risks
 
-**Neither the election nor the table finds the optimum.** Greedy (R28) is an approximation to the objective, and a bill
+**Neither the election nor the table finds the optimum.** Greedy (R27) is an approximation to the objective, and a bill
 takes one improvement step rather than iterating (R19). Both are bounded, and neither is exact.
 **Diagnostic:** the election's gap is already covered by the ILP comparison below.
 
@@ -57,7 +57,7 @@ its keep. Radius too small and no chunk spans what recurs; too large and every n
 mint time. Measure both early and jointly — they interact through `|e|`, not through R4, whose denominator is
 the same at every offset (R11). **Diagnostic:** how often the outermost offset is named against offset 0, swept
 over `H`. If the outer reaches stay empty at every `H`, the radius is bigger than the data supports and
-evidence is not what is limiting it. Sweep depth against `H` in the same runs — T16 makes the two move
+evidence is not what is limiting it. Sweep depth against `H` in the same runs — T13 makes the two move
 together, and conflating them is easy.
 
 **Cold-start churn.** Early tests are decided by very little evidence. Re-centering is the main defense, but
@@ -70,7 +70,7 @@ costs one recurrence of latency.
 
 **A bid the election took can settle negative, by construction.** The election accepts on the backward half —
 all a bid has seen (R21) — and the price lands on the whole span (D13), so the forward misses arrive after the
-acceptance and nothing retracts it (R27). The claim is that this state is transient or terminal, never an
+acceptance and nothing retracts it (R26). The claim is that this state is transient or terminal, never an
 equilibrium: re-centering votes out neighbors wrong more often than right, the add test splits off
 distinguishable demand, and an entry negative in sum is retired (remarks, on D13). **Diagnostic:** the
 fraction of observations settling negative, per neuron, over exposure. It should fall to the minority tail of entries
@@ -94,7 +94,7 @@ volume against routing cost, per level, and against activations per bill.
 **What subsumption does to a neuron's own structure.** A neuron reliably covered by a neighbor's unit prices
 every entry at near zero, so its table is pruned to the normal within `H` of its own firings and it stops
 bidding — which is correct while the coverage holds and leaves it with nothing when the coverage lapses. It
-then rebuilds from its own history, which is intact (R29), but it is silent for `H` firings first.
+then rebuilds from its own history, which is intact (R28), but it is silent for `H` firings first.
 **Diagnostic:** how many of its own firings a neuron whose coverer is retired takes to bid again.
 
 **Shared entries fit every position worse than tuned ones would.** D8 pools observations from everywhere into
@@ -117,7 +117,7 @@ claims agreeing take the slot even where the level-0 neuron owning that dimensio
 cascade only steps down when a level cannot decide, never when it decides badly. **Diagnostic:** count
 cross-level contests and how often the holder was right against how often the level below it was.
 
-**Election slack, and now with no bound at all.** R28 is a heuristic for the objective, and unlike the greedy it replaced
+**Election slack, and now with no bound at all.** R27 is a heuristic for the objective, and unlike the greedy it replaced
 it carries no approximation guarantee — two fixed passes over a static per-slot rule have no `ln n` backstop.
 Since apex-units-per-frame is the headline metric, slack and real structure are conflated, and the slack is now
 unmeasured rather than merely unmeasured-but-bounded. **Diagnostic:** solve one small window exactly (ILP) and
@@ -144,17 +144,17 @@ grows as patterns are created, so the space expands with the structure even thou
 `(dimension, position)` to a single state. What no longer expands is `|O|`: adjacency is a radius at every level
 (D4), and D15 sets that radius precisely to hold the expected neighbor count fixed as the level thins. So the open
 measurement is narrower than it was — not whether `|O|` explodes, but whether the invariant holds in practice,
-since it rests on T9's halving being close to what contraction actually achieves. **Diagnostic:** neighbors per
+since it rests on T11's halving being close to what contraction actually achieves. **Diagnostic:** neighbors per
 observation, per level, against the constant the invariant predicts.
 
 **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering makes
 them slightly less independent, and D8 makes the neuron population smaller and each neuron busier — every
 position sharing a type now folds into one routing table, so the parallelism available shifts from
 across-neuron toward across-activation, and re-centering becomes the contended point. The election is not
-sequential: R28 is two decisions and a settling, each over every slot or every bid at once, with nothing
+sequential: R27 is two decisions and a settling, each over every slot or every bid at once, with nothing
 revisited. The adjustment
 adds one ordering constraint and no message traffic: a level's bets must all be in before its election runs, and
-that election must have run before any of its bills read the board. Both fall inside one frame (T14) and neither
+that election must have run before any of its bills read the board. Both fall inside one frame (T15) and neither
 crosses a level, but on much larger inputs than MNIST all three judgments need revisiting.
 
 **Asymmetric reach, and isotropic growth.** Backward and forward reach both emerge from the vote, bounded by
@@ -169,6 +169,6 @@ otherwise. **Diagnostic:** mean spacing per activation dimension, per level, aga
 nothing, and the contributions say so (D13) — but the collapse votes on presence, so the neighbor stays in the
 neighborhood and the line keeps paying for it, and the entry can only shed it by dying whole. The tallies to
 change this already exist: a credited-presence vote is `presence − covered`, per slot, off D22. What it would
-cost is the seam — letting the candidate's collapse read election outcomes lets the board shape a *claim* (R29
+cost is the seam — letting the candidate's collapse read election outcomes lets the board shape a *claim* (R28
 guards evidence, and a claim is not evidence, so it may be legal), and it changes what T1's center means.
 Whether structure should learn creditedness, or only prices should, is open.
