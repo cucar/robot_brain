@@ -1236,9 +1236,11 @@ already executed.
 > and averages coarsely across all of them, a level-4 pattern fires rarely and averages sharply over one, and
 > the estimate is waiting at whichever level ends up uncovered.
 >
-> **Holding is not supplying.** Every active neuron records, but only an uncovered one puts its estimate up for
-> selection (R31a, R38a). A covered neuron keeps learning against the frames it lives through, so its estimate
-> is current the moment coverage lifts.
+> **A covered neuron still learns.** Coverage decides which neuron speaks, not what counts as evidence: the
+> action ran, the reward arrived, and that reward is a sample of what the action is worth when this neuron
+> fires, whichever claim selected it. It has to keep learning, because its estimate is the general case — the
+> average over every frame it fires in — and learning only while uncovered would make that average run over
+> whatever no pattern has differentiated yet, shifting with every new pattern.
 >
 > **A connection dies with either of its ends**, since a connection to something that no longer exists can
 > select nothing. Nothing else removes one, and no window ages the estimate it carries (R37).
@@ -1260,14 +1262,11 @@ already executed.
 > what structure exists, and reward, which decides which of it is executed. They meet at exactly one place, the
 > event→action connection. Those connections are not in the file and are not priced by the one test.
 >
-> **Only one of the two has a clock, and that follows from what each claim asserts.** A structure claims that
-> something recurs, so non-recurrence refutes it and its evidence expires on the window (D26). A connection
-> claims what an action is worth, and an action not taken is not counter-evidence — it is no evidence at all.
-> The two are refutable by different things, so the window belongs to one of them and not to the other. A
-> connection's estimate is therefore the plain average over its exposures, uncapped: the unbiased estimator of
-> a quantity the environment fixes and the machine only samples. **Structure forgets because it tracks the
-> machine's own behavior, which moves. An estimate does not, because it tracks the environment, which does
-> not.**
+> **Connections are not forgotten.** A pattern says something recurs, so a stretch without it proves the
+> pattern wrong, and its evidence expires on the window (D26). A connection says what an action is worth, and
+> never taking that action proves nothing about its worth. A connection's reward is therefore the plain average
+> over its exposures, with no cap and no decay: the machine is sampling a number the environment holds fixed,
+> and every sample is as good as the last.
 
 > **R38 — Selection.** No fit says which action to take; it says only what an action set looks like. Choosing
 > comes from the connections held toward the action patterns that have followed, each carrying the reward that
@@ -1285,13 +1284,14 @@ already executed.
 > action at every distance it can vote at, at neutral reward, so selection always has something to read and
 > there is no separate no-history path.
 
-> **R38a — Two claims on one slot.** Both mechanisms claim the same action slot, and each finds its own
-> candidates: the recognition side from what the action hierarchy recognizes, the inference side from the
-> connections held plus R39's walk over the declared order. Neither supplies the other's alternatives, and
-> neither has priority by kind. The slot resolves the way every slot resolves (R32): work down from the highest
-> level that claims it, then expand.
+> **R38a — Assertion vs inference.** Neurons offer recognitions and inferences on an action slot,
+> and the machine collapses each: the recognitions into an assertion, the inferences into an inference. Neither
+> side supplies the other's candidates — the recognitions come from what the action hierarchy recognizes, the
+> inferences from the connections held plus R39's walk over the declared order — and neither wins by kind. The
+> slot then resolves the way every slot resolves (R32): work down from the highest level that reaches it, then
+> expand.
 >
-> **Within a level an inference trumps a recognition.** The two are not readings of one quantity. A recognition
+> **Within a level the inference trumps the assertion.** The two are not readings of one quantity. The assertion
 > estimates how the machine tends to behave — which action has followed the recent ones — conditioned on action
 > context alone, marginal over every situation that sequence occurred in, and firing only where its
 > neighborhood is satisfied at its own level. An inference estimates what an action is worth in *this*
@@ -1300,20 +1300,22 @@ already executed.
 > because the default ran, because exploration was walking the order, or because nothing else was available.
 > It wins even where the habit is strong and the estimate is thin, and that case is the exploration rather than
 > a defect — a neutral estimate displacing a worn habit is how a situation gets sampled. If any inference
-> claims the slot at that level it decides and the recognitions there are silent; if none does, the
-> recognitions collapse among themselves as usual; if neither does, the level is silent and the next one down
-> resolves it.
+> reaches the slot at that level, it decides and the assertion there is silent; if none does, the assertion
+> stands on its own collapse as usual; if neither does, the level is silent and the next one down resolves it.
 >
-> **A covered neuron supplies neither** (R31a). Coverage withdraws its inferences on exactly the grounds it
-> withdraws its recognition: the coverer's own connections speak for the chunk, and counting the parts again
-> would let one unit's policy vote several times.
+> **A covered neuron supplies neither** (R31a). A pattern exists to tell one situation apart from the general
+> case its members fire in, and a member's estimate is that general case: an average over every situation it
+> has ever fired in, the pattern's among them. Letting the two compete puts the average the pattern was created
+> to escape back into the decision it was created for. The specific situation was recognized; nothing general
+> is allowed to speak into it. A new pattern therefore starts with no estimate and explores, which is right —
+> the general answer is precisely the one just judged too coarse.
 >
-> **Level is read on the action side.** A recognition's level is the recognizing action pattern's, an inference's
-> is that of the action pattern it selects, and both expand to base actions the same way — so a higher claim
-> decides more of the timeline than a lower one, which is what R32's precedence is for.
+> **Level is read on the action side.** An assertion's level is the recognizing action pattern's, an inference's
+> is that of the action pattern it selects, and both expand to base actions the same way — so what is settled
+> higher decides more of the timeline than what is settled lower, which is what R32's precedence is for.
 >
 > **Several inferences at one level take the largest estimate**, which is the ordinary meaning of executing the
-> best. Nothing corrects for how many exposures an estimate rests on, so a sharp claim on three exposures
+> best. Nothing corrects for how many exposures an estimate rests on, so a sharp estimate on three exposures
 > outranks a coarse one on two hundred; the correction would be a confidence parameter with nothing to derive it
 > from, and R39's walk is what buys the thin estimates their exposures.
 
@@ -1356,5 +1358,5 @@ flowchart TD
     X --> O
     O --> Z["LEDGER PASS, after the last level has billed:<br/>delete everything the DEATH LEDGER says is due,<br/>subtree and all. Usually that includes what this<br/>frame's bills retired"]
     Z --> W["PROCESS ACTIONS — the second call, NOT age-banded:<br/>it reaches every open activation the machine holds.<br/>Each records a connection to WHAT RAN THIS FRAME, at the<br/>distance of its own age, and returns the INFERENCES that<br/>contend for the next action slot (R35a, R38a)"]
-    W --> Y["§12 THE MACHINE ASSERTS, over the<br/>standing recognitions of the UNCOVERED neurons only —<br/>coverage inhibits, recognitions and inferences alike (R31a).<br/>Expand to base symbols, then per slot work DOWN from<br/>the highest level claiming it — within a level the<br/>COLLAPSE over the claims decides (count &gt; n/2); no<br/>majority and that level is silent, so the next one down<br/>resolves it. On an action slot an INFERENCE at a level<br/>beats a recognition there. Events → scored; actions → executed at f+1"]
+    W --> Y["§12 THE MACHINE ASSERTS, over the<br/>standing recognitions of the UNCOVERED neurons only —<br/>coverage inhibits, recognitions and inferences alike (R31a).<br/>Expand to base symbols, then per slot work DOWN from<br/>the highest level claiming it — within a level the<br/>COLLAPSE over the claims decides (count &gt; n/2); no<br/>majority and that level is silent, so the next one down<br/>resolves it. On an action slot an INFERENCE at a level<br/>beats the assertion there. Events → scored; actions → executed at f+1"]
 ```
