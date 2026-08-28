@@ -59,9 +59,10 @@ was ever going to write it.
 writing it discharges up to `2·reach_t + 1` frames of the run at once. That is why a wider reach is worth paying a
 wider line for, and it is why the normal is free and a child is not.
 
-**On D13 — the two sums are what the two mechanisms minimize, and that is the whole division of labor.**
-Contraction minimizes the second over a given dictionary — the election is exactly that sum, the history
-half of `L` for the frames it can see. The one test decides the first, entry by entry (R12). Neither can do
+**On D13 — the two sums are what the two mechanisms work against, and that is the whole division of labor.**
+Contraction works on the second over a given dictionary — the election is priced in exactly that sum, the
+history half of `L` for the frames it can see, though it does not minimize it (§10.4). The one test decides the
+first, entry by entry (R12). Neither can do
 the other's job: the election cannot create or destroy a symbol, and a neuron cannot see what its symbol
 saved.
 
