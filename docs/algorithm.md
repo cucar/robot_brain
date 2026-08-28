@@ -369,10 +369,6 @@ decided to keep, and the commitments its open activations have already acted on.
 > `Δt ≤ 0`, is in hand when the neuron fires and is what recognition compares (R7). The **forward half**,
 > `Δt > 0`, arrives over the next `reach_t` frames and can key nothing, because it does not exist when the
 > choice is made. **The split is availability, so only time can produce it.**
->
-> **The adjustment cuts the same way and means something different in each half** (D28). Backward it says which
-> neighbors another unit already covered, so they earn this neuron nothing. Forward it says which slots this
-> neuron's assertion does not own, so being right or wrong there costs the file nothing.
 
 > **D21 — Neuron state.** `°` marks a total: recoverable by a walk, kept to avoid one.
 > ```
@@ -489,16 +485,25 @@ never shared between two populations.
 
 ## 5.3 Re-centering
 
-> **R5 — Move.** The collapse is recomputed whenever counts move. No test, no gate: an entry is always the
-> center of what it currently serves. This is free, because the counts are already maintained.
+> **R5 — Re-centering.** An entry **re-centers** by running the collapse (R4) over the observations it now
+> serves, and recomputing its distance to every bin with it (R6). It is the collapse applied to the first of
+> R4's three populations, and the only one of the three that moves an entry's center.
+>
+> **An entry re-centers whenever its counts move.** No test, no gate: an entry is always the center of what it
+> currently serves. This is free, because the counts are already maintained.
 >
 > **Counts move only at a bill**, since that is when an observation completes, is evicted, or a served set
 > changes (R3) — and every one of those disturbs the whole span at once. So a re-center is always over all
 > offsets.
 >
-> **Evidence collapses at once, structure collapses at the end.** Counts moved by an observation completing or
-> being evicted are collapsed where they move, because the bill's tests are about to price against them. Counts
-> moved by an add or a delete are collapsed once, after both tests have run (R19).
+> **A bill re-centers twice, once after each kind of count movement** (R19). **Evidence** moves counts first —
+> observations folding in and being evicted — and every entry it touched re-centers before any test prices
+> against it. **Structure** moves counts second — an add taking bins, a retire dropping them — and every entry
+> that gained or lost one re-centers after both tests have run.
+>
+> **Neither re-center is per observation.** A bill carries every position the neuron fired at (§9.3), so several
+> spans can fold in one pass; they move counts in any order and the totals land the same, and it is one collapse
+> over those totals that every test reads.
 
 > **R6 — Servers are re-derived, not patched.** A moved neighborhood changes every distance measured against
 > it. What is maintained is **one entry's distance to every bin**: an entry that re-centers recomputes those,
@@ -641,7 +646,7 @@ in the design.
 > commit iff  benefit > 1 + |C|
 > ```
 > **`b.server` is the bin's server (D22), re-derived as the scan reads it.** A bill re-centers after it
-> restructures (R19 step 5), so a cached server can lag the distances until something reads them; the scan is
+> restructures (R19 step 6), so a cached server can lag the distances until something reads them; the scan is
 > the read that corrects it.
 >
 > **`C` is priced on evidence older than itself, and that is exact rather than optimistic.** Every observation
@@ -665,7 +670,7 @@ in the design.
 > is decided by its parent; its *structure* by itself, at its own level.
 >
 > **Two objects, one word.** The **neuron** minted one level up has no counts, as above. The **entry** the
-> parent now holds is a different object and takes counts at once — R19 step 3 hands it every bin it wins,
+> parent now holds is a different object and takes counts at once — R19 step 4 hands it every bin it wins,
 > including the one holding the observation that triggered the test.
 >
 > **Release is the same shape reversed**: the parent retires, the machine reclaims. A retired entry goes back on
@@ -731,7 +736,7 @@ retired while its evidence is still in the ring is rebuilt by the add test the m
 ## 8.3 The bill's pass
 
 > **R19 — The bill's pass.** Once per bill, in order:
-> 1. **Fold.** The completed observation joins its bin, carrying the adjustment it collected across its span
+> 1. **Fold.** Each completed observation joins its bin, carrying the adjustment it collected across its span
 >    (D28); a bin that opens here measures its distance to every entry — the comparison recognition makes at
 >    every firing (§9.1), re-made because the table may have moved during the window — and its server is
 >    what D22 takes, like any other bin's. The whole span folds into that bin's server's counts at once and the
@@ -741,23 +746,26 @@ retired while its evidence is still in the ring is rebuilt by the add test the m
 > 2. **Age.** A full ring evicts its oldest observation, one out for one in (R9). That span leaves its bin's
 >    server's counts and its adjustment leaves the bin's tallies. **The entry that loses a span here is rarely
 >    the one that just gained one**, which is why a bill can settle an observation well and still leave some
->    other entry below its line. Counts moved in either step collapse where they move (R5), so every entry the
->    two touched is centered before anything is priced.
-> 3. **Add**, for every completed observation whose contribution is negative (D13) — the fold worked it out, so nothing has
+>    other entry below its line.
+> 3. **Re-center on the evidence.** Every entry the first two steps moved counts on re-centers, once, over the
+>    totals they leave (R5), so nothing is priced against a stale center. **A fold does not re-center on its
+>    own**: a bill can carry several spans, and a center taken between two of them would depend on which fell
+>    first, which the counts themselves never do.
+> 4. **Add**, for every completed observation whose contribution is negative (D13) — the fold worked it out, so nothing has
 >    to read it. Collapse the demand into `C` (R15) and price it (R16). If it pays, `C` enters the
 >    table provisionally and takes every bin it wins. **A bill can therefore add several children**, one per
 >    observation that pays. The observations are taken in the order the inputs give them.
-> 4. **Retire and delete**, at every bill and on no condition at all. **A bill always moves counts** — a span folds in,
+> 5. **Retire and delete**, at every bill and on no condition at all. **A bill always moves counts** — a span folds in,
 >    usually another is evicted, and either can hand a bin to a different server (R3) — so every margin the pass
 >    reads is a different number than it was, and whether each entry still earns its line is an open question at
 >    every bill. The pruning pass over the whole table, `C` included (R18): retire every strictly negative
 >    margin, each leaving the table there and then. **Deleting is not the neuron's** — it happens on the
 >    machine's ledger pass, after the last level has billed, and an entry nothing is committed to is gone before
 >    this same frame ends (R18).
-> 5. **Re-center.** Structure collapses at the end (R5), so every entry whose served set moved in step 3 or 4
->    collapses again, and its `d_backward` to every bin is recomputed with it. **Nothing gates this either**: a
->    collapse follows its counts, and what varies between bills is only which entries had counts move.
-> 6. **One request to the machine.** The add if `C` survived, and every entry step 4 retired, to be deleted when
+> 6. **Re-center on the structure.** Every entry whose served set moved in step 4 or 5 re-centers again (R5).
+>    **Nothing gates this either**: a re-center follows its counts, and what varies between bills is only which
+>    entries had counts move.
+> 7. **One request to the machine.** The add if `C` survived, and every entry step 5 retired, to be deleted when
 >    the machine works out that it can be, in one interaction, after both tests have run *and* the table has
 >    re-centered. Sending last settles
 >    what the request carries: a candidate can inherit bins from an entry the pruning pass retired, so the
@@ -835,8 +843,9 @@ it covers all of them** — they are instances of one
 type at one age, differing only in position (D2, D5).
 
 **The bill has two halves with different units.** Steps 1 and 2 move records and totals, run **once per
-activation**, and commute. Steps 3 to 6 *read* those totals and are the only steps that move structure, so they
-run **once**, after every fold is in. This is R19, walked through:
+activation**, and commute — nothing between them reads what they move. Steps 3 to 7 run **once**, after every
+fold is in: step 3 re-centers on those totals, steps 4 and 5 price against the result, step 6 re-centers again.
+This is R19, walked through:
 
 1. **Enter the history.** Record the final offset, **take the adjustment** the machine read off the level's
    coverage set and the assertion map (D28), and the observation now exists. It joins the bin for its own backward half, **opening
@@ -846,29 +855,33 @@ run **once**, after every fold is in. This is R19, walked through:
    the table holds any child, that is the normal (D23). The bin's count rises by one, its tallies take one
    increment per forward
    offset, its adjustment tallies take the mask just read, and **the whole span folds into the bin's server's
-   counts at once**. The server re-centers, and its distance to every bin is recomputed. **This is where
-   prediction is scored.** **The fold is unconditional**: a neuron another unit subsumed records exactly as one
-   that was promoted does (R29).
+   counts at once**. **This is where prediction is scored.** **The fold is unconditional**: a neuron another
+   unit subsumed records exactly as one that was promoted does (R29).
 2. **Age.** If the ring is full, each arriving observation evicts the oldest (D25, R9) — one out for one in.
-   Each departing span leaves its server's counts, that server re-centers the same way, and its adjustment
-   leaves the bin's tallies with it. **Nothing is priced here.**
-3. **Add**, for **every completed observation whose contribution is negative** (D13) — measured against its bin's
-   server as that server stands after step 1, and worked out by the fold itself. It makes no difference whether the
+   Each departing span leaves its server's counts and its adjustment leaves the bin's tallies with it.
+   **Nothing is priced here.**
+3. **Re-center on the evidence.** Every entry the first two steps moved counts on re-centers: it collapses over
+   the observations it now serves and recomputes its distance to every bin with it (R5, R6). **Once for the
+   bill, not once per span** — a bill can fold several observations, and a center taken between two of them
+   would turn on which the inputs happened to give first. The totals do not, so the center taken over them does
+   not either, and that center is what the two tests below price against.
+4. **Add**, for **every completed observation whose contribution is negative** (D13) — measured against its bin's
+   server as step 3 left it, and worked out by the fold itself. It makes no difference whether the
    server is the normal or a child. Collapse the demand into `C` (R15) and price it (R16).  **A bill can therefore add several children**,
    one per observation that pays — it covers every position the neuron fired at, and each observation is taken in
    the order the inputs give them. A passing test installs `C` provisionally and hands it every bin it wins.
-4. **Retire**, at every bill and on no condition at all — steps 1 and 2 moved counts, so every margin is a
+5. **Retire**, at every bill and on no condition at all — steps 1 and 2 moved counts, so every margin is a
    different number than it was and whether each entry still earns its line is open again. The pruning pass over
    the whole table, `C` included: retire every strictly negative margin, sequentially (R18). Each leaves the
    table at once, its bins falling to whichever entry D22 takes next and the neighborhoods they held freezing.
    **The neuron deletes nothing** — the machine takes the entry, its pattern neuron and that neuron's subtree
    on the ledger pass at the death frame, which is this frame whenever nothing is committed to it (R18).
-5. **Re-center.** Every entry whose served set moved in step 3 or 4 collapses again, and its distance to every
-   bin is recomputed with it. Steps 1 and 2 collapsed what they moved as they moved it (R5), so between them
-   this step leaves nothing stale.
-6. **One request, and the bill returns.** If `C` survived, the machine returns its identity and the neuron
+6. **Re-center on the structure.** Every entry whose served set moved in step 4 or 5 re-centers again, the same
+   operation over its new served set (R5). Step 3 already centered what the evidence moved, so between the two
+   this pass leaves nothing stale.
+7. **One request, and the bill returns.** If `C` survived, the machine returns its identity and the neuron
    registers it as an entry — a passing test **requests** rather than creates, because a pattern is a symbol at
-   the level above and that alphabet belongs to the machine. The same request hands over every entry step 4
+   the level above and that alphabet belongs to the machine. The same request hands over every entry step 5
    retired and asks for it to be deleted; when it dies is the machine's to work out. The newborn is installed
    **now, for later**.
 
@@ -1369,12 +1382,12 @@ flowchart TD
     D --> E["Serve, and RETURN THE RECOGNITION: the committed entry's<br/>neighborhood, plus a BID if that entry served a child.<br/>The normal returns a neighborhood and no bid.<br/>The neuron asserts nothing; nothing comes back here"]
     E -.->|"the bid goes up"| X["CONTRACTION, two decisions and a settling, no iteration:<br/>ASSIGN each free slot to the claimant with the most<br/>covered neurons per unit of price, every slot<br/>independently; ACCEPT each bid that still holds more slots<br/>than it costs; then SETTLE a rejected holder's slots onto<br/>the best accepted bid that names them — credit only,<br/>nothing flips. The dictionary line is never charged here.<br/>Overlap is legal and priced"]
     E --> C["AGES IN BETWEEN — the MACHINE collects: it writes the<br/>arriving offset into the activation's forward half.<br/>THE NEURON IS NOT CALLED. The recognition stands as<br/>returned and is never fetched again"]
-    C --> B["AGE reach — THE BILL, once per (neuron, frame). The machine<br/>hands over every activation that reached this age, each with<br/>the ADJUSTMENT it read off the coverage set and assertion<br/>map. FOLD each: both enter the bin and the whole span folds<br/>into that bin's server. Then evict the oldest, one per<br/>arrival (R9). Only now, DECIDE — once"]
+    C --> B["AGE reach — THE BILL, once per (neuron, frame). The machine<br/>hands over every activation that reached this age, each with<br/>the ADJUSTMENT it read off the coverage set and assertion<br/>map. FOLD each: both enter the bin and the whole span folds<br/>into that bin's server. Then evict the oldest, one per<br/>arrival (R9). RE-CENTER once on everything the folds and<br/>the evictions moved. Only now, DECIDE — once"]
     X -.->|"the board is READ here, once"| B
     B --> L{"Contribution < 0?"}
     L -->|yes| M["ADD: collapse the demand to C, benefit > 1+|C|?<br/>Benefit counts only CREDITED neighbors and OWNED slots,<br/>off the bins' adjustment tallies. If it pays, C enters<br/>provisionally and TAKES every bin it wins. ONE candidate"]
     M --> DEL["RETIRE, EVERY BILL: prune the whole table,<br/>C included, same formula as the add test. Retire every strictly<br/>negative margin, one at a time, re-checking after each.<br/>Each LEAVES THE TABLE at once; its bins fall to whichever<br/>entry is next closest and its neighborhood freezes.<br/>The machine deletes it on the LEDGER PASS at its DEATH<br/>FRAME — this same frame if nothing is committed to it"]
-    DEL --> Q["RE-CENTER, once for the frame: every entry whose served<br/>set changed collapses again and its distance to every<br/>bin is recomputed"]
+    DEL --> Q["RE-CENTER AGAIN, once for the frame: every entry whose<br/>served set the add or the retire changed collapses over<br/>what it now serves and recomputes its distance to every bin"]
     Q --> P["ONE request to the machine, and the bill returns:<br/>the add if C survived, plus every entry retired this bill,<br/>to be deleted when the MACHINE works out that it can be.<br/>Newborn serves NEXT time"]
     L -->|no| DEL
     P --> O["Next level up, one stack, reach from D15<br/>(until a level fires no children — that frontier<br/>is the apex)"]

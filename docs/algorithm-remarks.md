@@ -421,11 +421,12 @@ until drift or eviction starves one of them.
 reader takes the closest of what remains (R6). An entry starved by eviction has no evidence left, and waits on
 the neighborhood recurring.
 
-**On R19 — two kinds of count movement, and only one of them waits.** Evidence moves counts in step 1 and its
-collapse follows immediately, because the tests have to price against centers that already hold the new
-observation: measuring against a stale center prices a bin against a neighborhood re-centering was about to
-move, and mints a child to remove a mismatch that was already going. Structure moves counts in steps 2 and 3,
-and those collapses wait for step 4.
+**On R19 — two kinds of count movement, and each gets its own re-center.** Evidence moves counts in steps 1 and
+2, and step 3 centers on them before anything is priced: measuring against a stale center prices a bin against a
+neighborhood re-centering was about to move, and mints a child to remove a mismatch that was already going.
+Structure moves counts in steps 4 and 5, and step 6 centers on those. **Neither re-center runs per span.** A
+bill can fold several observations, so a center taken between two of them would depend on the order the inputs
+gave them — an order the totals are indifferent to, and one nothing else in the design is allowed to read.
 
 **On R19 — the trigger is a way to skip the scans rather than a gate on them**, and it is self-correcting in
 the right direction: an entry serving many observations barely moves for one, so a contribution that is still
@@ -450,8 +451,8 @@ sets, with the collapse as the minimizer (T1), and `k` moves as add and delete c
 is why those moves exist alongside it, since Lloyd only optimizes assignment for a given set of centers.
 
 **What the design does not do is alternate to stability.** A bill absorbs its evidence, makes at most one
-structural decision and re-centers once: one improvement step, not a fixed point. Step 5 moves centers after
-steps 3 and 4 fixed who serves what, so a bin can end a bill preferring an entry other than the one it holds.
+structural decision and re-centers on each: one improvement step, not a fixed point. Step 6 moves centers after
+steps 4 and 5 fixed who serves what, so a bin can end a bill preferring an entry other than the one it holds.
 Nothing repairs that inside the bill. Iterating would settle the table against counts the next bill moves
 anyway, and every bill moves them. The table is never optimal over the ring and does not need to be. It needs
 to be current for the next recognition, and that is one bin's distances.
