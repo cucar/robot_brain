@@ -1225,9 +1225,9 @@ already executed.
 > neighborhood already names.
 >
 > **Making and strengthening are one operation.** The first co-occurrence creates the connection at strength 1
-> and every later one increments it; the reward folds into the running mean when it arrives a frame after that,
-> weighted by `1 / strength`, so the stored value is the exact average over the connection's exposures and no
-> rate is chosen.
+> and every later one increments it; the share of reward due to it folds into the running mean when that
+> reward arrives (R36a), weighted by `1 / strength`, so the stored value is the exact average over the
+> connection's exposures and no rate is chosen.
 >
 > **Every level holds them, not only the apex.** Structure is recoverable by expansion, which is what lets the
 > file record the frontier alone — policy is not. No operation derives what a pattern's children were worth from
@@ -1255,6 +1255,19 @@ already executed.
 > frame, and which of those frames the credit lands on is the wrong question — it lands on the pattern. The
 > estimate that selects a chunk is what the chunk earned, not what its first step earned, which is the only
 > reading that makes a multi-frame candidate comparable to a single-frame one.
+
+> **R36a — A reward pays for the window, not for one frame.** What arrives is the payoff of everything the
+> machine did leading up to it, and nothing tells it which frame earned it. The reward is therefore divided
+> across the apex action at every distance in the window, and each takes its share into the running mean of the
+> connections pointing at it. **The share falls linearly with distance** — the most recent frame takes the
+> largest, the oldest in the window the smallest — and the shares sum to the reward, so spreading it creates
+> nothing.
+>
+> **Linear, not exponential.** An exponential fall reaches zero within a few frames, which leaves a reward that
+> arrives late attributable to nothing — and a reward that arrives late is the case this rule exists for. A
+> linear fall keeps a nonzero share at the far end of the window. The cost is that frames which had nothing to
+> do with the outcome take a share as well; those shares are the smallest ones, they average out over
+> exposures, and no structure is priced on them.
 
 > **R37 — Two objectives, meeting at one place.** Everything structural is priced in file length; reward prices
 > nothing structural and cannot. A policy is not a description — the decoder replays the actions the file
@@ -1323,8 +1336,17 @@ already executed.
 > is declared in order**, and while a situation's reward is negative the machine walks that order, trying the
 > next action each time the situation recurs. Deterministic, so a run reproduces and a regression is a real
 > regression. Other strategies drop into the same slot and swapping them changes no structure.
+>
+> **A reward is signed, and zero is where everything starts.** The environment reports an action as good or bad
+> — strictly greater than zero or strictly less — and zero is neither. It is also the value every connection is
+> created at, the declared default's included, and that is what makes the walk work: a connection at zero has
+> not been judged, so it outranks anything negative and yields to anything positive. The machine moves off a
+> bad action onto an untried one and stops moving the moment it finds one that pays.
+>
+> **The walk ends when the alphabet does.** Once every action in the situation has been tried and all of them
+> are negative, there is nothing left to wire and the walk stops. Selection then takes the largest estimate,
+> which is the least bad, and the machine keeps doing it.
 
-Distribution of reward over time is a separable policy ([global-rewards.md](global-rewards.md)).
 
 # 14. Estimation
 
