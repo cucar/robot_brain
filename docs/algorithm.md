@@ -1176,8 +1176,9 @@ writes the file's history. A recognition returned at an earlier frame still stan
 > ```
 > **For each `(dimension, frame, position)` slot, work down from the highest level that claims it. Within a
 > level, the collapse over the claims landing there decides the slot (R4, R25). A level with no majority is
-> silent, and the next level down resolves it. A slot no level carries is a correction.** On an action slot a
-> second kind of claim reaches the same level and takes it before the collapse runs (R38a).
+> silent, and the next level down resolves it. A slot no level carries is a correction.** **An action slot
+> resolves by this same procedure and no other** — what executes there is chosen elsewhere and never enters it
+> (R34, R38a).
 >
 > **Precedence chooses the electorate; the collapse decides the outcome.**
 >
@@ -1188,15 +1189,24 @@ writes the file's history. A recognition returned at an earlier frame still stan
 > neighborhood reaches `−3` lands at `−1`. Claims landing at or before the recognizing neuron's own frame are
 > discarded, and nothing is lost: the decoder builds each frame from what the machine asserted *before* it.
 
-> **R34 — Events and actions, one procedure.** The rule is identical on both sides. Only the consumer differs:
-> the asserted **event** set is what the machine expects to observe, scored as frames arrive; the asserted
-> **action** set is what it has committed to execute, and expanding it *is* the top-down unrolling — a high
-> action pattern becomes its constituent actions at the distances its neighborhood recorded, down to base
-> actions that execute. Execution is not a second mechanism; it is this expansion read as a program. Each base
-> action executes in the frame its expansion places it in, the nearest being `+1` (R35).
+> **R34 — Events and actions, one procedure.** The rule is identical on both sides, and so is the consumer.
+> **An assertion is a prediction, and what settles it is a firing** (D5). The asserted **event** set is what the
+> machine expects to observe, settled by what the input reports; the asserted **action** set is what it expects
+> itself to do, settled by the action that actually ran. Both are scored as frames arrive.
+>
+> **An action assertion commits nothing.** What runs is chosen by inference (R38a), so a habit that predicts the
+> machine's own behavior compresses the action stream when it is right and pays corrections when it is not —
+> which it could not do while it was also deciding the outcome. **A claim that causes the slot it names can
+> never be wrong**, and a claim that can never be wrong earns compression without carrying risk.
+>
+> **Execution is an expansion, of the selected pattern rather than the asserted one.** A high action pattern
+> becomes its constituent actions at the distances its neighborhood recorded, down to base actions that execute.
+> Execution is not a second mechanism; it is this expansion read as a program. Each base action executes in the
+> frame its expansion places it in, the nearest being `+1` (R35).
 
-As each frame arrives, the part of the assertion that came due is scored: what it named correctly is free, what
-it got wrong is written as corrections.
+As each frame arrives, the part of the assertion that came due is scored, on both sides alike: what it named
+correctly is free, what it got wrong is written as corrections. An event slot is settled by what was observed
+there and an action slot by what ran there, and neither is settled by the assertion itself (R34).
 
 # 13. Rewards, selection, and actions
 
@@ -1207,7 +1217,7 @@ already executed.
 > after that.
 > ```
 > f      infer     the frame's events are recognized, `process actions` returns the inferences,
->                  and the assertion resolves (§12), committing an action for the frame ahead
+>                  the inference resolves (R38a), committing an action for the frame ahead
 > f + 1  execute   the action runs, and its neuron fires in this frame's column alongside
 >                  this frame's events — the connection is made here
 > f + 2  reward    what the action earned arrives as input, and updates that connection
@@ -1298,7 +1308,9 @@ already executed.
 > **R38 — Selection.** No fit says which action to take; it says only what an action set looks like. Choosing
 > comes from the connections held toward the action patterns that have followed, each carrying the reward that
 > arrived averaged over its exposures — a running estimate of what that action is worth in that situation — and
-> the machine executes the best. **A situation is one active neuron at one age.** The same frame is a different
+> the machine executes the best. **Nothing else decides it.** The action hierarchy recognizes its own sequences
+> and asserts over them, but that assertion is a prediction of what the machine will do, never a choice of it
+> (R34). **A situation is one active neuron at one age.** The same frame is a different
 > situation to a base neuron and to the level-4 pattern covering it, and a different one again to the same
 > neuron two ages later; each holds its own estimate, and R38a is what reconciles them.
 >
@@ -1311,24 +1323,31 @@ already executed.
 > action at every distance it can vote at, at neutral reward, so selection always has something to read and
 > there is no separate no-history path.
 
-> **R38a — Assertion vs inference.** Neurons offer recognitions and inferences on an action slot,
-> and the machine collapses each: the recognitions into an assertion, the inferences into an inference. Neither
-> side supplies the other's candidates — the recognitions come from what the action hierarchy recognizes, the
-> inferences from the connections held plus R39's walk over the declared order — and neither wins by kind. The
-> slot then resolves the way every slot resolves (R32): work down from the highest level that reaches it, then
-> expand.
+> **R38a — The inference decides, the assertion predicts.** Neurons offer recognitions and inferences on an
+> action slot, and the two are resolved separately, because they answer different questions. **The recognitions
+> collapse into an assertion**, which says what the machine expects to do and is scored against what it did
+> (R34); it resolves the way every assertion resolves (R32). **The inferences decide what actually runs**, and
+> nothing about the assertion enters that. Neither side supplies the other's candidates — the recognitions come
+> from what the action hierarchy recognizes, the inferences from the connections held plus R39's walk over the
+> declared order.
 >
-> **Within a level the inference trumps the assertion.** The two are not readings of one quantity. The assertion
-> estimates how the machine tends to behave — which action has followed the recent ones — conditioned on action
-> context alone, marginal over every situation that sequence occurred in, and firing only where its
-> neighborhood is satisfied at its own level. An inference estimates what an action is worth in *this*
-> situation, from a holder at any level and toward a target at any level. The inference wins because it is
-> conditioned on what matters, and because frequency of action is not value: a sequence recurs as readily
+> **They are not readings of one quantity.** The assertion estimates how the machine tends to behave — which
+> action has followed the recent ones — conditioned on action context alone, marginal over every situation that
+> sequence occurred in, and firing only where its neighborhood is satisfied at its own level. An inference
+> estimates what an action is worth in *this* situation, from a holder at any level and toward a target at any
+> level. **Only the second is a reason to act.** Frequency of action is not value: a sequence recurs as readily
 > because the default ran, because exploration was walking the order, or because nothing else was available.
-> It wins even where the habit is strong and the estimate is thin, and that case is the exploration rather than
-> a defect — a neutral estimate displacing a worn habit is how a situation gets sampled. If any inference
-> reaches the slot at that level, it decides and the assertion there is silent; if none does, the assertion
-> stands on its own collapse as usual; if neither does, the level is silent and the next one down resolves it.
+>
+> **Inferences resolve by level, then by estimate.** An inference's level is that of the action pattern it
+> selects, so R32's precedence carries over unchanged — work down from the highest level that reaches the slot,
+> then expand to base actions (R34). **Several inferences at one level take the largest estimate**, which is the
+> ordinary meaning of executing the best. Nothing corrects for how many exposures an estimate rests on, so a
+> sharp estimate on three exposures outranks a coarse one on two hundred; the correction would be a confidence
+> parameter with nothing to derive it from, and R39's walk is what buys the thin estimates their exposures.
+>
+> **Selection is never empty.** Every neuron is born connected to the declared default at every distance it can
+> vote at (R38), so some inference always reaches the slot, and a thin estimate displacing a worn habit is the
+> exploration rather than a defect — it is how a situation gets sampled.
 >
 > **A covered neuron supplies neither** (R31a). A pattern exists to tell one situation apart from the general
 > case its members fire in, and a member's estimate is that general case: an average over every situation it
@@ -1337,14 +1356,10 @@ already executed.
 > is allowed to speak into it. A new pattern therefore starts with no estimate and explores, which is right —
 > the general answer is precisely the one just judged too coarse.
 >
-> **Level is read on the action side.** An assertion's level is the recognizing action pattern's, an inference's
-> is that of the action pattern it selects, and both expand to base actions the same way — so what is settled
-> higher decides more of the timeline than what is settled lower, which is what R32's precedence is for.
->
-> **Several inferences at one level take the largest estimate**, which is the ordinary meaning of executing the
-> best. Nothing corrects for how many exposures an estimate rests on, so a sharp estimate on three exposures
-> outranks a coarse one on two hundred; the correction would be a confidence parameter with nothing to derive it
-> from, and R39's walk is what buys the thin estimates their exposures.
+> **Level is read on the action side, in both resolutions.** An assertion's level is the recognizing action
+> pattern's, an inference's is that of the action pattern it selects, and both expand to base actions the same
+> way — so what is settled higher decides more of the timeline than what is settled lower, which is what R32's
+> precedence is for.
 
 > **R39 — Exploration.** The default policy resolves explore–exploit without randomness: **the action alphabet
 > is declared in order**, and while a situation's reward is negative the machine walks that order, trying the
@@ -1394,5 +1409,5 @@ flowchart TD
     X --> O
     O --> Z["LEDGER PASS, after the last level has billed:<br/>delete everything the DEATH LEDGER says is due,<br/>subtree and all. Usually that includes what this<br/>frame's bills retired"]
     Z --> W["PROCESS ACTIONS — the second call, NOT age-banded:<br/>it reaches every open activation the machine holds.<br/>Each records a connection to WHAT RAN THIS FRAME, at the<br/>distance of its own age, and returns the INFERENCES that<br/>contend for the next action slot (R35a, R38a)"]
-    W --> Y["§12 THE MACHINE ASSERTS, over the<br/>standing recognitions of the UNCOVERED neurons only —<br/>coverage inhibits, recognitions and inferences alike (R31a).<br/>Expand to base symbols, then per slot work DOWN from<br/>the highest level claiming it — within a level the<br/>COLLAPSE over the claims decides (count &gt; n/2); no<br/>majority and that level is silent, so the next one down<br/>resolves it. On an action slot an INFERENCE at a level<br/>beats the assertion there. Events → scored; actions → executed at f+1"]
+    W --> Y["§12 THE MACHINE ASSERTS, over the<br/>standing recognitions of the UNCOVERED neurons only —<br/>coverage inhibits, recognitions and inferences alike (R31a).<br/>Expand to base symbols, then per slot work DOWN from<br/>the highest level claiming it — within a level the<br/>COLLAPSE over the claims decides (count &gt; n/2); no<br/>majority and that level is silent, so the next one down<br/>resolves it. On an action slot the assertion only PREDICTS<br/>what will run; the INFERENCE decides what does (R38a).<br/>Events → scored; actions → executed at f+1"]
 ```
