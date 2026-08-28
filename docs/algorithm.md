@@ -1234,11 +1234,14 @@ already executed.
 > what the pattern earned, so if only the frontier held connections, every mint would black out the policy
 > underneath it. Holding at every level is also what makes the ladder work: a base neuron fires in many contexts
 > and averages coarsely across all of them, a level-4 pattern fires rarely and averages sharply over one, and
-> R38a reads them specific-first.
+> the estimate is waiting at whichever level ends up uncovered.
+>
+> **Holding is not supplying.** Every active neuron records, but only an uncovered one puts its estimate up for
+> selection (R31a, R38a). A covered neuron keeps learning against the frames it lives through, so its estimate
+> is current the moment coverage lifts.
 >
 > **A connection dies with either of its ends**, since a connection to something that no longer exists can
-> select nothing. Nothing else removes one: a connection is not in the file, so the one test never prices it,
-> and the history window never reaches it.
+> select nothing. Nothing else removes one, and no window ages the estimate it carries (R37).
 
 > **R36 — Credit lands on the apex active action, and covers its whole span.** The credited object is the
 > highest action pattern in control of its dimension at the frame the action ran, not at the frame the reward
@@ -1256,6 +1259,15 @@ already executed.
 > records rather than choosing any. The machine therefore runs **two** objectives: compression, which decides
 > what structure exists, and reward, which decides which of it is executed. They meet at exactly one place, the
 > event→action connection. Those connections are not in the file and are not priced by the one test.
+>
+> **Only one of the two has a clock, and that follows from what each claim asserts.** A structure claims that
+> something recurs, so non-recurrence refutes it and its evidence expires on the window (D26). A connection
+> claims what an action is worth, and an action not taken is not counter-evidence — it is no evidence at all.
+> The two are refutable by different things, so the window belongs to one of them and not to the other. A
+> connection's estimate is therefore the plain average over its exposures, uncapped: the unbiased estimator of
+> a quantity the environment fixes and the machine only samples. **Structure forgets because it tracks the
+> machine's own behavior, which moves. An estimate does not, because it tracks the environment, which does
+> not.**
 
 > **R38 — Selection.** No fit says which action to take; it says only what an action set looks like. Choosing
 > comes from the connections held toward the action patterns that have followed, each carrying the reward that
@@ -1279,11 +1291,18 @@ already executed.
 > neither has priority by kind. The slot resolves the way every slot resolves (R32): work down from the highest
 > level that claims it, then expand.
 >
-> **Within a level an inference trumps a recognition.** A habit is built out of rewards that have already
-> arrived, so it lags the estimate it was built from; when the two disagree, the disagreement is the estimate
-> having moved and the habit not yet having followed. If any inference claims the slot at that level it decides
-> and the recognitions there are silent; if none does, the recognitions collapse among themselves as usual; if
-> neither does, the level is silent and the next one down resolves it.
+> **Within a level an inference trumps a recognition.** The two are not readings of one quantity. A recognition
+> estimates how the machine tends to behave — which action has followed the recent ones — conditioned on action
+> context alone, marginal over every situation that sequence occurred in, and firing only where its
+> neighborhood is satisfied at its own level. An inference estimates what an action is worth in *this*
+> situation, from a holder at any level and toward a target at any level. The inference wins because it is
+> conditioned on what matters, and because frequency of action is not value: a sequence recurs as readily
+> because the default ran, because exploration was walking the order, or because nothing else was available.
+> It wins even where the habit is strong and the estimate is thin, and that case is the exploration rather than
+> a defect — a neutral estimate displacing a worn habit is how a situation gets sampled. If any inference
+> claims the slot at that level it decides and the recognitions there are silent; if none does, the
+> recognitions collapse among themselves as usual; if neither does, the level is silent and the next one down
+> resolves it.
 >
 > **A covered neuron supplies neither** (R31a). Coverage withdraws its inferences on exactly the grounds it
 > withdraws its recognition: the coverer's own connections speak for the chunk, and counting the parts again
