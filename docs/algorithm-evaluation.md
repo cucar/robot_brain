@@ -24,8 +24,8 @@ and the pruning pass retires what is left.
 
 # 2. Risks
 
-**Neither the election nor the table finds the optimum.** Greedy (R27) is an approximation to the objective, and a bill
-takes one improvement step rather than iterating (R19). Both are bounded, and neither is exact.
+**Neither the election nor the table finds the optimum.** Greedy (R28) is an approximation to the objective, and a bill
+takes one improvement step rather than iterating (R20). Both are bounded, and neither is exact.
 **Diagnostic:** the election's gap is already covered by the ILP comparison below.
 
 **The table is never settled.** A bill absorbs its evidence, makes at most one structural decision and
@@ -69,8 +69,8 @@ starves. **Fallback if it still churns:** require the win set to span at least t
 costs one recurrence of latency.
 
 **A bid the election took can settle negative, by construction.** The election accepts on the backward half —
-all a bid has seen (R21) — and the price lands on the whole span (D13), so the forward misses arrive after the
-acceptance and nothing retracts it (R26). The claim is that this state is transient or terminal, never an
+all a bid has seen (R22) — and the price lands on the whole span (D13), so the forward misses arrive after the
+acceptance and nothing retracts it (R27). The claim is that this state is transient or terminal, never an
 equilibrium: re-centering votes out neighbors wrong more often than right, the add test splits off
 distinguishable demand, and an entry negative in sum is retired (remarks, on D13). **Diagnostic:** the
 fraction of observations settling negative, per neuron, over exposure. It should fall to the minority tail of entries
@@ -94,7 +94,7 @@ volume against routing cost, per level, and against activations per bill.
 **What subsumption does to a neuron's own structure.** A neuron reliably covered by a neighbor's unit prices
 every entry at near zero, so its table is pruned to the normal within `H` of its own firings and it stops
 bidding — which is correct while the coverage holds and leaves it with nothing when the coverage lapses. It
-then rebuilds from its own history, which is intact (R28), but it is silent for `H` firings first.
+then rebuilds from its own history, which is intact (R29), but it is silent for `H` firings first.
 **Diagnostic:** how many of its own firings a neuron whose coverer is retired takes to bid again.
 
 **Shared entries fit every position worse than tuned ones would.** D8 pools observations from everywhere into
@@ -117,7 +117,7 @@ claims agreeing take the slot even where the level-0 neuron owning that dimensio
 cascade only steps down when a level cannot decide, never when it decides badly. **Diagnostic:** count
 cross-level contests and how often the holder was right against how often the level below it was.
 
-**Election slack, and now with no bound at all.** R27 is a heuristic for the objective, and unlike the greedy it replaced
+**Election slack, and now with no bound at all.** R28 is a heuristic for the objective, and unlike the greedy it replaced
 it carries no approximation guarantee — two fixed passes over a static per-slot rule have no `ln n` backstop.
 Since apex-units-per-frame is the headline metric, slack and real structure are conflated, and the slack is now
 unmeasured rather than merely unmeasured-but-bounded. **Diagnostic:** solve one small window exactly (ILP) and
@@ -151,7 +151,7 @@ observation, per level, against the constant the invariant predicts.
 them slightly less independent, and D8 makes the neuron population smaller and each neuron busier — every
 position sharing a type now folds into one routing table, so the parallelism available shifts from
 across-neuron toward across-activation, and re-centering becomes the contended point. The election is not
-sequential: R27 is two decisions and a settling, each over every slot or every bid at once, with nothing
+sequential: R28 is two decisions and a settling, each over every slot or every bid at once, with nothing
 revisited. The adjustment
 adds one ordering constraint and no message traffic: a level's bets must all be in before its election runs, and
 that election must have run before any of its bills read the board. Both fall inside one frame (T16) and neither
@@ -169,13 +169,13 @@ otherwise. **Diagnostic:** mean spacing per activation dimension, per level, aga
 nothing, and the contributions say so (D13) — but the collapse votes on presence, so the neighbor stays in the
 neighborhood and the line keeps paying for it, and the entry can only shed it by dying whole. The tallies to
 change this already exist: a credited-presence vote is `presence − covered`, per slot, off D22. What it would
-cost is the seam — letting the candidate's collapse read election outcomes lets the board shape a *claim* (R28
+cost is the seam — letting the candidate's collapse read election outcomes lets the board shape a *claim* (R29
 guards evidence, and a claim is not evidence, so it may be legal), and it changes what T2's center means.
 Whether structure should learn creditedness, or only prices should, is open.
 
-**R39 is ahead of the implementation.** The spec says a reward carries an optional channel set and an optional
+**R40 is ahead of the implementation.** The spec says a reward carries an optional channel set and an optional
 frame span, and dissipates linearly over that span. The current brain does neither: `learn_temporal_connections`
 hands every open age this frame's reward whole and unscoped, and the pattern-mint path attributes
 `rewards[age − distance]` instead, so two code paths write the same field on two different attributions and
 neither ramps. **Diagnostic:** with a span-of-one reward, whether a connection at distance `d > 1` moves at
-all — under R39 it must not.
+all — under R40 it must not.

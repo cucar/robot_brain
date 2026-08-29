@@ -73,8 +73,8 @@ process frame   — made at age 0 and age reach_t only, never in between
 
 process actions — after every level has settled, NOT age-banded
                 in:  what ran this frame, and each open activation's age
-                out: the inferences contending for the next action slot (R42)
-                     — and the neuron records its connections to what ran (R37)
+                out: the inferences contending for the next action slot (R43)
+                     — and the neuron records its connections to what ran (R38)
 ```
 
 **A neuron with reach `r` is called twice per activation, not `r + 1` times.** The intermediate frames are pure
@@ -82,9 +82,9 @@ transcription: the machine writes the arriving offset into the forward half and 
 doubles per level, this is the difference between two calls and thirty-three at level five.
 
 **The recognition is returned once and frozen.** It is not re-read as the entry re-centers; the standing
-recognition is the one the neuron handed back at age 0 (R14, R23). The machine keeps it until the span closes.
+recognition is the one the neuron handed back at age 0 (R14, R24). The machine keeps it until the span closes.
 
-**Coverage inhibits on the machine side, not in the neuron** (R31). A covered neuron's recognition and
+**Coverage inhibits on the machine side, not in the neuron** (R32). A covered neuron's recognition and
 inferences take no part in the §13 resolution, but nothing about its billing, folding, adjustment or connection
 recording changes — the neuron is never told it was covered except through the adjustment it is handed.
 
@@ -114,7 +114,7 @@ included, plus `f` = its named-but-absent count. **Then return — the neuron is
 served distance as priced demand (a badly-served child frame is demand a future add can win); the add test
 never runs on this path — the context was recognized, and the description job went up a level with the
 child. Normal: no activation and no bid, but **the normal's neighborhood is still returned** — the machine needs
-it for §13 whether or not anything was bid (algorithm.md, §10.1 step 3). Then fall through to the steps below.
+it for §13 whether or not anything was bid (algorithm.md, R19 step 3). Then fall through to the steps below.
 
 *(The election runs in the thalamus, concurrently as far as the neuron is concerned — see algorithm.md,
 "Contraction". It reads the bids and writes only the level above; none of the methods below depend on its
@@ -314,7 +314,7 @@ is tagged with the phase it lands in.
 
 ## The MNIST frame protocol
 
-MNIST runs on R35's chain — infer, execute, reward — one example per three frames. Nothing in
+MNIST runs on R36's chain — infer, execute, reward — one example per three frames. Nothing in
 [algorithm.md](algorithm.md) changes for it. A base event neuron's reach in time is 1 (D15), so its
 observation spans the frame before and the frame after its own.
 
@@ -322,16 +322,16 @@ observation spans the frame before and the frame after its own.
 frame     carries              what happens
 -----     -------              ------------
 f         events only          base event neurons fire, bet, and return their
-                               recognitions (§10.1); contraction runs; process
+                               recognitions (R19); contraction runs; process
                                actions returns the inferences; the machine
                                asserts (§13), committing the digit call for f + 1
 f + 1     the action only      the digit call executes and its neuron fires;
                                events are silent. Process actions runs again and
                                every neuron open here records a connection to
-                               what ran, at the distance of its own age (R37)
+                               what ran, at the distance of its own age (R38)
 f + 2     the reward only      the label arrives as input, not as a symbol
                                (§15). Nothing fires. It folds into the
-                               connection's running mean (R37)
+                               connection's running mean (R38)
 f + 3     next example         = the next example's f
 ```
 
@@ -346,10 +346,10 @@ sits at temporal offset `0`. The temporal slots are voted out for want of a majo
 in `|e|`.
 
 **No action patterns form.** An action neuron's own backward and forward slots land on frames carrying no
-actions, so the action hierarchy stays flat. R38's apex active action is therefore always the base action,
-which R38 states explicitly holds before any action pattern exists.
+actions, so the action hierarchy stays flat. R39's apex active action is therefore always the base action,
+which R39 states explicitly holds before any action pattern exists.
 
-**Connections are recorded per frame, never at the bill.** R37 records one at every age a neuron is open at,
+**Connections are recorded per frame, never at the bill.** R38 records one at every age a neuron is open at,
 and the reward folds in a frame later. Neither is gated on the observation completing, so the reward path does
 not wait on the window and does not vary with level. Do not couple connection recording to §10.3.
 
@@ -359,8 +359,8 @@ activation at age 3 of a reach-8 span would never be reached. `process actions` 
 walks every open activation the machine holds and hands each one what ran. It also runs after the stack has
 settled rather than during a level, because what ran is not known until then.
 
-**Classification is selection, not a readout.** The digit call is an action chosen by R41 off the event→action
-connections, scored by the reward at `f + 2`. R43 supplies exploration while a situation's reward is negative.
+**Classification is selection, not a readout.** The digit call is an action chosen by R42 off the event→action
+connections, scored by the reward at `f + 2`. R44 supplies exploration while a situation's reward is negative.
 The naive-Bayes consensus and the per-dimension vote in the current code have no counterpart in
 [algorithm.md](algorithm.md) and are retired, not ported.
 
@@ -368,5 +368,5 @@ The naive-Bayes consensus and the per-dimension vote in the current code have no
 
 - Emit the image on one frame only; emit nothing on the action and reward frames.
 - Sparse emission: an off pixel supplies no symbol (D5). No neuron is emitted for it.
-- Declare the digit calls as an action dimension, in a fixed order — R43 walks that order for exploration, so
+- Declare the digit calls as an action dimension, in a fixed order — R44 walks that order for exploration, so
   it is part of the problem statement.
