@@ -172,3 +172,10 @@ change this already exist: a credited-presence vote is `presence − covered`, p
 cost is the seam — letting the candidate's collapse read election outcomes lets the board shape a *claim* (R28
 guards evidence, and a claim is not evidence, so it may be legal), and it changes what T1's center means.
 Whether structure should learn creditedness, or only prices should, is open.
+
+**R39 is ahead of the implementation.** The spec says a reward carries an optional channel set and an optional
+frame span, and dissipates linearly over that span. The current brain does neither: `learn_temporal_connections`
+hands every open age this frame's reward whole and unscoped, and the pattern-mint path attributes
+`rewards[age − distance]` instead, so two code paths write the same field on two different attributions and
+neither ramps. **Diagnostic:** with a span-of-one reward, whether a connection at distance `d > 1` moves at
+all — under R39 it must not.

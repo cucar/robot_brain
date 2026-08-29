@@ -1032,6 +1032,17 @@ by construction rather than in sequence.
 
 # 13. The assertion
 
+> **T16 — The forward half of the adjustment is final at the bill.** An activation firing at `f` asserts over
+> the slots `f+1` through `f + reach_t` (R33 discards everything at or before `f`). A claim on any of those
+> slots comes from a unit firing no later than `f + reach_t − 1`, again by R33, and every such unit's
+> recognition was resolved by the assertion pass at the end of its own frame — all of them before frame
+> `f + reach_t` begins. This frame's own assertion pass cannot reach into the span either: it resolves after
+> every level has billed, and it names `f + reach_t + 1` onward.
+>
+> **So no level above contributes a late claim.** A level-`k+1` unit firing inside the span asserted in the
+> frame it fired in, which is a frame already past; one firing at `f + reach_t` or later asserts beyond the
+> span. The bill reads a settled map, and D28's `superseded` is a fact rather than a snapshot.
+
 **How the assertion composes with contraction.** The two divide by scope. A bid is *priced* on its backward
 half but a promoted unit *claims* its whole span, so contested forward slots within a level are settled by the
 collapse (R24). The cascade resolves what contraction cannot see: a level-3 claim and a level-0 claim landing
@@ -1057,7 +1068,7 @@ remains once the inhibition has done its work.
 populations are compared, so R26's stance holds: structure self-corrects through corrections, and the assertion
 does not second-guess the election.
 
-> **T16 — Reach compounds.** A unit claimed at `+2` may name something at `+1` of its own, so expansion places a
+> **T17 — Reach compounds.** A unit claimed at `+2` may name something at `+1` of its own, so expansion places a
 > base claim at `+3`, past the radius. A radius bounds what a single pattern may **name**; it does not bound how far
 > the machine can see.
 
@@ -1108,10 +1119,17 @@ frame it fires in. Learning only while uncovered would make that average run ove
 differentiated yet, shifting with every new pattern.
 
 **On R39 — linear, not exponential.** An exponential fall reaches zero within a few frames, which leaves a
-reward that arrives late attributable to nothing — and a reward that arrives late is the case the rule exists
-for. A linear fall keeps a nonzero share at the far end of the window. The cost is that frames which had
-nothing to do with the outcome take a share as well; those shares are the smallest ones, they average out over
-exposures, and no structure is priced on them.
+reward that arrives late attributable to nothing — and a reward that arrives late is the case an unscoped
+reward exists for. A linear fall keeps a nonzero share at the far end of the span. The cost is that frames
+which had nothing to do with the outcome take a share as well; those shares are the smallest ones, they
+average out over exposures, and no structure is priced on them.
+
+**On R39 — why the scope is the environment's to give and not the machine's to infer.** An environment that
+can name the channel and the frame is reporting something it already knows, and there is nothing for the
+machine to work out. One that cannot is not withholding information — it does not have it, and no amount of
+machinery on this side would recover it. So the scope is an input with a default, and the default is the
+honest statement of ignorance rather than a fallback path: the same arithmetic runs either way, over a wider
+span and more channels.
 
 **On R40 — why connections are not forgotten.** A pattern says something recurs, so a stretch without it
 proves the pattern wrong, and its evidence expires on the window (D26). A connection says what an action is
