@@ -32,7 +32,7 @@ d          distance, d_backward its temporal-backward half                      
 n          the size of a collapse population                                   R4
 
 L          the file length                                                      D13
-D          the highest level the stack currently holds                          R18, T12
+D          the highest level the stack currently holds                          R18, T13
 H          the history size                                                     D25
 ```
 
@@ -461,7 +461,7 @@ observation has no server of its own**; it is priced against its bin's, whatever
 
 **An entry counts only its own observations.** Every observation is served by exactly one entry. Two of R3's four
 moves transfer a whole bin, which is arithmetic on tallies — `O(offsets)`, not `O(observations)` — because a
-bin moves whole (T3).
+bin moves whole (T4).
 
 ## 6.2 The collapse
 
@@ -540,7 +540,7 @@ backward distance is a property of the bin; the forward half is what followed th
 > **R8 — The ring makes eviction exact.** Removing the oldest observation means subtracting the neurons *it*
 > contributed, which a tally cannot recover, so each observation keeps its own forward half and the bin is the
 > cached aggregate over them. This is the one place a forward half is read whole; everything else reads it per
-> slot, off the tallies (T2).
+> slot, off the tallies (T3).
 
 > **R9 — Aging is by count.** The ring is a FIFO `H` deep: an arriving observation evicts the oldest, and only
 > then. Nothing compares a frame number, nothing accumulates arrears, and nothing sweeps the population per
@@ -732,7 +732,7 @@ The neuron fired this frame, and the backward half of its observation, `O⁻`, i
    makes no bid, so it has nothing to clear (D23). That entry becomes the activation's **committed entry**
    (R14). If `O⁻` has been seen before it already has a bin, whose distances are exactly these numbers (D22),
    and **this routing is the read that settles who serves that bin** — nothing is stored, the server being
-   taken off those distances every time the bin is used (R6, T7). The machine opens the activation at age 0
+   taken off those distances every time the bin is used (R6, T8). The machine opens the activation at age 0
    holding the commitment and an empty forward half. **The neuron writes nothing** — no bin is opened for `O⁻`
    if it has none.
 2. **Serve.** The committed entry serves the activation. If it has a child, the neuron hands the machine a
@@ -752,7 +752,7 @@ The neuron fired this frame, and the backward half of its observation, `O⁻`, i
 **The neuron is not called.** For every open activation whose next forward frame has arrived, the machine
 writes the neighbors at that offset into the activation's forward half, and that is the entire band. **Nothing
 is folded, re-centered, re-priced or compared** (D18), and **the board is not read**: coverage of this
-activation is still moving and stays so until the bill (T9).
+activation is still moving and stays so until the bill (T10).
 
 **The recognition is not fetched again.** It was returned once, at age 0, and it stands until the span
 completes (R23). The committed entry may re-center in between — from some *other* activation's bill — and the
@@ -815,7 +815,7 @@ fold is in: step 3 re-centers on those totals, steps 4 and 5 price against the r
 >    another level, and the bill ends on it.
 
 The bill is processed after the bets and after the level's election, since it reads a board that this frame's
-election is the last thing to move (T9).
+election is the last thing to move (T10).
 
 ---
 
@@ -900,7 +900,7 @@ accepts or declines one — it never edits a bid, merges two, or invents a third
 > **Both halves are final when the bill reads them.** The slots at issue are `f+1` through `f + reach_t`, and
 > an assertion reaches strictly forward (R33), so the last one that can name any of them resolved at the end of
 > frame `f + reach_t − 1` — before this frame's stack runs, and before this frame's own assertion pass, which
-> names `f + reach_t + 1` onward (T16). The coverage half closes on the same frame for its own reason (T9).
+> names `f + reach_t + 1` onward (T17). The coverage half closes on the same frame for its own reason (T10).
 >
 > It freezes into the observation as the bill folds it (D21). **The machine reports facts, never numbers**:
 > what the overlap is worth depends on a neighborhood that is still moving, so the worth is re-derived at every
@@ -944,7 +944,7 @@ apex-units-per-frame is read, the settled frames are the ones whose numbers are 
 > **R25 — Settlement is a condition to detect, not a schedule to predict.**
 >
 > **Frontier membership settles one level, in `reach_t` frames.** Whether an activation at frame `h` is covered
-> is decided by bids firing no later than `h + reach_t` (T9).
+> is decided by bids firing no later than `h + reach_t` (T10).
 >
 > **A frame's encoding settles at the top of whatever stack reached it.** A unit one level up, firing later,
 > can name a lower unit that names frame `g`. **Frame `g` is settled when no level holds a live unit that could
@@ -1017,8 +1017,8 @@ covers ends up credited to exactly one bid**, which is what stops a chunk being 
 >
 > **Within a level the order is bet, election, bill**, and it cannot be otherwise: a bid is made before the
 > election because that is what the election is over, and a bill comes after it because the bill reads a board
-> that this frame's election is the last to move (T9). Nothing in that order leaves the level or the frame
-> (T15).
+> that this frame's election is the last to move (T10). Nothing in that order leaves the level or the frame
+> (T16).
 >
 > **The frame ends with the machine's own pass.** Once the last level has billed, the machine reads the death
 > ledger and deletes everything due (R18), which is why a retirement is usually collected in the frame that
@@ -1073,7 +1073,7 @@ covers its neuron.
 > (R37). It is denied a vote, not a life.
 >
 > **Coverage is acquired late and never revoked.** An activation firing at `g` is uncovered until some bid
-> takes it, and by T9 the last bid that can fires at `g + reach_t`, so the electorate over the slots it names
+> takes it, and by T10 the last bid that can fires at `g + reach_t`, so the electorate over the slots it names
 > only ever shrinks and stops moving when everything else about that activation does. **No accepted bid is ever
 > dropped** (R22, D27).
 
@@ -1304,16 +1304,3 @@ connections §15 records.
 > **The walk ends when the alphabet does.** Once a voter holds a connection to every action in the channel at
 > that distance there is nothing left to wire, and selection takes the largest estimate, which is the least
 > bad.
-
----
-
-# 17. Estimation
-
-**No probability sets a cost.** Distance, cost and benefit are all counts of neighbors, so every price in the
-design is a whole number and no estimator, smoothing or boundary correction is needed. The only frequencies
-are the counts, used raw, and the only test applied to them is the collapse's `2 · count(p) > n` — an integer
-comparison against one population, never a share weighed against another's (§6.2).
-
-Estimators return only in [forgetting.md](forgetting.md), where the file is re-priced by how often each
-symbol occurs — the one variable-length code in which probabilities set costs.
-

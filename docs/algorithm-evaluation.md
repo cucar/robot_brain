@@ -57,7 +57,7 @@ its keep. Radius too small and no chunk spans what recurs; too large and every n
 mint time. Measure both early and jointly — they interact through `|e|`, not through R4, whose denominator is
 the same at every offset (R11). **Diagnostic:** how often the outermost offset is named against offset 0, swept
 over `H`. If the outer reaches stay empty at every `H`, the radius is bigger than the data supports and
-evidence is not what is limiting it. Sweep depth against `H` in the same runs — T13 makes the two move
+evidence is not what is limiting it. Sweep depth against `H` in the same runs — T14 makes the two move
 together, and conflating them is easy.
 
 **Cold-start churn.** Early tests are decided by very little evidence. Re-centering is the main defense, but
@@ -144,7 +144,7 @@ grows as patterns are created, so the space expands with the structure even thou
 `(dimension, position)` to a single state. What no longer expands is `|O|`: adjacency is a radius at every level
 (D4), and D15 sets that radius precisely to hold the expected neighbor count fixed as the level thins. So the open
 measurement is narrower than it was — not whether `|O|` explodes, but whether the invariant holds in practice,
-since it rests on T11's halving being close to what contraction actually achieves. **Diagnostic:** neighbors per
+since it rests on T12's halving being close to what contraction actually achieves. **Diagnostic:** neighbors per
 observation, per level, against the constant the invariant predicts.
 
 **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering makes
@@ -154,7 +154,7 @@ across-neuron toward across-activation, and re-centering becomes the contended p
 sequential: R27 is two decisions and a settling, each over every slot or every bid at once, with nothing
 revisited. The adjustment
 adds one ordering constraint and no message traffic: a level's bets must all be in before its election runs, and
-that election must have run before any of its bills read the board. Both fall inside one frame (T15) and neither
+that election must have run before any of its bills read the board. Both fall inside one frame (T16) and neither
 crosses a level, but on much larger inputs than MNIST all three judgments need revisiting.
 
 **Asymmetric reach, and isotropic growth.** Backward and forward reach both emerge from the vote, bounded by
@@ -170,7 +170,7 @@ nothing, and the contributions say so (D13) — but the collapse votes on presen
 neighborhood and the line keeps paying for it, and the entry can only shed it by dying whole. The tallies to
 change this already exist: a credited-presence vote is `presence − covered`, per slot, off D22. What it would
 cost is the seam — letting the candidate's collapse read election outcomes lets the board shape a *claim* (R28
-guards evidence, and a claim is not evidence, so it may be legal), and it changes what T1's center means.
+guards evidence, and a claim is not evidence, so it may be legal), and it changes what T2's center means.
 Whether structure should learn creditedness, or only prices should, is open.
 
 **R39 is ahead of the implementation.** The spec says a reward carries an optional channel set and an optional
