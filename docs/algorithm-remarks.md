@@ -62,7 +62,7 @@ were handed it.
 
 # 2. The objective
 
-**On D13 — why `cover` counts what an entry names rather than what turned up.** Take a neuron `x` whose entry
+**On D13 — why `cover` counts what turned up rather than what the entry names.** Take a neuron `x` whose entry
 names `{a, b, c}` backward, in a frame where `a` and `b` fired, `c` did not, and an unnamed `m` did.
 
 ```
@@ -72,9 +72,13 @@ with the unit      1 for the unit, which expands to x, a, b, c
                                                               true saving      1
 ```
 
-`|e| − d = 3 − 2 = 1`, which is the saving. Counting only the neighbors that turned up would give
-`(2 + 1) − (1 + 2) = 0` and miss it: `c` would be subtracted from the benefit *and* charged in `d`, which is
-the same mistake twice.
+`|O| − d = 3 − 2 = 1`, which is the saving. Now let only `a` fire, so `O = {a}` and `d = 2`: the file states
+`x, a` for 2 symbols without the unit and pays `1 + 2` with it, a saving of `−1`, and `|O| − d = 1 − 2` gives
+exactly that. **Counting what the entry names would give `|e| − d = 3 − 2 = +1` and report a saving where the
+file got longer** — `b` and `c` would be credited as delivered *and* charged as corrections, netting nothing,
+so a name that never fires would be free to hold. The two error types are the ones being told apart: naming
+wrongly costs a correction and delivers nothing, while a neighbor left unnamed costs a correction where
+stating it flat cost a line, so it is free either way.
 
 > **T1 — A fixed-length code is not a real file length, and no test can tell.** D11 prices a symbol at one
 > however often it is used. That is not what a decoder pays: naming a symbol out of a dictionary that grows
@@ -327,6 +331,13 @@ which is a neuron and holds connections of its own (R43).
 **On T2 — why a centroid will not do.** A centroid over sets is a fractional vector, which is not a set, cannot
 be written into the file, and has no symmetric difference. The counts **are** the fractional object; the
 collapse is how the design gets from it to something the decoder can expand.
+
+**On R4 — the majority is the derivative of `L`.** Over the `n` observations an entry serves, adding a
+neighbor that fired in `p·n` of them moves the summed contribution by `(2p − 1)·n`: `d` drops by one wherever
+the neighbor fired and rises by one wherever it did not (D13). So a neighbor pays for its slot exactly when it
+recurs in more than half of what the entry serves, and the collapse's `1/2` is where that derivative changes
+sign — not a cut laid over the objective. Had `cover` counted what the entry names, the derivative would be
+`2p·n`, positive for every `p > 0`, and the best neighborhood would be everything ever seen.
 
 **On R4 — the threshold is derived twice over**, from unrelated arguments: by L1 minimization for an entry's
 neighborhood and a candidate's (T2) and by D9's prices for a slot's owner (T15), and it is the same `1/2` both

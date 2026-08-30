@@ -193,24 +193,26 @@ file is (R12).
 > the overlap and the neuron records it** (D28) — the *fact* that these neighbors were not credited, never the
 > number that came out of it.
 > ```
-> contribution of e to one observation o
->       =  credited(o)  −  price(e, o)                                          (R21, R22)
+> contribution of e to one observation O
+>       =  cover(O)  −  price(e, O)                                             (R21, R22)
 >
-> cover(e)     =  1 + |e|    everything e's expansion delivers: the neurons it names and the neuron
->                             itself, each of which the file would otherwise state on its own line
+> cover(O)     =  1 + |O|    what the chunk costs stated flat: a line for every neuron that fired
+>                            around this one and a line for the neuron itself (D11)
 >
-> price(e, o)  =  1 + d       the unit's own line, and the corrections its expansion leaves behind
+> price(e, O)  =  1 + d       the unit's own line, and the corrections its expansion leaves behind
 >
-> so           contribution  =  (1 + |e|) − (1 + d)  =  |e| − d
+> so           contribution  =  (1 + |O|) − (1 + d)  =  |O| − d
 >
 >                              the symbols it saves, less the symbols it gets wrong
 > ```
-> **A neighbor e names that did not fire is not subtracted from `cover`; it is charged in `d`.** Naming it and
-> being wrong costs one correction, and that is the whole of the penalty — taking it out of `cover` as well
-> would charge it twice (D9).
+> **Cover is a property of the observation, not of the claim** — nothing about `e` enters it. What `e` changes
+> is `d`, and the two ways of being wrong are not priced alike. A neighbor `e` names that did not fire costs a
+> correction and saves nothing. A neighbor that fired and `e` does not name costs a correction where stating it
+> flat cost a line, so it is free: **not naming a neighbor is what nothing is charged for, and naming it wrongly
+> is what is** — D9's asymmetry, in the file.
 >
 > **The adjustment is what makes this local sum honest.** A neighbor another accepted bid took is not this
-> entry's to save, so `o`'s adjustment removes it from `|e|`, and a forward slot this activation does not own
+> entry's to save, so `O`'s adjustment removes it from `|O|`, and a forward slot this activation does not own
 > comes off `d` (D28). Both are counted over the whole span at the bill, and over the backward half alone at
 > the bet (D18).
 >
