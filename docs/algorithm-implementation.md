@@ -73,8 +73,8 @@ process frame   — made at age 0 and age reach_t only, never in between
 
 process actions — after every level has settled, NOT age-banded
                 in:  what ran this frame, and each open activation's age
-                out: the inferences contending for the next action slot (R43)
-                     — and the neuron records its connections to what ran (R38)
+                out: the inferences contending for the next action slot (R42)
+                     — and the neuron records its connections to what ran (R37)
 ```
 
 **A neuron with reach `r` is called twice per activation, not `r + 1` times.** The intermediate frames are pure
@@ -82,9 +82,9 @@ transcription: the machine writes the arriving offset into the forward half and 
 doubles per level, this is the difference between two calls and thirty-three at level five.
 
 **The recognition is returned once and frozen.** It is not re-read as the entry re-centers; the standing
-recognition is the one the neuron handed back at age 0 (R14, R24). The machine keeps it until the span closes.
+recognition is the one the neuron handed back at age 0 (R13, R23). The machine keeps it until the span closes.
 
-**Coverage inhibits on the machine side, not in the neuron** (R32). A covered neuron's recognition and
+**Coverage inhibits on the machine side, not in the neuron** (R31). A covered neuron's recognition and
 inferences take no part in the §13 resolution, but nothing about its billing, folding, adjustment or connection
 recording changes — the neuron is never told it was covered except through the adjustment it is handed.
 
@@ -114,7 +114,7 @@ included, plus `f` = its named-but-absent count. **Then return — the neuron is
 served distance as priced demand (a badly-served child frame is demand a future add can win); the add test
 never runs on this path — the context was recognized, and the description job went up a level with the
 child. Normal: no activation and no bid, but **the normal's neighborhood is still returned** — the machine needs
-it for §13 whether or not anything was bid (algorithm.md, R19 step 3). Then fall through to the steps below.
+it for §13 whether or not anything was bid (algorithm.md, R18 step 3). Then fall through to the steps below.
 
 *(The election runs in the thalamus, concurrently as far as the neuron is concerned — see algorithm.md,
 "Contraction". It reads the bids and writes only the level above; none of the methods below depend on its
@@ -127,16 +127,33 @@ it is the vote for the frame ahead.
 **`review(best_d) → error`** — frame step 5, when the inference resolves: spatially `error = best_d`,
 immediately; temporally at `f+1`, when the actuals arrive — and `add_test` below runs then too.
 
-**`add_test(O) → Option<MintRequest>`** — frame step 6, only on a nonzero error. Solo benefit = `Σ` over
-histogram entries strictly closer to `O` than to their current server of `(best_distance − d)·count` — the
-triggering frame is already recorded, so its error enters through its own entry, no special term. Pass iff
-`benefit > 1 + |O|`. A pass inserts `C` into `children` under a **pending id**, seeds `benefits[C] = 0`, runs
-`settle(C)`, and returns a **request**, not a child: `{definition: C, level: own + 1, channel: own}` —
-everything the allocation needs, decided here so the allocator decides nothing. The definition on the request is
-read *after* `settle`, so it is the one `C` ends the frame with rather than the one the test priced.
+**`add_test() → Option<MintRequest>`** — frame step 6, once per bill, against the counts the re-center left
+(algorithm.md, R14). No probe record and no selection; `C` is grown a neighbor at a time.
 
-**No joint add-and-delete test.** `C` is priced on its own wins while every incumbent is still paid for, and an
-incumbent left worthless by the takeover fails its own delete check in `settle` step 3, in the same move
+```
+saving[o] = price(o) − 1 − d(o, C)        price = 1 + |o| under the normal, 1 + best_distance under a child
+C = {}                                    so every normal-served record starts at 0
+
+loop
+    for each neighbor q not in C:
+        Δ(q) = #{ holds q, saving ≥ 0 } − #{ lacks q, saving ≥ 1 } − 1
+    take the largest Δ; break if it is ≤ 0
+    C ∪= {q};  saving[o] += 1 where o holds q, −1 elsewhere
+
+benefit = Σ max(0, saving[o])             pass iff benefit > 1 + |C|
+```
+
+Each round is one sweep of the ring building two per-neighbor tallies — the same walk a collapse makes — and
+the loop runs fewer than `2·w̄` times, `w̄` being the record size. Records are needed one at a time, so the
+histogram cannot stand in for the ring here. A pass inserts `C` into `children` under a **pending id**, seeds
+`benefits[C] = 0`, runs `settle(C)`, and returns a **request**, not a child: `{definition: C, level: own + 1,
+channel: own}` — everything the allocation needs, decided here so the allocator decides nothing. The definition
+on the request is read *after* `settle`, so it is the one `C` ends the frame with rather than the one the test
+priced.
+
+**No joint add-and-delete test.** `C` is credited only the gap it closes on each entry it wins, so nothing an
+incumbent already delivers is counted twice, and an incumbent left worthless by the takeover fails its own
+delete check in `settle` step 3, in the same move
 (algorithm.md, "Delete — pruning the table"). What the sequence cannot reach is a candidate that would pay only
 if some child's storage were refunded first; that case is given up deliberately.
 
@@ -180,7 +197,7 @@ reassignments moved and cascade sequentially. **It does not refresh the normal**
 `settle` step 4 does that once for the whole frame.
 
 **Wall-clock shape:** no test ever scans the history — the add test is one pass over the histogram and only
-runs on a normal-served error, rare for a settled neuron; `settle` and deletion are bounded by the
+runs on the normal-served path; `settle` and deletion are bounded by the
 histogram; the running benefits make every delete decision O(1) per event. What *does* scale with the
 dictionary is routing itself: a novel context is one distance against the normal and every child, so the
 per-frame cost grows with the child count. The one test is what bounds that count — only children that pay
@@ -204,7 +221,7 @@ structure produces no exposure curves, and the accuracy it reports is the readou
 - *Substrate and evidence.* Sparse activation (a dimension with nothing happening supplies no symbol; no neuron
   is emitted for it); the FIFO history with the histogram, stored fallbacks, and running benefits; routing and
   serving; unconditional recording.
-- *The lifecycle.* The error-triggered add test, `settle`, and event-driven deletes. This is the heart.
+- *The lifecycle.* The unconditional add test, `settle`, and event-driven deletes. This is the heart.
 
 The evidence half is verified rather than measured: the four invariants under "What must always hold" become
 `debug_assertions` that recompute from the raw history and compare against the incrementally-maintained state
@@ -266,8 +283,8 @@ is tagged with the phase it lands in.
    on it: the request construction in `process_spatial_frame`, the split into `recognized` /
    `new_child_parents` in `process_spatial_level`, and the mid-frame create-install-activate block. New
    children stop competing in `elect_spatial_bids` entirely.
-8. **Move minting after the review, as a request and a reply.** The add test runs for normal-served neurons
-   with a nonzero error, after the record is written — no election input of any kind. It settles the table
+8. **Move minting after the review, as a request and a reply.** The add test runs for every normal-served
+   neuron, after the record is written — no election input of any kind. It settles the table
    against a pending child and returns a request; the thalamus batch-allocates and dispatches `register_child`
    back; the parent rebinds the pending entry to the returned id. The
    existing install path (`allocate_spatial_pattern_neuron`, `install_spatial_corrections`) is the right shape
@@ -314,7 +331,7 @@ is tagged with the phase it lands in.
 
 ## The MNIST frame protocol
 
-MNIST runs on R36's chain — infer, execute, reward — one example per three frames. Nothing in
+MNIST runs on R35's chain — infer, execute, reward — one example per three frames. Nothing in
 [algorithm.md](algorithm.md) changes for it. A base event neuron's reach in time is 1 (D15), so its
 observation spans the frame before and the frame after its own.
 
@@ -322,16 +339,16 @@ observation spans the frame before and the frame after its own.
 frame     carries              what happens
 -----     -------              ------------
 f         events only          base event neurons fire, bet, and return their
-                               recognitions (R19); contraction runs; process
+                               recognitions (R18); contraction runs; process
                                actions returns the inferences; the machine
                                asserts (§13), committing the digit call for f + 1
 f + 1     the action only      the digit call executes and its neuron fires;
                                events are silent. Process actions runs again and
                                every neuron open here records a connection to
-                               what ran, at the distance of its own age (R38)
+                               what ran, at the distance of its own age (R37)
 f + 2     the reward only      the label arrives as input, not as a symbol
                                (§15). Nothing fires. It folds into the
-                               connection's running mean (R38)
+                               connection's running mean (R37)
 f + 3     next example         = the next example's f
 ```
 
@@ -346,10 +363,10 @@ sits at temporal offset `0`. The temporal slots are voted out for want of a majo
 in `|e|`.
 
 **No action patterns form.** An action neuron's own backward and forward slots land on frames carrying no
-actions, so the action hierarchy stays flat. R39's apex active action is therefore always the base action,
-which R39 states explicitly holds before any action pattern exists.
+actions, so the action hierarchy stays flat. R38's apex active action is therefore always the base action,
+which R38 states explicitly holds before any action pattern exists.
 
-**Connections are recorded per frame, never at the bill.** R38 records one at every age a neuron is open at,
+**Connections are recorded per frame, never at the bill.** R37 records one at every age a neuron is open at,
 and the reward folds in a frame later. Neither is gated on the observation completing, so the reward path does
 not wait on the window and does not vary with level. Do not couple connection recording to §10.3.
 
@@ -359,8 +376,8 @@ activation at age 3 of a reach-8 span would never be reached. `process actions` 
 walks every open activation the machine holds and hands each one what ran. It also runs after the stack has
 settled rather than during a level, because what ran is not known until then.
 
-**Classification is selection, not a readout.** The digit call is an action chosen by R42 off the event→action
-connections, scored by the reward at `f + 2`. R44 supplies exploration while a situation's reward is negative.
+**Classification is selection, not a readout.** The digit call is an action chosen by R41 off the event→action
+connections, scored by the reward at `f + 2`. R43 supplies exploration while a situation's reward is negative.
 The naive-Bayes consensus and the per-dimension vote in the current code have no counterpart in
 [algorithm.md](algorithm.md) and are retired, not ported.
 
@@ -368,5 +385,5 @@ The naive-Bayes consensus and the per-dimension vote in the current code have no
 
 - Emit the image on one frame only; emit nothing on the action and reward frames.
 - Sparse emission: an off pixel supplies no symbol (D5). No neuron is emitted for it.
-- Declare the digit calls as an action dimension, in a fixed order — R44 walks that order for exploration, so
+- Declare the digit calls as an action dimension, in a fixed order — R43 walks that order for exploration, so
   it is part of the problem statement.
