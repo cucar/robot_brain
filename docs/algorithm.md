@@ -221,7 +221,7 @@ file is (R12).
 > of `L` with respect to holding one entry**, read over the `H` observations the neuron holds: the corrections
 > the entry removes from the history against the `1 + |e|` its line costs. **A contribution is that derivative
 > in the case where nothing else would have served the chunk** — it prices one observation against the file
-> stating it flat, which is what a bid claims at the election (R21) and what a table reads only when the
+> stating it flat, which is what a bid covers at the election (R21) and what a table reads only when the
 > alternative is the normal (R12).
 
 ---
@@ -895,7 +895,7 @@ election is the last thing to move (T10).
 # 11. Contraction
 
 > **D26 — Contraction.** The machine covers the level below with units from the level above, each taken when
-> it covers more neurons than its bid costs to state — `1 + d`, never the dictionary line (R21, R27).
+> it covers more neurons than its bid costs to state — `1 + |e \ O⁻|`, never the dictionary line (R21, R27).
 >
 > **Covering everything is not the goal.** A neuron no unit covers stays in the file as itself, at cost 1
 > (D11), and that is the shorter file whenever no unit could hold it for less. **What coverage varies is the
@@ -921,22 +921,35 @@ election is the last thing to move (T10).
 > the frame — and the machine is holding the frame. It reads the neighborhood against its own board and
 > derives the rest (R21).
 
-> **R21 — What a bid claims, and what it costs.** The neuron sends neither. The machine has the neighborhood
-> and it knows what fired, so it works both out itself.
+> **R21 — What a bid covers, and what it costs.** The neuron sends the complete neighborhood (R20) and nothing
+> else. The machine holds the frame, so it reads that one object against what fired and derives both numbers.
 > ```
-> claimed   the neurons the neighborhood names at Δt ≤ 0 that did fire — the slots it asks for,
->           the bidder among them
+> the bid   the entry's whole neighborhood, backward and forward, and the child's id      (R20)
 >
-> price     1 + d     its own line in the history, plus the corrections its expansion leaves behind:
->                     neighbors it names that did not fire, and neighbors that fired it does not name
+> covers    the neurons it names that have fired — the slots it asks to subsume, the bidder among them
+> price     1 + |e \ O⁻|   its own line in the history, and the neurons it names in those
+>                          same frames that did not fire
 > ```
-> **The error is two-sided because a prediction is wrong either way** (D9, D17): a neighbor named and absent
-> must be turned off, a neighbor present and unnamed must be turned on, and both are corrections this unit's
-> expansion leaves behind. `d` runs over the backward half here because that is all a bid has seen — D18's cut
-> applied to a price. **A bid is backward throughout**, exactly as recognition is (D20).
+> **This is D13's contribution, and it is the number routing already produced.** `covers − price` is
+> `|O⁻| − d⁻`, the saving over stating the chunk flat, so a bid is worth at the election exactly what its entry
+> was ranked on at the bet (R18). Nothing is re-derived and no second valuation exists.
 >
-> **Both are re-measured on what the election leaves the bid** (R27 step 2). A slot another bid was given is
-> that bid's to answer for, and it leaves this bid's claim and this bid's price together.
+> **A neuron that fired and the bid does not name belongs to neither side.** It stands in the file as its own
+> line if nothing covers it (D26) and costs a turn-on if this unit is promoted — one symbol either way, so it
+> cancels before the test begins, and charging it here would count it twice against the uncovered term of the
+> same sum (§11.4). **The two-sided error is the assertion's** (D9): a slot named wrongly costs a turn-off and
+> a turn-on, and that is scored forward as frames arrive (R34), not here.
+>
+> **The bid is whole; only the half that has happened can be settled.** Nothing at `Δt > 0` has fired, so the
+> forward half of the neighborhood covers nothing and costs nothing *here* — it is not absent from the bid, it
+> is unsettled. It is what the machine asserts out of the standing recognitions (§13, R32), what reality
+> settles as each frame arrives (R34), and what the parent pays for at its bill (R19). **The cut is D20's
+> availability, and it is a fact about the moment rather than about the bid.**
+>
+> **What it covers is re-measured on what the election leaves the bid; the price is not** (R27 step 2). A slot
+> another bid holds is that bid's to answer for and leaves this bid's tally — but it fired, so it was never
+> among the neurons named and absent. **What a neighborhood gets wrong about a frame is a fact about the two,
+> and no assignment moves it.**
 >
 > **This is a price for one bid, not for the symbol.** The dictionary line `1 + |e|` is weighed by the one test
 > (R12) and appears nowhere in this price and nowhere in the election.
@@ -1038,8 +1051,10 @@ apex-units-per-frame is read, the settled frames are the ones whose numbers are 
 
 ## 11.4 The election
 
-**The file over one frame is the units promoted plus what they got wrong**: `Σ over the accepted (1 + d) + the
-neurons no unit covered`, the history half of `L` (D13) over the frames the election can see. The dictionary
+**The file over one frame is the units promoted plus what they got wrong**: `Σ over the accepted (1 + |e \ O⁻|)
++ the neurons no unit covered`, the history half of `L` (D13) over the frames the election can see. **The two
+terms do not overlap**: a neuron a promoted unit fails to name is in the second and not the first, which is why
+the price counts only the neighbors named and absent (R21). The dictionary
 half is R12's, and neither test touches the other's sum.
 
 **That sum is the objective; R27 is the procedure that serves it.** **Nothing anywhere forms a subset of bids
@@ -1055,13 +1070,14 @@ covers ends up credited to exactly one bid**, which is what stops a chunk being 
 >    coordinate — frame and position — that some bid this frame claims. Bids arrive naming relative offsets, so
 >    a bid's claims are resolved against its own coordinate before this pass runs, and slots already assigned
 >    by an earlier election are not in play (R22). **The slot goes to the claimant with the highest
->    `slots claimed / price`**. **Ties go to the older symbol, then to the earlier coordinate** — creation order for a
+>    `slots covered / price`**. **Ties go to the older symbol, then to the earlier coordinate** — creation order for a
 >    pattern and declaration order (D1) for a base neuron, then frame, then position. **Every slot resolves
 >    independently of every other.**
 > 2. **Tally and test.** Each bid holds whatever step 1 assigned it, and is accepted iff it holds strictly more
->    slots than its price, **both measured on what step 1 left it** (R21). The resolution may have taken slots
->    away, so what a bid delivers is not what it claimed — a slot another bid holds is that bid's to answer
->    for, and it leaves this bid's tally and this bid's price together.
+>    slots than its price, **the tally measured on what step 1 left it and the price on the neighborhood
+>    alone** (R21). The resolution may have taken slots away, so what a bid delivers is not what it claimed —
+>    a slot another bid holds is that bid's to answer for and leaves this bid's tally, and the price does not
+>    follow it, because a neuron that fired was never among the neighbors named and absent.
 > 3. **Settle the assignment over the accepted.** A slot whose holder was rejected passes to the best-rationed
 >    accepted bid that names it, by step 1's rule; a slot no accepted bid names is a correction. This decides
 >    nothing: an accepted bid can only gain here, gaining cannot un-accept, and a rejected bid is never looked
