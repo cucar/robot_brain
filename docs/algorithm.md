@@ -26,10 +26,13 @@ reach_t    the time dimension's reach at the neuron's own level — the window  
 W          the frame buffer's depth, reach_t + 1 — 2 at the base                D15
 
 O          an observation — what a neuron saw around one firing                 D19
-C          a candidate neighborhood, one per bill, grown a neighbor at a time R14
+O⁻         its backward half, complete the frame the neuron fires               D20
+C          a candidate neighborhood, grown a backward neighbor at a time        R14
 nbhd(e)    an entry's neighborhood, |e| its size                                D19
-d          distance, d_backward its temporal-backward half                      D17, D18
-n          the size of a collapse population                                   R4
+covers     the neurons a neighborhood names that fired                          D17
+price      1 + the neurons it names that did not                                D17
+residual   the neurons of an observation no entry covers                        D17
+n          the size of a collapse population                                    R4
 
 L          the file length                                                      D13
 D          the highest level the stack currently holds                          R17, T13
@@ -86,37 +89,51 @@ Every frame, each event dimension quantizes what was observed — if anything wa
 carries the action executing in that same frame — if one is.
 
 > **D5 — Firing.** A neuron fires only when something happens: an event neuron input, or an action neuron
-> output when its action is executed. **At most one neuron fires per dimension per position per level in a
-> frame**, and a dimension with nothing to report at a position is silent there.
+> output when its action is executed.
 >
-> **A neuron may therefore fire many times in one frame**, once per position, and those firings are instances
-> of one type (D2).
+> **At the base, at most one neuron fires per dimension per position in a frame.** The input reports one symbol
+> per channel at each point of its layout, and a dimension with nothing to report there is silent. That bound
+> is a property of the input, not a rule the machine imposes.
+>
+> **Above the base it does not hold.** A neuron covers one observation with a *set* of entries (R18), so
+> several of its children may be promoted at one coordinate, and a `(dimension, position)` at a pattern level
+> can carry several firings in a frame. D16 already admits several neighbors at one offset; this is the same
+> situation, and `|e|` counts them the same way.
+>
+> **A neuron may fire many times in one frame**, once per position, and those firings are instances of one
+> type (D2).
 >
 > **A frame's two halves are simultaneous.** What is observed and what is executed occupy the same column of
 > the grid, so an action runs alongside that frame's events and both are in hand together (§14).
 
-> **D6 — An activation stays open.** A firing at frame `f` remains open through `f + reach_t`, the neuron's own
-> reach in time (D15) — 1 at the base, wider above it. That is how long its observation takes to fill. While
-> open it **collects and nothing more**: arriving neighbors are written into it, and it is not counted, priced
-> or compared until its span closes (D18). The activation does not re-fire, and it enters other neurons'
-> neighborhoods only at its firing frame. The neuron may fire afresh while an earlier activation is open, so
-> several can be open at once, each collecting its own observation.
+> **D6 — An activation stays open, and what it does while open.** A firing at frame `f` remains open through
+> `f + reach_t`, the neuron's own reach in time (D15) — 1 at the base, wider above it.
 >
-> **The machine holds the open activation, and the neuron does not see it until its span closes.** The arriving
-> neighbors are the machine's own frame data on the way in, and it holds them for the neuron until the bill
-> (§10.2).
+> **Nothing the neuron decides waits for that.** Its backward half is complete the frame it fires (D20), and
+> every structural act — which entries cover it, which children bid, what is added, what retires — happens then
+> and there (R13). **An activation is open for one reason: to accrue.** Two things arrive over the window and
+> neither is a decision:
+> ```
+> the forward half   the neighbors at Δt > 0, one frame at a time, into its bin's tallies    D22
+> the adjustment     what other accepted bids covered, as coverage settles                   D28
+> ```
+> Both fold into the bin the activation joined at age 0 (R19), never into a decision the neuron is holding open.
+>
+> **The machine holds the open activation.** The arriving neighbors are its own frame data on the way in, and
+> it accrues them on the neuron's behalf; the neuron is not called for it.
 >
 > **Age is per activation, and a neuron carries several ages at once.** An activation's age is the frames
-> elapsed since it fired, `0` through `reach_t`, and it is the machine's counter. **The machine calls a neuron
-> at two of those ages and no others** — 0 and `reach_t` (R13) — so a neuron with a wide reach is silent
-> through most of every span. Nothing distinguishes activations but age: a new firing is the activation whose
-> age is 0.
+> elapsed since it fired, `0` through `reach_t`, and it is the machine's counter. Nothing distinguishes
+> activations but age: a new firing is the activation whose age is 0. **Age is read, not just counted** — it is
+> the distance at which that activation holds its connections and votes (R37, R42).
 
-> **D7 — Exclusion is per level, and about firing.** D5's bound is declared for the base and preserved upward
-> by construction: one firing per `(dimension, position)` per level offers at most one bid, so contraction
-> (§11) promotes at most one unit into that `(dimension, position)` one level up. A dimension can carry firings
-> at several levels in one frame and at several positions within a level; all are inhibited except the apex,
-> and two apexes at different positions never compete.
+> **D7 — Exclusion is per level, and about coverage.** A neuron an accepted bid covers is silenced in the
+> machine: it does not stand in the file and it does not vote (R30, R31). That is the whole of inhibition, and
+> it bounds nothing about how many neurons fire at a coordinate.
+>
+> **The design's only exclusivity is assignment, and it appears twice.** Every neuron a bid covers is credited
+> to exactly one bid (R27), and every neighbor of an observation is covered by exactly one of the entries
+> covering it (R18). Both are partitions of credit, and neither is a limit on firing.
 
 There is no rest value. A dimension where nothing happens supplies no symbol, and silence is what the decoder
 assumes for anything the file does not state.
@@ -124,7 +141,7 @@ assumes for anything the file does not state.
 > **D8 — Identity is absolute.** A neuron's identity is fixed entirely by its neuron dimensions, so nothing
 > about where it occurred is part of it. **The same shape at two positions is two activations of one neuron**,
 > and they pool: their observations carry the same relative neighborhood, so they land in one bin (D21) and one
-> entry serves both. A shape learned anywhere is learned everywhere, and the dictionary holds it once.
+> cover serves both. A shape learned anywhere is learned everywhere, and the dictionary holds it once.
 
 ---
 
@@ -175,7 +192,7 @@ file is (R12).
 > search state — counts, tallies, distances, margins — because expanding an apex unit needs the neighborhoods
 > and nothing else.
 
-> **D13 — File length, and what a symbol is worth.** Over the run the file is
+> **D13 — File length, and what a neighborhood is worth.** Over the run the file is
 > ```
 > L  =  Σ over dictionary (1 + |e|)  written once
 >    +  Σ over history (1 + errors)  written every activation
@@ -185,44 +202,30 @@ file is (R12).
 >
 > **`L` grows without bound and nothing in the design ever computes it.** No structure holds a file length and
 > no test compares two of them. Every quantity actually used is a **difference** in `L` — whether the file is
-> longer or shorter for holding one entry — which is finite however long the run is, and local: a count of
-> neighbors over the observations one entry serves (D17).
+> longer or shorter for holding one neighborhood — which is finite however long the run is, and local: a count
+> of neighbors over the observations that neighborhood covers (D17).
 >
-> **The neuron arrives at that difference directly.** The one thing it cannot know is overlap: a bid claims to
-> cover `{a, b, c, d}` when `a` and `b` were already covered by another accepted bid. **So the machine reports
-> the overlap and the neuron records it** (D28) — the *fact* that these neighbors were not credited, never the
-> number that came out of it.
+> **What one neighborhood is worth over one observation.** It accounts for the neurons it names that fired, at
+> the cost of its own line and the neurons it names that did not:
 > ```
-> contribution of e to one observation O
->       =  cover(O)  −  price(e, O)                                             (R20, R21)
->
-> cover(O)     =  1 + |O|    what the chunk costs stated flat: a line for every neuron that fired
->                            around this one and a line for the neuron itself (D11)
->
-> price(e, O)  =  1 + d       the unit's own line, and the corrections its expansion leaves behind
->
-> so           contribution  =  (1 + |O|) − (1 + d)  =  |O| − d
->
->                              the symbols it saves, less the symbols it gets wrong
+> margin(e, O)  =  covers  −  price  =  |O ∩ e|  −  ( 1 + |e \ O| )
 > ```
-> **Cover is a property of the observation, not of the claim** — nothing about `e` enters it. What `e` changes
-> is `d`, and the two ways of being wrong are not priced alike. A neighbor `e` names that did not fire costs a
-> correction and saves nothing. A neighbor that fired and `e` does not name costs a correction where stating it
-> flat cost a line, so it is free: **not naming a neighbor is what nothing is charged for, and naming it wrongly
-> is what is** — D9's asymmetry, in the file.
+> **A neuron `e` does not name is not `e`'s business.** It costs one symbol whether or not `e` exists — its own
+> line if nothing covers it, a turn-on if something does (D9) — so it is on neither side of this. **Naming a
+> neighbor wrongly is what is charged; leaving one out is not.**
 >
-> **The adjustment is what makes this local sum honest.** A neighbor another accepted bid took is not this
-> entry's to save, so `O`'s adjustment removes it from `|O|`, and a forward slot this activation does not own
-> comes off `d` (D28). Both are counted over the whole span at the bill, and over the backward half alone at
-> the bet (D18).
+> **This is the only valuation in the design.** The one test reads it over `H` observations (R12) and the
+> election reads it over one frame (R21), and they are the same expression over different populations.
 >
-> **Every term but the adjustment is measured now** (R2): `nbhd(e)` is wherever re-centering has put it, and `d`
-> follows it, being the bin's summed mismatch (D22). The adjustment is the only frozen part. **§8's test is the derivative
-> of `L` with respect to holding one entry**, read over the `H` observations the neuron holds: the corrections
-> the entry removes from the history against the `1 + |e|` its line costs. **A contribution is that derivative
-> in the case where nothing else would have served the chunk** — it prices one observation against the file
-> stating it flat, which is what a bid covers at the election (R21) and what a table reads only when the
-> alternative is the normal (R12).
+> **The adjustment is what makes this local sum honest.** The one thing the neuron cannot know is overlap: a
+> bid claims to cover `{a, b, c, d}` when `a` and `b` were already covered by another accepted bid. **So the
+> machine reports the overlap and the neuron records it** (D28) — the *fact* that these neighbors were not
+> credited, never the number that came out of it. A neighbor another bid took leaves `covers` and enters
+> nobody's price.
+>
+> **Every term but the adjustment is measured now** (R2): `nbhd(e)` is wherever re-centering has put it, and
+> what it covers follows. **§8's test is the derivative of `L` with respect to holding one entry**, read over
+> the observations the neuron holds.
 
 ---
 
@@ -235,27 +238,32 @@ dimension is executing (D5), and the machine works **up one stack, a level at a 
 ```
 per level, in this order and no other
 
-  bet        each neuron that fired routes its backward half to an entry, commits to it for
-             the window, and returns a recognition — with a bid if that entry has a child   R18
+  cover      each neuron that fired covers its backward half with a set of entries; every
+             entry in that set that has a child returns a recognition, which is its bid       R18
   election   the machine assigns each covered slot to one bid and accepts the bids that
-             hold more than they cost; the level's uncovered neurons are corrections        §11.4
-  bill       every activation whose span closed folds into its neuron's history, and the
-             neuron asks whether to add a child and whether to retire one                   §10.3
+             cover more than they cost; the level's uncovered neurons are corrections         §11.4
+  bill       each activation that fired this frame folds its backward half into its bin,
+             and the neuron asks what to add and what to retire                               §10.2
 
   the level above is built out of what the election accepted, and it happens again;
-  a level that accepts nothing has no level above it this frame                             §12
+  a level that accepts nothing has no level above it this frame                               §12
 
 then, once the last level has billed
 
-  ledger     delete every entry and pattern the bills retired that is now unreachable       §9.2
+  ledger     delete every entry and pattern the bills retired that is now unreachable         §9.2
   actions    every open activation records a connection to the action that ran, and
-             returns the inferences competing for the next action slot                      §15, §16
-  assert     the uncovered neurons' standing recognitions resolve into one owner per slot   §13
+             returns the inferences competing for the next action slot                        §15, §16
+  assert     the uncovered neurons' standing recognitions resolve into one owner per slot     §13
+  accrue     every open activation writes this frame's arrivals into its bin — the forward
+             neighbors that landed, and the coverage that settled                             §10.3
 ```
 
 That last pass commits the action for the frame ahead; the reward for it arrives the frame after (R35).
 
----
+**Every decision above is made on complete evidence.** A neuron's backward half is whole the frame it fires
+(D20), and nothing structural reads anything else — so no step is a bet, nothing is committed early, and
+nothing is revisited. What the remaining `reach_t` frames deliver is evidence for the *next* decision, not a
+verdict on this one.
 
 # Part I — A neuron
 
@@ -278,7 +286,8 @@ That last pass commits the action for the frame ahead; the reward for it arrives
 > at a nonzero spatial offset. Only offset zero in every component is the activation itself, and that is the
 > center.
 >
-> **One neighborhood per firing, and at most one entry serves it** (R7).
+> **One neighborhood per firing, and a set of entries covers it** (R18), each answering for the neighbors it
+> was assigned and none of them for the rest (D17).
 
 A neighborhood is a set of neighbors, each at its own offset. Drawn with a row per dimension and a column per
 offset, with one activation dimension and a reach of 1:
@@ -290,11 +299,10 @@ offset, with one activation dimension and a reach of 1:
         dim B       b      ·      ·        a  a named neighbor
         dim C       ·      ·      c        ·  silent
         dim D       ·      ·      d
-                  ╰─ d_backward ─╯╰ arriving ╯
-                   in hand at age 0        lands next frame
-                   recognition uses this   nothing is measured until it is complete
-                  ╰──────────── d ───────────╯
-                   the whole span, priced from the bill onward
+                  ╰──── O⁻ ─────╯╰──── O⁺ ────╯
+                   whole at age 0          lands over the next reach_t frames
+                   covered, priced,        asserted, scored, accrued —
+                   added and retired here  and never priced       D18
 ```
 
 > **D15 — Radius and reach.** The radius is **2**, in every activation dimension of every channel (D1).
@@ -329,153 +337,189 @@ offset, with one activation dimension and a reach of 1:
 > instead.**
 >
 > **A coarse offset may carry more than one neighbor**, since it spans a range and several activations of one
-> dimension can fall inside it. A count is per `(neuron, offset)` (D24), `d` is a symmetric difference over
-> neighbors (D17), and `|e|` counts them. D5's exclusion is about **firing**, one per `(dimension, position)`,
-> and that is untouched.
+> dimension can fall inside it. A count is per `(neuron, offset)` (D24) and `|e|` counts every neighbor named
+> there. Above the base a `(dimension, position)` may itself carry several firings (D5), which this handles the
+> same way and needs no rule of its own.
 
 ## 4.2 The fit
 
-> **D17 — Distance.** For an observation `O` and an entry candidate `C`, the distance is the symmetric
-> difference:
+> **D17 — What a neighborhood accounts for, and what it costs.** An entry `e` measured against an observation
+> `O` gives three sets, and every price in the design is counted off them:
 > ```
-> d(O, C) = |O △ C|  =  neighbors present that C does not name
->                     + neighbors C names that are not present
+> covers    O ∩ e     the neurons it names that fired — what it accounts for
+> price     1 + |e \ O|   its own line, and the neurons it names that did not fire
+> residual  O \ (the union of the entries covering O)   the neurons nothing accounts for
 > ```
-> It is literally the corrections that would follow the activation in the file. Service cost and match distance
-> are one number, dimension-free and offset-blind.
+> **The residual is not an error.** Each of its neurons stands in the file as its own line, at cost 1 (D11),
+> exactly as it would if no entry existed — so it is charged to no entry and credited to none (D9, D13).
+>
+> **An observation is covered by a set of entries, not by one** (R18). They partition what they cover: a
+> neuron is `covers` for exactly one of them, so nothing is accounted for twice. What is left over is the
+> residual.
+>
+> **The cost of an observation** is therefore what its cover costs plus what nothing covers:
+> ```
+> cost(O)  =  Σ over the entries covering O ( 1 + |e \ O| )  +  |residual(O)|
+> ```
+> and an observation nothing covers costs `1 + |O|`, the whole chunk stated flat.
+>
+> **Distance is a reading of the same three sets.** Where one entry is measured against the whole of an
+> observation, `d(O, e) = |O △ e|` and `margin = |O| − d`; that is the identical number D13 gives, written
+> against a flat baseline instead of a subset one. **The design uses the subset form everywhere**, because an
+> observation's cover is a set and only the subset form adds up over one.
 
-> **D18 — Only two distances.** `d_backward` is `d(O, C)` restricted to neighbors whose **temporal** offset is
-> `≤ 0` — the half in hand the frame a neuron fires, and all recognition ever sees. `d` is the whole thing.
+> **D18 — The backward half decides; the forward half predicts.** Cut on the temporal component alone (D20).
 > ```
-> d_backward   Δt ≤ 0       available at age 0        decides which entry an activation commits to
-> d            all offsets  available at the bill     decides what that observation costs
+> O⁻   Δt ≤ 0    complete the frame the neuron fires   every structural decision is made on it
+> O⁺   Δt > 0    arrives over the next reach_t frames  it is the prediction, and it decides nothing
 > ```
+> **The cut is availability, and it is not a compromise.** `O⁻` is whole when the neuron fires, so covering it,
+> pricing it, adding and retiring are all done on complete evidence and none of them is a bet. `covers`,
+> `price` and `residual` are read over `O⁻` and over nothing else.
+>
+> **What the forward half is for.** It is what an entry asserts (§13), what its child's expansion places when
+> it is an action (R36), and what the machine writes corrections against when it is wrong (R34). It enters no
+> test. **It is not chosen — it is measured**: the collapse over what actually followed (R4) is the best
+> statement of it available, so there is nothing about it to decide and nothing to price.
+>
 > **The cut is on time alone.** Spatial components never enter it: a neighbor three positions to the right
-> arrives in the same frame as one three positions to the left.
->
-> Nothing is ever measured in between. An observation is incomplete until age `reach_t`, and an incomplete
-> observation is not priced, not counted and not compared (R2).
+> arrives in the same frame as one three positions to the left, so both are in `O⁻`.
 
-> **R1 — Two comparisons, kept apart.** Which entry an activation **commits to** is decided at age 0 on
-> `d_backward`, and the commitment is locked for the window (R13). What an observation **costs** is `d` against
-> the entry serving it, measured as that entry's neighborhood now stands — a different question, asked of a
-> completed observation and re-asked whenever the table moves under it (R2). Throughout: *wins, closest,
-> runner-up* mean the first; *distance, cost, benefit* mean the second.
-
-> **R2 — A price is a measurement, not a record.** An observation costs its distance to the neighborhood of the
-> entry serving it (D17), and that neighborhood can change: re-centering (R5) recomputes the entry's
-> `d_backward` to each bin and its summed mismatch there, and those are what the bin's observations then cost
-> (D22). **An observation is fixed but its cost is not**, and it stops moving when its server stops moving.
+> **R1 — One comparison.** There is no second one. An observation is covered on `O⁻`, priced on `O⁻`, and the
+> tests that add and retire read the same numbers over the history. Nothing anywhere compares a neighborhood
+> against a forward half, and no quantity in the design waits for one.
 >
-> **An observation that has not completed has no cost at all** — it is collecting, not participating (D18).
+> **What arrives later is evidence, not a verdict.** The forward neighbors and the settling coverage accrue
+> into the bin (D6) and are read by the *next* decision the neuron makes, along with everything else its
+> history holds.
+
+> **R2 — A price is a measurement, not a record.** What an observation costs is read off its cover as that
+> cover now stands (D17), and the cover can change: re-centering (R5) moves a neighborhood, which moves what it
+> covers in every bin, and those are what the bin's observations then cost (D22). **An observation is fixed but
+> its cost is not**, and it stops moving when its cover stops moving.
 >
 > **The adjustment is a record, and it is not a price.** What the machine reported about a frame (D28) cannot
 > be re-derived, so it is stamped once and never revisited. **It is evidence, exactly like the observation it
 > rides on**: a fact about what happened, which prices are then measured against.
 
----
-
 # 5. State
 
 Only two things a neuron holds cannot be recomputed: the history of what it observed, and the entries it has
-decided to keep. Everything else it holds is a total. A third fact is irrecoverable and is **not the neuron's**
-— which entry each open activation committed to — and it sits on the machine's side of the line (D6, D21).
+decided to keep. Everything else it holds is a total.
 
 > **D19 — Observed and named.** Two things have the shape of a neighborhood and must not be confused. Both
-> span the whole box D4 admits, and D17 compares one against the other.
+> span the whole box D4 admits, and D17 measures one against the other.
 > ```
 > an observation   what the neuron SAW around one firing; recorded once, evicted `H` firings later
-> a neighborhood   what an entry NAMES; the collapse of what it serves (R4), moving as that moves (R5)
+> a neighborhood   what an entry NAMES; the collapse of what it covers (R4), moving as that moves (R5)
 > ```
 > An observation is a fact, a neighborhood a claim. Neither is a frame: a frame is one column, an observation
 > the whole window.
 
-> **D20 — Halves.** Cut either at the firing frame, on the temporal component alone. The **backward half**,
-> `Δt ≤ 0`, is in hand when the neuron fires and is what recognition compares (R7). The **forward half**,
-> `Δt > 0`, arrives over the next `reach_t` frames and can key nothing, because it does not exist when the
-> choice is made. **The split is availability, so only time can produce it.**
+> **D20 — Halves.** Cut at the firing frame, on the temporal component alone. The **backward half** is the
+> neighbors at `Δt ≤ 0` and the **forward half** those at `Δt > 0`. An entry's neighborhood has the same two
+> halves, and D18 says what each is for.
 
 > **D21 — Neuron state.** `°` marks a total: recoverable by a walk, kept to avoid one.
 > ```
 > neuron           = (coordinate, routing table, history, connections)
 >
 > routing table    = set of entries
-> entry            = (id, neighborhood, child, counts°, served bins°)
+> entry            = (id, neighborhood, child, counts°, covered bins°)
 >
-> history          = (bins, ring)                  complete observations only
+> history          = (bins, ring)
 > ring             = observations, oldest first
-> observation      = (position, backward half, forward half, adjustment)
+> observation      = (position, forward half, adjustment)     both filled in over the window (D6)
 > adjustment       = (covered:    which backward neighbors another unit took,
 >                     superseded: which forward slots this activation does not own)
 > bin              = (backward half, observation count,
->                     tallies°, covered tallies°, superseded tallies°,
->                     distance to each entry°, server°, Σ server mismatch°)
+>                     cover°, assignment°, price°, residual°,
+>                     forward tallies°, covered tallies°, superseded tallies°)
 >
-> connections      = one per (distance, action neuron)  toward what has followed (R37)
+> connections      = one per (distance, action neuron) toward what has followed (R37)
 > connection       = (strength, estimate)               exposures, and the mean reward over them
 >
 > held by the machine, not the neuron (D6):
-> open activations = one per (neuron, age, position)   still collecting
-> open activation  = (position, age, forward half so far, committed entry)
+> open activations = one per (neuron, age, position)   still accruing
+> open activation  = (position, age, its bin)
 > ```
-
-An `id` is creation order, a handle that survives re-centering and the tie-break R18, R24 and R27 reach for.
-An observation stores no backward half: every observation in a bin carries that bin's key exactly (R7), so the
-bin holds it once, and a bin knows how many observations it has but never which. **No observation carries a
-frame number**, and **nothing anywhere holds absolute time**: an open activation's `age` is a counter.
-
-**Connections hang off the neuron, beside the routing table.** **Nothing an entry does reaches one** — a
-connection dies only when one of its two neurons does (R37).
-
-**An open activation ends at its bill**, which is where the machine hands it over: its forward half becomes the
-observation's, the adjustment comes beside it (D28), and its `committed entry` goes with it. **A settled
-observation has no server of its own**; it is priced against its bin's, whatever that currently is.
+> An `id` is creation order, a handle that survives re-centering and the tie-break R18, R24 and R27 reach for.
+>
+> **An observation stores no backward half**: every observation in a bin carries that bin's key exactly (R7),
+> so the bin holds it once. **No observation carries a frame number**, and nothing anywhere holds absolute
+> time: an open activation's `age` is a counter.
+>
+> **An open activation carries no commitment.** It holds the bin it joined at age 0 and nothing else, because
+> everything it was going to decide was decided then (D6). What it does for the rest of its life is write
+> arrivals into that bin.
+>
+> **Connections hang off the neuron, beside the routing table.** **Nothing an entry does reaches one** — a
+> connection dies only when one of its two neurons does (R37).
 
 > **D22 — What the totals owe.** In dependency order, so the list also says what to recompute when something
 > moves.
 > ```
-> entry.counts       =  Σ over served bins:  their tallies                     (forward)
->                       Σ over served bins:  observation count × the bin's key (backward)
-> entry.served bins  =  { b : b.server = this entry }
+> bin.cover          =  the entries covering this bin's key, chosen by R18 over the key alone
+> bin.assignment[n]  =  which entry of the cover holds neighbor n            a partition of the key
+> bin.price          =  Σ over the cover ( 1 + |e⁻ \ key| )
+> bin.residual       =  the key's neurons no entry of the cover names
 >
-> bin.tallies        =  Σ over its observations, per (neuron, forward offset)
-> bin.distance[e]    =  d_backward(bin's key, e.neighborhood)
-> bin.server         =  the closest entry clearing `|e| > d_backward` there, else the normal (R18)
-> bin.Σ mismatch     =  d(bin, that neighborhood), summed off the tallies
-> bin.covered[k]     =  # observations whose adjustment took key neighbor k       (D28)
-> bin.superseded[o]  =  # observations whose adjustment took forward slot o
+> entry.covered bins =  { b : this entry is in b.cover }
+> entry.counts       =  Σ over covered bins:  observation count × the neighbors assigned to it   (backward)
+>                       Σ over covered bins:  their forward tallies                              (forward)
+>
+> bin.forward tallies    =  Σ over its observations, per (neuron, forward offset)
+> bin.covered[n]         =  # observations whose adjustment took key neighbor n     (D28)
+> bin.superseded[o]      =  # observations whose adjustment took forward slot o
 > ```
 > Credited neighbors are the key's neighbors less `covered`, and the priced forward slots are the offsets less
-> `superseded`. Those two tallies move when an observation joins the bin or is evicted and at no other time.
+> `superseded`.
+>
+> **The cover is a property of the bin, not of an observation** (R7). Every observation with that key was
+> covered the same way, because R18 reads the key and nothing else.
+>
+> **Three of these accrue rather than being computed.** The forward tallies, `covered` and `superseded` are
+> written into the bin by open activations over their windows (D6) and are never derived from anything the
+> neuron holds. The rest are totals over the key and the table, and move when either does.
 >
 > **The tallies are sparse**: indexed by the neighbors actually seen, not by everything the box admits. Only
 > the forward half needs tallies; backward, every observation carries the key, so the count *is* the tally.
 
-> **D23 — Entries are one kind of thing.** The normal and every child are the same object; the normal is the
-> entry whose child is null, so it has no dictionary line to pay for. **Every routing table holds exactly one,
-> from the neuron's creation**, which is what makes routing total: R18 always has something to fall to, and a
-> bin always has a server (D22). The **neighborhood** is the whole of what
-> an entry knows — neighbors behind the neuron and ahead of it, with no separate notion of context or of what
-> it infers.
+> **D23 — The residual is not an entry.** What no entry covers is not routed anywhere and has no line to pay:
+> it is a set of neurons, each standing in the file as itself (D17). **There is no default entry, no fallback
+> and no empty neighborhood** — a routing table may be empty, and an observation it covers nothing of costs
+> `1 + |O⁻|`, which is what an uncompressed chunk costs.
+>
+> The **neighborhood** is the whole of what an entry knows — neighbors behind the neuron and ahead of it, with
+> no separate notion of context or of what it infers.
 
 # 6. Counts, the collapse, re-centering
 
 ## 6.1 Counts
 
-> **D24 — Counts.** Each entry keeps, over exactly the observations it currently serves,
-> `count(neuron, offset)` = how often that neighbor was present.
+> **D24 — Counts.** Each entry keeps, over exactly the observations it covers, `count(neuron, offset)` = how
+> often that neighbor was present.
+>
+> **Backward, it counts only what is assigned to it** (D22). A neighbor of the observation held by another
+> entry of the same cover is that entry's evidence, not this one's — the same rule the adjustment applies
+> across neurons (D28), applied inside one table.
+>
+> **Forward, it counts the whole tally.** Nothing partitions the forward half: every entry covering a bin
+> asserts over the same future, and which of them owns a slot is settled where assertions are settled (R32),
+> not here. Two entries covering one bin still differ, because each collapses over the whole set of bins it
+> covers and no two of those sets are the same.
 
-> **R3 — What moves counts.** Three events, and every one of them moves a whole span or a whole bin.
+> **R3 — What moves counts.** Three events, and every one of them moves a whole bin's worth.
 > ```
-> an observation completes         its bin's server increments, by the whole span
-> a served observation is evicted  that server decrements by it
-> a bin's server changes           the old decrements by the bin's tallies, the new increments by them
+> an observation joins a bin        every entry of the cover increments, by the neighbors assigned to it
+> an observation is evicted         every entry of the cover decrements by the same
+> a bin's cover changes             an entry leaving decrements by the bin's tallies, one arriving increments
 > ```
-> A server changes when a child captures the bin, when the entry holding it retires, or when its distances change (R6).
+> A cover changes when the table changes — an entry added, an entry retired, or a neighborhood moved so that
+> R18 reads the key differently (R6).
 
-**An entry counts only its own observations.** Every observation is served by exactly one entry. Two of R3's four
-moves transfer a whole bin, which is arithmetic on tallies — `O(offsets)`, not `O(observations)` — because a
-bin moves whole (T4).
+**An entry counts only its own share.** Two of R3's three moves transfer a whole bin, which is arithmetic on
+tallies — `O(offsets)`, not `O(observations)` — because a bin moves whole.
 
 ## 6.2 The collapse
 
@@ -488,49 +532,52 @@ The collapse is the only operation anywhere that decides what goes in a slot.
 > Nothing is divided: `2 · count(p) > n` is an integer comparison. The alternative is `p`'s absence, which the
 > remaining `n − count(p)` vote for, so the two are decided against one denominator.
 >
-> **At an offset that names one position, at most one neuron clears the half**, since D5 lets an observation
-> hold one neuron of a dimension there. At a coarse offset an observation may hold several (D16), several
-> clear, and the neighborhood names them all — which is what `|e|` counts.
+> **An observation cannot abstain; a claim can.** An observation held that neuron at that offset or it did not,
+> and either way it is in the population. A unit naming nothing at a slot has **no opinion about it**, so a
+> unit that could have claimed a slot and did not is not in `n` at all.
 >
 > **The three populations.** One arithmetic, three times, and nothing else in the design decides what a
 > neighborhood names or what a slot holds.
 > ```
-> an entry's neighborhood   the observations it serves         R4, at every bill (R5)
-> a candidate's             the observations it would improve    R14, at every add test
-> a slot's owner            the claims landing on it, at one   R24, when the assertion resolves one level at a time
+> an entry's neighborhood   the observations it covers          R4, at every bill (R5)
+> a candidate's             the observations it would improve   R14, at every add test
+> a slot's owner            the claims landing on it            R24, when the assertion resolves
 > ```
-> **An observation cannot abstain; a claim can.** An observation held that neuron at that offset or it did not,
-> and either way it is in the population. A unit naming nothing at a slot has **no opinion about it**, so a
-> unit that could have claimed a slot and did not is not in `n` at all.
+> **Backward, a neighbor another entry of the same cover holds votes against.** It is present in the
+> observation but it is not this entry's to name, so it counts toward `n` and not toward `count(p)`. An entry
+> therefore grows into the residual and retreats from ground another entry holds, and two entries covering the
+> same bins cannot converge on one neighborhood.
+>
+> **Forward, every observation votes plainly.** There is no assignment ahead of the firing frame to respect.
 
-**One denominator, every offset.** An observation enters the history only when its whole span is complete
-(D21), so every observation an entry serves has something to say at every offset — a neuron or a silence, the
-outermost forward offset decided by exactly the same population as offset 0. **No threshold, smoothing or
-probability estimate enters any of this**, and no denominator is ever shared between two populations.
+**One denominator, every offset.** Every observation an entry covers has something to say at every offset — a
+neuron or a silence — so the outermost forward offset is decided by the same population as offset 0. **No
+threshold, smoothing or probability estimate enters any of this**, and no denominator is ever shared between
+two populations.
 
 ## 6.3 Re-centering
 
 > **R5 — Re-centering.** An entry **re-centers** by running the collapse (R4) over the observations it now
-> serves and recomputing its distance to every bin with it (R6).
+> covers, and the bins it reads then re-derive their covers with it (R6).
 >
 > **An entry re-centers whenever its counts move** — no test, no gate, and free, because the counts are already
-> maintained. Counts move only at a bill (R3), and every move there disturbs a whole span, so a re-center is
-> always over all offsets and never per observation. Several spans folding in one pass move counts in any order
-> and the totals land the same.
+> maintained. Counts move only at a bill or an accrual (R3), and every move there disturbs a whole bin's
+> worth, so a re-center is always over all offsets and never per observation.
 >
 > **A bill re-centers twice, once after each kind of count movement** (R19): after **evidence** moves counts —
-> observations folding in and being evicted — before any test prices against the result; and after
-> **structure** moves them — an add taking bins, a retire dropping them — once both tests have run.
+> an observation joining a bin, another being evicted — before either test prices against the result; and after
+> **structure** moves them — an add taking neighbors, a retire releasing them — once both tests have run.
 
-> **R6 — Servers are re-derived, not patched.** A moved neighborhood changes every distance measured against
-> it. What is maintained is **one entry's distance to every bin**: an entry that re-centers recomputes those,
-> and nothing else is repaired. The server is then taken from **the distances the bin holds** (D22) whenever
-> that bin is used — by recognition when it fires (R18), and by the tests when they scan the table (R19).
+> **R6 — Covers are re-derived, not patched.** A moved neighborhood changes what it covers in every bin. What
+> is maintained is **one entry's covers-and-price against every bin key**: an entry that re-centers recomputes
+> those, and nothing else is repaired. A bin's cover is then taken from the table by R18 whenever that bin is
+> used — by recognition when it fires, and by the tests when they scan the history (R19).
 >
-> **A bin whose server has changed takes its counts with it** (R3), so the entry that received a span is always
-> the entry that gives it back. Like every count movement, the transfer happens at a bill (R5).
+> **A bin whose cover has changed takes its counts with it** (R3), so the entry that received a bin's share is
+> always the entry that gives it back.
 
-**Cold start is silence.** An entry with no observations has no counts and no neighborhood.
+**Cold start is silence.** An entry with no observations has no counts and no neighborhood, and a neuron with
+an empty table covers nothing and bids nothing.
 
 # 7. The history
 
@@ -540,29 +587,41 @@ probability estimate enters any of this**, and no denominator is ever shared bet
 > evidence. **The ring is exactly `H` deep once filled**, and how much run it spans is whatever that neuron's
 > rate makes it. Nothing else anywhere is measured in frames.
 
-> **R7 — Keyed on the backward half — both sides.** Two observations with identical backward halves sit at the
-> same `d_backward` from every entry, so routing hands both to the same server; that is what makes the backward
-> half safe to share an assignment across, and the forward half cannot key anything because it does not exist
-> when the assignment is made.
+> **R7 — Keyed on the backward half — both sides.** Two observations with identical backward halves present
+> R18 with identical input, so they are covered identically; that is what makes the backward half safe to share
+> a cover across, and the forward half cannot key anything because it does not exist when the cover is chosen.
 >
-> **An entry is keyed the same way**, by its own backward half, and no two entries may share one: routing sees
-> only `d_backward`, so a pair with equal backward halves would be indistinguishable to it.
+> **An entry is keyed the same way**, by its own backward half. Two entries with equal backward halves are
+> indistinguishable to R18, so whichever it takes first covers everything the other would, leaving the second
+> with nothing assigned — and an entry covering nothing fails the retire test at the next bill (R17). **The
+> table does not need a rule against duplicates; the tests remove them.**
 
-A **bin** is the aggregate over its observations exactly as an entry is the aggregate over its bins. The
-backward distance is a property of the bin; the forward half is what followed this context, per slot, tallied.
+A **bin** is the aggregate over its observations exactly as an entry is the aggregate over its bins. The cover
+and its partition are properties of the bin's key; the forward half is what followed this context, per slot,
+tallied.
 
 > **R8 — The ring makes eviction exact.** Removing the oldest observation means subtracting the neurons *it*
 > contributed, which a tally cannot recover, so each observation keeps its own forward half and the bin is the
 > cached aggregate over them.
 >
-> **Two things read a forward half whole**: eviction, and the collapse that builds a candidate around a
-> forward neighbor, which the add test counts one observation at a time (R14). Everything else reads it
-> per slot, off the tallies (T3).
+> **Two things read a forward half whole**: eviction, and the collapse that builds a candidate around a forward
+> neighbor (R14). Everything else reads it per slot, off the tallies.
 
-> **R9 — Aging is by count.** The ring is a FIFO `H` deep: an arriving observation evicts the oldest, and only
-> then. Nothing compares a frame number, nothing accumulates arrears, and nothing sweeps the population per
-> frame — a neuron that does not fire evicts nothing. Recording is unconditional, and no election outcome ever
-> edits a history.
+> **R9 — Aging is by count, and an observation may still be filling.** The ring is a FIFO `H` deep: an arriving
+> observation evicts the oldest, and only then. Nothing compares a frame number, nothing accumulates arrears,
+> and nothing sweeps the population per frame — a neuron that does not fire evicts nothing.
+>
+> **An observation enters the ring at age 0 and keeps arriving for `reach_t` frames** (D6), so the ring holds
+> observations that are still accruing. **Eviction subtracts what was accrued, not what would have been**: the
+> forward half and adjustment the observation had written into its bin leave with it, and if its window had not
+> closed it simply wrote less. A neuron firing faster than its own reach evicts partial futures and prices
+> against partial tallies, which is a smaller sample and not a wrong one.
+>
+> **An evicted observation stops accruing.** Its open activation is closed by the eviction, and closing one is
+> the only thing eviction does besides the subtraction.
+>
+> Recording is unconditional, and **no election outcome ever edits a history** — deletion is the one thing that
+> reaches into a folded observation, and it only removes names of neurons that no longer exist (R17).
 
 > **R10 — Free parameter: the history size `H`.** It is the only one. The alphabet — channels, dimensions,
 > resolutions — is the problem statement rather than a knob; adjacency is not declared (D4), the reach per
@@ -580,175 +639,154 @@ backward distance is a property of the bin; the forward half is what followed th
 > costs to state. **Nothing measures a file to find that out**: both terms are counts over what the neuron
 > already holds, so the margin is the difference in `L` reached directly (§2).
 > ```
-> price(o)    =  1 + d       served by a child     the unit's line, and its corrections
->             =  1 + |O|     served by the normal   nothing promoted, every neighbor on its own line
->
-> benefit(e)  =  Σ over the observations at issue:  price without e − price with e   (adjusted, D28)
-> cost(e)     =  1 + |e|                                                             the line  (D11)
+> benefit(e)  =  Σ over the observations e covers:  covers − price   (adjusted, D28)
+> cost(e)     =  1 + |e|                                              the line  (D11)
 > margin(e)   =  benefit(e) − cost(e)
 > ```
 > An entry is **added** only when its margin is strictly positive and **retired** only when strictly negative
 > (R15, R17). At equality nothing happens, so the boundary cannot flip-flop.
 >
-> **An entry is worth what it saves over whatever would serve the observation without it** — another child if
-> one is close enough, the normal otherwise (R6). A saving some other entry already delivers is not this
-> entry's, which is what the adjustment says across neurons (D28) and what this says inside one table.
+> **`covers` is what nothing else would have covered.** An entry is worth what it saves over what would account
+> for those neurons if it were gone — another entry of the same cover if one names them, and the residual
+> otherwise, where each stands as its own line (D17). A saving some other neighborhood already delivers is not
+> this one's, which is what the adjustment says across neurons (D28) and what this says inside one table.
 >
-> **The normal is not an encoding.** An activation routed to it bids nothing (R20), so no unit covers it and
-> every neighbor stands in the file on its own line — `1 + |O|`, which is `d` against a neighborhood that
-> names nothing. So an entry whose observations would fall to the normal is worth `Σ (|O| − d)`, D13's
-> contribution, and one whose observations would fall to another child is worth `Σ (d_next − d)`. One
-> question, two situations.
+> **The same expression prices a bid over one frame** (R21). There is one valuation in the design (D13); the
+> two tests differ in the population they sum it over and in whether the dictionary line is in the sum.
 >
-> Benefit is the difference in the history term, cost is the difference in the dictionary term, and
-> `margin = −ΔL`.
-
-**Benefit is a measurement, so it moves when anything under it moves** — a bin gained or lost, an observation
-joined or evicted, a neighborhood re-centered. **No test needs a pass of its own.**
+> **Benefit is a measurement, so it moves when anything under it moves** — an observation joined or evicted, a
+> neighborhood re-centered, another entry taking a neighbor. **No test needs a pass of its own.**
 
 # 9. The two moves
 
-A neuron can do exactly two things to its routing table: **add** an entry and **delete** one. Re-centering is
+A neuron can do exactly two things to its routing table: **add** an entry and **retire** one. Re-centering is
 neither — it is what moving counts means (R5). So the whole of restructuring is two tests, asked in that
-order, at a bill and nowhere else (§10.3). **Both are R12 over different sets** — one margin, read over the
-bins a candidate would win and over the bins an entry holds — and there is no second currency anywhere in the
-design.
+order, at a bill and nowhere else (§10.2). **Both are R12 over different sets** — one margin, read over the
+neurons a candidate would take out of the residual and over the neurons an entry holds — and there is no
+second currency anywhere in the design.
 
 ## 9.1 Add — creating a child
 
-> **R13 — Two decision points: the bet at age 0, the bill at age `reach_t`.** At age 0 the neuron picks an
-> entry on backward evidence alone and returns a recognition naming it (R18). **That return is the
-> commitment**: the machine records the entry on the open activation and holds it there for the whole window
-> (D21), the frames in between only collect, and **the neuron itself remembers nothing across them**. At age
-> `reach_t` the observation is complete and the bill comes due: this is where the neuron asks whether to add
-> and whether to delete. **Every structural move happens there and nowhere else.**
+> **R13 — One decision point: the firing frame.** A neuron is called once per activation, at age 0, and
+> everything structural happens in that call: it covers its backward half (R18), returns a recognition per
+> entry of the cover, and — once the level's election has run — folds and asks both tests (R19).
 >
-> **What is held is the recognition, not the price.** A bill in between may hand the activation's bin to a
-> closer entry, and that is what the observation is then priced against — but the recognition the machine
-> holds stays the one the neuron returned, because that bid may already be a live unit one level up (R17).
+> **There is nothing to wait for.** `O⁻` is complete when the neuron fires (D18), so no decision here is made
+> on partial evidence, none is committed for later, and none is revisited. The neuron remembers nothing
+> between one firing and the next beyond what is in its history.
 >
-> A child minted at a bill first fires on the next activation its neighborhood recurs; it does not serve, cover
-> or propagate on the activation that created it. **Structure never pays off on the evidence that created it,
-> only on recurrence.**
+> A child minted at a bill first fires on the next activation whose key its parent's cover reaches; it does not
+> cover, bid or propagate on the activation that created it. **Structure never pays off on the evidence that
+> created it, only on recurrence.**
+>
+> **The rest of the activation's life is accrual** (D6, §10.3) — the forward half and the settling coverage,
+> written into the bin for the next decision to read.
 
-> **R14 — Where a candidate comes from.** A candidate is built one neighbor at a time, taking at every step the
-> neighbor that shortens the file most, and stopping when none of them does. **Nothing seeds it and nothing
-> outside the file's length chooses anything**: the same history builds the same `C`.
+> **R14 — Where a candidate comes from.** A candidate is built one backward neighbor at a time, taking at every
+> step the neighbor that shortens the file most, and stopping when none of them does. **Nothing seeds it and
+> nothing outside the file's length chooses anything**: the same history builds the same `C`.
 >
-> **What each observation would save.** The file pays `1 + d` for an observation under whatever names it, and
-> `1 + |O|` under the normal, which names nothing that gets written (R12). So against a candidate `C`:
-> ```
-> saving(o)  =  price(o) − 1 − d(o, C)         what the file gets back if o moves to C
+> **Only the backward half is grown.** A neighborhood's forward half is measured rather than chosen (D18), so
+> once `C⁻` is settled the forward half is the collapse (R4) over the forward halves of the observations `C`
+> would cover — which the ring already holds, so `|C|` is known before the entry exists.
 >
->            =  2·|o ∩ C| − |C|                where the normal serves it, since price is 1 + |o|
->            =  d(o, its child) − d(o, C)      where a child does
+> **What each observation would save.** `C` takes neurons out of the residual and pays for its own line and for
+> what it names that did not fire:
 > ```
-> **An observation moves only if moving helps it**, so a candidate is worth `Σ max(0, saving)` against the
-> `1 + |C|` its line costs (R12).
+> saving(o)  =  max( 0,  |residual(o) ∩ C⁻|  −  ( 1 + |C⁻ \ o⁻| ) )
+> ```
+> **A candidate is only ever credited the residual.** A neuron an entry already covers is not `C`'s to take —
+> a candidate that fits a chunk beautifully earns nothing for it if something already accounts for it. The
+> floor is R18: an observation whose cover `C` would not join contributes nothing, and `C` will not join a
+> cover it does not pay in.
 >
-> **What one neighbor does.** Adding `q` to `C` moves *every* observation's saving by **+1 if it holds `q` and
-> −1 if it does not** — the same step for both kinds, since `d` falls by one where `q` is present and rises by
-> one where it is absent. Through the floor at zero, that is:
+> **What one neighbor does.** Adding `q` to `C⁻` moves each observation's saving by
 > ```
-> Δ(q)  =  #{ o : holds q, saving ≥ 0 }        they each gain a symbol
->       −  #{ o : lacks q, saving ≥ 1 }        they each lose one — the rest were contributing nothing
->       −  1                                   q's own place in the line
+> Δ(q)  =  #{ o : q is in the residual, and C pays there }      it takes one more neuron
+>       −  #{ o : q did not fire, and C pays there }            it names one more absence
+>       −  1                                                    q's own place in the line
 > ```
+> A neighbor that fired but is already covered moves nothing: it is not `C`'s to claim and it is not an error
+> for `C` to name. **The three cases are the three sets of D17**, and every neighbor is in exactly one.
 > ```
-> C ← ∅                          every normal-served observation starts at saving 0
+> C⁻ ← ∅                         every saving starts at zero
 > repeat
 >     take the neighbor with the largest Δ, and stop if that Δ ≤ 0
->     add it to C, and move every saving by ±1
+>     add it to C⁻, and move every saving
 > ```
 > **The repetition is not a search over orderings.** A neighbor's worth depends on which observations `C` is
-> serving, and that changes with every addition — in the example below `c` is worth `+1` against four
-> observations and `0` against the three that remain once `a` is in. One neighbor's worth of information comes
-> out of each pass, and the pass that follows is measured on what the last one left.
+> paying in, and that changes with every addition. One neighbor's worth of information comes out of each pass,
+> and the pass that follows is measured on what the last one left.
 >
-> **It terminates, and the count is bounded.** Every round strictly increases the total and adds a neighbor
-> that is never taken back. A neighbor enters only when more than half the observations `C` serves hold it, so
-> `Σ over C (holders)` exceeds `|C|·|M|/2` and is at most `Σ over the members |o|` — giving `|C| < 2·w̄`, twice
-> the average size of the observations `C` serves. **The reach bounds the loop and nothing else does.**
+> **It terminates, and the count is bounded.** Every round strictly increases the total by at least one and adds
+> a neighbor that is never taken back, and the total can never exceed the residual the history is carrying. So
+> ```
+> |C⁻|  ≤  ½ · Σ over the history |residual(o)|
+> ```
+> **The residual bounds the loop and nothing else does** — a table that already covers everything admits no
+> candidate at all.
 >
 > **What it is not.** It is greedy, so it finds a local best and not the best `C` — choosing the subset is the
 > facility-location problem and is not solvable exactly at any useful size. What it has instead is no free
 > choice anywhere in it.
 
-> **Worked through.** Four observations, no children yet, so the normal serves all four.
-> ```
-> o₁ = {a, b, c}   price 4      C = ∅, every saving 0
-> o₂ = {a, b, d}   price 4
-> o₃ = {a, b, c}   price 4      round 1   Δ(a) = 3 − 0 − 1 = 2   Δ(b) = 2   Δ(c) = 1   Δ(d) = Δ(x) = Δ(y) = 0
-> o₄ = {x, y}      price 3                take a       savings   1, 1, 1, −1
->
->                                round 2   Δ(b) = 3 − 0 − 1 = 2
->                                          take b       savings   2, 2, 2, −2
->
->                                round 3   Δ(c) = 2 − 1 − 1 = 0    two hold it, o₂ would lose one
->                                          Δ(d) = 1 − 2 − 1 = −2   Δ(x) = 0 − 3 − 1 = −4
->                                          nothing pays, stop
->
-> C = {a, b}     gain  =  (2 + 2 + 2 + 0) − (1 + 2)  =  3
-> ```
-> By hand: the file paid `4 + 4 + 4 + 3 = 15`. The line costs 3, `o₁`, `o₂` and `o₃` sit at `d = 1` and cost 2
-> apiece, and `o₄` at `d = 4` is worse off than its own 3, so it does not move — `3 + 2 + 2 + 2 + 3 = 12`.
-
 > **R15 — The solo test.** R12, asked of a table `C` is not in yet.
 > ```
-> benefit  =  Σ over the whole history:  max(0, saving(o))                       (R14)
+> benefit  =  Σ over the whole history:  saving(o)      (R14)
 > commit iff  benefit > 1 + |C|
 > ```
-> **`C` is credited only what it improves.** An observation already described as well by whatever holds it
-> saves nothing and adds nothing, so a candidate that fits a chunk beautifully earns nothing for it if a child
-> already fits it as well. Off the normal it is credited the whole chunk, because the normal was delivering
-> nothing (R12). **An accepted add shortens the file**, against the table it was priced on.
+> **An accepted add shortens the file**, against the table it was priced on.
 >
-> **The test is offline and the bet is not in it.** A bill has every observation whole (D18), so the question
-> is asked over the full span against the whole history — not over the backward half routing will later see.
-> Routing is the bet the neuron makes frame by frame (R13) and it can hand `C` less than the test counted; the
-> pruning pass is what collects on that (§9.2). **Nothing here is decided on half an observation.**
+> **The test is offline and complete.** Every observation in the ring has a whole backward half, so the
+> question is asked over the same evidence R18 will use when `C` next competes for a cover. Nothing here is
+> decided on half an observation and nothing later can hand `C` less than the test counted.
 >
-> **An observation's server is re-derived as the scan reads it** (D22). A bill re-centers after it
-> restructures (R19 step 6), so a cached server can lag until something reads it; the scan is that read.
->
-> **The test spans the whole table**, so a candidate may take observations from any entry, and one left starved
-> by the takeover fails the pruning test in the same bill (§9.2).
+> **Candidates are grown until one fails.** Grow, price, install if it pays, and grow again against the
+> residual the installation leaves. The pass ends when a candidate does not clear its line. It terminates for
+> the same reason the retire pass does: every accepted add strictly shortens the neuron's file, and that file
+> is bounded below by the count of its observations.
 
-> **R16 — What the child is at birth.** The parent requests; the machine creates. The pattern inherits its
+> **R16 — What a child is at birth.** The parent requests; the machine creates. The pattern inherits its
 > parent's channel and dimension and mints one level above it, all carried on the request. It is created with
 > **no counts**: its own neighborhood belongs to its own level, which it has not observed yet. Its *existence*
 > is decided by its parent, its *structure* by itself.
 >
+> **A neuron may hold many children, and they do not contend.** Each is one entry's child, each covers the part
+> of an observation its entry was assigned, and several of them may be promoted at one coordinate (D5). What
+> they share is a parent and a coordinate, not a slot.
+>
 > **Two objects, one word.** The **neuron** minted one level up has no counts. The **entry** the parent now
-> holds is a different object and takes counts at once — R19 step 4 hands it every bin it wins, starting with
-> the ones it was cut out of.
+> holds is a different object and takes counts at once — R19 hands it its share of every bin whose cover it
+> joins.
 >
 > **Release is the same shape reversed**: the parent retires, the machine reclaims. A retired entry goes back
 > on the same request that carries the add (R19) and the machine reclaims its pattern neuron at the death frame
 > (R17), so a bill touches the alphabet once — in one direction, both, or neither.
 
-## 9.2 Delete — pruning the table
+## 9.2 Retire — pruning the table
 
-> **R17 — Retire, then delete.** Scan the whole routing table, every candidate the add test just installed
+> **R17 — Retire, then delete.** Scan the whole routing table, every candidate the add pass just installed
 > included. Every entry whose margin is strictly negative (R12) is **retired**.
 > ```
-> benefit  =  Σ over the entry's observations:  price(o) without this entry − (1 + d(o, this entry))
+> benefit  =  Σ over the observations it covers:  |neighbors only this entry names|  −  ( 1 + |e⁻ \ o⁻| )
 > retire iff  benefit < 1 + |e|
 > ```
-> **Without the entry the bin goes wherever D22 sends it next** (R6) — to another child, priced `1 + d` there,
-> or to the normal, priced `1 + |O|` (R12). It is the same difference the add test reads with the roles
-> swapped: the add asks what an entry that is not there would remove, the retire asks what an entry that is
-> there is still removing.
+> **Without the entry its neighbors fall where D17 puts them** — to another entry of the same cover that names
+> them, at no extra cost to that entry, or into the residual at one line each. It is the same difference the
+> add test reads with the roles swapped: the add asks what a neighborhood that is not there would take out of
+> the residual, the retire asks what one that is there is still keeping out of it.
 >
-> Retirement is one at a time, re-checking the rest after each — **two entries covering the same demand are
-> each worth nothing while the other stands**, and taking both on one reading would delete the demand's only
-> server. The pass is bounded: every retirement removes an entry from competition and creates none.
+> Retirement is one at a time, re-checking the rest after each — **two entries naming the same neurons are each
+> worth nothing while the other stands**, and taking both on one reading would return that demand to the
+> residual with nothing left to cover it. The pass is bounded: every retirement removes an entry from
+> competition and creates none.
 >
 > **Retiring is a deletion in the parent.** The entry leaves the routing table that instant. It stops competing
-> for recognition, so no further activation may commit to it, and its bins fall to whichever entry D22 takes
-> next (R6). Having no served set it has no margin and nothing to re-center — **the neighborhood it held stops
-> moving** — and it is not a candidate for anything again. What leaves the table rides the bill's return to the
-> machine (§10.3), as a request to delete it. **The neuron keeps no retired state and re-checks nothing.**
+> for a place in any cover, so no further activation can bid it, and the neurons it held fall to whatever D17
+> gives them next. Having nothing to cover it has no margin and nothing to re-center — **the neighborhood it
+> held stops moving** — and it is not a candidate for anything again. What leaves the table rides the bill's
+> return to the machine (§10.2), as a request to delete it. **The neuron keeps no retired state and re-checks
+> nothing.**
 >
 > **The death frame is the machine's to set, and it can be this frame.** The neuron asks for the child to go
 > and says nothing about when; it sees its own open activations and not the units promoted off them, while the
@@ -757,138 +795,146 @@ design.
 > death frame   =   when the last activation still able to name the entry closes
 >               =   this frame, when none is open
 > ```
-> That set only shrinks. A pattern neuron has one parent (D2), so once that parent stops routing to it nothing
-> can fire it again, and no level built afterward can name it either, because a level is built out of what is
-> firing (R29). Reach grows with the level (D15), so the last to close is the highest one and the wait is at
-> most `reach_t(D)` frames, `D` being the highest level the stack currently holds.
+> That set only shrinks. A pattern neuron has one parent (D2), so once that parent stops covering with it
+> nothing can fire it again, and no level built afterward can name it either, because a level is built out of
+> what is firing (R29). Reach grows with the level (D15), so the last to close is the highest one and the wait
+> is at most `reach_t(D)` frames, `D` being the highest level the stack currently holds.
 >
 > **Deleting** is the machine's, on a pass of its own: **every frame, once the last level has billed**, it
 > reads the **death ledger** and takes everything due — the entry, its pattern neuron and that neuron's subtree
-> together, and what named them scrubbed with them. An entry retired this frame with nothing committed to it
-> dies on this frame's pass; one a standing recognition still names waits exactly as long as the stack above it
-> needs, and not a frame longer. **Nothing traces who is committed to what**: the machine settles the question
-> off the board it already keeps.
+> together, and what named them scrubbed with them. An entry retired this frame with nothing open dies on this
+> frame's pass; one a standing recognition still names waits exactly as long as the stack above it needs, and
+> not a frame longer. **Nothing traces who is naming what**: the machine settles the question off the board it
+> already keeps.
 >
 > **The ledger holds the entry, not a handle to it.** A pattern's neighborhood is stated in one place, the
 > parent's line for it (D10), and a claim on that pattern is expanded through that line (R32). Until the death
 > frame, units at its own level still name it and units above it still cover it, so the definition has to stay
-> readable after the table stops routing to it.
+> readable after the table stops covering with it.
 
-**A commitment survives its entry's retirement.** An activation committed to a retired entry keeps the
-recognition it already returned — the neighborhood was read once and the line it is stated in is in the ledger,
-not gone — and if that bid was promoted, the unit above is still live and still expands through that same neighborhood (R32). The
-activation's own observation completes and folds into whatever now serves its bin (D22).
+**A recognition survives its entry's retirement.** A standing recognition keeps the neighborhood it already
+returned — read once, and the line it is stated in is in the ledger, not gone — and if that bid was promoted,
+the unit above is still live and still expands through that same neighborhood (R32).
 
 **A deletion takes the subtree, and takes it at once.** There is no staged cascade and nothing to wait on at
 any level.
 
-**The normal is never retired**: it has no dictionary line to refund.
+**Nothing is retired for having been wrong about the future.** A forward half is measured, not claimed (D18),
+so an entry is never charged for what followed it — only for what it names that did not fire beside it.
 
 # 10. The frame, per neuron
 
 **The neuron prices, the machine holds the board.** Every test the neuron runs is its own arithmetic over its
 own evidence; the one thing it cannot see is what the rest of the level already covered, and the machine hands
-that over when a span closes (D28). **An open activation is board, not price** — the machine holds every one
-of them, bidding or not, with the forward neighborhood still filling in and the age it stands at (D6).
+that over when it reports the assignment (D28).
 
-**The interface is one call, `process frame`, made at two ages and no others** (R13). At age 0 the neuron
-recognizes and returns a **recognition**; at age `reach_t` it bills and returns its structural requests; in
-between the machine does not call it at all. A second call, `process actions`, runs after every level has
-finished and is not age-banded — it is where connections are recorded and inferences returned (§15, §16).
+The machine calls a neuron twice in a frame. `process frame` reaches every activation that fired **this**
+frame — it covers, it returns recognitions, and after the election it bills. `process actions` runs after
+every level has finished and reaches every **open** activation at whatever age it stands at; it is where
+connections are recorded and inferences returned (§15, §16). Between them, the machine accrues into bins on
+its own (§10.3) and does not call the neuron at all.
 
-## 10.1 Age 0 — the bet
+## 10.1 The cover
 
-The neuron fired this frame, and the backward half of its observation, `O⁻`, is in hand.
+The neuron fired this frame, and the backward half of its observation, `O⁻`, is in hand — whole (D18).
 
-> **R18 — The bet's pass.** **Every activation at age 0 makes its own bet**, and the neuron answers for each
-> one separately. The machine calls once with all of them, because they are activations of one type at one age
-> differing only in position (D2, D5), and one call is cheaper than many — but nothing about the bet is shared
-> across them.
-> 1. **Route.** **Take the entry that maximizes `|e_backward| − d_backward`**, ties to the older `id`. Both
->    counts are over the backward half, which is all the bet can see (D18, D20). If `O⁻` has been seen before
->    it already has a bin, whose distances are exactly these numbers (D22), and **this routing is the read
->    that settles who serves that bin** — nothing is stored, the server being taken off those distances every
->    time the bin is used (R6, T8). **The neuron writes nothing** — no bin is opened for `O⁻` if it has none.
-> 2. **Return the recognition, and that return is the commitment.** The **recognition** is the routed entry's
->    neighborhood, read off the entry, and the id of its child if it has one — and a recognition carrying a
->    child id *is* the bid (R20). An entry routed to the normal returns a neighborhood and no id, so it bids
->    nothing (D23), and the neighborhood is returned either way because the machine needs it for the assertion
->    (§13). **The machine records the entry on the open activation as the `committed entry`** (D21) and holds
->    it for the window; **the neuron remembers nothing between the bet and the bill** (R13). **Nothing comes
->    back here**, and **the neuron asserts nothing** — an assertion is what the machine resolves out of the
->    standing recognitions once every level has run (§13), and it may resolve to nothing this one said.
->    **Creation never bids.**
+> **R18 — The cover pass.** **Every activation that fired covers its own backward half**, and the neuron
+> answers for each separately. The machine calls once with all of them, because they are activations of one
+> type at one age differing only in position (D2, D8), and one call is cheaper than many.
+> 1. **Cover.** Over the entries of the table, repeatedly take the one with the highest
+>    ```
+>    ( neurons of the residual it names )  /  ( 1 + | e⁻ \ O⁻ | )
+>    ```
+>    and take it **iff it names strictly more of the residual than its price**, ties to the older `id`. Each
+>    round is measured on the residual the last one left. **Stop when no entry pays.** The result is the
+>    **cover**, and every entry outside it is simply not used here.
+> 2. **Assign.** A neuron of `O⁻` belongs to the entry that took it, which is the first one to name it, since
+>    every round takes only out of the residual. That partition is the bin's assignment (D22), and it is what
+>    each entry counts and re-centers on (D24, R4).
+> 3. **Return one recognition per entry of the cover.** A recognition is that entry's whole neighborhood and
+>    the id of its child if it has one, and **a recognition carrying a child id *is* a bid** (R20). An entry
+>    with no child returns a neighborhood and bids nothing; the neighborhood is returned either way because the
+>    machine needs it for the assertion (§13). **Creation never bids.**
 >
-> **No structure is created, retired or reconsidered at age 0**, and nothing is learned here.
+> **This is R27, run by one chooser instead of many.** The machine resolves a frame's slots among bids that
+> arrive independently, so it assigns first and lets each bid answer for what it was left. A neuron picks its
+> own cover, so it takes and assigns in one motion. **The criterion is the same in both** — what a neighborhood
+> covers against what it costs to state (D13) — and so is the accept test.
+>
+> **A neuron with an empty table covers nothing**, bids nothing, and its whole observation is residual (D23).
+> That is the shortest file available to it, not a failure.
+>
+> **If `O⁻` has been seen before it already has a bin**, whose cover is exactly this computation (R7), and this
+> is the read that settles it — nothing is stored, the cover being re-derived off the table every time the bin
+> is used (R6).
 
-## 10.2 Ages in between — the machine collects
+## 10.2 The bill
 
-**The neuron is not called.** For every open activation whose next forward frame has arrived, the machine
-writes the neighbors at that offset into the activation's forward half, and that is the entire band. **Nothing
-is folded, re-centered, re-priced or compared** (D18), and **the board is not read**: coverage of this
-activation is still moving and stays so until the bill (T10).
-
-**The recognition is not fetched again.** It was returned once, at age 0, and it stands until the span
-completes (R23). The committed entry may re-center in between — from some *other* activation's bill — and the
-standing recognition does not follow it.
-
-**This band decides nothing and learns nothing.** The commitment cannot change (R13), no count can move (R3),
-and no price exists yet (R2). What does happen in these frames happens outside the band: a neuron open at any
-age records a connection to whatever action ran, in the pass that follows every level (R37).
-
-## 10.3 Age `reach_t` — the bill
-
-The last forward frame arrives for every activation that fired at `f − reach_t`, so their observations are
-complete. **The machine hands the neuron every one of them in one call** — the forward halves it has been
-holding, each with its adjustment already read off the two windows (D28). **Each activation folds on its
-own**; what happens once is the restructuring that follows, after every fold is in.
-
-**The bill has two halves with different units.** Steps 1 and 2 move records and totals, run **once per
-activation**, and commute — nothing between them reads what they move. Steps 3 to 7 run **once**, after every
-fold is in: step 3 re-centers on those totals, steps 4 and 5 price against the result, step 6 re-centers again.
+The level's election has run, so the machine can report what the rest of the level covered (D28). **The bill
+is the same call, continued**: the neuron folds this frame's observations and asks both tests.
 
 > **R19 — The bill's pass.** Once per bill, in order:
-> 1. **Fold.** Record the final offset and **take the adjustment** the machine read off the level's coverage
->    set and the assertion map (D28); the observation now exists. It joins the bin for its own backward half,
->    **opening that bin if this is the first time that context has completed** — bins are created here and
->    nowhere else, and destroyed in step 2 when the last observation they hold is evicted. **A bin that opens
->    measures its distance to every entry and takes the server D22 gives it**, which before the table holds any
->    child is the normal (D23). The bin's count rises by one, its tallies take one increment per forward
->    offset, its adjustment tallies take the mask just read, and **the whole span folds into that bin's
->    server's counts at once**. **This is where prediction is scored** and **where a contribution is settled**.
->    **The fold is unconditional**: a neuron another unit subsumed records exactly as one that was promoted
->    does (R28).
-> 2. **Age.** A full ring evicts its oldest observation, one out for one in (D25, R9). That span leaves its
->    bin's server's counts and its adjustment leaves the bin's tallies with it. **Nothing is priced here**, and
->    **the entry that loses a span is rarely the one that just gained one**.
+> 1. **Fold.** The observation joins the bin its key names, **opening that bin if this is the first time that
+>    context has been seen** — bins are created here and nowhere else, and destroyed in step 2 when the last
+>    observation they hold is evicted. A bin that opens takes its cover from R18. The bin's count rises by one,
+>    **every entry of the cover increments by the neighbors assigned to it** (R3), and the observation takes
+>    the part of its adjustment that is already settled — what *this* frame's election covered. **The rest of
+>    the adjustment, and the whole forward half, arrive later** (§10.3). **The fold is unconditional**: a
+>    neuron another unit subsumed records exactly as one that was promoted does (R28).
+> 2. **Age.** A full ring evicts its oldest observation, one out for one in (D25, R9). Whatever it had accrued
+>    leaves its bin with it, and its open activation closes. **Nothing is priced here.**
 > 3. **Re-center on the evidence.** Every entry the first two steps moved counts on re-centers, once, over the
->    totals they leave (R5, R6). **Once for the bill, not once per span**, so the center does not turn on which
->    observation the inputs happened to give first — and that center is what the two tests below price against.
-> 4. **Add.** Grow one candidate against the counts step 3 left — a neighbor at a time, largest `Δ` first,
->    until none pays (R14) — and price it (R15). If it pays, `C` enters the table and takes every bin it wins.
->    **One candidate per bill**: the growth is over the whole history and answers for all of it at once.
+>    totals they leave (R5, R6). **Once for the bill, not once per observation**, so the center does not turn
+>    on which activation the inputs happened to give first — and that center is what the two tests below price
+>    against.
+> 4. **Add.** Grow a candidate against the residual the history is carrying — a backward neighbor at a time,
+>    largest `Δ` first, until none pays (R14) — and price it (R15). If it pays, it enters the table and takes
+>    its share of every bin whose cover it joins. **Grow again against what it left**, and stop at the first
+>    candidate that does not clear its line.
 > 5. **Retire**, at every bill and on no condition at all: a bill always moves counts, so every margin is a
->    different number than it was. The pruning pass runs over the whole table, this bill's candidates included
->    — retire every strictly negative margin, sequentially, re-checking the rest after each (R17). Each leaves
->    the table at once, its bins falling to whichever entry D22 takes next and the neighborhoods they held
->    freezing. **The neuron deletes nothing**: the machine takes the entry, its pattern neuron and that
->    neuron's subtree on the ledger pass at the death frame, which is this frame whenever nothing is committed
->    to it (R17).
-> 6. **Re-center on the structure.** Every entry whose served set moved in step 4 or 5 re-centers again (R5).
+>    different number than it was. The pass runs over the whole table, this bill's new entries included —
+>    retire every strictly negative margin, sequentially, re-checking the rest after each (R17). Each leaves
+>    the table at once, its neurons falling where D17 puts them and the neighborhood it held freezing. **The
+>    neuron deletes nothing**: the machine takes the entry, its pattern neuron and that neuron's subtree on the
+>    ledger pass at the death frame, which is this frame whenever nothing is open to name it.
+> 6. **Re-center on the structure.** Every entry whose covered set moved in step 4 or 5 re-centers again (R5).
 >    Step 3 already centered what the evidence moved, so between the two nothing is left stale.
-> 7. **One request, and the bill returns.** Every candidate that survived, and every entry step 5 retired to be
->    deleted when the machine works out that it can be — in one interaction, after both tests have run *and*
->    the table has re-centered. A passing test **requests** rather than creates, because a pattern is a symbol
->    at the level above and that alphabet belongs to the machine; the machine returns its identity and the
->    neuron registers it as an entry. **Sending last settles what the request carries**: a candidate can inherit
->    bins from an entry the pruning pass retired, so each definition is the final one rather than the one the
->    add test happened to price. The newborn is installed **now, for later**. Nothing else in the bill reaches
->    another level, and the bill ends on it.
+> 7. **One request, and the bill returns.** Every candidate that survived, and every entry step 5 retired, in
+>    one interaction, after both tests have run *and* the table has re-centered. A passing test **requests**
+>    rather than creates, because a pattern is a symbol at the level above and that alphabet belongs to the
+>    machine; the machine returns its identity and the neuron registers it as an entry. **Sending last settles
+>    what the request carries**: a candidate can inherit neurons from an entry the retire pass took, so each
+>    definition is the final one rather than the one the add test happened to price. The newborn is installed
+>    **now, for later** (R13). Nothing else in the bill reaches another level, and the bill ends on it.
 
-The bill is processed after the bets and after the level's election, since it reads a board that this frame's
-election is the last thing to move (T10).
+**The bill is processed after the level's election**, since step 1 reads a board that this frame's election is
+the last thing to move (T10).
 
----
+## 10.3 The rest of the window — accrual
+
+**The neuron is not called.** For every open activation whose next forward frame has arrived, the machine
+writes what landed into the bin that activation joined:
+
+```
+forward neighbors   the neurons at this offset go into the bin's forward tallies       D22
+coverage            a neighbor of the key that an accepted bid has now taken goes
+                    into the bin's covered tallies                                     D28
+```
+
+**Nothing is decided, priced or compared here**, and no test is waiting on any of it. The accrual is evidence
+arriving for whatever the neuron decides next — its own next firing, or another activation's bill in the same
+bin.
+
+**Coverage settles over the window and only ever grows** (R31), which is why it accrues rather than being read
+once: the last bid that can cover an activation at `g` fires at `g + reach_t` (T10), so the covered tallies
+stop moving exactly when the activation closes.
+
+**An activation closes at age `reach_t`, or when eviction closes it** (R9). Closing does nothing but stop the
+accrual — there is no second bill and nothing is folded twice.
+
+**What does happen in these frames outside this band**: an open activation records a connection to whatever
+action ran, and offers an inference on the next action slot, in the pass that follows every level (R37, R42).
+That is what the window is otherwise for.
 
 # Part II — The machine
 
@@ -909,12 +955,16 @@ election is the last thing to move (T10).
 > **R20 — A bid is a neighborhood and a name.** A recognition whose entry has a child *is* a bid, and it
 > carries two things and no others:
 > ```
-> the neighborhood   the routed entry's whole span, backward and forward
+> the neighborhood   the entry's whole span, backward and forward
 > the child          the id of the pattern neuron this entry would promote
 > ```
 > The **whole** neighborhood travels, because it *is* the dictionary line for the symbol being proposed (D10),
-> and the bidder is implied, because a child *is* its parent in that neighborhood. **An activation routed to
-> the normal bids nothing** (D23).
+> and the bidder is implied, because a child *is* its parent in that neighborhood.
+>
+> **One activation may send several**, one per entry of its cover (R18), and they are independent bids: each
+> answers for the part of the observation its entry was assigned, and the machine has no reason to know they
+> came from one neuron. An entry with no child sends a recognition and no bid; a neuron covering nothing sends
+> neither.
 >
 > **Nothing else is sent, because nothing else is the neuron's to know.** Which of the named neighbors
 > actually fired, what this bid is worth against them, and what another bid has already taken are facts about
@@ -932,7 +982,7 @@ election is the last thing to move (T10).
 > ```
 > **This is D13's contribution, and it is the number routing already produced.** `covers − price` is
 > `|O⁻| − d⁻`, the saving over stating the chunk flat, so a bid is worth at the election exactly what its entry
-> was ranked on at the bet (R18). Nothing is re-derived and no second valuation exists.
+> was taken into its cover on (R18). Nothing is re-derived and no second valuation exists.
 >
 > **A neuron that fired and the bid does not name belongs to neither side.** It stands in the file as its own
 > line if nothing covers it (D26) and costs a turn-on if this unit is promoted — one symbol either way, so it
@@ -993,9 +1043,15 @@ one: a bid arrives as a definition, and everything it is worth this frame the ma
 > frame `f + reach_t − 1` — before this frame's stack runs, and before this frame's own assertion pass, which
 > names `f + reach_t + 1` onward (T17). The coverage half closes on the same frame for its own reason (T10).
 >
-> It freezes into the observation as the bill folds it (D21). **The machine reports facts, never numbers**:
-> what the overlap is worth depends on a neighborhood that is still moving, so the worth is re-derived at every
-> reading (D13) and only the fact is kept.
+> **It accrues rather than being read once.** The coverage half settles over the activation's window and only
+> ever grows (R31), so the machine writes each neighbor into the bin's covered tallies at the frame an accepted
+> bid takes it (§10.3), starting with whatever this frame's own election settled. The superseded half accrues
+> the same way, one slot at a time as the assertion resolves them. **Nothing waits for either**: the neuron's
+> tests read the tallies as they stand, and a bin whose newest observations are still filling is a smaller
+> sample rather than a wrong one (R9).
+>
+> **The machine reports facts, never numbers**: what the overlap is worth depends on a neighborhood that is
+> still moving, so the worth is re-derived at every reading (D13) and only the fact is kept.
 >
 > **Every active neuron reads one, bidding or not.** Coverage is a fact about a **neuron**, so what it records
 > applies to any entry later priced against that observation.
@@ -1078,6 +1134,12 @@ covers ends up credited to exactly one bid**, which is what stops a chunk being 
 >    alone** (R21). The resolution may have taken slots away, so what a bid delivers is not what it claimed —
 >    a slot another bid holds is that bid's to answer for and leaves this bid's tally, and the price does not
 >    follow it, because a neuron that fired was never among the neighbors named and absent.
+>
+>    **The tally counts only what would otherwise be a correction.** A slot another accepted bid also names
+>    would be picked up by that bid for free if this one were dropped (step 3), so it is no saving of this
+>    bid's and is not in its tally. **A bid is worth what the file loses without it**, which is R12's baseline
+>    and not a second rule — and the flat baseline is what that question returns when nothing else names the
+>    slot (D13).
 > 3. **Settle the assignment over the accepted.** A slot whose holder was rejected passes to the best-rationed
 >    accepted bid that names it, by step 1's rule; a slot no accepted bid names is a correction. This decides
 >    nothing: an accepted bid can only gain here, gaining cannot un-accept, and a rejected bid is never looked
@@ -1103,16 +1165,19 @@ covers ends up credited to exactly one bid**, which is what stops a chunk being 
 
 # 12. The order of a frame
 
-> **R29 — One stack, at the derived reach.** Base neurons build their neighborhoods, recognize them and bid;
-> contraction settles which propagate; the neurons then bill, reading off the settled board and minting
+> **R29 — One stack, at the derived reach.** Base neurons build their backward halves, cover them and bid;
+> contraction settles which bids propagate; the neurons then bill, reading off the settled board and minting
 > children where economical. The survivors are level 1 — the fewest that cover the active base neurons — and it
-> happens again. **When a level's active neurons fire no children, nothing propagates and there is no level
+> happens again. **When a level's active neurons promote no children, nothing propagates and there is no level
 > above it on this frame.** Nothing declares the depth and nothing caps it.
 >
-> **Within a level the order is bet, election, bill**, and it cannot be otherwise: a bid is made before the
-> election because that is what the election is over, and a bill comes after it because the bill reads a board
-> that this frame's election is the last to move (T10). Nothing in that order leaves the level or the frame
-> (T16).
+> **Within a level the order is cover, election, bill**, and it cannot be otherwise: a bid is made before the
+> election because that is what the election is over, and the bill comes after it because it reads a board that
+> this frame's election is the last to move (T10). Nothing in that order leaves the level or the frame (T16).
+>
+> **All three are one call on one activation** (R13). The neuron covers, the machine elects, the neuron folds
+> and restructures — and the activation that did all of it fired this frame, on evidence that was complete when
+> it started.
 >
 > **The frame ends with the machine's own pass.** Once the last level has billed, the machine reads the death
 > ledger and deletes everything due (R17), which is why a retirement is usually collected in the frame that
@@ -1244,9 +1309,9 @@ no structural test can see (R40).
 > `f + 1`, after the stack finishes, against what actually ran — **a neuron that argued for a different action
 > still learns from the one that ran.**
 >
-> **This is `process actions`, the machine's second call on a neuron and the only one that is not age-banded.**
-> `process frame` reaches a neuron at ages 0 and `reach_t` alone (R13); this one reaches every open activation
-> it has, at whatever age each stands at, and does both action-side jobs at once — the neuron records its
+> **This is `process actions`, the machine's second call on a neuron and the only one that reaches an
+> activation after its firing frame.** `process frame` reaches a neuron at age 0 alone (R13); this one reaches
+> every open activation it has, at whatever age each stands at, and does both action-side jobs at once — the neuron records its
 > connections to what ran and returns the inferences that contend for the next action slot (R42). **It runs
 > before §13 resolves**: the connections it records are to the action already executing this frame, decided a
 > frame ago, while the inferences it returns are candidates for the slot §13 is about to settle.
@@ -1358,13 +1423,26 @@ no structural test can see (R40).
 > recognizes, the inferences from the connections the voter holds — which is the whole of it, because R43's
 > walk enters by creating one.
 >
+> **A selected pattern stands until its span runs out.** Execution is an expansion (R36), so choosing a
+> pattern at `f` places base actions at `f+1`, `f+2` and beyond — and those placements are **standing
+> inferences**, contending for their slots exactly as this frame's fresh ones do. They are resolved by the same
+> two keys below: **a plan holds because it keeps winning**, a higher-level selection displaces it, an
+> equal-level one with a better estimate displaces it, and when its span ends it is simply gone. Nothing is
+> retracted and nothing is held.
+>
+> **A standing inference is not an assertion.** It is sourced from connections, decides what runs and is not
+> in the file; the assertion is sourced from recognitions, is scored, and decides nothing (R34, R40). Both
+> stand for the span of the pattern that produced them and both re-resolve every frame, and neither is ever
+> read by the other.
+>
 > **The electorate, explicitly.** At frame `f` the voters entitled to an inference on the slot `f + 1` (R41)
 > are:
 > ```
-> every open activation the machine holds at f      one per (neuron, age, position)   (D21)
->   less  every activation an accepted bid covers                                     (R31)
->   less  every activation at age reach_t           it will not be open at f + 1
->   read as (neuron, age)                           position carries no connection    (D8)
+> every standing inference that places a base action at f + 1                          R36
+> plus  every open activation the machine holds at f  one per (neuron, age, position)  (D21)
+>   less  every activation an accepted bid covers                                      (R31)
+>   less  every activation at age reach_t            it will not be open at f + 1
+>   read as (neuron, age)                            position carries no connection    (D8)
 > ```
 > Each reads its connections at **distance `age + 1`**, the distance at which it will stand from the action it
 > is choosing (R35). An activation at age `reach_t` has no connection to read, which is why the distances a
