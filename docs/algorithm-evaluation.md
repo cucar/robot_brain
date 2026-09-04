@@ -12,7 +12,8 @@ names beside the firing and never for what followed (D17); its forward half is m
 enters no test, and is not in the file (D9). What the machine expects next is an output it hands out (§13),
 and no part of the machine reads whether it came true. Prediction is therefore a pure by-product: the machine
 gets better at predicting by compressing better — richer chunks are bought, patterns upstairs describe over
-richer symbols, and each one's forward half is the consensus of what actually followed the situation it names.
+richer symbols, and each child's record is the consensus of what actually followed the situation it was bought
+for.
 
 **There is no path at all by which a prediction error can change what structure exists.** If accuracy still
 tracks compression, it is the by-product thesis and nothing else.
@@ -77,15 +78,20 @@ firings whose held cover differs from the cover R18 would derive fresh, and the 
 is large and the difference is zero, the hold is doing nothing but hysteresis and the tie rule could be
 loosened.
 
-**Exploration waits for the first bought pattern.** A voter is an apex activation reading the pattern it was
-promoted from, and a base neuron on the apex has none (§10.3), so an action slot nothing reaches runs the
-declared default (R35). Before any pattern is bought, every slot is that slot, and the machine runs the default
-only. The walk (R37) begins on the first pattern that is bought and lands on the apex, and until then no reward
-teaches anything. On event-dense input that is a few frames; on sparse input it could be long. **Diagnostic:**
-the frame of the first non-default action, against the frame of the first bought pattern. **Fallback:** give
-base neurons a forward record of their own, marginal over every situation, and let them vote where nothing
-above them does — which is the earlier design's neuron-level connection, and the reason it was dropped is
-that it votes the general case into every specific one (R36).
+**The base votes its marginal.** A base neuron on the apex expects and infers from its own record, which is
+the average over every situation it has ever fired in (D17, R35). Early in a run that is every voter there is,
+so the machine's first expectations are the coarsest ones it will ever make, and its first actions are chosen
+on estimates that average over situations the base neuron cannot tell apart. Coverage silences a base neuron
+only once something more specific is bought over it. **Diagnostic:** the share of apex voters that are base
+neurons, per frame, over exposure; it should fall as the dictionary fills. If it stays high on data that
+recurs, patterns are not being bought where the base is voting, and the compression side is where to look.
+
+**A majority over `H` firings can flip.** An event slot is in the expected set when more than half the ring
+holds it (R4), so a neighbor that follows about half the time flickers in and out as firings enter and leave.
+That is the price of a set that answers a changed world within `H` firings rather than a weight that answers
+it never. **Diagnostic:** per slot, how often it changes state per `H` firings on stationary input; slots near
+one half are expected to flicker and slots far from it are not, and a flicker rate that does not fall with
+distance from one half is a bug.
 
 **Several children per firing may not halve the level above.** A neuron used to promote at most one child,
 which is what made T11's halving argument work — and the halving is what D14's doubling reach is derived from,
@@ -97,17 +103,23 @@ election stops buying the moment one does not pay. **Diagnostic:** bought bids p
 level per frame, against the halving T11 assumes. If levels stop thinning, D14's reach schedule is calibrated
 against an invariant that no longer holds, and the reach has to be derived from measured spacing instead.
 
-**Siblings share a future.** Every pattern covering a firing sums the same forward half (D21), so children
-bought together carry one expectation between them and diverge only as their coverage diverges. Two patterns
-always bought together never diverge at their own level; the level above is expected to merge them (§4 of the
-remarks). **Diagnostic:** for pairs of patterns of one neuron, the overlap of the firings they cover against
-the overlap of their forward halves. Pairs high on both for a long stretch are the merge the level above has
-not made.
+**Siblings agree until one is bought alone.** Two children bought at one coordinate see the same forward
+neighbors, so their records agree until the first firing where one is bought and the other is not (D21). Two
+patterns always bought together never diverge at their own level; the level above is expected to merge them
+(§4 of the remarks). **Diagnostic:** for pairs of children of one neuron, the overlap of the frames they were
+bought in against the overlap of their records. Pairs high on both for a long stretch are the merge the level
+above has not made.
+
+**A newly minted child expects nothing for a while.** Its record fills only from firings where it was bought
+(D17), so between its mint and its first `H` purchases it expects little and infers only the default. The
+parent it was minted from is covered whenever the child is bought, so nothing speaks for that situation with
+any history until the child has one. **Diagnostic:** frames from a child's mint to its record's first majority
+slot, against how often it is bought.
 
 **Nothing retires a pattern for a useless future.** A pattern is priced on what it names that did not fire
-beside it, and never on what it named ahead (D17, R17). So a pattern whose forward half is worthless keeps its
-line as long as its backward half covers, and the machine's expectation from it is noise. The claim is that
-the collapse handles this without a test — a forward event slot with no majority drops out, so a useless
+beside it, and never on what its child was followed by (D17, R17). So a child whose record is worthless keeps
+its line as long as its parent's pattern covers, and the machine's expectation from it is noise. The claim is
+that the collapse handles this without a test — a forward event slot with no majority drops out, so a useless
 expectation becomes silence rather than a wrong symbol — and that a pattern whose *backward* half is good is
 worth its line regardless. **Diagnostic:** expected symbols per apex unit that did not arrive, per level. If
 that share does not fall with exposure, the collapse is not clearing bad slots and the consumer of the output
@@ -209,12 +221,13 @@ activation dimensions**: D14 grows every one of them by the same factor, which h
 them equally, and a channel whose patterns chunk harder in time than in space would want otherwise.
 **Diagnostic:** mean spacing per activation dimension, per level, against the isotropic prediction.
 
-**Whether the output needs an owner per slot.** The prediction is the union over the apex of what each unit
-expects (R27). Two units expecting different symbols at one base slot both go out. That is more information
-than a vote, and it is the consumer's problem to reduce. Whether any consumer the machine is built for — a
-readout, a downstream machine, a scorer — actually wants the set or wants one symbol is not decided, and if the
-latter the cascade the assertion used to run is the obvious reduction to hand it. **Diagnostic:** how often
-the union at a base slot holds more than one symbol, per level of the units that placed them.
+**Whether a coarse voter should count as one.** The vote at the base gives every apex activation one unit per
+dimension whatever level it stands at (§13, R36). A level-4 unit that expanded to forty base symbols and a
+base neuron that expects one symbol are then equal voters in the dimension they share, and the level-4 unit's
+expectation about that dimension rests on a situation the base neuron's does not. Level was taken out of the
+vote because ranking by level let compression override reward; whether some other reading of the voter — the
+count behind its slot, the size of its ring — should weight it is not decided. **Diagnostic:** per dimension,
+how often the winner was placed by a base voter over a pattern voter that disagreed, and which was right.
 
 **The cross-neuron seam.** R4's abstention teaches a pattern not to name what another pattern of the *same
 cover* holds. Across neurons nothing teaches it: a neighbor some other neuron's unit reliably covers is still
@@ -231,7 +244,10 @@ open age the frame's reward whole and unscoped on one path and attributes `rewar
 and neither ramps. **Diagnostic:** with a span-of-one reward, whether a slot at offset `d > 1` moves at all —
 under R33 it must not.
 
-**The forward record has not been implemented as one object.** The spec folds connections into the forward
-half (D20, R31); the brain still keeps two. Until they are one, every place the spec says "action slot" the
-code has a connection that may or may not agree with the tally beside it. **Diagnostic:** for a pattern and an
-action, the count on its forward tally against the strength on its connection, which under D20 are one number.
+**The forward side of the code is close, and the deltas are enumerated.** The brain already holds
+connections on the neuron per distance, learned from its own ages, voted at age plus one, silenced when
+covered, and resolved per dimension at the base with no level in the vote — which is the shape D20, R31 and
+R36 describe. What differs is that it wires every level to the base set instead of its own level and so needs
+no expansion, keeps weights that never leave instead of a majority over a ring, and mints its patterns on
+prediction error instead of at the bill. [algorithm-implementation.md](algorithm-implementation.md) lists the
+changes.

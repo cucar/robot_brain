@@ -1,354 +1,301 @@
 # Algorithm Implementation
 
-The implementation-facing half of [algorithm.md](algorithm.md): the per-neuron state and methods, the staged
-build plan, and the deltas against the current code. The algorithm is specified there; nothing here changes it.
+The implementation-facing half of [algorithm.md](algorithm.md): the per-neuron state and calls, the staged
+build plan, and the deltas against the current code. The algorithm is specified there; nothing here changes
+it. Where the design is settled but its data structures are not, this document says so rather than inventing
+them.
 
 ## Neuron state
 
-The complete per-neuron state on the spatial axis. Sets are sorted id lists; nothing stores a frame number.
+The complete per-neuron state, D20 read as storage. Sets are sorted id lists; nothing stores a frame number.
 
 ```
 id                                          // (dim, bucket) at base; opaque id above
 
-// the dictionary line — the only stored definitions
-children:     Map<child_id, definition>     // definition = sorted set of neuron ids; frozen at mint
-
-// derived state — tallies over the history below; recomputable, costs nothing in the file
-connections:  Map<neuron_id, count>         // counts over the normal-served records in the history
-served:       int                           // number of normal-served records (majority denominator)
-normal:       definition                    // cached majority set { n : 2·count(n) > served }
+// the dictionary lines — the only stored definitions
+patterns:     Map<pattern_id, {
+                 neighborhood,              // sorted set of (neuron, offset ≤ 0); the line; moves at re-center
+                 child,                     // the pattern neuron one level up
+                 counts }>                  // per (neuron, offset ≤ 0) over the firings it covers, credited only
 
 // the evidence
 history:
-  ring:       FIFO<context_ref>             // capacity = the horizon; arrival order = eviction order
-  histogram:  Map<context, {
-                 count,                     // how many remembered records are this context
-                 server,                    // Normal | Child(id) — closest entry under the CURRENT entry set
-                 best_distance,             // d(context, server's definition)
-                 fallback,                  // second-closest entry
-                 fallback_distance }        // d(context, fallback's definition)
+  ring:       FIFO<firing>                  // capacity H; arrival order = eviction order
+  firing:     { position,
+                backward:  set of (neuron, offset ≤ 0),
+                forward:   set of (neuron, offset > 0) as landed, and beside each action the reward,
+                cover:     the patterns covering it, held (R6),
+                assignment: which pattern of the cover holds each present backward neighbor }
 
-// the running one test
-benefits:     Map<child_id, benefit>        // Σ (fallback_distance − best_distance)·count over records served
+// the forward record — a total over the ring; recomputable, in no line of the file
+forward:      Map<(neuron, offset > 0), count>                       // event slots; expected iff 2·count > n
+actions:      Map<(action_neuron, offset > 0), { strength, estimate }>  // action slots; born with the default
 ```
 
-**What must always hold.** Every method may do what it wants while it runs, but by the time it returns these
-four statements must be true again. They are the design's debug assertions — each one is checkable in a test
-by recomputing from the raw history and comparing against the incrementally-maintained state:
+**What must always hold.** Each is checkable in a test by recomputing from the ring and comparing against the
+incrementally maintained state:
 
-- `connections` / `served` describe exactly the histogram entries with `server == Normal`, weighted by count —
-  a from-scratch recount of the normal-served records always matches. `normal` is their element-wise majority.
-- Every histogram entry's `server` / `fallback` really are the closest and second-closest entries under the
-  *current* entry set. Adds, deletes, and normal movement re-derive them; this is what lets routing read the
-  stored assignment instead of rescanning when the context is already remembered.
-- `benefits[child]` always equals what a from-scratch recomputation would give:
-  `Σ (fallback_distance − best_distance)·count` over the entries it serves. The delete test is then just
-  "delete iff `benefits[child] < 1 + |children[child]|`" — strictly below cost, kept at equality — checked
-  only when an event moved the benefit.
-- Every committed structural change strictly decreases `L`. Since `L` is a non-negative whole number, cascades
-  terminate and nothing can churn.
+- Every pattern's `counts` equal a from-scratch recount over the firings whose held cover holds it, restricted
+  to the neighbors assigned to it. Its `neighborhood` is R4's collapse over those counts, with the line
+  charged and equality held.
+- Every firing's `cover` is one R18 could have produced against some past table, and no re-derivation against
+  the current table is strictly cheaper than it (R6).
+- `forward` and `actions` equal a from-scratch sum over the ring's forward halves. A slot no firing in the
+  ring still holds is absent.
+- Every pass of the bill leaves the neuron's file (T6's `L_N`) no longer than it found it.
 
-The normal has no margin: no storage line, never deleted.
-
-On the temporal axis the same shape holds with two statistic tables per entry — context-side counts and
-outcome-side counts — both moved together when a record changes hands, and records completed one frame late
-(algorithm.md, "The history").
+**Not yet designed.** How the residual per firing and the seed tally per bill are kept so R14 is one pass
+rather than a rescan; whether `cover` is stored as pattern ids or as an index the way the old histogram stored
+servers; and what the three-way comparison in R6 costs when a candidate is installed against a full ring. The
+old histogram, `normal`, `fallback` and running-benefit structures are retired: the spec has no default
+pattern (D22) and no per-firing server, and the benefit is R12's margin read off `counts`.
 
 ## The machine–neuron interface
 
-**The machine owns the open activations; the neuron owns its table and its history** (algorithm.md, D6, D21).
-An open activation is `(position, age, forward half so far, committed entry)`, held one per
-`(neuron, age, position)` on the machine side. Nothing about a frame lives in the neuron.
+**The machine owns the open activations; the neuron owns its table, its history and its record** (D6, D20).
+An open activation is `(position, age, its firing)`, held one per `(neuron, age, position)` on the machine
+side. Nothing about a frame lives in the neuron.
 
 There are two calls and no others:
 
 ```
-process frame   — made at age 0 and age reach_t only, never in between
-  age 0         in:  the backward half, and the frame's rewards
-                out: a RECOGNITION = (the committed entry's neighborhood,
-                                      a bid if that entry served a child — else none)
-  age reach_t   in:  every activation that reached this age, each with its completed
-                     forward half and the adjustment the machine read for it (D28)
-                out: add requests + delete requests
+process frame   — made at age 0 only, once per neuron per frame, with every activation that fired
+                in:  each activation's backward half
+                out: per activation, a bid for every pattern that applies (R18 step 3)
+                     plus one request: the candidate that paid, and the pattern that retired (R19)
 
-process actions — after every level has settled, NOT age-banded
-                in:  what ran this frame, and each open activation's age
-                out: the inferences contending for the next action slot (R42)
-                     — and the neuron records its connections to what ran (R37)
+process actions — made once per frame after every level has run, with every open activation the machine holds
+                in:  per activation, the neurons of its level that fired this frame (its forward neighbors at
+                     offset = age), and any reward share for an action it already recorded (R33)
+                out: per activation on the apex, its expectations and its inferences at offsets age+1 … reach,
+                     in its own level's alphabet; covered activations return nothing
 ```
 
-**A neuron with reach `r` is called twice per activation, not `r + 1` times.** The intermediate frames are pure
-transcription: the machine writes the arriving offset into the forward half and calls nothing. Since reach
-doubles per level, this is the difference between two calls and thirty-three at level five.
+**The bill runs inside `process frame`, before the offer** (R19). The neuron covers and folds the new firing,
+re-centers once, builds one candidate, retires one pattern, then offers. The election runs after the call
+returns and reports nothing back (R23). The machine returns the requested child's identity on the next call or
+as a separate reply; either way the pattern is in the table from the next frame (R13).
 
-**The recognition is returned once and frozen.** It is not re-read as the entry re-centers; the standing
-recognition is the one the neuron handed back at age 0 (R13, R23). The machine keeps it until the span closes.
+**`process actions` is age-blind by construction.** It walks every open activation the machine holds and hands
+each what landed. A neuron with reach `r` is therefore reached `r + 1` times per activation on the forward
+side — once per frame it is open — and each visit is a write into one firing plus, on the apex, a read of the
+record. Reads move nothing (T8).
 
-**Coverage inhibits on the machine side, not in the neuron** (R31). A covered neuron's recognition and
-inferences take no part in the §13 resolution, but nothing about its billing, folding, adjustment or connection
-recording changes — the neuron is never told it was covered except through the adjustment it is handed.
+**Coverage inhibits on the machine side, not in the neuron** (D7). The machine knows which activations the
+coverage set holds; it skips their speech and still delivers their forward neighbors and rewards.
 
-## Neuron methods
+## The bill, as methods
 
-In call order within a frame, on the **reach-collapsed spatial path** the early stages build, where the bet and
-the bill fall in one frame and the two calls above coincide. All distances are the fit (algorithm.md, "The
-fit"); all sums run over the histogram, which never holds more entries than the horizon.
+R19's five passes, in order. All prices are D16's fit over `O⁻`; all sums run over the ring.
 
-**`evict_if_full()`** — frame step 1. If the ring is at capacity: pop the oldest ref; decrement its histogram
-entry's count (drop the entry at zero). If its server was the normal: subtract the context from
-`connections`, decrement `served`, mark the normal dirty. If a child: `benefits[child] -= (fallback_distance −
-best_distance)`; if the benefit falls strictly below that child's cost, `delete_child(child)`.
+**`cover_and_fold(O)`** — pass 1. R18 steps 1 and 2 over the current table: the greedy cover by ratio, the
+assignment by first-namer. Push the firing with its cover and assignment; if the ring was full, pop the oldest
+and subtract its assigned neighbors from its cover's counts and its landed forward half from the record.
+Add the new firing's assigned neighbors to its cover's counts.
 
-**`route_and_record(O) → (server, best_d, fallback, fb_d)`** — frame step 2, one operation. If `O` is already
-in the histogram, take `argmin` over its stored distances — the assignment is re-derived here, so a stale
-server corrects itself the moment the context recurs; otherwise scan the normal and every child for the two
-smallest distances, ties to the older entry. Then write the record from the
-same scan: push the ref, upsert the histogram entry — the server is routing's choice, promoted or not, covered
-or not. If the normal serves: add `O` to `connections`, increment `served`, mark dirty. Nothing recorded here
-is ever revoked — there is no pending state and no retraction.
+**`recenter()`** — pass 2. Every pattern whose counts moved re-collapses per slot with the line charged and
+equality held (R4). Every firing whose table moved under it re-derives its cover and keeps the cheaper (R6).
 
-**`serve(server)`** — frame step 3, and the whole of what age 0 returns. It always yields the served entry's
-neighborhood; it additionally yields a bid when the server is a child. Child: **activate it** — it fires, and
-the thalamus gets the recognition bid: the active neurons the child's definition names correctly, bidder
-included, plus `f` = its named-but-absent count. **Then return — the neuron is done for the frame.** The record already carries the
-served distance as priced demand (a badly-served child frame is demand a future add can win); the add test
-never runs on this path — the context was recognized, and the description job went up a level with the
-child. Normal: no activation and no bid, but **the normal's neighborhood is still returned** — the machine needs
-it for §13 whether or not anything was bid (algorithm.md, R18 step 3). Then fall through to the steps below.
+**`build_one() → Option<Request>`** — pass 3. R14: tally the residual per neighbor over the ring, seed on the
+largest (ties to declaration order then the nearer offset), take the firings whose residual holds the seed as
+the population, collapse per slot with the same abstention. R15: price it over the firings whose cover it
+would join, on residual neighbors only, against `1 + |C|`. If it pays, return the request with the definition
+`C` carries at the end of the bill.
 
-*(The election runs in the thalamus, concurrently as far as the neuron is concerned — see algorithm.md,
-"Contraction". It reads the bids and writes only the level above; none of the methods below depend on its
-outcome.)*
+**`retire_one() → Option<pattern_id>`** — pass 4. Read every margin (R12), this bill's candidate included;
+retire the smallest if strictly negative (R17). It leaves the table now; the firings it covered re-derive
+(R6); its child goes on the request as a delete.
 
-**`infer()`** — frame step 4, normal path only, at frame `f`. Predict the inference set from `connections`,
-used as the per-neighbor distribution they are. Spatially the inference is the neighborhood itself; temporally
-it is the vote for the frame ahead.
+**`offer(O) → bids`** — pass 5. A bid for every pattern with more than half its neighbors present in `O⁻`,
+less the candidate just requested. Each bid is the child id and the neighborhood.
 
-**`review(best_d) → error`** — frame step 5, when the inference resolves: spatially `error = best_d`,
-immediately; temporally at `f+1`, when the actuals arrive — and `add_test` below runs then too.
+**`register_child(id)`** — on the reply. Bind the pending pattern to its child id. Then every firing takes the
+cheapest of its held cover, its held cover with the newcomer appended, and its cover re-derived (R6), and the
+newcomer's counts are whatever those covers assign it.
 
-**`add_test() → Option<MintRequest>`** — frame step 6, once per bill, against the counts the re-center left
-(algorithm.md, R14). No probe record and no selection; `C` is grown a neighbor at a time.
+**`accrue(age, arrivals, reward)`** — the forward call. Write the arrivals into the firing at offset `age`,
+the reward beside the action it names, and add both to the record. If on the apex, return the record's slots
+at offsets `age + 1` onward: event slots that clear the majority with their counts, action slots with strength
+and estimate.
 
-```
-saving[o] = price(o) − 1 − d(o, C)        price = 1 + |o| under the normal, 1 + best_distance under a child
-C = {}                                    so every normal-served record starts at 0
+## The forward side — the code against the design
 
-loop
-    for each neighbor q not in C:
-        Δ(q) = #{ holds q, saving ≥ 0 } − #{ lacks q, saving ≥ 1 } − 1
-    take the largest Δ; break if it is ≤ 0
-    C ∪= {q};  saving[o] += 1 where o holds q, −1 elsewhere
+The temporal side of the current brain (`neuron.rs`, `thalamus.rs`, `brain.rs`) already has the shape D20, R31
+and R36 describe. What matches, and what has to change:
 
-benefit = Σ max(0, saving[o])             pass iff benefit > 1 + |C|
-```
+**Already the design.**
 
-Each round is one sweep of the ring building two per-neighbor tallies — the same walk a collapse makes — and
-the loop runs fewer than `2·w̄` times, `w̄` being the record size. Records are needed one at a time, so the
-histogram cannot stand in for the ring here. A pass inserts `C` into `children` under a **pending id**, seeds
-`benefits[C] = 0`, runs `settle(C)`, and returns a **request**, not a child: `{definition: C, level: own + 1,
-channel: own}` — everything the allocation needs, decided here so the allocator decides nothing. The definition
-on the request is read *after* `settle`, so it is the one `C` ends the frame with rather than the one the test
-priced.
+- Connections live on the neuron per distance, and a neuron active at age `k` learns a distance-`k` connection
+  toward each current active (`learn_temporal_connections`), so every level learns its own record from its own
+  open activations.
+- `vote(age)` reads `temporal_connections[age + 1]`, which is R36's offset.
+- Ages that activated a child pattern are suppressed and do not vote (`get_suppressed_ages`), which is D7's
+  silencing; they still learn.
+- Strength is a count and the reward is the exact mean via `1 / strength` (`strengthen_connection`), which is
+  R31. A negative mean wires the next untried action in the channel at neutral reward
+  (`upsert_connection` → `find_alternative_action`), which is R37.
+- `aggregate_votes` normalizes each voter to one unit per `(dimension, distance)` split by strength, events win
+  by share and actions by reward, and level appears nowhere in it. That is §13 and R36's base-level vote.
 
-**No joint add-and-delete test.** `C` is credited only the gap it closes on each entry it wins, so nothing an
-incumbent already delivers is counted twice, and an incumbent left worthless by the takeover fails its own
-delete check in `settle` step 3, in the same move
-(algorithm.md, "Delete — pruning the table"). What the sequence cannot reach is a candidate that would pay only
-if some child's storage were refunded first; that case is given up deliberately.
+**Deltas.**
 
-**`settle(C)`** — inline, immediately on a passing add test:
-1. For each histogram entry `C` wins (`d < best_distance`): old server's benefit drops by its gap; `fallback ←`
-   old server, `server ← C`, distances update; `benefits[C]` gains the new gap; if the old server was the
-   normal, subtract `count` copies of the context from `connections`, decrement `served`, mark dirty.
-2. For each entry where `C` is closer than the stored fallback but not the server: replace the fallback,
-   adjust the server's benefit by the change in gap.
-3. Any benefit strictly below its cost: `delete_child`, one at a time, re-checking after each.
-4. If dirty: `refresh_normal()`. **This is the frame's only re-center for structure** — the deletes in step 3
-   mark dirty and do not refresh, so the normal is recomputed once, after every handoff has landed.
-
-**`refresh_normal()`** — recompute `normal = { n : 2·count(n) > served }`. If it changed: re-derive `server` /
-`fallback` for the histogram entries (bounded by the horizon); apply any handoffs exactly as in `settle`
-step 1 — records leaving the normal subtract counts, records arriving add them — and re-check touched
-benefits. A record changes hands only for a **strictly** smaller distance, ties keep the incumbent. **One
-sweep, not a loop**: those handoffs move `connections` again, so the definition ends the frame one step behind
-its own served set, and `route_and_record` re-derives the assignment when the context next recurs (algorithm.md,
-"The bill's pass").
-
-**The round trip.** `settle` ends the neuron's first pass, so the request leaves with every local decision
-already made. The thalamus collects the frame's requests, batch-allocates a pattern neuron per request (level
-and channel off the request, no connections), creates the objects so the level above can dispatch to them, and
-dispatches `register_child` back to each requesting parent. This is the same shape as today's install path,
-moved after the review. The same result carries the ids released by any deletes, so a frame touches the
-allocator once, in one direction or both.
-
-**`register_child(id)`** — on the returned identity: rebind the pending entry in `children` and `benefits` to
-`id`. Nothing else moves — the table settled before the request went out. **The newborn does not fire this
-frame**: it is a routing-table entry that first serves, bids, and subsumes on the next frame its context
-recurs.
-
-**`delete_child(X)`** — remove from `children` and `benefits`, and report `X` on the pass's result so the
-thalamus can release the pattern neuron and scrub its cross-neuron references. Unlike a mint, a delete needs no
-round trip: the neuron already holds everything the reassignment requires, and the released id is only of
-interest outside. For each entry served by `X`: `server ← fallback`, `best_distance ← fallback_distance`, recompute a
-fresh fallback against the survivors; entries landing on the normal add their counts (dirty). For each entry
-whose *fallback* was `X`: recompute the fallback, adjust the server's benefit. Re-check any benefit the
-reassignments moved and cascade sequentially. **It does not refresh the normal** — it only marks dirty, and
-`settle` step 4 does that once for the whole frame.
-
-**Wall-clock shape:** no test ever scans the history — the add test is one pass over the histogram and only
-runs on the normal-served path; `settle` and deletion are bounded by the
-histogram; the running benefits make every delete decision O(1) per event. What *does* scale with the
-dictionary is routing itself: a novel context is one distance against the normal and every child, so the
-per-frame cost grows with the child count. The one test is what bounds that count — only children that pay
-for their storage survive — but how large it gets in practice is an open question (algorithm.md).
+1. **Targets are the voter's own level, not the base.** `process_temporal_levels` hands every level the
+   level-0 active set as `sensory_neurons`, and `aggregate_votes` panics on a pattern-neuron target. Each level
+   is handed its own age-0 actives instead, connections may target pattern neurons, and the panic goes.
+2. **Expansion before resolution.** A new pass between `collect_votes` and `infer_neurons`: every vote whose
+   target is a pattern neuron expands through dictionary lines to base symbols at composed offsets (R27), each
+   carrying the vote's strength and reward unchanged; symbols landing at or before the current frame are
+   dropped (R28). The expansion exists for spatial patterns already and is reused. `aggregate_votes` then runs
+   on base targets only, as it does today.
+3. **A majority over a ring, not weights that never leave.** `temporal_connections` keeps every target that
+   ever followed and never weakens one. The record becomes a total over the ring: eviction subtracts the
+   evicted firing's forward half, a slot's strength is the number of ring firings holding it, and an event slot
+   is expected only when `2·count > n` (R4). This is the change that lets a neuron answer a changed world
+   within `H` of its own firings.
+4. **One record, one firing.** The forward half is stored per firing (R8) and the record is its sum; today the
+   connection map is the only copy and nothing per firing exists to subtract.
+5. **Rewards land beside the neighbor, shaped by R33.** Today every open age is handed the frame's reward whole
+   and unscoped (`decorate_temporal_actives`), and a second path attributes `rewards[age − distance]`. Both go.
+   A reward names channels and a span, shares fall linearly over the span, and each share is written beside the
+   action neighbor at the offset the distance names, in every open activation's firing.
+6. **Base neurons vote.** They already do in the code; the design keeps it. Nothing to change, and the risk it
+   carries is in [algorithm-evaluation.md](algorithm-evaluation.md).
+7. **Patterns are minted at the bill, never on a missed vote.** `recognize_temporal_patterns`,
+   `correct_errors`, `evaluate_vote_error` and the error-pattern allocation are the old error-driven path and
+   are retired, not ported. Prediction mints nothing (D9). The temporal pattern hierarchy is the same bill as
+   the spatial one at `reach_t > 1`, which is the reason for one stack (R25).
 
 ## The build plan
 
-Each phase lands independently and is measured before the next. The build order follows the axes: spatial
-event processing first, then temporal event processing, then actions and rewards. The headline metric through
-the event stages is the objective itself — **apex neurons per level per frame, paired with the dictionary
-size that bought them** — tracked **as a function of exposure**: on recurring data both curves should fall
-and flatten. Alongside: churn (creates + deletes per thousand frames, which should decay as dictionaries
-settle), task accuracy (train and held-out), neuron counts per level, and wall-clock per frame.
+Each phase lands independently and is measured before the next. The build order follows the spec's parts:
+the neuron's bill, then contraction, then the forward side and actions. The headline metric through the
+event stages is the objective itself — **apex neurons per level per frame, paired with the dictionary size
+that bought them** — tracked **as a function of exposure**: on recurring data both curves should fall and
+flatten. Alongside: churn (builds + retirements per thousand firings, which should decay as tables settle),
+task accuracy (train and held-out), neuron counts per level, and wall-clock per frame.
 
-### Stage 1 — spatial event processing
+### Stage 1 — the bill
 
-**Phase 1 — substrate, evidence, and the dictionary lifecycle.** Two halves that could have landed separately
-but do not, because the first has nothing to measure on its own: a brain that records evidence and builds no
-structure produces no exposure curves, and the accuracy it reports is the readout's, not the algorithm's.
+**Phase 1 — substrate, evidence, and the table.** Sparse activation (a dimension with nothing happening
+supplies no symbol); the ring of firings with held covers and assignments; the greedy cover; the five-pass bill
+with one build and one retirement per firing; the request-and-reply mint. The invariants above become
+`debug_assertions` that recompute from the ring on every mutation. Gate on the exposure curves: dictionary
+size sublinear in exposures, apex per frame falling, churn decaying. Also measure history memory and per-frame
+wall-clock. Cap at one level so the recursion is not a variable yet.
 
-- *Substrate and evidence.* Sparse activation (a dimension with nothing happening supplies no symbol; no neuron
-  is emitted for it); the FIFO history with the histogram, stored fallbacks, and running benefits; routing and
-  serving; unconditional recording.
-- *The lifecycle.* The unconditional add test, `settle`, and event-driven deletes. This is the heart.
-
-The evidence half is verified rather than measured: the four invariants under "What must always hold" become
-`debug_assertions` that recompute from the raw history and compare against the incrementally-maintained state
-on every mutation, so a divergence trips at the frame that caused it instead of showing up as a bad curve
-later. Gate the phase on the exposure curves: dictionary size sublinear in exposures, apex per frame falling,
-churn decaying. Also measure history memory and per-frame wall-clock. Cap at one level so the recursion is not
-a variable yet.
-
-**Phase 2 — contraction.** The bids, the election, the neighbor filter rule, and the level-above
-construction, adapted to the sparse substrate (only active neurons need cover). Measured by the per-level
-reduction factor actually achieved and the depth at which it settles.
+**Phase 2 — contraction.** The wide offer, the election, and the level-above construction on the sparse
+substrate. Measured by the per-level reduction factor actually achieved and the depth at which it settles.
 
 **Phase 3 — the readout gate.** Compare held-out accuracy against what the level counts justify. Do not build
 past this phase if the answer is no.
 
-### Stage 2 — temporal event processing
+### Stage 2 — the forward side
 
-The same neuron mechanism at `d > 0`. The recognition context and the inference connections come apart into
-two statistic tables per entry, records complete one frame late, and the election stays recognition-only —
-the frame order is already built for this (algorithm.md, "The frame, step by step"). Gate: held-out
-prediction on sequence data, and the same exposure curves on the temporal dictionaries.
+The forward record on every neuron, the forward call, expansion before resolution, and the base-level vote —
+deltas 1 through 4 above. Gate: held-out prediction on sequence data, and the same exposure curves on the
+temporal dictionaries. The temporal pattern hierarchy is Stage 1's bill run at `reach_t > 1` and is not a
+separate mechanism.
 
 ### Stage 3 — actions and rewards
 
-Action dimensions in the channels; default actions as the bootstrap; reward learned on the apex active action
-([global-rewards.md](global-rewards.md)); exploration when learned rewards are negative; top-down unfolding
-of a selected higher action into its constituent actions over the coming frames. Gate: a closed-loop
-environment in which a learned action sequence answers a learned event sequence.
+Action dimensions in the channels; the default as a slot on every neuron; R33's shaped rewards (delta 5);
+exploration on a negative estimate; the standing inference and top-down expansion of a selected higher action
+(R30, R36). Gate: a closed-loop environment in which a learned action sequence answers a learned event
+sequence.
 
 Variable-length pricing lands on its own track, specified in [forgetting.md](forgetting.md).
 
 ## Changes required in the current code (not yet implemented)
 
-The current implementation (`thalamus.rs` / `neuron.rs` on this branch) predates most of the above. Each delta
-is tagged with the phase it lands in.
+The current implementation predates most of the above. Each delta is tagged with the phase it lands in. The
+forward-side deltas are the numbered list in the section above and land in Stages 2 and 3.
 
 **Phase 1 — the substrate and the evidence.**
 
 1. **Sparse emission is an encoder change only.** `build_frame` iterates whatever the inputs map holds, so
    omitting a dimension — or a whole channel — already works with no change in the brain. On MNIST it is the
    encoder skipping off pixels.
-2. **Rebuild the history.** `SpatialHistory` becomes a FIFO ring of context refs plus a histogram carrying
-   `count`, `server`, `best_distance`, `fallback`, `fallback_distance`. The per-config `frames: Vec<FrameNumber>`
-   and the absolute-frame `age_spatial_history` cutoff both go: capacity is the horizon in the neuron's own
-   activations, and eviction is one-out-one-in off the ring. `SpatialHistory::rebase` goes with the frame
-   numbers.
-3. **Store the fallback.** Routing returns the two smallest distances from one scan instead of the winner only,
-   and writes both into the record. This is what every later item reads.
-4. **Replace the delete scan with running benefits.** `spatial_delete_candidate` and
-   `spatial_delete_candidate_uncached` are deleted outright — not ported. Delete becomes
-   `benefits[child] < 1 + |definition|`, checked only where an event moved the benefit (eviction, a mint's
-   handoffs), strictly below cost, all failing children sequentially with cascade. Today's version scans the histogram on
-   every active neuron every frame, deletes at most one, and deletes at equality; all three change.
-5. **Switch the normal to element-wise majority.** `spatial_normal_config`'s per-channel argmax becomes
-   `{ n : 2·count(n) > served }`, which needs a new `served` counter. `spatial_target_channels` and the channel
-   plumbing that feeds it go — the normal is channel-free.
-6. **Add `settle`.** New. `reassign_after_mint` is its step 1 only and is subsumed by it.
-7. **Remove the new-child bid path.** Delete the `NEW_CHILD_BID` sentinel (`neuron.rs`) and every branch keyed
-   on it: the request construction in `process_spatial_frame`, the split into `recognized` /
-   `new_child_parents` in `process_spatial_level`, and the mid-frame create-install-activate block. New
-   children stop competing in `elect_spatial_bids` entirely.
-8. **Move minting after the review, as a request and a reply.** The add test runs for every normal-served
-   neuron, after the record is written — no election input of any kind. It settles the table
-   against a pending child and returns a request; the thalamus batch-allocates and dispatches `register_child`
-   back; the parent rebinds the pending entry to the returned id. The
-   existing install path (`allocate_spatial_pattern_neuron`, `install_spatial_corrections`) is the right shape
-   already and moves after the review. The newborn is **not** activated: it fires first on its next
-   recognition.
-9. **Delete the birth special cases** — they exist only to patch mid-frame minting: the newborn's insertion
-   into `new_error_pattern_ids` for the level above, the no-subsume-on-birth-frame rule, and the
-   fires-but-does-not-record state.
-10. **Record unconditionally.** Every active neuron commits its frame, as routed: winners, losing recognizers
-    (server = the child, at its routed distance), normal-serves, covered or not. Today a losing bid commits
-    nothing and the frame vanishes — that goes.
+2. **Rebuild the history.** `SpatialHistory` becomes a FIFO ring of firings, each carrying its backward half,
+   its forward half as it lands, its held cover and its assignment. The per-config `frames: Vec<FrameNumber>`
+   and the absolute-frame `age_spatial_history` cutoff both go: capacity is `H` in the neuron's own firings,
+   and eviction is one-out-one-in off the ring. `SpatialHistory::rebase` goes with the frame numbers. The
+   histogram keyed on identical contexts goes: covers are held per firing, so identical backward halves no
+   longer share one (R6).
+3. **Replace the server with the cover.** Routing chooses one closest entry today; it becomes R18's greedy
+   cover by ratio with the first-namer assignment, and both are written into the firing.
+4. **Delete the normal.** `spatial_normal_config`, `refresh_normal_config`, `served`, `spatial_target_channels`
+   and the channel plumbing that feeds it go. The spec has no default pattern (D22); what no pattern covers is
+   the residual, one line each.
+5. **Replace the delete scan with R17.** `spatial_delete_candidate` and `spatial_delete_candidate_uncached` are
+   deleted outright. Retire becomes: read every margin off `counts`, retire the smallest if strictly negative,
+   at most one per bill.
+6. **Replace the greedy growth with R14.** `spatial_add_pays` and its candidate construction become seed,
+   population, collapse, and one price, once per bill.
+7. **Remove the new-child bid path.** Delete the `NEW_CHILD_BID` sentinel and every branch keyed on it: the
+   request construction in `process_spatial_frame`, the split into `recognized` / `new_child_parents` in
+   `process_spatial_level`, and the mid-frame create-install-activate block. New children stop competing in
+   `elect_spatial_bids` entirely.
+8. **Move minting to the bill, as a request and a reply.** The bill runs before the offer, inside the same
+   call; the request leaves with the bids; the thalamus batch-allocates and dispatches `register_child` back;
+   the parent binds the pending pattern to the returned id. The newborn is **not** activated: it is offered
+   first on the next firing (R13).
+9. **Delete the birth special cases** — the newborn's insertion into `new_error_pattern_ids` for the level
+   above, the no-subsume-on-birth-frame rule, and the fires-but-does-not-record state.
+10. **Record unconditionally.** Every active neuron folds its firing, as covered: bought or not, covered or
+    not. Today a losing bid commits nothing and the frame vanishes — that goes.
 11. **Delete the evidence coupling to the election.** Remove `prune_inhibited_spatial_history` /
     `drop_inhibited_spatial_frame` and the subsumed-set plumbing from the evidence path entirely. The subsumed
-    set survives only where it belongs: deciding what the level above (and the apex handoff) sees. The
-    election writes nothing into any neuron. With nothing left to commit conditionally, the whole
+    set survives only where it belongs: deciding what the level above sees and who speaks. The election writes
+    nothing into any neuron, and there is no report back (R23). With nothing left to commit conditionally, the
     decide-then-commit round trip goes too: `SpatialCommitOp`, `commit_spatial_frame`, and the
     thalamus/region/column `commit_spatial_frames` chain.
 12. **Remove the completeness gate.** `observed.len() >= spatial_capacity` in `process_spatial_frame` has no
     counterpart in the design, and under sparse activation it would rarely pass. `spatial_capacity` and its
     plumbing go with it.
 13. **Drop the spatial recency machinery.** `activation_strength`, `last_activation_frame`, the lazy decay,
-    death frames, `forget_rate`, and `can_delete_child` describe nothing in the design on the spatial side —
-    children live and die by the one test, not by activation recency.
-14. **Backups break.** The persisted history changes shape (ring, fallbacks, `served`), so old backups are
-    unloadable. Accepted: no migration path, bump the format and fail loudly on an old file.
+    `forget_rate` and `can_delete_child` describe nothing in the design — patterns live and die by the one
+    test. Death frames stay, re-derived as R17 states them: a retired pattern's child dies when its last open
+    activation closes.
+14. **Backups break.** The persisted history changes shape, so old backups are unloadable. Accepted: no
+    migration path, bump the format and fail loudly on an old file.
 15. **The invariants become debug assertions.** The four statements under "What must always hold", each
-    recomputed from the raw history and compared against the incrementally-maintained state.
+    recomputed from the ring and compared against the incrementally maintained state.
 
 **Phase 2 — contraction.**
 
-16. **Price false positives in bids.** `covered` stays correct-names-only; carry `f = |definition \ observed|`
-    on the bid and change the survival test in `spatial_survivors` from a flat `≥ 2` to `k ≥ 2 + f`. This is a
-    known gap between the doc and the code.
-17. **Replace the above-base adjacency heuristics with the filter rule.** The eight-sector nearest rule
-    (`directional_neighbors`) and the reuse-the-last-declared-set fallback both go: while a neighbor filter is
-    declared for a level, it applies; above the declared levels, the neighborhood is the level's active set.
-    `channel_positions` and `set_channel_position` are only there to serve the sector rule and go with it;
-    `set_spatial_neighbor_levels` stays — the declared per-level sets *are* the filter.
+16. **Price named-and-absent in bids.** Carry `1 + |e \ O⁻|` on the bid as its price and change the survival
+    test in `spatial_survivors` from a flat `≥ 2` to R23's `covers > price`.
+17. **Offer every pattern that applies.** Today a neuron bids its routed entry only. R18 step 3 sends a bid for
+    every pattern with more than half its neighbors present, so the election sees the catalog.
+18. **Replace the above-base adjacency heuristics with the reach.** The eight-sector nearest rule
+    (`directional_neighbors`) and the reuse-the-last-declared-set fallback both go: adjacency is D4's box at
+    D14's reach, at every level. `channel_positions` and `set_channel_position` serve only the sector rule and
+    go with it.
 
 **Phase 3 — the readout gate.**
 
-18. **Watch for the one expected regression:** action wiring reaches a new child one recurrence later than
-    today, since newborns no longer fire on their birth frame.
+19. **Watch for the one expected regression:** a child's own record starts empty at its mint (D17), so a newly
+    bought child expects nothing and infers the default until its ring fills.
 
 ## The MNIST frame protocol
 
-MNIST runs on R35's chain — infer, execute, reward — one example per three frames. Nothing in
-[algorithm.md](algorithm.md) changes for it. A base event neuron's reach in time is 1 (D15), so its
-observation spans the frame before and the frame after its own.
+MNIST runs on R29's chain — infer, execute, reward — one example per three frames. Nothing in
+[algorithm.md](algorithm.md) changes for it. A base event neuron's reach in time is 1 (D14), so its firing
+spans the frame before and the frame after its own.
 
 ```
 frame     carries              what happens
 -----     -------              ------------
-f         events only          base event neurons fire, bet, and return their
-                               recognitions (R18); contraction runs; process
-                               actions returns the inferences; the machine
-                               asserts (§13), committing the digit call for f + 1
-f + 1     the action only      the digit call executes and its neuron fires;
-                               events are silent. Process actions runs again and
-                               every neuron open here records a connection to
-                               what ran, at the distance of its own age (R37)
-f + 2     the reward only      the label arrives as input, not as a symbol
-                               (§15). Nothing fires. It folds into the
-                               connection's running mean (R37)
+f         events only          base event neurons fire, bill, and offer (R18, R19); contraction
+                               runs; process actions delivers nothing new and collects the
+                               apex's inferences; the vote at the base commits the digit call
+                               for f + 1 (R36)
+f + 1     the action only      the digit call executes and its neuron fires; events are
+                               silent. Process actions runs and every activation open here
+                               writes the action into its firing at its own age (R31)
+f + 2     the reward only      the label arrives as input, not as a symbol (§15), and is
+                               written beside the action in every open firing, from where it
+                               enters the neuron's estimate (R31, R33). Nothing fires.
 f + 3     next example         = the next example's f
 ```
 
@@ -359,31 +306,31 @@ dimension is silent in them (D5).
 
 **Base event processing is spatial.** The backward slot at `−1` lands on the previous example's reward frame
 and the forward slot at `+1` on the action frame; both are silent. So every neighbor a base event neuron names
-sits at temporal offset `0`. The temporal slots are voted out for want of a majority (R4, R11) and cost nothing
-in `|e|`.
+sits at temporal offset `0`. The temporal slots are voted out for want of a majority (R4, R11) and cost
+nothing in `|e|`.
 
 **No action patterns form.** An action neuron's own backward and forward slots land on frames carrying no
-actions, so the action hierarchy stays flat. R38's apex active action is therefore always the base action,
-which R38 states explicitly holds before any action pattern exists.
+actions, so the action hierarchy stays flat. R32's apex active action is therefore always the base action,
+which R32 states explicitly holds before any action pattern exists.
 
-**Connections are recorded per frame, never at the bill.** R37 records one at every age a neuron is open at,
-and the reward folds in a frame later. Neither is gated on the observation completing, so the reward path does
-not wait on the window and does not vary with level. Do not couple connection recording to §10.3.
+**Action slots are recorded per frame, never at the bill.** R31 records one at every age a neuron is open at,
+and the reward lands a frame later. Neither is gated on anything completing, so the reward path does not wait
+on the window and does not vary with level.
 
-**This is the one thing that survives on the intermediate frames, and it is why `process actions` is a second
-call.** `process frame` reaches a neuron at two ages only, so connection recording cannot ride on it — an
-activation at age 3 of a reach-8 span would never be reached. `process actions` is age-blind by construction: it
-walks every open activation the machine holds and hands each one what ran. It also runs after the stack has
-settled rather than during a level, because what ran is not known until then.
+**This is why `process actions` is a second call.** `process frame` reaches a neuron at age 0 only, so the
+forward half cannot ride on it — an activation at age 3 of a reach-8 span would never be reached. `process
+actions` walks every open activation the machine holds and hands each one what landed. It also runs after the
+stack has settled rather than during a level, because what ran is not known until then.
 
-**Classification is selection, not a readout.** The digit call is an action chosen by R41 off the event→action
-connections, scored by the reward at `f + 2`. R43 supplies exploration while a situation's reward is negative.
-The naive-Bayes consensus and the per-dimension vote in the current code have no counterpart in
-[algorithm.md](algorithm.md) and are retired, not ported.
+**Classification is selection at the base.** The digit call is an action chosen by R35 and R36: every apex
+activation's action slots at offset `age + 1`, expanded to base actions, resolved per action dimension by
+largest estimate with the code's per-voter normalization breaking ties. The current brain's per-dimension
+vote in `aggregate_votes` is that resolution and stays. The naive-Bayes readout over active neurons has no
+counterpart in [algorithm.md](algorithm.md) and is retired, not ported.
 
 ### Encoder changes
 
 - Emit the image on one frame only; emit nothing on the action and reward frames.
 - Sparse emission: an off pixel supplies no symbol (D5). No neuron is emitted for it.
-- Declare the digit calls as an action dimension, in a fixed order — R43 walks that order for exploration, so
+- Declare the digit calls as an action dimension, in a fixed order — R37 walks that order for exploration, so
   it is part of the problem statement.
