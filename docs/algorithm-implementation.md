@@ -149,9 +149,11 @@ and R36 describe. What matches, and what has to change:
    on base targets only, as it does today.
 3. **A majority over a ring, not weights that never leave.** `temporal_connections` keeps every target that
    ever followed and never weakens one. The record becomes a total over the ring: eviction subtracts the
-   evicted firing's forward half, a slot's strength is the number of ring firings holding it, and an event slot
-   is expected only when `2·count > n` (R4). This is the change that lets a neuron answer a changed world
-   within `H` of its own firings.
+   evicted firing's forward half, a slot's strength is the number of ring firings holding it, an event slot is
+   expected only when `2·count > n` (R4), and an action slot's estimate is the mean over the exposures the
+   ring holds, recomputed exactly on eviction rather than smoothed. Slots the bootstrap or the walk wired stand
+   at strength 0 until tried (R31). This is the change that lets a neuron answer a changed world within `H` of
+   its own firings.
 4. **One record, one firing.** The forward half is stored per firing (R8) and the record is its sum; today the
    connection map is the only copy and nothing per firing exists to subtract.
 5. **Rewards land beside the neighbor, shaped by R33.** Today every open age is handed the frame's reward whole

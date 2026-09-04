@@ -1127,10 +1127,23 @@ machinery on this side would recover it. So the scope is an input with a default
 honest statement of ignorance rather than a fallback path: the same arithmetic runs either way, over a wider
 span and more channels.
 
-**On R34 — why estimates are not forgotten.** A pattern says something recurs, so a stretch without it proves
-the pattern wrong, and its evidence expires on the ring (D24). An action slot says what an action is worth,
-and never taking that action proves nothing about its worth: the machine is sampling a number the environment
-holds fixed, and every sample is as good as the last.
+**On R34 — why nothing weakens, and why the ring still bounds it.** An earlier design kept action estimates
+for the neuron's lifetime and never weakened a slot, on the argument that never taking an action proves nothing
+about its worth, so an unchosen action must not be penalized or the brain collapses onto whatever it tried
+first. The first half of that survives: non-choice moves nothing. The second half does not. A lifetime mean
+absorbs a changed worth at a rate that falls with every exposure it already has, which is the slowness the
+event slots were just freed from, and a lifetime is a second horizon beside `H`, which R10 forbids. Over the
+ring, an unchosen action's estimate stands unchanged until its last exposure leaves, and then the slot is gone.
+What that costs is one re-trial: when the current best action turns negative, the walk wires the first action
+without a slot, which may be one the ring has forgotten, and it is tried once more. That happens only when the
+incumbent has failed, which is exactly when re-testing the alternatives is right, and it costs one sample per
+`H` firings at most. In a stationary world where the incumbent stays good, nothing is ever re-tried.
+
+**On R34 — a neuron that fires rarely remembers for longer.** The ring counts the neuron's own firings (D24),
+so a neuron that fires once a day holds a day's worth of estimates per slot and a neuron that fires every
+frame holds `H` frames' worth. A rare situation keeps its lesson for as long as its rarity makes it, with no
+second aging law; that is what lets a moment minted by replay (see [hippocampus.md](hippocampus.md)) hold an
+estimate across long stretches while an ordinary base neuron turns its ring over in seconds.
 
 **On R34 — why reward cannot price structure.** A policy is not a description: the decoder replays the actions
 the file records rather than choosing any, so nothing a reward says about an action changes what it costs to

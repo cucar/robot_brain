@@ -86,6 +86,13 @@ only once something more specific is bought over it. **Diagnostic:** the share o
 neurons, per frame, over exposure; it should fall as the dictionary fills. If it stays high on data that
 recurs, patterns are not being bought where the base is voting, and the compression side is where to look.
 
+**A forgotten action is re-tried.** An action slot lives only as long as the ring holds a firing that recorded
+it (R31), so an action judged bad and then not taken for `H` firings is gone, and when the incumbent turns
+negative the walk wires it again at neutral estimate and tries it once (R37). In a stationary world that is
+one bad sample per `H` firings per neuron, and only after the incumbent failed; in a world with a long-lived
+bad action and a flickering incumbent it is a recurring cost. **Diagnostic:** how often a slot is re-wired by
+the walk within `2·H` firings of being evicted, and what it earned the second time against the first.
+
 **A majority over `H` firings can flip.** An event slot is in the expected set when more than half the ring
 holds it (R4), so a neighbor that follows about half the time flickers in and out as firings enter and leave.
 That is the price of a set that answers a changed world within `H` firings rather than a weight that answers

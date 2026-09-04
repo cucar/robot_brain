@@ -1233,6 +1233,11 @@ half, which no structural test can see (R34).
 >
 > **A slot dies with either of its ends** — the neuron, or the action neuron — or when the ring no longer
 > holds a firing that recorded it. Nothing else removes one (R34).
+>
+> **A wired slot stands until it is tried.** The bootstrap (R35) and the walk (R37) create slots with no
+> firing behind them, at strength 0 and neutral estimate. Such a slot stands until the action is tried; from
+> the first exposure on it is a ring total like any other, and once its last exposure is evicted it is gone,
+> and the walk may wire it again.
 
 > **R32 — Credit lands on the apex active action, and covers its whole span.** The credited object is the
 > highest action pattern in control of its dimension at the frame the action ran, not at the frame the reward
@@ -1284,9 +1289,11 @@ half, which no structural test can see (R34).
 > exists, and reward, which decides which of it is executed. They meet at exactly one place, the action slot of
 > a neuron's forward record, and that record is not in the file and not priced by the one test.
 >
-> **Estimates are not decayed.** A slot's reward is the plain average over the exposures the ring still holds,
-> with no cap and no rate; what leaves it is only what eviction takes (R31), so an estimate is exactly as
-> current as the neuron's last `H` firings.
+> **Estimates adapt and do not decay.** A slot's reward is the plain average over the exposures the ring still
+> holds, with no cap and no rate. Nothing weakens a slot for not being chosen: an action not taken keeps the
+> value it had until the last firing that held it leaves the ring. What moves an estimate is exposure entering
+> the ring and exposure leaving it (R31), so it is exactly as current as the neuron's last `H` firings, and a
+> changed worth is absorbed within them.
 
 # 16. Selection
 
