@@ -8,7 +8,7 @@ risk states what would be done about it, so measurement has a decision attached.
 # 1. The falsifiable claim
 
 Nothing in the design optimizes for prediction, and nothing scores it. A pattern is charged for the neurons it
-names beside the firing and never for what followed (D17); its forward half is counted into its record,
+names beside the activation and never for what followed (D17); its forward half is counted into its record,
 enters no test, and is not in the file (D9). What the machine expects next is an output it hands out (§13),
 and no part of the machine reads whether it came true. Prediction is therefore a pure by-product: the machine
 gets better at predicting by compressing better — richer chunks are bought, patterns upstairs describe over
@@ -25,7 +25,7 @@ assumption everything else rests on.
 
 The standing metric is **apex units per level per frame, paired with the dictionary size that bought them**.
 It should fall with exposure on recurring data: early structure is provisional, re-centering consolidates it,
-and the retire pass takes what is left.
+and R17 takes what is left.
 
 ---
 
@@ -35,18 +35,18 @@ and the retire pass takes what is left.
 sum, and a bill takes one candidate and one retirement rather than iterating (R19). The table provably reaches
 a local optimum on a fixed history (T6), and a local optimum is what it is: two patterns straddling one
 cluster, each paying while the other stands, are never merged at their own level. **Diagnostic:** on a small
-neuron, compare the standing file cost against an exact assignment solved offline over the same firings and
+neuron, compare the standing file cost against an exact assignment solved offline over the same activations and
 pattern count. The gap is the basin.
 
 **The neuron never hears what it sold.** This is the design's largest deliberate omission. The election writes
 the coverage set and reports nothing back (R23), so a neuron prices every pattern on what it saw, whether or
-not the machine ever buys it. A pattern that describes the neuron's firings well but is consistently outbid on
+not the machine ever buys it. A pattern that describes the neuron's activations well but is consistently outbid on
 the same ground — a neighbor's unit reliably takes the territory first — stays in the dictionary, keeps being
 offered, and keeps paying its line in `L`. The design bets this is rare: a neuron finds itself in many
 situations and wins some and loses others. **Diagnostic:** per pattern, the fraction of its bids bought over
 its life. A pattern below some low fraction for a long stretch is the case the omission gets wrong. **Fallback
 if it is common:** report one bit per bid, bought or not, back to the neuron on the response of its next call,
-and let the retire test read benefit over bought firings only. That is far cheaper than the per-neighbor
+and let R17 read benefit over bought activations only. That is far cheaper than the per-neighbor
 adjustment the design used to run, and it closes the case without touching what a pattern learns.
 
 **Earlier bidders win shared past neurons.** A bid at `f` keeps a neuron at `f − 2` against a better bid at
@@ -56,9 +56,9 @@ would have flipped the acceptance. If the second number is not small, the altern
 within the coverage set's window, which is bounded and has been rejected so far for the ripple it sends up the
 stack.
 
-**One candidate and one retirement per bill.** A neuron restructures at most one step per firing in each
+**One candidate and one retirement per bill.** A neuron restructures at most one step per activation in each
 direction (R19). A neuron whose situation changes wholesale — three new chunks at once — takes three of its own
-firings to build them and rebuilds nothing until it fires. That is the same rhythm the machine keeps, and it
+activations to build them and rebuilds nothing until it fires. That is the same rhythm the machine keeps, and it
 is a rate, not a cap. **Diagnostic:** the fraction of bills whose candidate paid, over a run. Near one for a
 long stretch means the neuron is building as fast as it is allowed and has a backlog; near zero means the rate
 is not binding.
@@ -70,11 +70,11 @@ to be bounded by the cover. **Diagnostic:** bids per activation against cover si
 of bought bids that the cover would not have offered — which is the wide offer's whole benefit, and if it is
 near zero the offer can be narrowed back at no loss.
 
-**Holding covers can hold a stale one.** R6 keeps a firing's cover unless the re-derived one is strictly
-cheaper, which is what makes the bill a descent (T6). It also means a firing folded under an old table keeps
-an old cover for as long as nothing beats it strictly, and two firings with one backward half can be covered
+**Holding covers can hold a stale one.** R6 keeps an activation's cover unless the re-derived one is strictly
+cheaper, which is what makes the bill a descent (T6). It also means an activation saved under an old table keeps
+an old cover for as long as nothing beats it strictly, and two activations with one backward half can be covered
 two ways. The counts a pattern re-centers on are then partly the table's past. **Diagnostic:** the share of
-firings whose held cover differs from the cover R18 would derive fresh, and the cost difference. If the share
+activations whose held cover differs from the cover R18 would derive fresh, and the cost difference. If the share
 is large and the difference is zero, the hold is doing nothing but hysteresis and the tie rule could be
 loosened.
 
@@ -101,21 +101,20 @@ as it has history. The bet is the same as above: the general case is allowed to 
 case is a younger neuron. **Diagnostic:** for a change introduced at a known frame, the estimate at the apex
 against the true worth, per frame after the change, split by the age of the voting neuron. If old voters
 still decide the dimension long after the change, the hierarchy is not minting where it is needed, and the
-compression side is where to look. A flicker rate that does not fall with
-distance from one half is a bug.
+compression side is where to look.
 
-**Several children per firing may not halve the level above.** A neuron used to promote at most one child,
+**Several children per activation may not halve the level above.** A neuron used to promote at most one child,
 which is what made T11's halving argument work — and the halving is what D14's doubling reach is derived from,
 what T12's depth bound rests on, and what keeps `|O|` constant across levels. A cover of `m` patterns promotes
 up to `m` children at one coordinate (D5, R18), and the wide offer lets patterns outside the cover be bought
-too, so a level can be *wider* than the one below it wherever firings decompose into several chunks. Nothing
+too, so a level can be *wider* than the one below it wherever activations decompose into several chunks. Nothing
 caps `m`; what bounds it is that each extra child is another line and another set of charges, and the
 election stops buying the moment one does not pay. **Diagnostic:** bought bids per activation and units per
 level per frame, against the halving T11 assumes. If levels stop thinning, D14's reach schedule is calibrated
 against an invariant that no longer holds, and the reach has to be derived from measured spacing instead.
 
 **Siblings agree until one is bought alone.** Two children bought at one coordinate see the same forward
-neighbors, so their records agree until the first firing where one is bought and the other is not (D21). Two
+neighbors, so their records agree until the first activation where one is bought and the other is not (D21). Two
 patterns always bought together never diverge at their own level; the level above is expected to merge them
 (§4 of the remarks). **Diagnostic:** for pairs of children of one neuron, the overlap of the frames they were
 bought in against the overlap of their records. Pairs high on both for a long stretch are the merge the level
@@ -148,7 +147,7 @@ sees a translation-invariant bag and loses every bit of *where*, so it has to co
 pairs. A regression here will look like the compression was wrong when it was the decode. The readout gate in
 [algorithm-implementation.md](algorithm-implementation.md) is the check.
 
-**History size and reach sensitivity.** Every decision is exact with respect to the last `H` firings and blind
+**History size and reach sensitivity.** Every decision is exact with respect to the last `H` activations and blind
 beyond them. `H` too small and patterns form on coincidences and the stack deepens faster than the evidence
 warrants; too large and a neuron follows a moving situation slowly and keeps more structure than earns its
 keep. Reach too small and no chunk spans what recurs; too large and every neighborhood is mostly noise at
@@ -161,12 +160,12 @@ together, and conflating them is easy.
 **Cold-start churn.** Early tests are decided by very little evidence. Re-centering is the main defense, but
 measure churn over the first thousand frames and again in steady state.
 
-**One-shot builds.** A seed present in a handful of firings gives a population of that handful, and the
+**One-shot builds.** A seed present in a handful of activations gives a population of that handful, and the
 collapse over a small population names most of what it holds. Re-centering largely defuses it — the pattern is
 pulled toward whatever recurs, or starves. **Fallback if it still churns:** require the seed's population to
-span at least two firings before a candidate is priced. Exact, and costs one recurrence of latency.
+span at least two activations before a candidate is priced. Exact, and costs one recurrence of latency.
 
-**Shared patterns fit every position worse than tuned ones would.** D8 pools firings from everywhere into one
+**Shared patterns fit every position worse than tuned ones would.** D8 pools activations from everywhere into one
 pattern, so a pattern describes statistics that genuinely differ by position and fits each of them worse. That
 is a real cost and it is paid in charges, which is the history half of `L` — the dictionary half falls in
 exchange, and R12 is what weighs the two. The design commits to the trade being worth it and offers no way to
@@ -175,7 +174,7 @@ charges per activation against dictionary size, before and after, on the same da
 
 **The cover pass is a greedy set cover, not a nearest-neighbor lookup.** One scan of the table per round, and
 a round is one pattern taken (R18). Cost is `O(|cover| · |table| · |O⁻|)`, and `|cover|` is exactly the
-quantity the multi-child risk above says is unbounded. **Diagnostic:** cover-pass scans per firing against
+quantity the multi-child risk above says is unbounded. **Diagnostic:** cover-pass scans per activation against
 cover size, per level.
 
 **Routing cost at the base.** `|O|` is held constant across levels by construction (D14), but its value is set
@@ -183,12 +182,12 @@ by the reach and the base density, and the cover pass prices every pattern again
 **Diagnostic:** scan volume per level, against `|O|`.
 
 **An early partition can freeze.** A pattern never acquires a neighbor another pattern of the same cover already
-holds — the slot's population excludes those firings entirely (R4) — so patterns grow into the residual and
+holds — the slot's population excludes those activations entirely (R4) — so patterns grow into the residual and
 never into each other. That is what stops two patterns converging, and T6 rests on it, and it also means a bad
 early split of one chunk across two patterns is not repaired by re-centering. It can only be repaired by one
 of them retiring and the other growing into what it left, one per bill. **Diagnostic:** how often a retirement
-is followed within `H` firings by a surviving pattern growing into the vacated neighbors. If it is rare, the
-partition is sticky and the build is carrying more of the load than intended.
+is followed within `H` activations by a surviving pattern growing into the vacated neighbors. If it is rare, the
+partition is sticky and R14 is carrying more of the load than intended.
 
 **Election slack, bounded but unmeasured.** R23 is ratio-greedy weighted set cover, so its slack against the
 best cover buildable from the same bids is bounded by `H(n)` and no better
@@ -203,7 +202,7 @@ neuron proposes is a symbol the election never gets to consider, and no neuron p
 what it would let a *different* neuron stop paying for. Distinct from election slack, which measures the
 election against a perfect election over the same bids; this measures propose-then-elect against optimizing
 dictionary and frames together. **Diagnostic:** over a short run on one small level, compare the file this
-design writes against the file a joint optimization over the same firings produces. That gap decides whether
+design writes against the file a joint optimization over the same activations produces. That gap decides whether
 contraction should stay purely a buyer or start supplying candidates back into the tables it covered — the
 constituents of one chunk each build their own near-duplicate of it today, which is where a constructive
 variant would pay first.
@@ -216,7 +215,7 @@ variant would pay first.
 grows as patterns are created, so the space expands with the structure. What no longer expands is `|O|`:
 adjacency is a reach at every level (D4), and D14 sets that reach precisely to hold the expected neighbor count
 fixed as the level thins. So the open measurement is whether the invariant holds in practice, since it rests
-on T11's halving being close to what contraction actually achieves. **Diagnostic:** neighbors per firing, per
+on T11's halving being close to what contraction actually achieves. **Diagnostic:** neighbors per activation, per
 level, against the constant the invariant predicts.
 
 **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering makes
