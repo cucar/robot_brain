@@ -1272,12 +1272,21 @@ at every level, so an event neuron's connections can name an action pattern — 
 high-level response by a single connection, which is how a complex action sequence is learned as the answer to a
 complex event sequence.
 
-**On R35 — why the default is a connection on every neuron.** Every neuron is born holding the declared default at
-every forward offset, base neurons included, so from the first frame every apex activation has an inference
-and the walk (R37) can begin on the first negative reward. An earlier draft held connections on patterns only, which
-left the base mute and exploration waiting for the first bought pattern. The rule that an unreached dimension
-runs the default survives as a safety, and it fires only when nothing at all is on the apex, which is an empty
-frame.
+**On R35 — why the default runs rather than being wired.** An earlier draft wired the declared default on every
+neuron at birth, at strength 1 and neutral estimate, so that every apex activation had an inference from the first
+frame. It was a fiction twice over: a level-5 pattern born holding a base action it had never seen run, and a
+strength counting an exposure nobody had. Under the apex rule it is also unnecessary. A dimension no inference
+reaches runs the default, the default is then the apex action of that frame, and every uncovered activation
+connects to it with its reward exactly as it would to any other action. Nothing is lost at cold start — the base
+is not mute, it is silent for one frame and then holds what ran — and nothing pretends to have been judged. What
+stands from the earlier draft is the other lesson: connections are held on the base as well as on patterns, or
+exploration waits for the first bought pattern.
+
+**On R35 — why action neurons do not choose.** An action's own-kind connections would say what the machine did
+next after doing this: a policy conditioned on the last action and on nothing that was happening. That is either
+a habit loop that reinforces itself without perception, or a chunk — and if A-then-B recurs the action hierarchy
+writes it as a pattern, which the event that selects it runs whole. So an action neuron keeps only what an
+expectation and replay can use, the apex events that followed it, and every inference is an event's.
 
 **On R36 — why there is no confidence correction.** The correction would be a parameter with nothing to
 derive it from, and R37's walk is what buys the thin estimates their exposures.

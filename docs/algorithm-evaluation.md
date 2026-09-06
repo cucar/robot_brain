@@ -283,11 +283,13 @@ is R33's span of one, and a minted pattern is pre-wired with `rewards[age − di
 Neither scopes and neither ramps. **Diagnostic:** with a span-of-one reward, whether the estimate of an action
 that ran in an earlier frame moves at all — under R33 it must not.
 
-**The forward side of the code is the design, with two deliberate differences.** A connection is a lifetime total on
-the neuron, strengthened on observation, never weakened, never collapsed; the estimate is the exact running mean; the
-default is wired at birth at strength 1; the walk wires the next untried action on a negative mean; covered ages are
-silenced; and the vote at the base normalizes each voter to one unit per dimension and distance, events winning by
-share and actions by the share-weighted mean estimate, with no level anywhere in it. All of that is D20, R31, R35, R36
-and R37 as written. What differs is that the code wires every level's connections to the base set instead of the level
-below its own (D17), and so needs no expansion (R27, R30), and that it shapes no reward (above).
+**The forward side of the code is the design, with four deliberate differences.** A connection is a lifetime
+total on the neuron, strengthened on observation, never weakened, never collapsed; the estimate is the exact running
+mean; the walk wires the next untried action on a negative mean; covered ages are silenced; and the vote at the base
+normalizes each voter to one unit per dimension and distance, events winning by share and actions by the
+share-weighted mean estimate, with no level anywhere in it. All of that is D20, R31, R36 and R37 as written. What
+differs: the code wires the declared default at birth at strength 1, where R35 lets it run and be learned; action
+neurons vote for actions in the code, where R35 lets only events choose; the code wires every level's connections to
+the base set instead of the level below its own (D17), and so needs no expansion (R27, R30); and it shapes no reward
+(above).
 [algorithm-implementation.md](algorithm-implementation.md) lists the changes.

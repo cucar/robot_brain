@@ -402,17 +402,19 @@ offset, with one activation dimension and a reach of 1:
 > situation and nothing else, forming from the frame after its mint on (R13); a base neuron's are the future of
 > the symbol over every situation it fires in. Either speaks only when nothing more specific covers it (D7).
 >
-> **A neuron's own kind is written one level down; the other kind joins apex to apex.** A pattern child is a
-> situation in the alphabet of its parent's level, so what follows it of its own kind — events after an event,
-> actions after an action — is recorded in that alphabet: the neurons of the level below its own that fire while
-> it is open, and for a base neuron, having no level below, the base's. A child therefore sees exactly the
-> firings the neurons it covers would have seen, over the situation its pattern names and at its own level's
-> reach, so silencing them under it loses nothing (D7); a base neuron's connections are the marginal over every
-> situation it fires in, and speak only where nothing covers it. **Across kinds no level is read**: an uncovered
-> event activation connects to the apex action that ran (R31), at whatever level that action stands, and an
-> uncovered action activation connects to the apex events that follow it the same way, so a level-8 event can
-> learn to name a level-5 action. Only the apex learns across kinds; a covered activation learns nothing of the
-> other kind (D7).
+> **A neuron's own kind is written one level down; the other kind joins apex to apex.** A pattern child is a situation
+> in the alphabet of its parent's level, so what follows it of its own kind — the events after an event — is recorded
+> in that alphabet: the neurons of the level below its own that fire while it is open, and for a base neuron, having
+> no level below, the base's. **An action neuron holds no connections of its own kind**: what actions follow an action
+> is a chunk, and the action hierarchy writes it as a pattern (D4). A child therefore sees exactly the firings the
+> neurons it covers would have seen, over the situation its pattern names and at its own level's reach, so silencing
+> them under it loses nothing (D7); a base neuron's connections are the marginal over every situation it fires in, and
+> speak only where nothing covers it. **Across kinds no level is read**: an uncovered event activation connects to the
+> apex action that ran (R31), at whatever level that action stands, and an uncovered action activation connects to the
+> apex events that follow it the same way, so a level-8 event can learn to name a level-5 action. Only the apex learns
+> across kinds; a covered activation learns nothing of the other kind (D7). **An event neuron therefore holds both
+> kinds and an action neuron holds events only**: an action neuron expects, and nothing about the next action is ever
+> read from one (R35).
 >
 > **The cut is on time alone.** Spatial components never enter it: a neighbor three positions to the right
 > arrives in the same frame as one three positions to the left, so both are in `O⁻`.
@@ -943,8 +945,9 @@ bids from a table that has already saved this frame, and nothing about its outco
 things:
 
 ```
-the forward neighbors   of its own kind, the neurons of the level below its own that fired this frame —
-                        its own, at the base; of the other kind, if it is uncovered, the apex          D17
+the connections         for an event neuron, the events of the level below its own that fired this frame
+                        — its own, at the base — and, if it is uncovered, the apex action; for an
+                        action neuron, if it is uncovered, the apex events                              D17
 the reward              any reward that arrived, for the action that ran this frame and for any earlier
                         frame the reward spans, at the distance each one names                     R33
 ```
@@ -1304,9 +1307,9 @@ structural test can see (R34).
 >
 > **A connection dies with either of its ends** — the neuron, or the action neuron. Nothing else removes one (R34).
 >
-> **A connection wired ahead of any exposure is created at strength 1 and estimate 0.** The bootstrap (R35) and the
-> walk (R37) create connections nothing has yet been seen to follow; each is created exactly as a first exposure at
-> neutral reward would create it, and from then on it is a connection like any other.
+> **A connection wired ahead of any exposure is created at strength 1 and estimate 0.** The walk (R37) is the one
+> thing that creates a connection nothing has yet been seen to follow; it is created exactly as a first exposure
+> at neutral reward would create it, and from then on it is a connection like any other.
 
 > **R32 — What is learned is what ran.** No inference is credited and nothing is in control: the action that
 > executed is the one every uncovered activation connects to and the one its reward lands on (R31), whether
@@ -1392,16 +1395,18 @@ structural test can see (R34).
 > why a covered neuron is silenced (D7) and its coverer speaks instead, and the only reason a base neuron's
 > marginal ever speaks is that nothing more specific was bought over it.
 >
-> **The asymmetry is in what is chosen, not in who holds the connections.** Every neuron holds action connections,
-> action neurons included, and any apex activation may select an action. Nothing selects an event: what the machine
-> expects to observe is an output (§13), never a choice.
+> **Only events choose.** An event neuron holds action connections (D17) and any apex event activation may select
+> an action. An action neuron holds none: what it did next is a chunk the action hierarchy writes as a pattern,
+> not a policy, and a voter that knows only the last action and not the situation is a habit. Nothing selects
+> an event: what the machine expects to observe is an output (§13), never a choice.
 >
-> **The bootstrap is a connection, not a fallback.** Every neuron is born holding the declared default action at
-> every forward offset it can vote at, at strength 1 and neutral estimate (R31), so there is no separate
-> no-history path. It is the
-> only action wired in advance; R37's walk supplies the rest, one at a time and only where the default has been
-> judged and found wanting. **An action dimension no inference reaches runs the declared default**, which can
-> only happen when nothing at all is on the apex.
+> **The default runs; it is not wired.** An action dimension no inference reaches runs the declared default
+> action. Nothing holds it in advance: when it runs it is the apex action of that frame, every uncovered
+> activation connects to it with its reward by the ordinary path (R31), and from then on it is an action like
+> any other. A neuron is born holding no action connection at all — a base neuron at cold start and a freshly
+> minted pattern alike say nothing about the next action until something has run under them, and what they
+> then hold is whatever was executed. R37's walk is the only thing that wires an action ahead of its running,
+> one at a time and only where the best known has been judged and found wanting.
 
 > **R36 — The inference decides.** An inference is one action connection read by one voter: it names an action
 > neuron of the level below the voter's own — its own, at the base (D17) — and carries a strength and an
@@ -1448,8 +1453,8 @@ structural test can see (R34).
 > how many exposures an estimate rests on**, so a sharp estimate on three exposures outranks a coarse one on
 > two hundred.
 >
-> **A covered neuron supplies nothing** (D7). A newly minted child therefore starts with no estimate but the
-> default's and explores.
+> **A covered neuron supplies nothing** (D7). A newly minted child therefore starts with no inference at all; the
+> other voters, or the default, decide until something has run under it, and it learns what ran (R35).
 
 > **R37 — Exploration.** The default policy resolves explore–exploit without randomness: **the action alphabet
 > is declared in order**, and **an action connection whose estimate turns negative wires the next action in that
@@ -1462,7 +1467,7 @@ structural test can see (R34).
 >
 > **A reward is signed, and zero is where everything starts.** The environment reports an action as good or bad
 > — strictly greater than zero or strictly less — and zero is neither. It is also the estimate every connection is
-> created at, the declared default's included, which is what makes the walk work: a connection at zero has not been
+> created at, which is what makes the walk work: a connection at zero has not been
 > judged, so it outranks anything negative and yields to anything positive.
 >
 > **The walk ends when the alphabet does.** Once a neuron holds a connection to every action in the channel at that
