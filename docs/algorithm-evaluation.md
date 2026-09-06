@@ -113,6 +113,17 @@ election stops buying the moment one does not pay. **Diagnostic:** bought bids p
 level per frame, against the halving T11 assumes. If levels stop thinning, D14's reach schedule is calibrated
 against an invariant that no longer holds, and the reach has to be derived from measured spacing instead.
 
+**Far placement is lossy, and the loss compounds with height.** An offset is kept to one significant binary
+digit (D15), so a neighbor 11 frames back is written as 8 and expanded to 8 (R27). Each level down adds its own
+group's slack, so a high unit places the base symbols of its farthest neighbors only to within the sum of the
+groups along the path — its forward half can say what comes next but not, above a few levels, exactly when.
+The file says so (§2); what it does not say is how deep the stack stays useful before its far placements are
+too coarse for the prediction (§13) or a motor program (R30) to act on, which is a cap on useful depth that
+nothing declares. **Diagnostic:** per level, the placement error of expanded base symbols against where they
+fired, split by offset group; and the level above which the forward half's base placements no longer win a
+dimension. If that level is low, the coarse groups are earning their reach on the backward side and losing it
+on the forward, and a finer offset alphabet above some level is the fallback.
+
 **Siblings agree until one is bought alone.** Two children bought at one coordinate see the same forward
 neighbors, so their connections agree until the first activation where one is bought and the other is not (D21). Two
 patterns always bought together never diverge at their own level; the level above is expected to merge them

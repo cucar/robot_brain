@@ -151,8 +151,11 @@ assumes for anything the file does not state.
 
 # 2. The objective: it is all one file
 
-Write every frame observed so far as a single file a decoder could read back to reproduce each of them
-exactly. **The file is the run.** There is no window and no horizon: nothing is dropped from the objective
+Write every frame observed so far as a single file a decoder could read back to reproduce each of them —
+every symbol in its dimension, placed to the resolution the offset alphabet keeps (D15). **The compression is
+lossy, and the loss is in placement only**: the file never misstates which symbol fired or where in the
+alphabet, and it places a far neighbor to within the power of two its offset is rounded to. **The file is the
+run.** There is no window and no horizon: nothing is dropped from the objective
 because it happened long ago, and everything the machine's structure is worth is measured against the whole of
 what it has seen.
 
@@ -339,7 +342,10 @@ offset, with one activation dimension and a reach of 1:
 > `reach(k) = 2^k`, so `G = k`.
 >
 > **Near offsets come out exact and distant ones are named coarsely. Nothing is cut off; precision decays
-> instead.**
+> instead — and this is where the file is lossy.** An offset written as `2^g` stands for any distance in
+> `[2^g, 2^(g+1))`. The true distance is not in the file, the decoder places the neighbor at `2^g` (R27), and
+> nothing charges the difference: the price counts symbols named and absent (D10), never where a present one
+> landed. **What the file guarantees is the symbol, its dimension, and its place to within its offset's group.**
 >
 > **A coarse offset may carry more than one neighbor**, since it spans a range and several activations of one
 > dimension can fall inside it. A count is per `(neuron, offset)` (D23) and `|e|` counts every neighbor named
@@ -1182,6 +1188,13 @@ by what it is estimated to earn (R36).
 > A's connections name  (C, +2)  expand it:
 >   C's line is {(p, 0), (q, −1)}                → p's dimension at f+2, q's dimension at f+1
 > ```
+> **A coarse offset expands to its rounded coordinate.** A neighbor named at `sign · 2^g` is placed at exactly
+> that distance whatever distance in the group it fired at, and several neighbors at one coarse offset (D15)
+> are each placed there. **The rounding composes.** Each step down adds its own group's slack, so a level-`k`
+> unit places the base symbols of its farthest neighbors to within the sum of the groups along the path: the
+> higher the unit, the coarser its far placements, and a forward half deep in the stack places its base symbols
+> only roughly. That is the loss the file carries (§2), and expansion reports it faithfully rather than hiding it.
+>
 > **This is the same expansion that recovers the run from the file** (D11) and that turns a selected action
 > pattern into a program (R30). There is one expansion in the design, and it reads dictionary lines only.
 >
