@@ -28,7 +28,8 @@ out over settles which channels it can be adjacent to.
 **On D5 — many activations per coordinate.** The base bound is the input's: one symbol per channel at each point
 of its layout. Above the base there is no bound at all, because a neuron covers its activation with a set of
 patterns and each of them may promote a child (R18). What replaced the bound is not a weaker version of it but
-a different kind of rule — the only exclusivity left is credit (D7), and credit is about paying, not naming.
+a different kind of rule — the only exclusivity left is credit (R18, R23), and credit is about paying, not
+naming.
 
 **On D5 — the two halves are simultaneous, not sequential.** An action is not a reply appended to a frame.
 Reading it as one puts the action a frame later than it is and breaks every offset measured across the two

@@ -1,46 +1,17 @@
 # Universal Compression with Actions and Rewards (UCAR)
 
-UCAR is a machine that compresses what it observes by building a hierarchical dictionary of patterns, and
-learns what to do by observing rewards. It is defined by two alphabets, like a Turing machine — the **event
-alphabet** it can observe and the **action alphabet** it can execute — and above each it forms symbols of its
+UCAR is the design for a machine that compresses what it observes by building a hierarchical dictionary of patterns, and
+learns what to do by observing rewards. It is defined by two alphabets, like a Turing machine: the **event
+alphabet** it can observe and the **action alphabet** it can execute. Above each, it forms symbols of its
 own. Every symbol, base or learned, event or action, is a **neuron**.
 
-It has two inputs and two outputs. In: the events observed and the rewards earned. Out: the events it expects
+It has two inputs and two outputs. Inputs: the events observed and the rewards earned. Outputs: the events it expects
 next and the actions it executes. Both outputs are written in the base alphabets.
 
 This document is the specification, and nothing else. **D** is a definition and **R** a rule; together they
 are the machine. Theorems, worked examples and all commentary on why the design is shaped this way live in
 [algorithm-remarks.md](algorithm-remarks.md), keyed by the same D and R numbers; risks, diagnostics and open
 questions live in [algorithm-evaluation.md](algorithm-evaluation.md).
-
-**How it is ordered.** Section 2 states the objective everything else is derived from, so it comes before the
-mechanisms that optimize it, and section 3 maps one frame end to end so every rule below has a place to sit.
-Part I is a neuron on its own evidence, Part II the machine over a level, Part III the action side. Nothing is
-stated twice: where two sections need the same fact, one states it and the other cites it.
-
-**Notation.**
-
-```
-f, g, h    frame numbers
-δ          a raw coordinate difference, before D15 resolves it to an offset
-
-reach(k)   the reach at level k, derived                                        D14
-reach_t    the time dimension's reach at the neuron's own level — the window    D14
-W          the frame buffer's depth, reach_t + 1 — 2 at the base                D14
-
-O          the neighborhood one activation observed, both halves                    D13
-O⁻         its backward half, complete the frame the neuron fires              D19
-C          a candidate neighborhood, the collapse over its seed's population   R14
-nbhd(e)    a pattern's neighborhood, |e| its size — backward neighbors only     D18
-covers     the neurons a neighborhood names that fired                         D16
-price      1 + the neurons it names that did not                               D16
-residual   the neurons of an activation no pattern covers                           D16
-n          the size of a collapse population                                   R4
-
-L          the file length                                                     D12
-D          the highest level the stack currently holds                         R17, R24
-H          the history size                                                    D24
-```
 
 ---
 
@@ -60,7 +31,7 @@ H          the history size                                                    D
 > over* its activation dimensions and *reports* its neuron dimensions at each point of that layout.
 
 > **D2 — Type and instance.** A **neuron is a type** and an **activation is an instance of it**, and each
-> carries the dimensions of its own kind (D1).
+> carries the dimensions of its own kind.
 > ```
 > neuron coordinate       (dim_id, bucket_id)           structural and defining
 > activation coordinate   frame, and one position per   fleeting; two activations of one neuron
@@ -77,69 +48,45 @@ H          the history size                                                    D
 > enumerable index over the whole run, which is what lets `(dimension, offset)` name a slot at any level.
 
 > **D4 — Adjacency.** Two activations are neighbors when they are **within reach in every activation
-> dimension they share** (D1, D14). It is a conjunction, so a neighborhood is a box.
->
-> **Nothing declares which channels may see which**: what a channel is laid out over settles it. Two channels
-> sharing only time are related in time alone, and a channel whose one activation dimension is time — a stream
-> of characters — stands in no spatial relation to anything.
->
+> dimension they share**. This includes time and spatial dimensions both. The neighborhood is a spatio-temporal box. 
 > Neighbors are always at the neuron's own level, since a neighborhood is written over the symbols that level
-> offers, **and always of the neuron's own kind**: an event's neighbors are events and an action's are actions,
-> whatever else fires in the same column (D5). The two kinds meet nowhere in a neighborhood; they meet only in
-> the connections across kinds (D17). **The rule is identical at every level**; what differs is the reach (D14).
+> offers, **and always of the neuron's own kind**: an event's neighbors are events and an action's neighbors are actions.
 
-## 1.2 Firing
+## 1.2 Activations
 
-Every frame, each event dimension quantizes what was observed — if anything was — and each action dimension
-carries the action executing in that same frame — if one is.
+Every frame, each event dimension quantizes what was observed (if anything) and each action dimension
+carries the action executing in that same frame (if there is one).
 
-> **D5 — Firing.** A neuron fires only when something happens: an event neuron input, or an action neuron
+> **D5 — Activation.** A neuron is activated (fires) only when something happens: an event neuron input, or an action neuron
 > output when its action is executed.
 >
-> **At the base, at most one neuron fires per dimension per position in a frame.** The input reports one symbol
+> **A neuron may fire many times in one frame**, and those activations are instances of one type.
+>
+> **At the base level, at most one neuron fires per dimension per position in a frame.** The input reports one symbol
 > per channel at each point of its layout, and a dimension with nothing to report there is silent. That bound
 > is a property of the input, not a rule the machine imposes.
 >
-> **Above the base it does not hold.** A neuron covers one activation with a *set* of patterns (R18), so several of
-> its children may be promoted at one coordinate, and a `(dimension, position)` at a pattern level can carry
-> several activations in a frame. D15 already admits several neighbors at one offset; this is the same situation,
-> and `|e|` counts them the same way.
+> **Above the base level, multiple neurons can fire for the same dimension and position.** A neuron can choose to cover with
+> multiple patterns (R18), so several of its children may be active at one coordinate, since they inherit coordinates. 
 >
-> **A neuron may fire many times in one frame**, once per position, and those activations are instances of one
-> type (D2).
->
-> **A frame's two halves are simultaneous.** What is observed and what is executed occupy the same column of
-> the grid, so an action runs alongside that frame's events and both are in hand together (§14).
-
-> **D6 — An activation stays open, and what it does while open.** An activation at frame `f` remains open through
-> `f + reach_t`: what follows it fires one frame at a time through that frame (D17), and an action's reward
-> arrives in the frame the action runs in (R29), so nothing lands after the last of them.
->
-> **Nothing the neuron decides waits for that.** Its backward half is complete the frame it fires (D19), and every
-> structural act — which patterns cover it, which are offered, what is added, what retires — happens then and there
-> (R13). **An activation is open for two reasons, and neither is a decision about structure.** It **connects**: each
-> neuron of the level its connections are written in (D17) that fires while it is open strengthens its neuron's
-> connection to it at the offset its age names, and the rewards that follow the actions among them move the estimates
-> on those connections (§10.3). And while it stands on the apex (R26) it **speaks**: it expects from its neuron's
-> connections (§13) and votes on the next action from the same connections (§16).
->
-> **The machine holds the open activation.** The arriving neighbors are its own frame data on the way in, and
-> it delivers them to the neuron once per frame (§10.3).
+> **D6 — An activation stays open.** An activation at frame `f` stays open through `f + reach_t`, the reach in
+> time at its neuron's own level (D14). Three things reach it over that span, one frame at a time:
+> ```
+> its own kind     the neurons one level down that fire while it is open                     D17
+> the other kind   the apex, and only while the activation is uncovered                      D17
+> the rewards      for the actions among those, each in the frame its own action runs in     R29
+> ```
+> The machine holds it open, not the neuron.
 >
 > **Age is per activation, and a neuron carries several ages at once.** An activation's age is the frames
-> elapsed since it fired, `0` through `reach_t`, and it is the machine's counter. Nothing distinguishes
-> activations but age: a new activation is the one whose age is 0. **Age is read, not just counted** — it is
-> the offset at which the activation strengthens connections and reads what comes next (R31, R36).
+> elapsed since it fired, `0` through `reach_t`; a new activation is the one at age 0. **Age is read, not just
+> counted** — it is the offset at which the activation strengthens connections and reads what comes next
+> (R31, R36).
 
-> **D7 — Exclusion is per level, and about coverage.** A neuron an accepted bid covers is silenced in the
-> machine: it does not stand in the file, it does not predict and it does not vote (R26). That is the whole of
-> inhibition, and it bounds nothing about how many neurons fire at a coordinate.
->
-> **The design's only exclusivity is credit, and it appears twice.** At the election, every neuron the accepted
-> bids name is paid for once, credited to exactly one bid (R23); inside a neuron, every present neighbor of an
-> activation is credited to exactly one pattern of its cover (R18). Both are partitions of credit, and **neither is
-> a limit on naming**: two accepted bids may both name one neuron and both expand to it. The file pays for it
-> once, and the second bid is neither credited nor charged for it (R21).
+> **D7 — A covered neuron is silenced.** A neuron an accepted bid covers does not stand in the file, does not
+> predict events and does not infer actions. **Silenced is not stopped.** A neuron is covered only after it has
+> fired (R26), and its activation goes on strengthening its own kind's connections exactly as an uncovered one
+> does (§10.3). That is the whole of inhibition in the design.
 
 There is no rest value. A dimension where nothing happens supplies no symbol, and silence is what the decoder
 assumes for anything the file does not state.
@@ -170,8 +117,9 @@ what it has seen.
 > stands, exactly as a price is (R2), so no past decision has to be honored and nothing is retained that the
 > machine could not expand.
 >
-> **Nothing ever materializes it.** The coverage set spans `reach(k) + 1` frames (D26) and a neuron's history
-> is `H` activations deep (D24), so no pass anywhere walks the run.
+> **Nothing ever materializes it.** The coverage set spans `reach(k) + 1` frames, `reach(k)` being the reach at
+> level `k` (D14, D26), and a neuron's history is `H` activations deep — `H` the history size, the last activations
+> a neuron keeps (D24). No pass anywhere walks the run.
 >
 > **The file holds nothing about the future.** A neuron's connections — what followed its activations — are in
 > no dictionary line and not in the history (D17). What the machine expects to see next is its output
@@ -211,8 +159,9 @@ where the file is (R12).
 > longer or shorter for holding one neighborhood — which is finite however long the run is, and local: a count
 > of neighbors over the activations that neighborhood covers (D16).
 >
-> **What one neighborhood is worth over one activation.** It accounts for the neurons it names that fired, at the
-> cost of its own line and the neurons it names that did not:
+> **What one neighborhood is worth over one activation.** Write `O` for what one activation observed (D13). A
+> neighborhood accounts for the neurons it names that fired — its `covers` — at the cost of its own line and the
+> neurons it names that did not — its `price` (D16):
 > ```
 > margin(e, O)  =  covers  −  price  =  |O ∩ e|  −  ( 1 + |e \ O| )
 > ```
@@ -227,7 +176,8 @@ where the file is (R12).
 > two numbers differ, and are meant to.** Neither is ever handed to the other: the neuron is not told what the
 > machine paid for, and the machine never reads what the neuron priced.
 >
-> **Every term is measured now** (R2): `nbhd(e)` is wherever re-centering has put it, and what it covers
+> **Every term is measured now** (R2): `nbhd(e)`, the neighborhood pattern `e` names, is wherever re-centering has
+> put it, and what it covers
 > follows. **§8's test is the derivative of `L` with respect to holding one pattern**, read over the activations
 > the neuron holds.
 
@@ -283,7 +233,7 @@ only when a unit on the apex is expanded.
 > **D13 — Neighborhood.** An activation observes the active neurons that adjacency admits (D4) — behind and beside it,
 > the neurons of its own level; ahead of it, what its connections are written over (D17): its own kind one level down,
 > the other kind on the apex — each tagged with its **offset** — the difference of activation coordinates, one
-> component per activation dimension the two share (D1, D2):
+> component per activation dimension the two share (D1, D2). That set, both halves, is the activation's `O`:
 > ```
 > O = { (p, −4), (a, −3), (r, −2), (i, −1), (␣, +1) }        a stream:  one component, time
 > O = { (k, 0, −1, 0), (k, 0, +1, 0), (m, 0, 0, −2) }        an image:  three, time and two axes
@@ -325,7 +275,8 @@ offset, with one activation dimension and a reach of 1:
 > ```
 > **No level declares anything, and there is no rate to choose.**
 >
-> In time, `W = reach_t + 1` is the depth of the frame buffer — 2 at the base. The buffer is a sliding window:
+> `reach_t` is this reach in the time dimension, at the neuron's own level — its window. In time,
+> `W = reach_t + 1` is the depth of the frame buffer — 2 at the base. The buffer is a sliding window:
 > an activation sits at its newest edge when it fires, with `reach_t` frames of context behind it, and its
 > backward half is read there and never again.
 >
@@ -338,6 +289,7 @@ offset, with one activation dimension and a reach of 1:
 > offset(0)   =   0
 > offset(δ)   =   sign(δ) · 2^g · ⌊ |δ| / 2^g ⌋          δ ≠ 0,  g = ⌊ log_2 |δ| ⌋
 > ```
+> `δ` is the raw coordinate difference this rule resolves to an offset.
 > **Offset zero is the center and is given, not computed** — it is the only case `log_2 |δ|` does not reach.
 > Every other `δ` is a nonzero integer difference of activation coordinates (D2), so `|δ| ≥ 1` and `g ≥ 0`
 > without a floor of its own, and above `g = 0` the multiplier is always 1. The reachable offsets are
@@ -729,6 +681,7 @@ the design.
 > population   =  the activations whose residual holds the seed
 > C⁻           =  the collapse (R4) over that population, backward, per slot
 > ```
+> `C` is the candidate neighborhood so built, `C⁻` its backward half — which is all of it (D18).
 > The seed is in every activation of the population, so `C` names it once the population holds two activations; over
 > one activation `2 · 1 > 2` fails and the collapse names nothing, so **nothing is ever built on a single
 > occurrence**. Every other neighbor `C` names is present, and in the residual, in more than half of the
