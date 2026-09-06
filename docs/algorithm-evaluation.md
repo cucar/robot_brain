@@ -158,8 +158,17 @@ over `H`. If the outer reaches stay empty at every `H`, the reach is bigger than
 evidence is not what is limiting it. Sweep depth against `H` in the same runs — T13 makes the two move
 together, and conflating them is easy.
 
-**Cold-start churn.** Early tests are decided by very little evidence. Re-centering is the main defense, but
-measure churn over the first thousand frames and again in steady state.
+**Boundary flicker on stationary input.** R4 holds at equality, which stops a slot flip-flopping when the same
+population is re-read, but the ring is a FIFO and its population moves at every bill. A slot whose count sits
+at the boundary follows the activations entering and leaving, naming it raises the pattern's price wherever it
+is absent, that can drop the pattern out of a cover, and the smaller population re-decides every other slot.
+The claim is that on stationary input this is flicker around a fixed point, confined to boundary slots, with an
+amplitude that does not grow with run length — a claim about noise, which nothing in the rules proves. **This is
+the standing test.** Per pattern per bill: slot flips against the slot's distance from the boundary,
+`2 · count − n − 1`, and cover changes per bill for the cascade. Expected: flips concentrated within a step or
+two of the boundary, at a rate that settles once the ring is full and does not drift. A flip rate that rises with
+run length, or flips far from the boundary, is the churn engine and a bug. Early tests are also decided by very
+little evidence, so read the same numbers over the first thousand frames and again in steady state.
 
 **One-shot builds.** A seed present in a handful of activations gives a population of that handful, and the
 collapse over a small population names most of what it holds. Re-centering largely defuses it — the pattern is

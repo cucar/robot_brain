@@ -390,8 +390,11 @@ could grow at no gain.
 **On R4 — why the slot holds at equality.** With the line charged the boundary is `2 · count = n + 1`, and at
 that boundary naming and not naming cost the same. A rule that dropped the slot there could re-add it next
 bill when one activation moved and drop it again the bill after, walking a plateau forever without ever lowering
-the file. Holding what it had makes a plateau a fixed point, so a pattern that has stopped improving stops
-moving.
+the file. Holding what it had makes a plateau a fixed point of the collapse over a fixed history, so a pattern
+that has stopped improving stops moving. The ring is a fixed history only between bills: on a live one the
+fixed point is tracked rather than reached, and a slot whose count sits at the boundary moves with the traffic
+through the ring (R4). That is an estimator with a hard threshold answering sampling noise, and how much it
+moves on stationary input is the evaluation's standing test, not a theorem.
 
 **On R4 — the third case is why abstention exists here and nowhere else.** An activation is never allowed to sit
 out a question the design is asking it; this one it has already answered, for that slot, by having the

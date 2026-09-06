@@ -529,7 +529,12 @@ The collapse is the only operation anywhere that decides what a neighborhood nam
 > states it wrongly in the other `n − count(p)`, and costs one in the dictionary line (D10), so naming it
 > shortens the file by `2 · count(p) − n − 1` and it is taken when that is positive. **At `2 · count(p) = n + 1`
 > the slot keeps what it had**: a pattern that names `p` keeps it, one that does not leaves it out, and a
-> candidate, which has nothing, leaves it out. Nothing is divided, and nothing can flip-flop at the boundary.
+> candidate, which has nothing, leaves it out. Nothing is divided, and over a fixed population nothing flip-flops
+> at the boundary. **The ring is not fixed**: an activation enters and one leaves at every bill, so a slot whose
+> count sits at the boundary follows them, and naming it raises the pattern's price wherever it is absent, which
+> can cost the pattern a cover and re-decide every other slot on the smaller population. Each step is the right
+> response to the evidence, and what it adds up to on stationary input is flicker around a fixed point, confined
+> to slots at the boundary — an amount that is measured, not proved (algorithm-evaluation.md).
 >
 > **Connections are never collapsed.** No line is paid for one (D9), so nothing has to be made into a set: a
 > connection keeps how often its neuron followed, and for an action what it earned (R31), and prediction and
@@ -1319,8 +1324,10 @@ structural test can see (R34).
 > the credit is exact. One that does not names nothing, and the reward spreads over every channel and the
 > whole window: the shares landing on a channel or a distance that had nothing to do with the outcome are
 > noise around zero and average out over exposures, while the shares landing on the ones that did accumulate.
-> **No structure is priced on either** (R34), so a coarse reward costs accuracy in the estimate and nothing
-> else.
+> **No structure is priced on either** (R34), so a coarse reward costs accuracy in the estimate and nothing in
+> the file. What it does move is the walk: an unscoped reward carries its sign into every estimate it reaches, so
+> the sign test R37 reads shifts the same way for all of them, and the walk runs while the world is going badly
+> overall and rests while it is going well. That is the meaning of a signed reward, and it is intended.
 
 > **R34 — Two objectives, meeting at one place.** Everything structural is priced in file length; reward prices
 > nothing structural and cannot. The machine runs **two** objectives: compression, which decides what structure
