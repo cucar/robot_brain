@@ -23,13 +23,13 @@ history:
   ring:       FIFO<firing>                  // capacity H; arrival order = eviction order
   firing:     { position,
                 backward:  set of (neuron, offset ≤ 0),
-                forward:   set of (neuron, offset > 0) as landed, and beside each action the reward,
                 cover:     the patterns covering it, held (R6),
                 assignment: which pattern of the cover holds each present backward neighbor }
 
-// the forward record — a total over the ring; recomputable, in no line of the file
-forward:      Map<(neuron, offset > 0), count>                       // event slots; expected iff 2·count > n
-actions:      Map<(action_neuron, offset > 0), { strength, estimate }>  // action slots; born with the default
+// the forward record — lifetime totals; in no line of the file, and not recomputable from anything
+forward:      Map<(neuron, offset > 0), strength>                       // event slots; never evicted
+actions:      Map<(action_neuron, offset > 0), { strength, estimate }>  // action slots; born with the default at
+                                                                        // strength 1, estimate 0
 ```
 
 **What must always hold.** Each is checkable in a test by recomputing from the ring and comparing against the
@@ -40,8 +40,8 @@ incrementally maintained state:
   charged and equality held.
 - Every firing's `cover` is one R18 could have produced against some past table, and no re-derivation against
   the current table is strictly cheaper than it (R6).
-- `forward` and `actions` equal a from-scratch sum over the ring's forward halves. A slot no firing in the
-  ring still holds is absent.
+- `forward` and `actions` only ever grow: no strength falls, and a slot leaves only with the death of either
+  of its ends (R31). An action slot's estimate is the mean of the shares it has received, over its strength.
 - Every pass of the bill leaves the neuron's file (T6's `L_N`) no longer than it found it.
 
 **Not yet designed.** How the residual per firing and the seed tally per bill are kept so R14 is one pass
@@ -78,8 +78,8 @@ as a separate reply; either way the pattern is in the table from the next frame 
 
 **`process actions` is age-blind by construction.** It walks every open activation the machine holds and hands
 each what landed. A neuron with reach `r` is therefore reached `r + 1` times per activation on the forward
-side — once per frame it is open — and each visit is a write into one firing plus, on the apex, a read of the
-record. Reads move nothing (T8).
+side — once per frame it is open — and each visit is a write into the record plus, on the apex, a read of it.
+Reads move nothing (T8).
 
 **Coverage inhibits on the machine side, not in the neuron** (D7). The machine knows which activations the
 coverage set holds; it skips their speech and still delivers their forward neighbors and rewards.
@@ -90,8 +90,8 @@ R19's five passes, in order. All prices are D16's fit over `O⁻`; all sums run 
 
 **`cover_and_fold(O)`** — pass 1. R18 steps 1 and 2 over the current table: the greedy cover by ratio, the
 assignment by first-namer. Push the firing with its cover and assignment; if the ring was full, pop the oldest
-and subtract its assigned neighbors from its cover's counts and its landed forward half from the record.
-Add the new firing's assigned neighbors to its cover's counts.
+and subtract its contribution from its cover's counts (R3). The record is untouched. Add the new firing's
+contribution to its cover's counts.
 
 **`recenter()`** — pass 2. Every pattern whose counts moved re-collapses per slot with the line charged and
 equality held (R4). Every firing whose table moved under it re-derives its cover and keeps the cheaper (R6).
@@ -111,33 +111,49 @@ less the candidate just requested. Each bid is the child id and the neighborhood
 
 **`register_child(id)`** — on the reply. Bind the pending pattern to its child id. Then every firing takes the
 cheapest of its held cover, its held cover with the newcomer appended, and its cover re-derived (R6), and the
-newcomer's counts are whatever those covers assign it.
+newcomer's counts are whatever those covers assign it. The machine, for its part, opens an activation for the
+child at the parent's coordinate at age 0 — accrual only: `process actions` reaches it, nothing else does
+(R13).
 
-**`accrue(age, arrivals, reward)`** — the forward call. Write the arrivals into the firing at offset `age`,
-the reward beside the action it names, and add both to the record. If on the apex, return the record's slots
-at offsets `age + 1` onward: event slots that clear the majority with their counts, action slots with strength
-and estimate.
+**`accrue(age, arrivals, reward)`** — the forward call. For each arrival, increment the record's slot at
+`(arrival, age)`, creating it at strength 1; fold each reward share into the estimate of the action slot it
+names, weighted `1 / strength`; if an action slot's estimate is now negative, create the next untried action
+of that channel at that offset at strength 1 and estimate 0 (R37). Nothing is written into the firing. If on
+the apex, return the record's slots at offsets `age + 1` onward: event slots with their strengths, action
+slots with strength and estimate.
 
 ## The forward side — the code against the design
 
 The temporal side of the current brain (`neuron.rs`, `thalamus.rs`, `brain.rs`) already has the shape D20, R31
 and R36 describe. What matches, and what has to change:
 
-**Already the design.**
+**Already the design.** The forward record in the spec is written to match this code, and these are the
+places it is read from.
 
 - Connections live on the neuron per distance, and a neuron active at age `k` learns a distance-`k` connection
   toward each current active (`learn_temporal_connections`), so every level learns its own record from its own
-  open activations.
-- `vote(age)` reads `temporal_connections[age + 1]`, which is R36's offset.
+  open activations. That is R31's write, and §10.3.
+- A connection is created at strength 1 or incremented, and never decremented or deleted except with a neuron
+  (`strengthen_or_create_connection`, `delete_patterns`). Nothing per firing exists forward and nothing is
+  subtracted on eviction. That is R31's "nothing leaves" and D20's record outside the ring.
+- Strength is a count and the reward is the exact mean via `alpha = 1 / strength` (`strengthen_connection`),
+  which is R31's estimate and R34's plain average. A negative mean wires the first action in the channel's
+  declared order that has no connection at that distance, at strength 1 and reward 0
+  (`upsert_connection` → `find_alternative_action`), which is R37.
+- Every neuron is born with a connection to each channel's default action at every voting distance, strength
+  1 and reward 0 (`Column::create_neurons`), which is R35's bootstrap.
+- `vote(age)` reads `temporal_connections[age + 1]`, which is R36's offset, and returns every connection with
+  strength above zero — the whole distribution, no majority. That is R4's "forward, nothing is collapsed".
 - Ages that activated a child pattern are suppressed and do not vote (`get_suppressed_ages`), which is D7's
   silencing; they still learn.
-- Strength is a count and the reward is the exact mean via `1 / strength` (`strengthen_connection`), which is
-  R31. A negative mean wires the next untried action in the channel at neutral reward
-  (`upsert_connection` → `find_alternative_action`), which is R37.
-- `aggregate_votes` normalizes each voter to one unit per `(dimension, distance)` split by strength, events win
-  by share and actions by reward, and level appears nowhere in it. That is §13 and R36's base-level vote.
+- `aggregate_votes` normalizes each voter to one unit per `(dimension, distance)` split by strength;
+  `determine_dimension_winners` takes events by share of the dimension's total and actions by the
+  share-weighted mean of the voters' rewards, ties to larger strength then lower id, and level appears nowhere
+  in it. That is §13 and R36's base-level vote. The `Nb` consensus mode and the supervised `Brain.learn`
+  wiring are not in the design and go: MNIST runs on three frames with ordinary rewards (below), and nothing
+  wires a voter to an action but an action running.
 
-**Deltas.**
+**Deltas.** Two are deliberate differences the design keeps; the rest are the old error-driven path.
 
 1. **Targets are the voter's own level, not the base.** `process_temporal_levels` hands every level the
    level-0 active set as `sensory_neurons`, and `aggregate_votes` panics on a pattern-neuron target. Each level
@@ -146,26 +162,27 @@ and R36 describe. What matches, and what has to change:
    target is a pattern neuron expands through dictionary lines to base symbols at composed offsets (R27), each
    carrying the vote's strength and reward unchanged; symbols landing at or before the current frame are
    dropped (R28). The expansion exists for spatial patterns already and is reused. `aggregate_votes` then runs
-   on base targets only, as it does today.
-3. **A majority over a ring, not weights that never leave.** `temporal_connections` keeps every target that
-   ever followed and never weakens one. The record becomes a total over the ring: eviction subtracts the
-   evicted firing's forward half, a slot's strength is the number of ring firings holding it, an event slot is
-   expected only when `2·count > n` (R4), and an action slot's estimate is the mean over the exposures the
-   ring holds, recomputed exactly on eviction rather than smoothed. Slots the bootstrap or the walk wired stand
-   at strength 0 until tried (R31). This is the change that lets a neuron answer a changed world within `H` of
-   its own firings.
-4. **One record, one firing.** The forward half is stored per firing (R8) and the record is its sum; today the
-   connection map is the only copy and nothing per firing exists to subtract.
-5. **Rewards land beside the neighbor, shaped by R33.** Today every open age is handed the frame's reward whole
-   and unscoped (`decorate_temporal_actives`), and a second path attributes `rewards[age − distance]`. Both go.
-   A reward names channels and a span, shares fall linearly over the span, and each share is written beside the
-   action neighbor at the offset the distance names, in every open activation's firing.
-6. **Base neurons vote.** They already do in the code; the design keeps it. Nothing to change, and the risk it
+   on base targets only, as it does today. From that point on, the resolution at the base is the code's.
+3. **Rewards are scoped and shaped by R33; the fold is unchanged.** Today the reward given with a frame is
+   attached whole to every action active in that frame, on every open age (`decorate_temporal_actives`), and a
+   minted pattern is pre-wired with `rewards[age − distance]` on a second path. Both go. A reward names channels
+   and a span, shares fall linearly over the span, and each share is folded into the action slot at the offset
+   the distance names, in every open activation's neuron, at `1 / strength` exactly as today. The current
+   harness's whole-reward-in-the-frame-the-action-ran is R33's span-of-one case and keeps working unchanged.
+4. **Base neurons vote.** They already do in the code; the design keeps it. Nothing to change, and the risk it
    carries is in [algorithm-evaluation.md](algorithm-evaluation.md).
-7. **Patterns are minted at the bill, never on a missed vote.** `recognize_temporal_patterns`,
+5. **Patterns are minted at the bill, never on a missed vote.** `recognize_temporal_patterns`,
    `correct_errors`, `evaluate_vote_error` and the error-pattern allocation are the old error-driven path and
    are retired, not ported. Prediction mints nothing (D9). The temporal pattern hierarchy is the same bill as
    the spatial one at `reach_t > 1`, which is the reason for one stack (R25).
+6. **A minted child starts with an empty record, because it is minted at age 0.** The code mints on a missed
+   vote, at whatever age the miss was seen, so the pattern is born already behind: the frames between the
+   parent's firing and the miss have gone by, and `allocate_temporal_pattern_neuron` backfills them by
+   pre-wiring the new pattern to the actuals that followed its parent, with those frames' rewards, at strength
+   1. The design mints at the bill, at age 0, on justification (R14, R15), so a child is born with nothing
+   behind it to backfill. It is born empty, is given an activation at the parent's coordinate in the mint
+   frame, accrues from the next frame on, and keeps accruing after the parent's own activation has closed,
+   since children outlive their parents (R13, R17). The only thing wired at birth is the default (R35).
 
 ## The build plan
 
@@ -193,14 +210,14 @@ past this phase if the answer is no.
 
 ### Stage 2 — the forward side
 
-The forward record on every neuron, the forward call, expansion before resolution, and the base-level vote —
-deltas 1 through 4 above. Gate: held-out prediction on sequence data, and the same exposure curves on the
-temporal dictionaries. The temporal pattern hierarchy is Stage 1's bill run at `reach_t > 1` and is not a
-separate mechanism.
+The forward record on every neuron, the forward call, expansion before resolution, and the base-level vote — deltas 1
+and 2 above; the record itself is already the code's. Gate: held-out prediction on sequence data, and the same
+exposure curves on the temporal dictionaries. The temporal pattern hierarchy is Stage 1's bill run at `reach_t > 1`
+and is not a separate mechanism.
 
 ### Stage 3 — actions and rewards
 
-Action dimensions in the channels; the default as a slot on every neuron; R33's shaped rewards (delta 5);
+Action dimensions in the channels; the default as a slot on every neuron; R33's shaped rewards (delta 3);
 exploration on a negative estimate; the standing inference and top-down expansion of a selected higher action
 (R30, R36). Gate: a closed-loop environment in which a learned action sequence answers a learned event
 sequence.
@@ -276,8 +293,9 @@ forward-side deltas are the numbered list in the section above and land in Stage
 
 **Phase 3 — the readout gate.**
 
-19. **Watch for the one expected regression:** a child's own record starts empty at its mint (D17), so a newly
-    bought child expects nothing and infers the default until its ring fills.
+19. **Watch for the one expected regression:** a child's own record starts empty at its mint (D17) and holds
+    one window's worth by its first purchase (R13), so a newly bought child expects from very little and infers
+    the default until it has been bought enough times to hold more.
 
 ## The MNIST frame protocol
 
@@ -294,10 +312,10 @@ f         events only          base event neurons fire, bill, and offer (R18, R1
                                for f + 1 (R36)
 f + 1     the action only      the digit call executes and its neuron fires; events are
                                silent. Process actions runs and every activation open here
-                               writes the action into its firing at its own age (R31)
+                               increments its neuron's slot for the action at its own age (R31)
 f + 2     the reward only      the label arrives as input, not as a symbol (§15), and is
-                               written beside the action in every open firing, from where it
-                               enters the neuron's estimate (R31, R33). Nothing fires.
+                               folded into that action slot's estimate in every open
+                               activation's neuron (R31, R33). Nothing fires.
 f + 3     next example         = the next example's f
 ```
 

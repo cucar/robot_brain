@@ -37,11 +37,10 @@ sides.
 **On D6 — ages in a single neuron.** A neuron active at frames 10 and 12 is at ages 0 and 2 in frame 10 + 2,
 then 1 and 3 in the next, and so on.
 
-**On D6 — an activation is one firing, not a state.** It decides everything it will ever decide in the frame
-it fires, on a backward half that is already whole (D17). What it does afterwards is accrue and speak. Accrual
-is transcription rather than judgement — the arriving neighbors and rewards go into the firing, where the
-*next* expansion reads them. Speaking is reading the neuron's own forward record, and it changes nothing the
-neuron holds.
+**On D6 — an activation is one firing, not a state.** It decides everything it will ever decide in the frame it fires,
+on a backward half that is already whole (D17). What it does afterwards is accrue and speak. Accrual is transcription
+rather than judgement — the arriving neighbors and rewards go into the neuron's forward record, where the *next*
+expansion reads them. Speaking is reading the neuron's own forward record, and it changes nothing the neuron holds.
 
 **On D6 — why one extra frame.** The window is `reach_t` frames of forward neighbors, and the activation is
 open one frame longer than that for a single reason: the action recorded at offset `reach_t` is paid for at
@@ -218,7 +217,7 @@ worth it is open ([algorithm-evaluation.md](algorithm-evaluation.md)).
    buffer        [ 9 10]        [10 11]         [11 12]
                       ▲              ▲
    activation       fires        +1 lands       reward for +1
-   at frame 10   newest edge    into the firing  lands, closes
+   at frame 10   newest edge    into the record  lands, closes
                    sees −1
 ```
 
@@ -245,16 +244,17 @@ event ones: an action neuron fires when its action executes and accrues its forw
 
 **On D17 — the forward half is the child's, not the parent pattern's.** An earlier draft kept the forward half
 on the pattern: the collapse over what followed every firing the pattern covered, read by the child when the
-child stood on the apex. Three things argued for moving it to the child's own ring. The child exists in
-exactly one situation — its parent's pattern was bought — so its ring is already the record of what that
+child stood on the apex. Three things argued for moving it to the child's own record. The child exists in
+exactly one situation — its parent's pattern was bought — so its record is already the record of what that
 situation was followed by, with no pattern needed to condition it. The child's record is in its own level's
 alphabet at its own reach, so the top of a stack expects at the widest reach the stack has, where reading the
 parent's pattern would have it expect at the reach of the level below. And the pattern's population was
 looser: it summed every firing where the pattern applied in the parent's own cover, bought or not, and
 applied-but-not-bought usually means something else described the chunk better, which is a different
-situation. What it costs is that a newly minted child's record starts empty and fills only as it is bought,
-where the pattern would have carried a future over from before the mint; but under the earlier draft that
-future was never read until the child was bought either, so the head start was small.
+situation. What it costs is that a newly minted child's record starts empty, where the pattern would have
+carried a future over from before the mint. The cost is one frame: the child is given an activation at its
+mint and its record fills from the next frame on (R13), so by the time it is first bought it already holds
+what followed the situation it was minted in.
 
 **On D17 — the base speaks its marginal.** A base neuron on the apex has been recognized as nothing more
 specific than itself, so its own record — what follows the symbol over every situation it fires in — is the
@@ -262,9 +262,9 @@ best expectation anything has for it in that frame. It is coarse, and it is sile
 more specific is bought over it (D7). The alternative, the base expecting nothing, left the machine mute and
 its exploration stalled until the first pattern was bought, which was a real gap.
 
-**On D17 — siblings.** Two children promoted at one coordinate are two neurons with two rings. While they are
-always bought together their rings see the same forward neighbors and their records agree; the first time one
-is bought without the other, they diverge. Where they never diverge, the level above sees them as two
+**On D17 — siblings.** Two children promoted at one coordinate are two neurons with two records. While they
+are always bought together their activations see the same forward neighbors and their records agree; the
+first time one is bought without the other, they diverge. Where they never diverge, the level above sees them as two
 neighbors at offset zero that always co-occur and merges them (§4).
 
 **At `R_t = 1` the vocabulary collapses.** `O⁻` **is** `O` backward, nothing is in flight, and the forward call
@@ -304,15 +304,25 @@ pattern and connections on the neuron: per-slot counts of what followed, and per
 action was worth. Both were indexed by a forward offset and a neighbor, and the distance a connection was held
 at was exactly the offset the action fired at. So the connection was a forward neighbor that happened to be an
 action, carrying one more number. D20 says so: an action slot is a forward neighbor with a strength and an
-estimate, the event slots sit beside it in one record, and the record is the neuron's over its own ring — which
-is where the connections always were.
+estimate, the event slots sit beside it in one record, and the record is the neuron's over its own life —
+which is where the connections always were.
 
-**On D20 — sets, not weights.** An event slot is in the expected set or not, by majority over the ring, and
-the count behind it is a count over H firings. A record that instead kept every neighbor that ever followed,
-with a weight that only ever grew, would answer a changed world at the rate the weights could be outgrown,
-which is unbounded; a majority over the ring answers within H of the neuron's own firings, because everything
-older has left. The count still travels down with the expansion as the vote's strength (§13), but it is read
-off the ring and it leaves with the ring.
+**On D20 — weights, not sets, and no window.** The backward side needs a window and a majority because it is
+written into the file: a pattern has to be a set, since a set is the only thing a decoder can expand, and the
+ring is what the majority is taken over. The forward side is never written anywhere (D9), so it needs neither.
+What a neuron keeps forward is every neighbor that ever followed it, at every offset, with how often — the
+empirical distribution of what follows the symbol — and for an action the sample mean of what it earned. That
+is the maximum-likelihood statistic for a thing that is only ever read, and the vote at the base is a mixture
+of those distributions with one unit per voter (§13). A majority would throw the minority away for no reason
+the file gives, and a window would forget for no reason the file gives.
+
+An earlier draft kept the forward record as a majority over the ring, on the argument that a weight that only
+ever grows answers a changed world at the rate it can be outgrown. It does; and that is not where the design
+answers a changed world. A neuron's record is the lifetime marginal of what follows its symbol. Specificity
+comes from the hierarchy: when the world changes the neuron's patterns turn over within `H` (D24), a new child
+is minted, and that child's record is over the new situation alone from its first exposure. The old estimate
+is not wrong; it is the general case, which is what a base neuron is for (R35). Responsiveness is bought with
+structure, not with forgetting, and the window stays where the file needs it.
 
 **On D21 — why handover is arithmetic.** What a firing holds against each pattern is the index R6 says nothing
 has to be added to — a pattern that moved recomputes what it covers in each of them, and every firing reaching
@@ -321,6 +331,28 @@ share in `O(offsets)`. The offset grid grows with the level, since D14's reach d
 neighbors in it stays fixed by construction — that is the invariant the reach is chosen to hold.
 
 # 6. Counts, the collapse, re-centering
+
+**On D23 — why a pattern tallies neighbors it does not name.** A pattern used to count only the neighbors
+assigned to it. That is enough to decide whether to *keep* a named slot and never enough to decide whether to
+*enter* one: a neighbor the pattern does not name is never assigned to it, so its count was identically zero
+and R4 could never take it. R4's abstention paragraph says a pattern grows into the residual, and the state as
+defined could not support that sentence; R5's "free, because the counts are already maintained" was not true of
+the one count that growth depends on.
+
+The fix is the smallest that makes R4 exact. At each slot R4 wants two numbers: how many covered firings had
+the neighbor there and unclaimed by another pattern of the cover, and how many abstain because another pattern
+holds it. Those are `present(p)` and `held(p)`, and the population is `n − held(p)`. Both are sparse — indexed
+by neighbors actually seen — and both move a whole firing's worth at a time, so R3's granularity is unchanged.
+The one new obligation is R3's third line: when a firing's cover changes, a pattern that *stays* in the cover
+still subtracts and re-adds, because what another pattern took from the residual moves this pattern's
+`present` to `held`, or back.
+
+**Worked case.** `e = {b@0, c@0}` covers ten firings and `d@0` begins to appear. `d` is residual in every firing
+that has it, so `present_e(d)` climbs by one per such firing while `held_e(d)` stays zero. At `2 · present_e(d)
+> 11` — six of ten — re-centering enters `d` and `e` becomes `{b, c, d}`. The four firings without `d` now price
+`e` at 2, which is what they were paying before (line plus one residual), so R6 lets them keep it, and they
+evict in turn. **No candidate could have done this**: a candidate is built on the residual alone (R14), `b` and
+`c` are held by `e` in those firings, and `{d}` alone saves nothing (R15).
 
 > **T2 — The collapse is the per-slot minimizer of the pattern's margin over its population.** Over the
 > firings a pattern covers, naming a neighbor moves the summed margin by `+1` wherever that neighbor was in the
@@ -336,11 +368,26 @@ neighbors in it stays fixed by construction — that is the invariant the reach 
 be written into the file, and has no symmetric difference. The counts **are** the fractional object; the
 collapse is how the design gets from it to something the decoder can expand.
 
-**On R4 — why the line is in the slot rule.** An earlier draft took a slot at a bare majority and charged the
-dictionary line only in the add and retire tests. That left the per-slot decision off the objective by exactly
-one: a neighbor present in half the population plus one was named, and cost the line a symbol for a net of
-zero. Charging the line where the slot is decided makes every slot decision a strict descent on the margin,
-which is what T6 needs, and it removes the last place a neighborhood could grow at no gain.
+**On R4 — why the line is in the slot rule, and why the rule is not `2 · count > n`.** The threshold is a
+file-length statement, not a majority statement, and the dictionary line is part of the file (D9). Naming `p`
+in a pattern that covers `n` firings, `count(p)` of which have `p` in the residual:
+
+```
+history    − count(p)          those residual lines are gone
+history    + (n − count(p))    the firings without p now carry a wrong name
+dictionary + 1                 the pattern's line is one symbol longer
+```
+
+Net change `n − 2 · count(p) + 1`; the slot is taken when that is negative, `2 · count(p) > n + 1`. Dropping it
+is the mirror. **The plain majority counts the history and forgets the line**: at three of five, naming saves
+one line of history and costs one of dictionary, and the file is the same length. An earlier draft took a slot
+at that bare majority and charged the line only in the add and retire tests, which left the per-slot decision
+off the objective by exactly one. Charging it where the slot is decided makes every slot decision a strict
+descent on the margin, which is what T6 needs, and it removes the last place a neighborhood could grow at no
+gain.
+
+**The forward rule is `2 · count > n` precisely because no line is paid for a forward slot** (D9). The two
+thresholds differ by one, for one reason, and it is the reason the design has a dictionary at all.
 
 **On R4 — why the slot holds at equality.** With the line charged the boundary is `2 · count = n + 1`, and at
 that boundary naming and not naming cost the same. A rule that dropped the slot there could re-add it next
@@ -352,11 +399,12 @@ moving.
 out a question the design is asking it; this one it has already answered, for that slot, by having the
 neighbor covered.
 
-**On R4 — why the forward rule is different.** A forward event slot is charged nothing: it is not in the line
-and not in the history (D9). So there is no line to break even against, a bare majority is the whole of the
-question, and there is nothing to hold at equality because nothing rests on it. An action slot is not
-collapsed because selection wants the whole set, estimates included, and a majority would throw away exactly
-the alternatives the walk is for (R37).
+**On R4 — why there is no forward rule.** The collapse exists to turn counts into a set, and a set is needed
+only because the file has to be expanded. A forward slot is charged nothing: it is not in the line and not in
+the history (D9). So there is nothing to break even against and nothing that has to become a set. An event
+slot goes down as a vote at its strength (§13), an action slot as an inference at its strength and estimate
+(R36), and a majority would throw away exactly the minority the vote still needs and exactly the alternatives
+the walk is for (R37).
 
 **On R4 — uniqueness is not assumed and is no longer guaranteed.** At the base, an offset naming one position
 holds one neuron of a dimension (D5), so those counts sum to at most `n` and only one can clear the half. Above
@@ -403,7 +451,8 @@ and are retired (R17). A neuron that falls silent sheds nothing: it holds its `H
 intact, indefinitely, and resumes from them when its situation returns. An active neuron adapts exactly as
 fast as its evidence turns over, and a silent one simply waits.
 
-**On D24 — `H` does three jobs.** It is the memory, it is R12's selectivity — double it and every pattern's
+**On D24 — `H` does three jobs.** It is the structural memory — the forward record is outside it (R31) — it
+is R12's selectivity — double it and every pattern's
 benefit roughly doubles against an unchanged line, so more survive — and it is the rate at which the stack
 deepens (T13). One number, three effects, all monotone in it, and it should be tuned knowing that.
 
@@ -412,12 +461,13 @@ cover older first, so the younger holds nothing anywhere and retires. The market
 the election ties to the older symbol (R23) — but the neuron never hears the election's verdict, so the table
 has to be able to do it alone, and it can.
 
-> **T3 — Counts are sums over firings, and nothing reads a firing whole but eviction.** Re-centering sums a
-> pattern's assigned neighbors over the firings it covers, both tests sum margins over firings, and the
+> **T3 — Counts are sums over firings, and nothing reads a firing whole but eviction.** Re-centering sums
+> `present` and `held` over the firings a pattern covers (D23), both tests sum margins over firings, and the
 > candidate collapses over a population of firings — every one of these is a per-slot count, and the per-slot
-> counts are what a pattern keeps (D23). Forward, the same: a slot's count and an action slot's estimate are
-> per-slot sums. Nothing asks whether `c` at `+1` came with `d` at `+2`. The one operation that needs a firing
-> as a unit is removing it (R8), because a sum cannot say which of its terms was the oldest.
+> counts are what a pattern keeps (D23). Forward, there are no firings to sum over at all: the record is
+> per-slot totals on the neuron, written as neighbors land and never read back per firing (R31). Nothing asks
+> whether `c` at `+1` came with `d` at `+2`. The one operation that needs a firing as a unit is removing it
+> (R8), because a sum cannot say which of its terms was the oldest.
 
 > **T4 — What covers is what was priced.** An earlier design chose a cover on the backward half and then priced
 > the firing on the whole span, so the pattern that won the prefix could end up a worse describer than one that
@@ -535,6 +585,13 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 
 # 9. The two moves
 
+**On R13 — why a mint activation.** A pattern is minted at the parent's age 0, on a backward half that is
+whole (D17), and everything that follows that frame is exactly the future of the situation the child was
+minted for. Had the child waited for its first purchase to open an activation, that future would have gone by
+unrecorded, and the child would begin its life one situation behind. The activation costs nothing structural:
+it is not elected, so the file, the frontier and the vote are untouched, and the only thing it does is what
+every activation does between firings — write what lands into its neuron's record (T8).
+
 **On R14 — the build, worked through.** Five firings in the ring, an empty table, so every neuron of every
 firing is in the residual.
 
@@ -562,8 +619,8 @@ majority in disguise — the neighbors in the residual against the neighbors abs
 over a population that changed as `C` grew, which is the only reason it took a round to add one neighbor.
 Fixing the population first removes the rounds. The seed is the neighbor the table is failing on most; the
 population is the firings where it is failing; the collapse over that population settles every other slot at
-once by exactly the majority the loop was computing. The machine already works this way: resolve every slot
-independently, then tally (R23). Nothing in either place grows anything.
+once by exactly the majority the loop was computing. The seed chooses the population and the population
+decides every slot. Nothing in either place grows anything.
 
 **On R14 — what "the same history" means.** Covers are held rather than derived (R6), so two neurons with
 identical rings can carry different covers if their tables moved under them in a different order, and the
@@ -656,8 +713,9 @@ question.
 **On R18 — why the cover is a set and the criterion is a ratio.** A neuron picking one pattern has a nearest
 neighbor problem; a neuron picking several has a covering problem, and covering is where a ratio belongs. A
 line is paid once per pattern however many neurons it accounts for, so what matters is not which pattern is
-closest but which buys the most residual per line. That is the same criterion R23 uses one level up, for the
-same reason — and the two differ in who does the choosing and over what.
+closest but which buys the most residual per line. **That is not merely the same criterion R23 uses one level
+up; it is the same procedure**, run by the neuron over its table and by the machine over a frame's bids. What
+differs is the population and the fact that only the neuron may mint or retire a symbol.
 
 **On R18 — why the offer is wider than the cover.** The cover is the neuron's own partition, chosen on the
 neuron's residual. Take a firing `a, b, c, d, e` with patterns `E1` naming `a, b, c, d` and `E2` naming
@@ -700,9 +758,9 @@ holds and never what the election sees early.
 an order on firings that are simultaneous — the pixel at one position did not happen before the pixel at
 another — and the structure that came out would depend on it, which is the defect R23 removes one level up.
 
-**On §10.3 — why the forward call carries no decision.** Its jobs are transcription: arriving neighbors into
-the firing, a reward beside the action it paid for. Neither feeds a test that is waiting. What the call does
-carry out is speech — what the neuron on the apex expects and infers — and speech reads the record without
+**On §10.3 — why the forward call carries no decision.** Its jobs are transcription: arriving neighbors into the
+neuron's record, a reward into the estimate of the action it paid for. Neither feeds a test that is waiting. What the
+call does carry out is speech — what the neuron on the apex expects and infers — and speech reads the record without
 touching it.
 
 > **T7 — The tests are the assignment.** The only consumer of a table-wide picture of covers is the build's
@@ -713,8 +771,8 @@ touching it.
 
 > **T8 — Nothing between firings is read.** Counts move when a firing is folded, when one is evicted, or when a
 > cover changes (R3), and all three happen in a firing frame. Between firings the forward call does write —
-> forward neighbors and rewards land in firings (D6) — but **nothing prices them until the neuron next
-> fires**, and no neighborhood, cost or cover is recomputed in between. The forward half is read between
+> forward neighbors and rewards land in the neuron's record (D6) — but **nothing prices them, ever**: no
+> neighborhood, cost or cover reads the record, and nothing is recomputed in between. The forward half is read between
 > firings, by the apex, and reading it moves nothing.
 >
 > **So accrual is evidence in escrow.** It changes what the next answer will be and never an answer already
@@ -746,16 +804,19 @@ the neuron's own record so far:  an event slot (c,+1), and an action slot (u,+1)
 **Frame 10 — the neuron fires, and everything is decided.** Its backward half is `{(a,−2), (b,−1), (g,−1),
 (z,0)}` — whole, because backward is what a firing already has. The bill runs first.
 
-The cover pass runs over the residual, which starts as all four neurons plus the neuron itself.
+The cover pass runs over the residual, which starts as all four neighbors. The neuron's own firing is not in
+`O⁻` and so is not a slot the cover can take — that is the one place the neuron's population differs from the
+board's, where the bidding activation is the first slot a bought bid subsumes (R21).
 
 ```
-K⁻ = {a,b}   covers 2 of the residual, plus the bidder    price 1 + |{}|  = 1     ratio 3
-M⁻ = {g,h}   covers g;  h did not fire                    price 1 + |{h}| = 2     ratio 1
+K⁻ = {a,b}   covers 2 of the residual                     price 1 + |{}|  = 1     ratio 2
+M⁻ = {g,h}   covers g;  h did not fire                    price 1 + |{h}| = 2     ratio 0.5
 ```
 
-`K` goes first and takes `a`, `b` and the bidder. On the second round `M` is measured against what is left:
-it now covers only `g`, at a price of 2, so it does not pay and is not taken. **The cover is `{K}`**, `g` and
-`z` are the residual, and `K` counts `a` and `b` from this firing.
+`K` goes first and takes `a` and `b`. On the second round `M` is re-measured against what is left: it still
+covers only `g`, at a price of 2, so it does not pay and is not taken. **The cover is `{K}`**, `g` and `z` are
+the residual, and `K` counts `a` and `b` as its own share and `g` and `z` as `present` it does not yet name
+(D23).
 
 Then the rest of the bill: the firing joins the ring and the oldest leaves; `K` re-centers; a candidate is
 seeded on the neighbor most often in the residual — `g` and `z` are in it this time — and priced; the worst
@@ -773,23 +834,24 @@ be asked again about frame 10.
 
 **Frames 11 through 14 — the forward call.** At 11, `c` does not come; `e` fires in that dimension instead,
 and the action `u` runs. The machine calls the activation at age 1 with `(e, +1)` and `(u, +1)`, and the neuron
-writes both into the firing and its record. This neuron is covered — `K`'s child was bought — so it writes and
-does not speak. `K`'s child, on the apex at level 1, is called at its own age with the level-1 neighbors that
-fired, writes them into its own ring, and returns what its own record expects and infers at `+2`. At 12, a
-reward for `u` arrives and is written beside `(u, +1)` in both rings; `(?, +2)` lands the same way. At 14 the
-base activation closes.
+increments its slots at `(e, +1)` and `(u, +1)`, creating either that does not exist at strength 1. This neuron
+is covered — `K`'s child was bought — so it writes and does not speak. `K`'s child, on the apex at level 1, is
+called at its own age with the level-1 neighbors that fired, writes them into its own record, and returns what
+its own record expects and infers at `+2`. At 12, a reward for `u` arrives and folds into the estimate at
+`(u, +1)` in both records; `(?, +2)` lands the same way. At 14 the base activation closes.
 
 **The neuron is not asked again, and nothing about frame 10 is revisited.** `K` was not wrong to be in the
 cover: it was priced on what fired beside the neuron, and `e` arriving instead of `c` is not a charge against
-it (D17). What `e` does is move the neuron's count at `+1`, so the next time this neuron is on the apex its
-expectation may have flipped `c → e`, or lost the slot to silence if its firings are split. **That is reach
-emerging** — and it arrives as evidence for the next expansion, never as a verdict on the last one.
+it (D17). What `e` does is raise the neuron's strength at `(e, +1)` by one against `(c, +1)`, so the next time
+this neuron is on the apex its one unit of vote at `+1` is split between `c` and `e` a little more toward `e`
+than before (§13). **That is reach emerging** — and it arrives as evidence for the next expansion, never as a
+verdict on the last one.
 
 ```
    frame 10                                  frames 11 … 14
    ────────────────────────────────────────  ───────────────────────────────
    fire — the backward half is whole         (e,+1), (u,+1) land, then +2, +3
-   cover, fold, evict, re-center             written into the firing
+   cover, fold, evict, re-center             written into the record
    build one, retire one
    offer every pattern that applies          the reward for u lands beside it
    ── the level elects, and says nothing ──
@@ -810,7 +872,7 @@ flowchart TD
     B --> M["BUILD ONE candidate<br/>seed, population, collapse, price — R19 step 3"]
     M --> DEL["RETIRE ONE<br/>the worst margin, if strictly negative — R19 step 4"]
     DEL --> P["OFFER, and one request<br/>a bid for every pattern that applies — R19 step 5"]
-    P -.->|"bids: child id + backward neighborhood"| X["THE ELECTION<br/>credit each slot to one bid, accept the bids that cover<br/>more than they cost, settle the rest — R23"]
+    P -.->|"bids: child id + backward neighborhood"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R23"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D14 gives it — §12"]
     O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §9.2"]
     Z --> W["PROCESS ACTIONS, every open activation at its own age<br/>forward neighbors and rewards in; from the apex,<br/>expectations and inferences out — §10.3"]
@@ -824,10 +886,10 @@ flowchart TD
 promoted plus what they got wrong. An earlier draft stated that as a rule of its own — accept a subset `S`,
 minimize `cost(S)` — and named it prize-collecting set cover, which is the right classification and the wrong
 picture: it reads as though something somewhere forms subsets and scores them, and the classification is only
-interesting if you are choosing a search. Nothing searches. R23 resolves every slot in parallel on
-profitability, drops the bids that do not clear their price, and hands their slots back to the accepted bids
-that named them. **What the objective describes is the outcome of that procedure, not an instruction to
-anyone**, which is why it belongs here and not in the spec.
+interesting if you are choosing a search. Nothing searches. R23 takes the bid with the best ratio over the
+free set, credits it what it names there, and asks the question again over what is left. **What the objective
+describes is the outcome of that procedure, not an instruction to anyone**, which is why it belongs here and
+not in the spec.
 
 **On R20 — why the bid carries no forward half.** Nothing at `Δt > 0` has fired, so the machine could settle
 nothing against it; the file holds no line for it, so nothing would be priced on it; and it would make the bid
@@ -875,25 +937,47 @@ that loses one counts one fewer.
 
 ## The election
 
-**Why per slot rather than by ratio, repeatedly.** A greedy pass over the ratio makes the same *kind* of
-assignment — every covered neuron ends up credited to whichever bid the queue reached first — but it makes it
-implicitly, by processing order, which is why it needs a tie-break clause to be deterministic at all and why it
-cannot be run in parallel. Resolving each slot on its own merits makes the assignment explicit,
-order-independent by construction, and parallel across slots. It also makes contraction the third use of one
-primitive rather than a mechanism of its own (§6.2): resolve every slot at once, then tally.
+**On R23 — why the election is R18, and what the earlier rule got wrong.** An earlier R23 resolved every slot
+once, on each bid's ratio over the whole free board, and then accepted each bid on what that resolution left
+it. That is not the same procedure as R18, though the specification said it was: R18 re-measures after every
+take and lets a bid that has fallen below its price take nothing, while the earlier R23 let a bid take slots on
+its original ratio, fail its own test, and keep those slots away from the bids that failed *because* of it.
 
-**On R23 — why the third step is not optional.** A promoted unit's neighborhood *is* its dictionary line
-(R20), so expanding it recovers every neighbor it names, whether or not that neighbor was credited to it.
-Coverage is therefore a fact about what the accepted units expand to, and the assignment has no power over it:
-writing a line for a neuron some accepted unit already names would write a symbol the file already contains.
-Step 3 makes the bookkeeping match what expansion already did. Without it, a slot held by a rejected bid reads
-as uncovered and stands as its own line beside a unit that already delivers it.
+**Counterexample.** Three bids, every named slot fired:
 
-**On R23 — nothing iterates, and the pass can only under-accept.** Steps 1 and 2 decide; step 3 only allocates
-credit among decisions already made, so no acceptance can flip and there is nothing to converge to. A bid whose
-territory is taken stops clearing its price on its own. The consequence is that the election can leave a neuron
-as its own line where a second look would have covered it, and can never pay two units for one chunk — which
-is the failure contraction exists to prevent.
+```
+A  names s1 s2 s3 s4      price 1   ratio 4
+D  names s1 s2 s9         price 1   ratio 3
+E  names s9 s10           price 1   ratio 2
+```
+
+Old R23: `s1, s2` to A; `s9` to D, since 3 > 2; `s10` to E. A holds 4 > 1 and is accepted. D holds 1, not > 1,
+rejected. E holds 1, rejected. The old step 3 moved slots only among accepted bids, so `s9` and `s10` stood as
+residual: history term `1 + 2 = 3`. R18 over the board: take A; the free set is `{s9, s10}`; D covers 1 at price
+1 and E covers 2 at price 1, so take E. History term `1 + 1 = 2`.
+
+**The frozen ratio is the whole defect.** D's claim on `s9` was worth something only if D was going to pay, and
+whether D would pay was not known until after the claim had been honored. Re-measuring per round asks the two
+questions in the right order.
+
+**Why the loop is not the variable loop the design avoids.** Every accepted bid subsumes at least two free
+slots (`covers > price ≥ 1`), so the rounds are bounded both by half the free set and by the number of bids.
+And because `price` is fixed by the frame while `covers` can only fall as the free set shrinks, a bid's ratio
+is monotone non-increasing through the election: the top bid can be re-measured alone, and if it still leads
+the others' stale ratios it is the true maximum. **The election is a heap pop with one re-measure per round,
+not a re-scan.**
+
+**What the rewrite does not touch.** R22's priority for earlier frames — the greedy runs over the free set,
+which already excludes everything an earlier election credited. D26's board. R26's frontier. And the fact that
+the election delivers nothing to any neuron.
+
+**On R23 — why nothing has to be handed back.** A promoted unit's neighborhood *is* its dictionary line (R20),
+so expanding it recovers every neighbor it names, credited or not: coverage is a fact about what the accepted
+units expand to, and the assignment has no power over it. The old pass needed a third step to make the
+bookkeeping match that, because a slot held by a rejected bid would otherwise read as uncovered and stand as
+its own line beside a unit that already delivers it. **The greedy never creates that state** — a bid that never
+reached the top holds nothing, so a slot it named is either credited to a bid that did pay or was never claimed
+by one at all.
 
 **On R23 — a ratio that ranks is not a price.** `cover / price` is a selection score over two counts: it
 estimates nothing, prices nothing, and no cost anywhere is set by it, so T1 is untouched. Both are counts and a
@@ -910,13 +994,12 @@ customer to the business, and both were dropped on one judgment: a neuron finds 
 some and loses some, and a pattern consistently outbid on the same ground is not expected to be common. If it
 is, [algorithm-evaluation.md](algorithm-evaluation.md) says what to measure.
 
-**What is given up.** Greedy is the classical approximation for set cover, with slack against the optimum
-bounded by `ln n`. Two fixed passes have no such guarantee, so the slack becomes unmeasured rather than
-bounded. The case it loses is a boundary one — a bid that sheds most of its territory to better ratios, falls
-under its price, and takes down a neighbor that would have cleared with the slot it took. Accepted
-deliberately: **contraction mints nothing that lasts**, so a marginal cover costs a bounded handful of lines
-and nothing structural. Two chunks sharing a boundary neuron is how a stream tiles, and the bid that loses that
-neuron simply counts one fewer.
+**What is given up.** Greedy is the classical approximation for weighted set cover, and its slack against the
+optimum is bounded — `H(n)`, where `n` is the largest neighborhood offered (§17). What it does not give is the
+optimum itself, and the case it loses is a boundary one: two chunks sharing a boundary neuron is how a stream
+tiles, and the bid that loses that neuron simply counts one fewer. Accepted deliberately, and cheaply —
+**contraction mints nothing that lasts**, so a marginal cover costs a bounded handful of lines and nothing
+structural.
 
 > **T10 — What settles is a slot, and the settled ones are not a prefix.** Each slot settles once and stays
 > settled: settlement is the absence of any live unit that could reach it, and units only ever fall out of
@@ -1127,23 +1210,28 @@ machinery on this side would recover it. So the scope is an input with a default
 honest statement of ignorance rather than a fallback path: the same arithmetic runs either way, over a wider
 span and more channels.
 
-**On R34 — why nothing weakens, and why the ring still bounds it.** An earlier design kept action estimates
-for the neuron's lifetime and never weakened a slot, on the argument that never taking an action proves nothing
-about its worth, so an unchosen action must not be penalized or the brain collapses onto whatever it tried
-first. The first half of that survives: non-choice moves nothing. The second half does not. A lifetime mean
-absorbs a changed worth at a rate that falls with every exposure it already has, which is the slowness the
-event slots were just freed from, and a lifetime is a second horizon beside `H`, which R10 forbids. Over the
-ring, an unchosen action's estimate stands unchanged until its last exposure leaves, and then the slot is gone.
-What that costs is one re-trial: when the current best action turns negative, the walk wires the first action
-without a slot, which may be one the ring has forgotten, and it is tried once more. That happens only when the
-incumbent has failed, which is exactly when re-testing the alternatives is right, and it costs one sample per
-`H` firings at most. In a stationary world where the incumbent stays good, nothing is ever re-tried.
+**On R34 — why nothing weakens, and why nothing is windowed either.** Never taking an action proves nothing
+about its worth, so an unchosen action must not be penalized, or the brain collapses onto whatever it tried
+first. That is the first half. The second is that the estimate is a lifetime mean, and an earlier draft
+rejected that on the argument that a lifetime is a second horizon beside `H`, which R10 forbids. It is not a
+horizon: it is the absence of one, and it has no parameter. Under this rule `H` governs structure and nothing
+else, which is one knob fewer. What a lifetime mean gives up is the rate at which one slot absorbs a changed
+worth, which falls as `1 / strength`; what it gets is an estimate that is exactly the sample mean, and a record
+that is specific because of who holds it rather than because of when it was written (R35). Attempts to buy
+responsiveness inside the slot — decay, a window, a rate — were tried against the stock demos and lost to the
+plain average every time.
 
-**On R34 — a neuron that fires rarely remembers for longer.** The ring counts the neuron's own firings (D24),
-so a neuron that fires once a day holds a day's worth of estimates per slot and a neuron that fires every
-frame holds `H` frames' worth. A rare situation keeps its lesson for as long as its rarity makes it, with no
-second aging law; that is what lets a moment minted by replay (see [hippocampus.md](hippocampus.md)) hold an
-estimate across long stretches while an ordinary base neuron turns its ring over in seconds.
+**Three things this costs, stated plainly.** An action judged bad early stays judged: once every action in a
+channel has a slot, nothing new is wired, and an action that was unlucky on its first samples is re-tried only
+if it becomes the least bad (R37). That is the ordinary weakness of a greedy bandit, accepted for determinism.
+A slot wired ahead of any exposure is one neutral pseudo-sample (R31): its strength is one higher than what
+was seen, which is a prior of a single observation at zero, and the honest name for it. And a slot never
+leaves: memory is bounded by distinct co-occurrences, which is the alphabet squared per offset at worst.
+
+**On R34 — a neuron that fires rarely remembers exactly as long as one that fires often.** Both remember
+everything. What differs is how many exposures each has, and so how far one new sample moves the mean. A
+moment minted by replay (see [hippocampus.md](hippocampus.md)) holds its estimate across any stretch, at
+whatever strength its few exposures gave it, with no aging law to argue with.
 
 **On R34 — why reward cannot price structure.** A policy is not a description: the decoder replays the actions
 the file records rather than choosing any, so nothing a reward says about an action changes what it costs to
@@ -1195,5 +1283,73 @@ frame.
 can hold a situation forever. Thompson sampling over the action slots is the obvious probabilistic
 alternative, and it drops into the same slot.
 
-**On R37 — what the walk buys.** It is deterministic, so a run reproduces and a regression is a real
-regression. Other strategies drop into the same slot, and swapping them changes no structure.
+**On R37 — what the walk buys, and what it does not.** It is deterministic, so a run reproduces and a
+regression is a real regression. Other strategies drop into the same slot, and swapping them changes no
+structure. What it does not buy is a second look: the walk wires each action once, and with no window nothing
+is ever forgotten and wired again, so an action's first few samples are the only ones it gets unless it is
+selected on its own merit afterwards. In a stationary world that is the right economy; in one where an
+action's worth changes, the neuron that notices is a new child with a fresh record, not this slot.
+
+---
+
+# 17. What is provable about compression
+
+The claim the specification can make, and the one it cannot, stated once.
+
+## Provable, per move, on the evidence in hand
+
+Each structural move is a non-increase on the file it is measured against, evaluated over the population it is
+measured on at the moment it is made. Strict where marked.
+
+- **Add (R15).** Strict. The candidate joins iff its summed saving exceeds `1 + |C⁻|`, and R19 step 3 lets every
+  firing do at least as well as the test counted, so the ring's file shrinks by at least the margin the test
+  found.
+- **Retire (R17).** Strict. A pattern's margin *is* the change in the ring's file on its removal: the history
+  term rises by `Σ (covers − price)` and the dictionary term falls by `1 + |e|`, which is the margin with the
+  sign reversed. Negative margin, shorter file.
+- **Re-centering (R5).** Non-increase. Entering a slot changes the ring's file by `(n − 2 · count + 1)` over the
+  pattern's population at that slot, dropping one by the negative of that, and R4 fires only when the sign is
+  right and holds still at zero. This depends on D23 keeping `present` and `held`: with only the assigned share
+  counted, the count that decides entry is not maintained and the claim does not hold.
+- **Re-derivation (R6).** Non-increase, by construction: a re-derived cover replaces the held one only when
+  strictly cheaper.
+- **Cover (R18) and election (R23).** Each accepted pattern or bid names strictly more than it costs, so a
+  covered firing or frame is strictly shorter than the same firing or frame stated flat, by at least one line
+  per acceptance.
+
+## Provable, per frame, against the best available
+
+R18 and R23 are one procedure, and that procedure is ratio-greedy weighted set cover: each pattern or bid is a
+set with cost `price`, and every slot also has a singleton set of cost 1, standing as its own line. Chvátal's
+bound (1979) applies directly — the cover the greedy returns costs at most `H(n)` times the cheapest cover
+buildable from the same sets, where `H(n) = 1 + 1/2 + … + 1/n ≈ ln n` and `n` is the largest set's size, here
+the largest neighborhood offered. **So per frame the machine's history term is within `H(n)` of the best it
+could have done with the bids it was offered**, and the one-pass election this replaced had no such bound.
+
+## Not provable, and why
+
+**Across frames.** Every frame adds a firing to each active neuron's ring, evicts one, and adds raw lines to
+the machine's history before any election runs. The forward record is outside all of this: it is in no file,
+and no move is priced on it (R34). "The file is shorter after frame `f + 1` than after frame `f`"
+is false of any compressor reading a stream, this one included. What holds is the statement above: never longer
+than flat, and every structural move a descent on the evidence in hand.
+
+**Across the two objectives.** D12 is explicit that the neuron prices over its ring and the machine over its
+frames, that the numbers differ, and that they are meant to. A neuron's descent is therefore on its own
+history, and a pattern that pays on the ring but is never bought is a dictionary line with no realized saving
+at the machine's level. The design forbids the coupling that would close this — the election delivers nothing
+to the neuron (R23, R25) — so **no single quantity is descended by the whole system**. Each side descends its
+own file; nothing descends the sum, and a proof cannot be had without a rule the design deliberately does not
+have.
+
+**Beyond a local optimum.** Greedy cover plus coordinate descent — hold covers and take the majority, hold
+neighborhoods and re-derive covers — reaches a state in which no single move shortens the file. It does not
+reach the shortest file. Weighted set cover is NP-hard and `ln n` is within a constant of the best any
+polynomial-time procedure achieves in general, so the `H(n)` ceiling is where every practical design stops, not
+a weakness of this one.
+
+## The theorem, as it can be stated
+
+> **T15 — Every move the system makes is a non-increase on the file it is measured against, evaluated on the
+> evidence in hand; the machine's encoding of each frame is strictly shorter than the raw frame whenever
+> anything is promoted, and within `H(n)` of the best encoding available from what was offered.**

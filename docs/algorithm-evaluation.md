@@ -8,7 +8,7 @@ risk states what would be done about it, so measurement has a decision attached.
 # 1. The falsifiable claim
 
 Nothing in the design optimizes for prediction, and nothing scores it. A pattern is charged for the neurons it
-names beside the firing and never for what followed (D17); its forward half is measured by the collapse,
+names beside the firing and never for what followed (D17); its forward half is counted into its record,
 enters no test, and is not in the file (D9). What the machine expects next is an output it hands out (§13),
 and no part of the machine reads whether it came true. Prediction is therefore a pure by-product: the machine
 gets better at predicting by compressing better — richer chunks are bought, patterns upstairs describe over
@@ -86,18 +86,22 @@ only once something more specific is bought over it. **Diagnostic:** the share o
 neurons, per frame, over exposure; it should fall as the dictionary fills. If it stays high on data that
 recurs, patterns are not being bought where the base is voting, and the compression side is where to look.
 
-**A forgotten action is re-tried.** An action slot lives only as long as the ring holds a firing that recorded
-it (R31), so an action judged bad and then not taken for `H` firings is gone, and when the incumbent turns
-negative the walk wires it again at neutral estimate and tries it once (R37). In a stationary world that is
-one bad sample per `H` firings per neuron, and only after the incumbent failed; in a world with a long-lived
-bad action and a flickering incumbent it is a recurring cost. **Diagnostic:** how often a slot is re-wired by
-the walk within `2·H` firings of being evicted, and what it earned the second time against the first.
+**An action judged bad early is not re-tried.** A slot never leaves (R31), so the walk wires each action once
+and never again (R37); an action that was unlucky on its first samples keeps that estimate and runs again only
+if it becomes the least bad of a channel where everything has been tried. In a stationary world nothing is
+lost. In a world where an action's worth changes, the slot cannot notice — the design's answer is that a new
+child with a fresh record notices instead (R34), which holds only where structure is actually being minted
+over that situation. **Diagnostic:** per channel, the share of action slots whose estimate is negative on
+fewer than three exposures and which are never selected again; and, on data where an action's worth is known
+to change, how many frames pass before the apex voter for that situation is a neuron minted after the change.
 
-**A majority over `H` firings can flip.** An event slot is in the expected set when more than half the ring
-holds it (R4), so a neighbor that follows about half the time flickers in and out as firings enter and leave.
-That is the price of a set that answers a changed world within `H` firings rather than a weight that answers
-it never. **Diagnostic:** per slot, how often it changes state per `H` firings on stationary input; slots near
-one half are expected to flicker and slots far from it are not, and a flicker rate that does not fall with
+**An estimate moves at `1 / strength`.** With no window, a slot with a thousand exposures moves by a
+thousandth of each new sample, so a base neuron's estimate on stationary-then-changed data lags for as long
+as it has history. The bet is the same as above: the general case is allowed to lag because the specific
+case is a younger neuron. **Diagnostic:** for a change introduced at a known frame, the estimate at the apex
+against the true worth, per frame after the change, split by the age of the voting neuron. If old voters
+still decide the dimension long after the change, the hierarchy is not minting where it is needed, and the
+compression side is where to look. A flicker rate that does not fall with
 distance from one half is a bug.
 
 **Several children per firing may not halve the level above.** A neuron used to promote at most one child,
@@ -117,20 +121,24 @@ patterns always bought together never diverge at their own level; the level abov
 bought in against the overlap of their records. Pairs high on both for a long stretch are the merge the level
 above has not made.
 
-**A newly minted child expects nothing for a while.** Its record fills only from firings where it was bought
-(D17), so between its mint and its first `H` purchases it expects little and infers only the default. The
-parent it was minted from is covered whenever the child is bought, so nothing speaks for that situation with
-any history until the child has one. **Diagnostic:** frames from a child's mint to its record's first majority
-slot, against how often it is bought.
+**A newly minted child expects little for a while.** Its record starts filling the frame after its mint
+(R13) and then only in the frames it is bought in (D17), so until it has been bought a few times it expects
+from one or two exposures and infers little but the default. The parent it was minted from is covered whenever
+the child is bought, so nothing speaks for that situation with much history until the child has some.
+**Diagnostic:** frames from a child's mint to the first time its expectation wins a dimension, against how
+often it is bought.
 
 **Nothing retires a pattern for a useless future.** A pattern is priced on what it names that did not fire
 beside it, and never on what its child was followed by (D17, R17). So a child whose record is worthless keeps
-its line as long as its parent's pattern covers, and the machine's expectation from it is noise. The claim is
-that the collapse handles this without a test — a forward event slot with no majority drops out, so a useless
-expectation becomes silence rather than a wrong symbol — and that a pattern whose *backward* half is good is
-worth its line regardless. **Diagnostic:** expected symbols per apex unit that did not arrive, per level. If
-that share does not fall with exposure, the collapse is not clearing bad slots and the consumer of the output
-is getting noise the machine could have withheld.
+its line as long as its parent's pattern covers, and the machine's expectation from it is noise. Nothing
+clears a bad slot: the record keeps every symbol that ever followed, and the claim is that the vote dilutes
+what it cannot clear — a record spread over many symbols splits its one unit thinly across them, so it decides
+a dimension only where no sharper voter contends — and that a pattern whose *backward* half is good is worth
+its line regardless. A diluted voter still places something in every dimension it has ever seen, so it never
+falls silent. **Diagnostic:** expected symbols per apex unit that did not arrive, per level, and the share of
+dimensions decided by a voter whose winning symbol held under a tenth of its unit. If either does not fall
+with exposure, dilution is not enough and the consumer of the output is getting noise the machine could have
+withheld.
 
 **The readout is unvalidated, and the position now lives outside the symbol.** Compressing harder can produce a
 worse classifier, because a readout may be living on exactly the position-and-class-specific duplicates that
@@ -182,11 +190,12 @@ of them retiring and the other growing into what it left, one per bill. **Diagno
 is followed within `H` firings by a surviving pattern growing into the vacated neighbors. If it is rare, the
 partition is sticky and the build is carrying more of the load than intended.
 
-**Election slack, with no bound at all.** R23 is a heuristic for the objective, and unlike the greedy it
-replaced it carries no approximation guarantee — two fixed passes over a static per-slot rule have no `ln n`
-backstop. Since apex-units-per-frame is the headline metric, slack and real structure are conflated.
-**Diagnostic:** solve one small window exactly (ILP) and compare — and compare the per-slot rule against a
-greedy pass over the same bids, which is the cheaper of the two comparisons and isolates what the change cost.
+**Election slack, bounded but unmeasured.** R23 is ratio-greedy weighted set cover, so its slack against the
+best cover buildable from the same bids is bounded by `H(n)` and no better
+([algorithm-remarks.md](algorithm-remarks.md) §17). The bound is worst-case and
+says nothing about the slack on real frames, and since apex-units-per-frame is the headline metric, slack and
+real structure are conflated in it. **Diagnostic:** solve one small window exactly (ILP) and compare, which
+locates the realized slack inside the `H(n)` ceiling.
 
 **The composition gap.** Both scopes price in one currency against one `L`, and the neuron's prices and the
 machine's are meant to differ (D12). What remains is that candidates are *generated* locally: a demand no
@@ -229,12 +238,12 @@ them equally, and a channel whose patterns chunk harder in time than in space wo
 **Diagnostic:** mean spacing per activation dimension, per level, against the isotropic prediction.
 
 **Whether a coarse voter should count as one.** The vote at the base gives every apex activation one unit per
-dimension whatever level it stands at (§13, R36). A level-4 unit that expanded to forty base symbols and a
-base neuron that expects one symbol are then equal voters in the dimension they share, and the level-4 unit's
-expectation about that dimension rests on a situation the base neuron's does not. Level was taken out of the
-vote because ranking by level let compression override reward; whether some other reading of the voter — the
-count behind its slot, the size of its ring — should weight it is not decided. **Diagnostic:** per dimension,
-how often the winner was placed by a base voter over a pattern voter that disagreed, and which was right.
+dimension whatever level it stands at (§13, R36). A level-4 unit that expanded to forty base symbols and a base neuron
+that expects one symbol are then equal voters in the dimension they share, and the level-4 unit's expectation about
+that dimension rests on a situation the base neuron's does not. Level was taken out of the vote because ranking by
+level let compression override reward; whether some other reading of the voter — the strength behind its slot, the
+exposures its estimate rests on — should weight it is not decided. **Diagnostic:** per dimension, how often the winner
+was placed by a base voter over a pattern voter that disagreed, and which was right.
 
 **The cross-neuron seam.** R4's abstention teaches a pattern not to name what another pattern of the *same
 cover* holds. Across neurons nothing teaches it: a neighbor some other neuron's unit reliably covers is still
@@ -244,17 +253,19 @@ and it is the same bet. The one-bit fallback above would not close it; closing i
 the design removed. **Diagnostic:** per pattern, the share of its named neighbors that its bought bids were
 never credited for, over its life.
 
-**R33 is ahead of the implementation.** The spec says a reward carries an optional channel set and an optional
-frame span, dissipates linearly over that span, and lands beside the action neighbor in every open activation's
-firing. The current brain does none of that shape: it holds connections apart from forward tallies, hands every
-open age the frame's reward whole and unscoped on one path and attributes `rewards[age − distance]` on another,
-and neither ramps. **Diagnostic:** with a span-of-one reward, whether a slot at offset `d > 1` moves at all —
-under R33 it must not.
+**R33's shaping is ahead of the implementation; the arithmetic is not.** The spec says a reward carries an
+optional channel set and an optional frame span, dissipates linearly over that span, and enters the estimate
+of the action slot at the offset each distance names. The current brain folds rewards into the estimate
+exactly as R31 says — one exposure, one share, weighted `1 / strength` — but does not shape them: it attaches
+the frame's reward whole to every action active in that frame, on every open age, and a minted pattern is
+pre-wired with `rewards[age − distance]` on a second path. Neither scopes and neither ramps. **Diagnostic:**
+with a span-of-one reward, whether a slot at offset `d > 1` moves at all — under R33 it must not.
 
-**The forward side of the code is close, and the deltas are enumerated.** The brain already holds
-connections on the neuron per distance, learned from its own ages, voted at age plus one, silenced when
-covered, and resolved per dimension at the base with no level in the vote — which is the shape D20, R31 and
-R36 describe. What differs is that it wires every level to the base set instead of its own level and so needs
-no expansion, keeps weights that never leave instead of a majority over a ring, and mints its patterns on
-prediction error instead of at the bill. [algorithm-implementation.md](algorithm-implementation.md) lists the
-changes.
+**The forward side of the code is the design, with two deliberate differences.** The record is lifetime totals
+on the neuron, written on observation, never evicted, never collapsed; the estimate is the exact running mean;
+the default is wired at birth at strength 1; the walk wires the next untried action on a negative mean;
+covered ages are silenced; and the vote at the base normalizes each voter to one unit per dimension and
+distance, events winning by share and actions by the share-weighted mean estimate, with no level anywhere in
+it. All of that is D20, R31, R35, R36 and R37 as written. What differs is that the code wires every level's
+record to the base set instead of its own level's, and so needs no expansion (R27, R30), and that it shapes no
+reward (above). [algorithm-implementation.md](algorithm-implementation.md) lists the changes.
