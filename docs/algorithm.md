@@ -84,7 +84,9 @@ H          the history size                                                    D
 > of characters — stands in no spatial relation to anything.
 >
 > Neighbors are always at the neuron's own level, since a neighborhood is written over the symbols that level
-> offers. **The rule is identical at every level**; what differs is the reach (D14).
+> offers, **and always of the neuron's own kind**: an event's neighbors are events and an action's are actions,
+> whatever else fires in the same column (D5). The two kinds meet nowhere in a neighborhood; they meet only in
+> the connections across kinds (D17). **The rule is identical at every level**; what differs is the reach (D14).
 
 ## 1.2 Firing
 
@@ -1175,9 +1177,9 @@ The frontier cuts across levels, not along one:
 ```
 
 **Events and actions run in parallel within a level.** An action fires in the same column as the events it runs
-alongside (D5), so it is recognized and chunked by the rule they are. **The connection across kinds is not formed
-here**: it names the apex action, which is known only once every level has settled, so it is recorded in the `process
-actions` pass instead (R31).
+alongside (D5), so it is recognized and chunked by the rule they are, over neighbors of its own kind (D4). **The
+connection across kinds is not formed here**: it names the apex action, which is known only once every level has
+settled, so it is recorded in the `process actions` pass instead (R31).
 
 # 13. The prediction
 
@@ -1412,7 +1414,8 @@ structural test can see (R34).
 > there.
 >
 > **A selected pattern stands until its span runs out.** Choosing an action pattern at `f` places base actions
-> at `f+1`, `f+2` and beyond — and those placements are **standing inferences**, contending for their
+> at the frames ahead its line reaches; a member its line places at `f` or before is dropped, since it has run
+> or cannot, the counterpart of R28 — and the placements ahead are **standing inferences**, contending for their
 > dimensions exactly as this frame's fresh ones do, at the strength and estimate they were selected on. **A
 > plan holds because it keeps winning**: a better estimate displaces it, and when its span ends it is simply
 > gone. Nothing is retracted and nothing is held.
