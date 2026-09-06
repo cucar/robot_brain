@@ -554,11 +554,21 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 > - **Retire.** Removing `e` changes `L_N` by exactly R17's margin, with the sign reversed: its neighbors that
 >   no other pattern of the cover names return to the residual, its lines and charges leave, its dictionary
 >   line leaves. `e` is retired only when that is strictly negative, so `L_N` falls by at least one.
-> - **Re-center.** For a fixed cover and assignment, `L_N` is a sum over slots of independent terms, and R4's
->   rule takes each slot exactly when its term falls (T2), holding at equality. So a re-center is non-increasing
->   and strictly decreasing whenever a slot changes.
-> - **Re-derive covers.** R6 replaces an activation's cover only by a strictly cheaper one, which is the cost of
->   that activation in `L_N` falling. Nothing else moves.
+> - **Re-center, covers held.** Hold every activation's cover and assignment where they are and move the
+>   pattern. `L_N` is then a sum over slots of independent terms, because an activation's residual at slot `p`
+>   depends on nothing but slot `p`. Naming `p` changes `L_N` by exactly `−(2 · count(p) − n − 1)` over the
+>   population the abstention leaves (T2). Dropping `p` changes it by at most the negative of that, and only
+>   "at most" because an activation where another pattern of the cover also names `p` hands `p` to that pattern
+>   for nothing instead of returning it to the residual, so the realized saving can only exceed the priced one.
+>   R4 takes a slot exactly when its term falls and holds at equality, so a re-center is non-increasing and
+>   strictly decreasing whenever a slot changes. **It is a sum over the population**: an individual activation
+>   can get dearer under the moved pattern while the total falls.
+> - **Re-derive covers, pattern moved.** R6 now re-derives each activation's cover against the moved pattern and
+>   replaces the held one only when the new is strictly cheaper, which is the cost of that activation in `L_N`
+>   falling. **This step starts from exactly the state the last one ended on** — held covers against the moved
+>   pattern — so the comparison it makes is against the right baseline, and the file before the move is never
+>   needed: the first step carries it to the moved pattern under the old covers, the second carries the old covers
+>   to the new ones under the moved pattern. Nothing else moves.
 >
 > `L_N` is a non-negative integer, so the strict moves are finite, and the process reaches a state where no
 > candidate pays, no pattern is negative, no slot moves and no cover is cheaper. That is a local optimum with

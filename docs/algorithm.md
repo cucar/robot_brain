@@ -534,7 +534,7 @@ The collapse is the only operation anywhere that decides what a neighborhood nam
 > count sits at the boundary follows them, and naming it raises the pattern's price wherever it is absent, which
 > can cost the pattern a cover and re-decide every other slot on the smaller population. Each step is the right
 > response to the evidence, and what it adds up to on stationary input is flicker around a fixed point, confined
-> to slots at the boundary — an amount that is measured, not proved (algorithm-evaluation.md).
+> to slots at the boundary — an amount that is measured, not proved.
 >
 > **Connections are never collapsed.** No line is paid for one (D9), so nothing has to be made into a set: a
 > connection keeps how often its neuron followed, and for an action what it earned (R31), and prediction and
