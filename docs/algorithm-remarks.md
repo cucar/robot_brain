@@ -247,14 +247,25 @@ event ones: an action neuron fires when its action executes and connects forward
 pattern: the collapse over what followed every activation the pattern covered, read by the child when the child stood
 on the apex. Three things argued for moving it to the child's own connections. The child exists in exactly one
 situation — its parent's pattern was bought — so its connections are already the distribution of what that situation
-was followed by, with no pattern needed to condition it. The child's connections are in its own level's alphabet at
-its own reach, so the top of a stack expects at the widest reach the stack has, where reading the parent's pattern
-would have it expect at the reach of the level below. And the pattern's population was looser: it summed every
+was followed by, with no pattern needed to condition it. The child's connections are at its own reach, so the top of
+a stack expects at the widest reach the stack has, where reading the parent's pattern would have it expect at the
+reach of the level below. And the pattern's population was looser: it summed every
 activation where the pattern applied in the parent's own cover, bought or not, and applied-but-not-bought usually
 means something else described the chunk better, which is a different situation. What it costs is that a newly minted
 child's connections start empty, where the pattern would have carried a future over from before the mint. The cost is
 one frame: the child is given an activation at its mint and its connections form from the next frame on (R13), so by
 the time it is first bought it already holds what followed the situation it was minted in.
+
+**On D17 — why connections are written one level down.** An earlier draft wrote a child's connections in its own
+level's alphabet. But a level consists only of what the election bought, so a child's forward neighbors were other
+bought children, and in a thin stack that is almost nothing — while the base neurons it covered held rich marginals
+and were silenced (D7). Buying a child over a chunk could make the prediction worse. Written in the level below, the
+child sees exactly the firings its members would have seen, over its situation and at its own reach, so silence under
+it loses nothing, and the rule needs no exception at the base: a base neuron's definition is itself, and its
+connections are the base's. What is given up — after this situation, that situation, in the child's own alphabet —
+is what a pattern one level higher is, built over children on the backward side, so the information moves to where
+the dictionary already puts it. The code wires every level to the base set, which is the same instinct taken all the
+way down at the cost of composition.
 
 **On D17 — the base speaks its marginal.** A base neuron on the apex has been recognized as nothing more
 specific than itself, so its own connections — what follows the symbol over every situation it fires in — are the
@@ -848,7 +859,7 @@ be asked again about frame 10.
 and the action `u` runs. The machine calls the activation at age 1 with `(e, +1)` and `(u, +1)`, and the neuron
 strengthens its connections at `(e, +1)` and `(u, +1)`, creating either that does not exist at strength 1. This
 neuron is covered — `K`'s child was bought — so it connects and does not speak. `K`'s child, on the apex at
-level 1, is called at its own age with the level-1 neighbors that fired, strengthens its own connections to
+level 1, is called at its own age with the base neighbors that fired (D17), strengthens its own connections to
 them, and returns what its own connections expect and infer at `+2`. The reward for `u` arrives with frame 11
 and folds into the estimate at `(u, +1)` on both neurons in the same write (R29). At 12, `(?, +2)` connects the
 same way. At 13 the base activation closes.
@@ -1135,8 +1146,8 @@ they offered lost its election makes no difference to the file.
 **On R26 — why coverage silences.** A covered neuron is recoverable solely by expanding its coverer, and the coverer's
 expansion already reaches everything the covered neuron names. So in the file it is a symbol already written; in the
 prediction it is an expectation already placed, since the coverer's connections are the same future over a narrower
-situation; and in selection it is the general case the coverer was minted to escape (R35). One rule, three readings,
-and all three are the same rule against saying one thing twice.
+situation, written in the level it covers (D17); and in selection it is the general case the coverer was minted to
+escape (R35). One rule, three readings, and all three are the same rule against saying one thing twice.
 
 # 13. The prediction
 
@@ -1200,16 +1211,20 @@ ladder work: a level-1 pattern fires in many contexts and averages coarsely acro
 pattern fires rarely and averages sharply over one, and the estimate is waiting at whichever level ends up
 uncovered.
 
-**On R31 — why a covered neuron keeps learning.** Its estimates are the general case, the average over every
-activation in its ring. Learning only while uncovered would make that average run over whatever no higher pattern
-has differentiated yet, shifting with every new pattern.
+**On R31 — why only the apex learns across kinds.** An earlier draft let a covered neuron learn the action that
+ran, on the argument that its estimate is the general case and should be sampled everywhere. But its own kind is
+learned one level down whether it is covered or not (D17), and across kinds the sample a covered activation would
+take is the sample its coverer takes, over a narrower situation; taking it twice lets the general case keep pace
+with the specific one the coverer was minted to be. The frontier learns across kinds, and the frontier is what
+speaks.
 
-**On R32 — why credit lands on the apex.** A committed higher action holds the dimension and suppresses its
-constituents, so crediting the base would reward suppressed subordinates and calcify primitive-level policy.
+**On R32 — why the apex action and not the base.** A completed higher action holds the dimension and subsumes
+its constituents, so connecting to the base would reward subsumed subordinates and calcify primitive-level policy.
 
-**On R32 — why credit lands on the pattern and not its first step.** The estimate that selects a pattern has to
-be what the pattern earned, which is the only reading that makes a multi-frame candidate comparable to a
-single-frame one.
+**On R32 — why a pattern fires when its program completes and not when it starts.** Firing at the start would
+give it a backward half not yet in hand (D17); firing at completion puts it where recognition would. What the
+program earned reaches it through the reward span (R33), so the estimate that selects a pattern is what the
+pattern earned, which is the only reading that makes a multi-frame candidate comparable to a single-frame one.
 
 **On R33 — linear, not exponential.** An exponential fall reaches zero within a few frames, which leaves a
 reward that arrives late attributable to nothing — and a reward that arrives late is the case an unscoped
