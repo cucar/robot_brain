@@ -38,15 +38,15 @@ sides.
 then 1 and 3 in the next, and so on.
 
 **On D6 — an activation is an event, not a state.** It decides everything it will ever decide in the frame it
-fires, on a backward half that is already whole (D17). What it does afterwards is accrue and speak. Accrual is
-transcription rather than judgement — the arriving neighbors and rewards go into the neuron's forward record,
-where the *next* expansion reads them. Speaking is reading the neuron's own forward record, and it changes
+fires, on a backward half that is already whole (D17). What it does afterwards is connect and speak. Connecting is
+transcription rather than judgement — the arriving neighbors and rewards strengthen the neuron's connections,
+where the *next* expansion reads them. Speaking is reading the neuron's own connections, and it changes
 nothing the neuron holds.
 
-**On D6 — why one extra frame.** The window is `reach_t` frames of forward neighbors, and the activation is
-open one frame longer than that for a single reason: the action recorded at offset `reach_t` is paid for at
-`reach_t + 1` (R29), and a reward that lands after the activation closed would have nowhere to go. The extra
-frame is derived from the three-frame chain, not chosen.
+**On D6 — why the window is exactly `reach_t`.** The last forward neighbor fires at offset `reach_t`, and an
+action's reward arrives in the frame the action runs in (R29), so nothing can land after that frame and there
+is no frame to hold open for. An earlier draft paid the reward one frame after the action and had to keep every
+activation open one frame longer for that single arrival; the two-frame cycle removes the frame and the reason.
 
 **On D7 — three consequences of having no rest value.**
 
@@ -214,11 +214,11 @@ worth it is open ([algorithm-evaluation.md](algorithm-evaluation.md)).
 **On D14 — the buffer, walked through.** With a reach of 1 — the base — an activation at frame 10:
 
 ```
-                 frame 10        frame 11        frame 12
-   buffer        [ 9 10]        [10 11]         [11 12]
+                 frame 10        frame 11
+   buffer        [ 9 10]        [10 11]
                       ▲              ▲
-   activation       fires        +1 lands       reward for +1
-   at frame 10   newest edge    into the record  lands, closes
+   activation       fires        +1 fires, with its reward
+   at frame 10   newest edge    connects, closes
                    sees −1
 ```
 
@@ -241,30 +241,29 @@ any pattern.
 
 **On D17 — the split is availability, not meaning.** An activation sees both directions, and a pattern is minted
 after its chunk has been seen. Covering is simply what cannot wait. This binds action neurons no less than
-event ones: an action neuron fires when its action executes and accrues its forward half the same way.
+event ones: an action neuron fires when its action executes and connects forward the same way.
 
-**On D17 — the forward half is the child's, not the parent pattern's.** An earlier draft kept the forward half
-on the pattern: the collapse over what followed every activation the pattern covered, read by the child when the
-child stood on the apex. Three things argued for moving it to the child's own record. The child exists in
-exactly one situation — its parent's pattern was bought — so its record is already the record of what that
-situation was followed by, with no pattern needed to condition it. The child's record is in its own level's
-alphabet at its own reach, so the top of a stack expects at the widest reach the stack has, where reading the
-parent's pattern would have it expect at the reach of the level below. And the pattern's population was
-looser: it summed every activation where the pattern applied in the parent's own cover, bought or not, and
-applied-but-not-bought usually means something else described the chunk better, which is a different
-situation. What it costs is that a newly minted child's record starts empty, where the pattern would have
-carried a future over from before the mint. The cost is one frame: the child is given an activation at its
-mint and its record fills from the next frame on (R13), so by the time it is first bought it already holds
-what followed the situation it was minted in.
+**On D17 — the forward half is the child's, not the parent pattern's.** An earlier draft kept the forward half on the
+pattern: the collapse over what followed every activation the pattern covered, read by the child when the child stood
+on the apex. Three things argued for moving it to the child's own connections. The child exists in exactly one
+situation — its parent's pattern was bought — so its connections are already the distribution of what that situation
+was followed by, with no pattern needed to condition it. The child's connections are in its own level's alphabet at
+its own reach, so the top of a stack expects at the widest reach the stack has, where reading the parent's pattern
+would have it expect at the reach of the level below. And the pattern's population was looser: it summed every
+activation where the pattern applied in the parent's own cover, bought or not, and applied-but-not-bought usually
+means something else described the chunk better, which is a different situation. What it costs is that a newly minted
+child's connections start empty, where the pattern would have carried a future over from before the mint. The cost is
+one frame: the child is given an activation at its mint and its connections form from the next frame on (R13), so by
+the time it is first bought it already holds what followed the situation it was minted in.
 
 **On D17 — the base speaks its marginal.** A base neuron on the apex has been recognized as nothing more
-specific than itself, so its own record — what follows the symbol over every situation it fires in — is the
+specific than itself, so its own connections — what follows the symbol over every situation it fires in — are the
 best expectation anything has for it in that frame. It is coarse, and it is silenced the moment something
 more specific is bought over it (D7). The alternative, the base expecting nothing, left the machine mute and
 its exploration stalled until the first pattern was bought, which was a real gap.
 
-**On D17 — siblings.** Two children promoted at one coordinate are two neurons with two records. While they
-are always bought together their activations see the same forward neighbors and their records agree; the
+**On D17 — siblings.** Two children promoted at one coordinate are two neurons with two sets of connections. While
+they are always bought together their activations see the same forward neighbors and their connections agree; the
 first time one is bought without the other, they diverge. Where they never diverge, the level above sees them as two
 neighbors at offset zero that always co-occur and merges them (§4).
 
@@ -275,7 +274,7 @@ a stage of it, which is what makes a reach a configuration rather than an archit
 
 **On R1 — nothing waits.** An earlier design held every structural decision open until the forward half had
 landed, on the argument that a child names a whole span and half of it had not happened. But the half that had
-not happened was never a term in either test. A neighborhood's forward half is measured rather than chosen
+not happened was never a term in either test. What follows a neighborhood is measured rather than chosen
 (D17), so waiting for it bought nothing and cost the entire apparatus of commitments, horizons and provisional
 answers that used to sit between the two ages.
 
@@ -300,13 +299,13 @@ activations with one backward half can hold different covers depending on what t
 The group could no longer share, so the group is gone. Nothing was lost but a cache — every sum the tests need
 is a sum over activations either way (T3).
 
-**On D20 — why two records became one, on the neuron.** The design used to keep forward tallies on the
-pattern and connections on the neuron: per-slot counts of what followed, and per-age estimates of what an
+**On D20 — why the connections are one set, on the neuron.** The design used to keep forward tallies on the
+pattern and connections on the neuron: per-offset counts of what followed, and per-age estimates of what an
 action was worth. Both were indexed by a forward offset and a neighbor, and the distance a connection was held
 at was exactly the offset the action fired at. So the connection was a forward neighbor that happened to be an
-action, carrying one more number. D20 says so: an action slot is a forward neighbor with a strength and an
-estimate, the event slots sit beside it in one record, and the record is the neuron's over its own life —
-which is where the connections always were.
+action, carrying one more number. D20 says so: an action connection is a forward neighbor with a strength and an
+estimate, the event connections sit beside it, and the set is the neuron's over its own life — which is where
+the connections always were.
 
 **On D20 — weights, not sets, and no window.** The backward side needs a window and a majority because it is
 written into the file: a pattern has to be a set, since a set is the only thing a decoder can expand, and the
@@ -317,11 +316,11 @@ is the maximum-likelihood statistic for a thing that is only ever read, and the 
 of those distributions with one unit per voter (§13). A majority would throw the minority away for no reason
 the file gives, and a window would forget for no reason the file gives.
 
-An earlier draft kept the forward record as a majority over the ring, on the argument that a weight that only
+An earlier draft kept the connections as a majority over the ring, on the argument that a weight that only
 ever grows answers a changed world at the rate it can be outgrown. It does; and that is not where the design
-answers a changed world. A neuron's record is the lifetime marginal of what follows its symbol. Specificity
+answers a changed world. A neuron's connections are the lifetime marginal of what follows its symbol. Specificity
 comes from the hierarchy: when the world changes the neuron's patterns turn over within `H` (D24), a new child
-is minted, and that child's record is over the new situation alone from its first exposure. The old estimate
+is minted, and that child's connections are over the new situation alone from its first exposure. The old estimate
 is not wrong; it is the general case, which is what a base neuron is for (R35). Responsiveness is bought with
 structure, not with forgetting, and the window stays where the file needs it.
 
@@ -348,8 +347,9 @@ The one new obligation is R3's third line: when an activation's cover changes, a
 still subtracts and re-adds, because what another pattern took from the residual moves this pattern's
 `present` to `held`, or back.
 
-**Worked case.** `e = {b@0, c@0}` covers ten activations and `d@0` begins to appear. `d` is residual in every activation
-that has it, so `present_e(d)` climbs by one per such activation while `held_e(d)` stays zero. At `2 · present_e(d)
+**Worked case.** `e = {b@0, c@0}` covers ten activations and `d@0` begins to appear. `d` is residual in every
+activation that has it, so `present_e(d)` climbs by one per such activation while `held_e(d)` stays zero. At `2 ·
+present_e(d)
 > 11` — six of ten — re-centering enters `d` and `e` becomes `{b, c, d}`. The four activations without `d` now price
 `e` at 2, which is what they were paying before (line plus one residual), so R6 lets them keep it, and they
 evict in turn. **No candidate could have done this**: a candidate is built on the residual alone (R14), `b` and
@@ -387,9 +387,6 @@ per-slot decision off the objective by exactly one. Charging it where the slot i
 decision a strict descent on the margin, which is what T6 needs, and it removes the last place a neighborhood
 could grow at no gain.
 
-**The forward rule is `2 · count > n` precisely because no line is paid for a forward slot** (D9). The two
-thresholds differ by one, for one reason, and it is the reason the design has a dictionary at all.
-
 **On R4 — why the slot holds at equality.** With the line charged the boundary is `2 · count = n + 1`, and at
 that boundary naming and not naming cost the same. A rule that dropped the slot there could re-add it next
 bill when one activation moved and drop it again the bill after, walking a plateau forever without ever lowering
@@ -401,9 +398,9 @@ out a question the design is asking it; this one it has already answered, for th
 neighbor covered.
 
 **On R4 — why there is no forward rule.** The collapse exists to turn counts into a set, and a set is needed
-only because the file has to be expanded. A forward slot is charged nothing: it is not in the line and not in
+only because the file has to be expanded. A connection is charged nothing: it is not in the line and not in
 the history (D9). So there is nothing to break even against and nothing that has to become a set. An event
-slot goes down as a vote at its strength (§13), an action slot as an inference at its strength and estimate
+slot goes down as a vote at its strength (§13), an action connection as an inference at its strength and estimate
 (R36), and a majority would throw away exactly the minority the vote still needs and exactly the alternatives
 the walk is for (R37).
 
@@ -453,7 +450,7 @@ and are retired (R17). A neuron that falls silent sheds nothing: it holds its `H
 intact, indefinitely, and resumes from them when its situation returns. An active neuron adapts exactly as
 fast as its evidence turns over, and a silent one simply waits.
 
-**On D24 — `H` does three jobs.** It is the structural memory — the forward record is outside it (R31) — it
+**On D24 — `H` does three jobs.** It is the structural memory — connections are outside it (R31) — it
 is R12's selectivity — double it and every pattern's
 benefit roughly doubles against an unchanged line, so more survive — and it is the rate at which the stack
 deepens (T13). One number, three effects, all monotone in it, and it should be tuned knowing that.
@@ -466,8 +463,8 @@ has to be able to do it alone, and it can.
 > **T3 — Counts are sums over activations, and nothing reads an activation whole but eviction.** Re-centering sums
 > `present` and `held` over the activations a pattern covers (D23), both tests sum margins over activations, and the
 > candidate collapses over a population of activations — every one of these is a per-slot count, and the per-slot
-> counts are what a pattern keeps (D23). Forward, there are no activations to sum over at all: the record is
-> per-slot totals on the neuron, written as neighbors land and never read back per activation (R31). Nothing asks
+> counts are what a pattern keeps (D23). Forward, there are no activations to sum over at all: a connection is
+> a total on the neuron, strengthened as neighbors fire and never read back per activation (R31). Nothing asks
 > whether `c` at `+1` came with `d` at `+2`. The one operation that needs an activation as a unit is removing it
 > (R8), because a sum cannot say which of its terms was the oldest.
 
@@ -487,7 +484,7 @@ tests scan distinct backward contexts and read pre-summed counts.
 > **T5 — Every loop in the design is bounded, and none is capped.** A bill is five passes, each over a fixed
 > set — the ring, the table, the slots — and none of them repeats until a condition holds (R19): one candidate
 > is built by one seed and one collapse, one pattern retires at most. The election is two decisions and a
-> settling, none of them repeated (R23). A retirement is collected within `reach_t(D) + 1` frames and takes
+> settling, none of them repeated (R23). A retirement is collected within `reach_t(D)` frames and takes
 > its whole subtree in one step (R17). The level stack is bounded by the base activity behind a frame (T12) and
 > by the run so far against `H` (T13), which together also bound the settlement walk (R24) and the depth of an
 > expansion (R27). Every bound falls out of a quantity the design already counts, so nothing has to be chosen
@@ -592,7 +589,7 @@ whole (D17), and everything that follows that frame is exactly the future of the
 minted for. Had the child waited for its first purchase to open an activation, that future would have gone by
 unrecorded, and the child would begin its life one situation behind. The activation costs nothing structural:
 it is not elected, so the file, the frontier and the vote are untouched, and the only thing it does is what
-every activation does between activations — write what lands into its neuron's record (T8).
+every activation does between activations — strengthen its neuron's connections (T8).
 
 **On R14 — building a candidate, worked through.** Five activations in the ring, an empty table, so every
 neuron of every activation is in the residual.
@@ -761,9 +758,9 @@ an order on activations that are simultaneous — the pixel at one position did 
 another — and the structure that came out would depend on it, which is the defect R23 removes one level up.
 
 **On §10.3 — why the forward call carries no decision.** Its jobs are transcription: arriving neighbors into the
-neuron's record, a reward into the estimate of the action it paid for. Neither feeds a test that is waiting. What the
-call does carry out is speech — what the neuron on the apex expects and infers — and speech reads the record without
-touching it.
+neuron's connections, a reward into the estimate of the action connection it paid for. Neither feeds a test
+that is waiting. What the call does carry out is speech — what the neuron on the apex expects and infers — and
+speech reads the connections without touching them.
 
 > **T7 — The tests are the assignment.** The only consumer of a table-wide picture of covers is R14's
 > residual, and R17 reads it only through the activations a pattern covers. Both scan the whole
@@ -773,11 +770,11 @@ touching it.
 
 > **T8 — Nothing between activations is read.** Counts move when an activation is saved, when one is evicted, or
 > when a cover changes (R3), and all three happen in the frame the neuron fires. Between activations the forward
-> call does write — forward neighbors and rewards land in the neuron's record (D6) — but **nothing prices them,
-> ever**: no neighborhood, cost or cover reads the record, and nothing is recomputed in between. The forward half
-> is read between activations, by the apex, and reading it moves nothing.
+> call does write — forward neighbors and rewards strengthen the neuron's connections (D6) — but **nothing prices
+> them, ever**: no neighborhood, cost or cover reads a connection, and nothing is recomputed in between. The
+> connections are read between activations, by the apex, and reading them moves nothing.
 >
-> **So accrual is evidence in escrow.** It changes what the next answer will be and never an answer already
+> **So connecting is evidence in escrow.** It changes what the next answer will be and never an answer already
 > given.
 
 **This is Lloyd's algorithm, interleaved with the data.** Assign points to the nearest center, move each center
@@ -800,7 +797,7 @@ Take `R_t = 3` and a neuron whose table holds two patterns, `K` and `M`:
 ```
 K names  {(a,−2), (b,−1)}
 M names  {(g,−1), (h,0)}
-the neuron's own record so far:  an event slot (c,+1), and an action slot (u,+1) at estimate 0
+the neuron's connections so far:  an event connection (c,+1), and an action connection (u,+1) at estimate 0
 ```
 
 **Frame 10 — the neuron fires, and everything is decided.** Its backward half is `{(a,−2), (b,−1), (g,−1),
@@ -834,13 +831,14 @@ The neuron is told none of this. `K`'s child is promoted at frame 10 and expands
 **That is the whole of the neuron's frame.** Nothing is held open, nothing is committed for later, nothing will
 be asked again about frame 10.
 
-**Frames 11 through 14 — the forward call.** At 11, `c` does not come; `e` fires in that dimension instead,
+**Frames 11 through 13 — the forward call.** At 11, `c` does not come; `e` fires in that dimension instead,
 and the action `u` runs. The machine calls the activation at age 1 with `(e, +1)` and `(u, +1)`, and the neuron
-increments its slots at `(e, +1)` and `(u, +1)`, creating either that does not exist at strength 1. This neuron
-is covered — `K`'s child was bought — so it writes and does not speak. `K`'s child, on the apex at level 1, is
-called at its own age with the level-1 neighbors that fired, writes them into its own record, and returns what
-its own record expects and infers at `+2`. At 12, a reward for `u` arrives and folds into the estimate at
-`(u, +1)` in both records; `(?, +2)` lands the same way. At 14 the base activation closes.
+strengthens its connections at `(e, +1)` and `(u, +1)`, creating either that does not exist at strength 1. This
+neuron is covered — `K`'s child was bought — so it connects and does not speak. `K`'s child, on the apex at
+level 1, is called at its own age with the level-1 neighbors that fired, strengthens its own connections to
+them, and returns what its own connections expect and infer at `+2`. The reward for `u` arrives with frame 11
+and folds into the estimate at `(u, +1)` on both neurons in the same write (R29). At 12, `(?, +2)` connects the
+same way. At 13 the base activation closes.
 
 **The neuron is not asked again, and nothing about frame 10 is revisited.** `K` was not wrong to be in the
 cover: it was priced on what fired beside the neuron, and `e` arriving instead of `c` is not a charge against
@@ -853,7 +851,7 @@ verdict on the last one.
    frame 10                                  frames 11 … 14
    ────────────────────────────────────────  ───────────────────────────────
    fire — the backward half is whole         (e,+1), (u,+1) land, then +2, +3
-   cover, save, evict, re-center             written into the record
+   cover, save, evict, re-center             connections strengthened
    build one, retire one
    offer every pattern that applies          the reward for u lands beside it
    ── the level elects, and says nothing ──
@@ -1094,8 +1092,8 @@ is held for the prediction, which is an output and not a map.
 > **T14 — One pass resolves inside the frame.** A bid carries only backward neighbors (R20), so every election
 > runs on frames already in hand, and the bill that fed it ran before it — bill, offer and election are all
 > inside the level and inside the frame, which is why nothing in the loop costs latency in the stack. A unit
-> promoted at `f` is available as an offset-0 neighbor to the level above at `f`, and its own forward half
-> completing later gates nothing. **Spanning patterns therefore cost no latency in the stack**; the only thing
+> promoted at `f` is available as an offset-0 neighbor to the level above at `f`, and its own connections
+> forming later gate nothing. **Spanning patterns therefore cost no latency in the stack**; the only thing
 > that settles late anywhere is R24's accounting, and nothing waits on it.
 
 **Why there is no phase boundary.** Splitting the stack would declare a schedule of a different kind — one
@@ -1121,10 +1119,11 @@ is chosen by exactly the frontier. In the worked drawing, `i` and `j` are covere
 the frontier beside a level-3 pattern — whether that is because they offered no child or because the child
 they offered lost its election makes no difference to the file.
 
-**On R26 — why coverage silences.** A covered neuron is recoverable solely by expanding its coverer, and the
-coverer's expansion already reaches everything the covered neuron names. So in the file it is a symbol already
-written; in the prediction it is an expectation already placed, since the coverer's record is the same future
-over a narrower situation; and in selection it is the general case the coverer was minted to escape (R35). One rule, three readings, and all three are the same rule against saying one thing twice.
+**On R26 — why coverage silences.** A covered neuron is recoverable solely by expanding its coverer, and the coverer's
+expansion already reaches everything the covered neuron names. So in the file it is a symbol already written; in the
+prediction it is an expectation already placed, since the coverer's connections are the same future over a narrower
+situation; and in selection it is the general case the coverer was minted to escape (R35). One rule, three readings,
+and all three are the same rule against saying one thing twice.
 
 # 13. The prediction
 
@@ -1134,7 +1133,7 @@ within a level and a cascade across levels, then scored against what arrived, wi
 file. It was the second most involved mechanism in the design after the adjustment, and it decided nothing —
 no test read the corrections, no pattern was ever retired for them, and the election never saw a completed
 span. What survived it is the part that is useful to whoever is downstream: the expansion. An apex unit's
-record says what it was followed by; expanding that through dictionary lines lands base symbols in frames
+connections say what it was followed by; expanding that through dictionary lines lands base symbols in frames
 ahead; one winner per dimension over the apex is what the machine expects. It goes out. It is not a line in
 the file, and it is never wrong in any sense the machine keeps.
 
@@ -1176,14 +1175,14 @@ are covered (D17), and a bid could name a neighbor the election has not picked y
 **On R31 — why the connection is a neighbor after all.** An earlier design held it apart: it crossed kinds, it
 was temporal only, its ends need not sit at one level, and it was formed after every level had settled. Every
 one of those is true of a forward neighbor in an action dimension. A forward neighbor crosses kinds whenever
-an event neuron's record holds an action; it is temporal because `Δt > 0` is temporal; its two ends are the
-neuron and whatever fired, at whatever level fired it; and the forward half of every activation is written
-after every level has run (§10.3). What the connection had that a neighbor did not was an estimate, and an
-estimate is one more number beside a count. So it is a slot with a strength and an estimate, and the neuron
-holds one forward record instead of two.
+an event neuron's connections hold an action; it is temporal because `Δt > 0` is temporal; its two ends are the
+neuron and whatever fired, at whatever level fired it; and every activation connects after every level has run
+(§10.3). What the connection had that a neighbor did not was an estimate, and an estimate is one more number
+beside a count. So it is a forward neighbor with a strength and an estimate, and the neuron holds one set of
+connections instead of two.
 
 **On R31 — why the frontier is not enough.** Structure is recoverable by expansion, which is what lets the
-file record the frontier alone; policy is not. Holding action slots at every level is also what makes the
+file record the frontier alone; policy is not. Holding action connections at every level is also what makes the
 ladder work: a level-1 pattern fires in many contexts and averages coarsely across all of them, a level-4
 pattern fires rarely and averages sharply over one, and the estimate is waiting at whichever level ends up
 uncovered.
@@ -1217,17 +1216,17 @@ about its worth, so an unchosen action must not be penalized, or the brain colla
 first. That is the first half. The second is that the estimate is a lifetime mean, and an earlier draft
 rejected that on the argument that a lifetime is a second horizon beside `H`, which R10 forbids. It is not a
 horizon: it is the absence of one, and it has no parameter. Under this rule `H` governs structure and nothing
-else, which is one knob fewer. What a lifetime mean gives up is the rate at which one slot absorbs a changed
-worth, which falls as `1 / strength`; what it gets is an estimate that is exactly the sample mean, and a record
+else, which is one knob fewer. What a lifetime mean gives up is the rate at which one connection absorbs a changed
+worth, which falls as `1 / strength`; what it gets is an estimate that is exactly the sample mean, and a distribution
 that is specific because of who holds it rather than because of when it was written (R35). Attempts to buy
-responsiveness inside the slot — decay, a window, a rate — were tried against the stock demos and lost to the
+responsiveness inside the connection — decay, a window, a rate — were tried against the stock demos and lost to the
 plain average every time.
 
 **Three things this costs, stated plainly.** An action judged bad early stays judged: once every action in a
-channel has a slot, nothing new is wired, and an action that was unlucky on its first samples is re-tried only
+channel has a connection, nothing new is wired, and an action that was unlucky on its first samples is re-tried only
 if it becomes the least bad (R37). That is the ordinary weakness of a greedy bandit, accepted for determinism.
-A slot wired ahead of any exposure is one neutral pseudo-sample (R31): its strength is one higher than what
-was seen, which is a prior of a single observation at zero, and the honest name for it. And a slot never
+A connection wired ahead of any exposure is one neutral pseudo-sample (R31): its strength is one higher than what
+was seen, which is a prior of a single observation at zero, and the honest name for it. And a connection never
 leaves: memory is bounded by distinct co-occurrences, which is the alphabet squared per offset at worst.
 
 **On R34 — a neuron that fires rarely remembers exactly as long as one that fires often.** Both remember
@@ -1241,13 +1240,13 @@ state one.
 
 **On R35 — recognition and execution run in opposite directions.** Events compose bottom-up; actions unfold
 top-down, and selecting a high-level action pattern is a commitment to perform it. The two hierarchies connect
-at every level, so an event neuron's record can name an action pattern — a high-level situation joined to a
-high-level response by a single slot, which is how a complex action sequence is learned as the answer to a
+at every level, so an event neuron's connections can name an action pattern — a high-level situation joined to a
+high-level response by a single connection, which is how a complex action sequence is learned as the answer to a
 complex event sequence.
 
-**On R35 — why the default is a slot on every neuron.** Every neuron is born holding the declared default at
+**On R35 — why the default is a connection on every neuron.** Every neuron is born holding the declared default at
 every forward offset, base neurons included, so from the first frame every apex activation has an inference
-and the walk (R37) can begin on the first negative reward. An earlier draft held slots on patterns only, which
+and the walk (R37) can begin on the first negative reward. An earlier draft held connections on patterns only, which
 left the base mute and exploration waiting for the first bought pattern. The rule that an unreached dimension
 runs the default survives as a safety, and it fires only when nothing at all is on the apex, which is an empty
 frame.
@@ -1267,7 +1266,7 @@ only gets sampled by something being tried in it.
 
 **On R36 — why level is not read.** An earlier draft resolved inferences by level first and estimate second,
 on the argument that a higher action pattern decides more of the timeline. That let compression override
-reward outright: a level-4 slot at a small negative estimate beat a level-1 slot at a large positive one,
+reward outright: a level-4 connection at a small negative estimate beat a level-1 connection at a large positive one,
 which is a second place where the two objectives meet and the wrong one wins there (R34). The base-level vote
 reads the estimate alone. A specific situation still tends to win, because a child's estimate is over one
 situation and a base neuron's over many, so where the situation matters the child's number is the sharper one
@@ -1282,15 +1281,15 @@ actions at one estimate, and any frame's fresh inference that beats it at one of
 frame.
 
 **On R37 — why always executing the best-known action is a problem.** An action that merely scores acceptably
-can hold a situation forever. Thompson sampling over the action slots is the obvious probabilistic
-alternative, and it drops into the same slot.
+can hold a situation forever. Thompson sampling over the action connections is the obvious probabilistic
+alternative, and it drops into the same place.
 
 **On R37 — what the walk buys, and what it does not.** It is deterministic, so a run reproduces and a
-regression is a real regression. Other strategies drop into the same slot, and swapping them changes no
+regression is a real regression. Other strategies drop into the same place, and swapping them changes no
 structure. What it does not buy is a second look: the walk wires each action once, and with no window nothing
 is ever forgotten and wired again, so an action's first few samples are the only ones it gets unless it is
 selected on its own merit afterwards. In a stationary world that is the right economy; in one where an
-action's worth changes, the neuron that notices is a new child with a fresh record, not this slot.
+action's worth changes, the neuron that notices is a new child with fresh connections, not this connection.
 
 ---
 
@@ -1331,8 +1330,8 @@ could have done with the bids it was offered**, and the one-pass election this r
 ## Not provable, and why
 
 **Across frames.** Every frame adds an activation to each active neuron's ring, evicts one, and adds raw lines to
-the machine's history before any election runs. The forward record is outside all of this: it is in no file,
-and no move is priced on it (R34). "The file is shorter after frame `f + 1` than after frame `f`"
+the machine's history before any election runs. Connections are outside all of this: they are in no file,
+and no move is priced on them (R34). "The file is shorter after frame `f + 1` than after frame `f`"
 is false of any compressor reading a stream, this one included. What holds is the statement above: never longer
 than flat, and every structural move a descent on the evidence in hand.
 

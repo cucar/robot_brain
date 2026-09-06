@@ -8,12 +8,12 @@ risk states what would be done about it, so measurement has a decision attached.
 # 1. The falsifiable claim
 
 Nothing in the design optimizes for prediction, and nothing scores it. A pattern is charged for the neurons it
-names beside the activation and never for what followed (D17); its forward half is counted into its record,
+names beside the activation and never for what followed (D17); what followed it strengthens its connections,
 enters no test, and is not in the file (D9). What the machine expects next is an output it hands out (§13),
 and no part of the machine reads whether it came true. Prediction is therefore a pure by-product: the machine
 gets better at predicting by compressing better — richer chunks are bought, patterns upstairs describe over
-richer symbols, and each child's record is the consensus of what actually followed the situation it was bought
-for.
+richer symbols, and each child's connections are the distribution of what actually followed the situation it was
+bought for.
 
 **There is no path at all by which a prediction error can change what structure exists.** If accuracy still
 tracks compression, it is the by-product thesis and nothing else.
@@ -78,7 +78,7 @@ activations whose held cover differs from the cover R18 would derive fresh, and 
 is large and the difference is zero, the hold is doing nothing but hysteresis and the tie rule could be
 loosened.
 
-**The base votes its marginal.** A base neuron on the apex expects and infers from its own record, which is
+**The base votes its marginal.** A base neuron on the apex expects and infers from its own connections, which is
 the average over every situation it has ever fired in (D17, R35). Early in a run that is every voter there is,
 so the machine's first expectations are the coarsest ones it will ever make, and its first actions are chosen
 on estimates that average over situations the base neuron cannot tell apart. Coverage silences a base neuron
@@ -86,16 +86,16 @@ only once something more specific is bought over it. **Diagnostic:** the share o
 neurons, per frame, over exposure; it should fall as the dictionary fills. If it stays high on data that
 recurs, patterns are not being bought where the base is voting, and the compression side is where to look.
 
-**An action judged bad early is not re-tried.** A slot never leaves (R31), so the walk wires each action once
+**An action judged bad early is not re-tried.** A connection never leaves (R31), so the walk wires each action once
 and never again (R37); an action that was unlucky on its first samples keeps that estimate and runs again only
 if it becomes the least bad of a channel where everything has been tried. In a stationary world nothing is
-lost. In a world where an action's worth changes, the slot cannot notice — the design's answer is that a new
-child with a fresh record notices instead (R34), which holds only where structure is actually being minted
-over that situation. **Diagnostic:** per channel, the share of action slots whose estimate is negative on
+lost. In a world where an action's worth changes, the connection cannot notice — the design's answer is that a new
+child with fresh connections notices instead (R34), which holds only where structure is actually being minted
+over that situation. **Diagnostic:** per channel, the share of action connections whose estimate is negative on
 fewer than three exposures and which are never selected again; and, on data where an action's worth is known
 to change, how many frames pass before the apex voter for that situation is a neuron minted after the change.
 
-**An estimate moves at `1 / strength`.** With no window, a slot with a thousand exposures moves by a
+**An estimate moves at `1 / strength`.** With no window, a connection with a thousand exposures moves by a
 thousandth of each new sample, so a base neuron's estimate on stationary-then-changed data lags for as long
 as it has history. The bet is the same as above: the general case is allowed to lag because the specific
 case is a younger neuron. **Diagnostic:** for a change introduced at a known frame, the estimate at the apex
@@ -114,13 +114,13 @@ level per frame, against the halving T11 assumes. If levels stop thinning, D14's
 against an invariant that no longer holds, and the reach has to be derived from measured spacing instead.
 
 **Siblings agree until one is bought alone.** Two children bought at one coordinate see the same forward
-neighbors, so their records agree until the first activation where one is bought and the other is not (D21). Two
+neighbors, so their connections agree until the first activation where one is bought and the other is not (D21). Two
 patterns always bought together never diverge at their own level; the level above is expected to merge them
 (§4 of the remarks). **Diagnostic:** for pairs of children of one neuron, the overlap of the frames they were
-bought in against the overlap of their records. Pairs high on both for a long stretch are the merge the level
+bought in against the overlap of their connections. Pairs high on both for a long stretch are the merge the level
 above has not made.
 
-**A newly minted child expects little for a while.** Its record starts filling the frame after its mint
+**A newly minted child expects little for a while.** Its connections start forming the frame after its mint
 (R13) and then only in the frames it is bought in (D17), so until it has been bought a few times it expects
 from one or two exposures and infers little but the default. The parent it was minted from is covered whenever
 the child is bought, so nothing speaks for that situation with much history until the child has some.
@@ -128,10 +128,11 @@ the child is bought, so nothing speaks for that situation with much history unti
 often it is bought.
 
 **Nothing retires a pattern for a useless future.** A pattern is priced on what it names that did not fire
-beside it, and never on what its child was followed by (D17, R17). So a child whose record is worthless keeps
+beside it, and never on what its child was followed by (D17, R17). So a child whose connections are worthless keeps
 its line as long as its parent's pattern covers, and the machine's expectation from it is noise. Nothing
-clears a bad slot: the record keeps every symbol that ever followed, and the claim is that the vote dilutes
-what it cannot clear — a record spread over many symbols splits its one unit thinly across them, so it decides
+clears a bad connection: the connections keep every symbol that ever followed, and the claim is that the vote
+dilutes what it cannot clear — a neuron whose connections spread over many symbols splits its one unit thinly
+across them, so it decides
 a dimension only where no sharper voter contends — and that a pattern whose *backward* half is good is worth
 its line regardless. A diluted voter still places something in every dimension it has ever seen, so it never
 falls silent. **Diagnostic:** expected symbols per apex unit that did not arrive, per level, and the share of
@@ -229,7 +230,7 @@ of this needs revisiting.
 
 **Asymmetric reach, and isotropic growth.** Backward and forward reach both emerge from the vote, bounded by
 the same reach. Whether one reach is right — "how much do I need to recognize myself" and "how far do I need to
-expect" are different questions — is unresolved, and it matters more now that the forward half is the whole of
+expect" are different questions — is unresolved, and it matters more now that the connections are the whole of
 the machine's expectation. One reach is the committed choice; separate reaches are the fallback if diagnostics
 show neighborhoods consistently reaching the bound in one direction only. **The same doubt applies across
 activation dimensions**: D14 grows every one of them by the same factor, which holds only if contraction thins
@@ -240,9 +241,9 @@ them equally, and a channel whose patterns chunk harder in time than in space wo
 dimension whatever level it stands at (§13, R36). A level-4 unit that expanded to forty base symbols and a base neuron
 that expects one symbol are then equal voters in the dimension they share, and the level-4 unit's expectation about
 that dimension rests on a situation the base neuron's does not. Level was taken out of the vote because ranking by
-level let compression override reward; whether some other reading of the voter — the strength behind its slot, the
-exposures its estimate rests on — should weight it is not decided. **Diagnostic:** per dimension, how often the winner
-was placed by a base voter over a pattern voter that disagreed, and which was right.
+level let compression override reward; whether some other reading of the voter — the strength behind its connection,
+the exposures its estimate rests on — should weight it is not decided. **Diagnostic:** per dimension, how often the
+winner was placed by a base voter over a pattern voter that disagreed, and which was right.
 
 **The cross-neuron seam.** R4's abstention teaches a pattern not to name what another pattern of the *same
 cover* holds. Across neurons nothing teaches it: a neighbor some other neuron's unit reliably covers is still
@@ -252,19 +253,21 @@ and it is the same bet. The one-bit fallback above would not close it; closing i
 the design removed. **Diagnostic:** per pattern, the share of its named neighbors that its bought bids were
 never credited for, over its life.
 
-**R33's shaping is ahead of the implementation; the arithmetic is not.** The spec says a reward carries an
-optional channel set and an optional frame span, dissipates linearly over that span, and enters the estimate
-of the action slot at the offset each distance names. The current brain folds rewards into the estimate
-exactly as R31 says — one exposure, one share, weighted `1 / strength` — but does not shape them: it attaches
-the frame's reward whole to every action active in that frame, on every open age, and a minted pattern is
-pre-wired with `rewards[age − distance]` on a second path. Neither scopes and neither ramps. **Diagnostic:**
-with a span-of-one reward, whether a slot at offset `d > 1` moves at all — under R33 it must not.
+**R33's shaping is ahead of the implementation; the cycle and the arithmetic are not.** The spec says a reward
+carries an optional channel set and an optional frame span, dissipates linearly over that span, and enters the
+estimate of the action connection at the age each distance names. The current brain runs the two-frame cycle
+as R29 says — the action inferred at one frame fires at the next with its reward attached — and folds rewards
+into the estimate exactly as R31 says, one exposure, one share, weighted `1 / strength`. What it does not do is
+shape them: it attaches the frame's reward whole to the action that ran in that frame, on every open age, which
+is R33's span of one, and a minted pattern is pre-wired with `rewards[age − distance]` on a second path.
+Neither scopes and neither ramps. **Diagnostic:** with a span-of-one reward, whether the estimate of an action
+that ran in an earlier frame moves at all — under R33 it must not.
 
-**The forward side of the code is the design, with two deliberate differences.** The record is lifetime totals
-on the neuron, written on observation, never evicted, never collapsed; the estimate is the exact running mean;
+**The forward side of the code is the design, with two deliberate differences.** A connection is a lifetime total
+on the neuron, strengthened on observation, never weakened, never collapsed; the estimate is the exact running mean;
 the default is wired at birth at strength 1; the walk wires the next untried action on a negative mean;
 covered ages are silenced; and the vote at the base normalizes each voter to one unit per dimension and
 distance, events winning by share and actions by the share-weighted mean estimate, with no level anywhere in
 it. All of that is D20, R31, R35, R36 and R37 as written. What differs is that the code wires every level's
-record to the base set instead of its own level's, and so needs no expansion (R27, R30), and that it shapes no
+connections to the base set instead of its own level's, and so needs no expansion (R27, R30), and that it shapes no
 reward (above). [algorithm-implementation.md](algorithm-implementation.md) lists the changes.
