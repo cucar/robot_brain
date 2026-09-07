@@ -138,7 +138,7 @@ export function formatVotes(votes, inferences, formatters, dimensionIdToName) {
 /**
  * Format event votes for one channel. Groups by event neuron (each a candidate
  * bucket on some dimension), then groups candidates by dimension so dimensions
- * compete amongst themselves. Inside each candidate, voters are shown sorted by
+ * compete among themselves. Inside each candidate, voters are shown sorted by
  * strength — mirroring how consensus resolution ranks them.
  */
 function formatEventVotes(allVotes, winnerIds, channel, dimensionIdToName) {

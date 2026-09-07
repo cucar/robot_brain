@@ -313,15 +313,15 @@ export class Job {
 			// exposed via getStartFrameInfo (which is null on empty frames).
 			// Cache the first non-null lookup so vote rendering still works
 			// on frames where the snapshot would be unavailable.
-			if (!this._dimNameCache) {
+			if (!this.dimNameCache) {
 				const info = this.brain.getStartFrameInfo();
-				if (info) this._dimNameCache = info.dimensionIdToName;
+				if (info) this.dimNameCache = info.dimensionIdToName;
 			}
 			const out = formatVotes(
 				result?.votes,
 				result?.inferences ?? new Map(),
 				this.getChannelFormatters(),
-				this._dimNameCache ?? {},
+				this.dimNameCache ?? {},
 			);
 			if (out) console.log(out);
 		}

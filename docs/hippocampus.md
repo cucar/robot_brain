@@ -45,19 +45,24 @@ Thought emerges from replay traversal through compressed contextual structure.
 
 ### Moments age into classes
 
-A moment is born with many parents (the union at mint time). 
-Per-link decay applies independently to each parent connection. 
-Use-driven reinforcement strengthens links that match real recurring contexts. 
-Over time, weak (incidental) parent links drop out; strong (real-context) parent links survive and sharpen. 
-The moment ends up connected only to its core parents — a class-shaped node, structurally indistinguishable from a statistically-formed pattern.
+A moment is born with many parents: the apex at the instant it was minted, all of it. 
+It keeps a ring of its last `H` firings like every neuron ([algorithm.md](algorithm.md), D24), and its parent set is the collapse over that ring — a parent stays while it is present in more than half of the moment's firings (R4). 
+At birth the ring holds one firing, and a majority over one firing is everything, so the moment is born as broad as the instant was. 
+Every later firing is another instant; the parents those instants share keep their majority and the incidental ones lose it. 
+The moment ends up naming only its core parents — a class-shaped node, structurally indistinguishable from a statistically-formed pattern. No link decays, no link is boosted, and no threshold is set: the ring is the whole mechanism, and it moves at the rate the moment fires rather than at the rate of the clock.
+
+Two rules say what reaches a moment and what fires it, and they are different. 
+**Any parent reaches.** A single active parent makes the moment addressable by the executor: it can be recalled from a partial cue, replayed and thought from. 
+**A majority fires.** The moment fires, and the current apex enters its ring, only when more than half of its parents are present — the cortex's own apply test (R18). 
+Reaching writes an imagined firing carrying the moment's own reconstructed instant; firing writes the real one. Both narrow the moment; only the second lets the present overwrite it, and only when the present resembles it.
 
 Moments are not stored as immutable records.
-A recalled moment is a partial reconstruction assembled from surviving contextual routes across many parent neurons.
-As forgetting removes weak or incidental routes, moments gradually lose episodic specificity and become semantic abstractions (classes).
+A recalled moment is a reconstruction from the parents its ring still gives a majority to.
+As rehearsal and recurrence drop the incidental parents, moments gradually lose episodic specificity and become semantic abstractions (classes) — and the cue that fires them widens with it, from instants very like the original to anything carrying the gist.
 
 Classes are not a separate neuron kind. 
-They are aged moments. 
-The forgetting curve is the abstraction mechanism. 
+They are rehearsed moments. 
+The majority over the ring is the abstraction mechanism. 
 This is the architectural analog of episodic-to-semantic consolidation as observed empirically: vivid specific memories lose incidental detail and survive as gist.
 
 ### The three-tier graph
@@ -68,14 +73,14 @@ The full architecture forms a graph with three tiers:
 
 - **Bottom tier: sensory and motor neurons.** Input and output. The raw interface with the environment.
 - **Middle tier: pattern neurons.** Created by the cortex through intersection — statistical compression of recurring co-activations. Many levels, each at exponentially coarser timescale. Patterns connect downward to sensory neurons and upward to higher patterns. The cortex builds this tier bottom-up.
-- **Top tier: moment/class neurons.** Created by the hippocampus through union — one-shot binding of the active pattern set at salience triggers. Moments connect downward to patterns (their parents) and laterally to other moments (the temporal moment graph) and to action neurons.
+- **Top tier: moment/class neurons.** Created by the hippocampus through union — one-shot binding of the active pattern set at salience triggers. Moments name patterns as parents in their neighborhoods, and their forward records hold what followed them: other moments, patterns and actions.
 
 The cortex and hippocampus perform symmetric but opposite operations on this graph:
 
 - **Cortex (intersection):** selectivity at creation. Observes many instances, finds what recurs, creates a narrow node representing only the common signal. Patterns start narrow and stay narrow.
-- **Hippocampus (union):** selectivity deferred to decay. Observes one salient instant, binds everything active, creates a broad node. Moments start broad and narrow through per-link decay as incidental parents fade and core parents survive. A moment converges toward a class — structurally identical to a pattern that was narrow from the start.
+- **Hippocampus (union):** selectivity deferred to the ring. Observes one salient instant, binds everything active, creates a broad node. Moments start broad and narrow as later instants enter the ring and the majority drops the parents they do not share. A moment converges toward a class — structurally identical to a pattern that was narrow from the start.
 
-Both create nodes in the same substrate. Both fire by context match. The difference is when selectivity happens: at birth (intersection) or through life (union, pruned by forgetting).
+Both create nodes in the same substrate. Both fire by the same majority test. The difference is when selectivity happens: at birth (intersection) or through life (union, narrowed by the ring).
 
 ### Multi-level moment hierarchy (union of unions)
 
@@ -98,6 +103,8 @@ Implementation note: the multi-level extension is architecturally locked in but 
 
 Ordinary cortical neurons fire when their context matches and otherwise sit dormant — they are not deliberately summonable. Moments are different: the hippocampus can address them by id (via the thalamic translation layer), reactivate them, traverse their connections, and run experiments over them. **A neuron is "thinkable" iff the hippocampal executor can reach it.** Thinkability is not a property of the neuron's location or type; it is a property of being operated on by the hippocampus.
 
+What makes a moment reachable in a frame is any one of its parents being active — a partial cue is enough, which is pattern completion. Reaching is not firing: a reached moment can be recalled and replayed, but it fires, and takes the present into its ring, only on a majority of its parents (see "Moments age into classes").
+
 ### The HM test
 
 This architecture predicts HM directly. Removing the hippocampus removes the executor. After removal:
@@ -119,23 +126,23 @@ If a Robot Brain with a fully populated cortex loses its hippocampus, that is th
 - **Buzsáki's "brain from inside out"** — the brain as a generative system; replay/preplay are the same intrinsic dynamics under different conditions.
 - **Kahneman dual-process theory** — Robot Brain implements System 1 and System 2 as separate organs over a shared substrate, rather than as a behavioral metaphor.
 - **Hippocampal scenario-construction literature** — patients with hippocampal damage cannot imagine novel scenes either, not just remember old ones. The hippocampus is the executor; memory is one of its uses.
-- **Episodic-to-semantic consolidation** — empirical finding that specific episodic memories schematize into gist over time. In this architecture, this is a structural consequence of per-link decay on multi-parent moments under use-driven reinforcement.
+- **Episodic-to-semantic consolidation** — empirical finding that specific episodic memories schematize into gist over time. In this architecture, this is a structural consequence of the majority over a multi-parent moment's ring as later instants, real and rehearsed, enter it.
 
 ---
 
 ## Architectural principles
 
 1. **One substrate, two operators.** Cortex and hippocampus operate on the same cortical neurons in the same columns. Thalamus mediates id↔property addressing.
-2. **Cortex splits by intersection, hippocampus binds by union.** Cortex divides experience into hierarchical patterns through prediction-error-driven statistical learning (selectivity at creation — only recurring signals enter). Hippocampus binds salient instants into multi-parent moment nodes in one shot (selectivity deferred to decay — everything enters, reality prunes).
+2. **Cortex splits by intersection, hippocampus binds by union.** Cortex divides experience into hierarchical patterns by compression over recurring firings (selectivity at creation — only what recurs is built). Hippocampus binds salient instants into multi-parent moment nodes in one shot (selectivity deferred to the ring — everything enters, and later instants vote the incidental parents out).
 3. **One neuron kind in routing tables.** Patterns and moments are the same kind of node. They differ in how they were created (intersection vs union), in fan-in (typically few parents vs many parents), and in the temporal grain over which their action connections are organized.
 4. **Hippocampus is the executor, not the store.** It mints moments, runs experiments over them, and updates action connections on moments. It does not hold them.
-5. **Recall is by context.** A moment fires when its parent patterns fire with sufficient context overlap. This is normal cortical activation, not a special operation.
-6. **One voting machinery.** All firing nodes vote for actions through their action connections. Each connection carries two scalars — a *strength* (accumulated evidence) and a *reward* (a running-mean value estimate); the highest-reward action wins, with strength weighting the aggregate and breaking ties. Moments and patterns vote identically; experiment-driven updates adjust the same connections that statistical learning does (strength up, reward smoothed toward the observed-or-simulated return, either direction). There is no separate "decided action" override mechanism.
+5. **Recall is by context, and reaching is not firing.** Any active parent makes a moment reachable by the executor. A moment fires when more than half its parents are present — the cortex's apply test ([algorithm.md](algorithm.md), R18) — and that is normal cortical activation, not a special operation.
+6. **One voting machinery.** All apex nodes vote for actions through the action slots of their forward record ([algorithm.md](algorithm.md), R31, R36). A slot carries a *strength* (the exposures the node's ring still holds) and an *estimate* (the mean reward over them); the highest estimate wins, with strength breaking ties. Moments and patterns vote identically, and replay teaches them identically: an experiment writes firings into the same rings that real frames do, and the slots are re-read from the ring. There is no separate "decided action" override mechanism and no second kind of update.
 7. **Selective minting.** Only frames with reward or prediction error above a z-score threshold trigger moment minting. Ordinary experience never becomes thinkable.
 8. **Two clocks.** The hippocampus runs at a faster clock than the cortex, executing many experiment frames per cortex frame.
 8b. **Parallel fan-out replay.** Replay is a pool of N concurrent trajectories from a shared starting state, not a single-track walk. After fan-out, the winning trajectory's actions are written back to the moments along it. This is the core replay mechanism, not an optimization.
-8c. **Salience-modulated lookback.** Before fan-out, the starting state is rewound backward along the temporal moment graph by a depth derived from triggering salience. Small surprises rewind shallowly; large surprises rewind deep. The brain trades short-term thinking for long-term re-evaluation at the scope the trigger warrants.
-9. **Same death ledger, different aging.** Forgetting is unified through one death ledger. Moments age on a slower timeline than patterns because they represent rarer, more salient information.
+8c. **Salience-modulated lookback.** Before fan-out, the starting state is rewound backward through the active moments' backward halves by a depth derived from triggering salience. Small surprises rewind shallowly; large surprises rewind deep. The brain trades short-term thinking for long-term re-evaluation at the scope the trigger warrants.
+9. **Same death ledger, same aging rule, different rate.** Forgetting is unified through one death ledger, and a node's evidence expires on one rule: its ring holds its last `H` firings ([algorithm.md](algorithm.md), D24). A moment fires rarely, so its ring turns over slowly and it remembers for as long as its rarity makes it. Nothing declares a slower timeline for moments; the rate is the node's own.
 10. **Bidirectional coupling via thalamus.** Cortex emits think-actions that reach the hippocampus. Hippocampus reads currently active cortical state and writes action-connection updates back to specific moment neurons. Updates are local to the neuron written, never global.
 11. **Multi-level moment hierarchy.** The union-creation rule applies recursively: level-1 moments bind patterns, level-2 moments bind level-1 moments, level-N moments bind level-(N-1) moments. Each level operates at an exponentially coarser timescale, mirroring the pattern hierarchy's exponential scaling. The same structural machinery (context fingerprint, action connections, temporal bins, decay, inhibition) applies at every moment level.
 12. **Inhibition selects the planning horizon.** When a higher-level moment fires, it suppresses lower-level moments from voting independently. The highest-level moment that matches the current context dominates action selection at its temporal scale. No separate planning module or horizon selector is needed.
@@ -144,11 +151,11 @@ If a Robot Brain with a fully populated cortex loses its hippocampus, that is th
 
 ## Context overlap
 
-Context overlap is not a global semantic similarity operation. 
-Each neuron stores child routing entries with the full activation context present when that child was created or reinforced.
-When the neuron activates again, the current activation context is compared against the stored routing contexts of its child entries.
-Children receiving strong contextual matches receive stronger votes.
-Memory retrieval therefore emerges from distributed agreement across many independent local routing decisions.
+Context overlap is not a global semantic similarity operation, and it is not a tolerance. 
+A moment's parent set is a majority statement over its ring, and an instant matches it when it agrees with the majority of that statement: more than half of the parents present ([algorithm.md](algorithm.md), R18, "the collapse read backwards"). 
+That is one comparison per moment against the current apex, made where the moment lives, with no global search.
+A moment that has narrowed to a few core parents is matched by any instant carrying those few; a fresh moment is matched only by an instant much like its own.
+Memory retrieval therefore emerges from many independent local matches, each exactly as wide as that moment's ring has made it.
 
 ---
 
@@ -156,12 +163,11 @@ Memory retrieval therefore emerges from distributed agreement across many indepe
 
 A cortical node, regardless of whether it was minted as a pattern or as a moment, has:
 
-- A **context fingerprint**: incoming connections from other nodes (sensory neurons, patterns, moments — anything in the substrate), each weighted by activation strength at the node's creation time and updated by use-driven reinforcement.
-- **Outgoing connections to other nodes**: routing-table entries pointing to higher-level patterns the node participates in, and (for moments) to other moments via the temporal moment graph.
-- **Outgoing connections to action neurons**, organized into temporal bins (see "Action connections and temporal bins" below).
+- A **neighborhood**: the nodes it names as parents (sensory neurons, patterns, moments — anything in the substrate), which is the majority over the node's ring of firings ([algorithm.md](algorithm.md), D20, R4). Nothing on it is weighted; a parent is in the set or not.
+- A **forward record**: what followed the node's own firings, per offset — events, patterns, moments and actions alike — with strength and estimate on the action slots ([algorithm.md](algorithm.md), D20, R31). For moments the offsets are the long-term bin scheme (see "Action connections and temporal bins" below).
 - Metadata: mint frame, kind tag (pattern/moment), salience at birth, current strength, last-access frame.
 
-When the node's context matches the current frame within tolerance, it fires and contributes its votes to action selection. The cortex does not distinguish patterns from moments at activation or voting time — both fire by the same rule, both vote into the same aggregation.
+When more than half of the node's neighborhood is present in the current frame, it fires and, if on the apex, contributes its expectations and inferences. The cortex does not distinguish patterns from moments at activation or voting time — both fire by the same rule, both vote into the same aggregation.
 
 What distinguishes patterns from moments structurally:
 
@@ -198,7 +204,7 @@ A moment is minted by union over the active high-level patterns; those patterns 
 
 This preserves the one-voting-rule principle exactly. Inhibition gates *who* votes, not *how much* a vote counts. When a moment and a pattern both fire un-inhibited, they vote identically; there is no moment-supremacy multiplier. The override is entirely a consequence of which nodes are allowed to participate, not of any asymmetry in vote strength — which is why no separate "decided action" mechanism is needed.
 
-Inhibition is categorical, not graded. A moment fires only when its parents are co-active with sufficient context overlap, so selectivity already lives at the firing threshold: by the time a moment fires, the question of whether a parent really belongs to this context has been answered. Grading inhibition by link strength would re-apply that same selectivity a second time. A parent that is incidental to the moment is, by definition, usually not active when the moment fires — so there is nothing to inhibit; and in the rare frame where it is co-active, it is part of the current scene and muting it is correct. Fire-or-not carries the nuance; inhibition is binary downstream of it.
+Inhibition is categorical, not graded. A moment fires only when more than half its parents are co-active, so selectivity already lives at the firing rule: by the time a moment fires, the question of whether a parent really belongs to this context has been answered by the ring. Grading inhibition by anything would re-apply that same selectivity a second time. A parent that is incidental to the moment is, by definition, usually not active when the moment fires — so there is nothing to inhibit; and in the rare frame where it is co-active, it is part of the current scene and muting it is correct. Fire-or-not carries the nuance; inhibition is binary downstream of it.
 
 ### Inhibition as the horizon selector
 
@@ -255,12 +261,12 @@ The hippocampus owns no permanent store. It owns:
 
 Its operations:
 
-- **Mint moment** — given the currently active cortical state and a salience trigger, create a moment node in the appropriate column with connections to every active high-level pattern (with weight proportional to each parent's activation strength), action connections recording every action that fired during the encoded context window (with frame offsets), and edges to recently-active moments (the temporal moment graph).
-- **Rewind** — walk backward through the temporal moment graph from the trigger point to select a past moment as the starting state. Rewind depth is salience-modulated: small triggers rewind shallowly (local "what could I have done differently here?"); large triggers rewind deep (broader "what could I have done differently further upstream?"). This is how the brain trades short-term thinking for long-term re-evaluation.
+- **Mint moment** — given the currently active cortical state and a salience trigger, create a moment node in the appropriate column whose first ring firing is the instant: every active high-level pattern in its backward half, and the actions that ran within reach at their offsets. Its forward record fills on its own as the activation stays open.
+- **Rewind** — walk backward through the active moments' backward halves from the trigger point to select a past set as the starting state. Rewind depth is salience-modulated: small triggers rewind shallowly (local "what could I have done differently here?"); large triggers rewind deep (broader "what could I have done differently further upstream?"). This is how the brain trades short-term thinking for long-term re-evaluation.
 - **Fan out parallel trajectories** — from the chosen starting state, dispatch N concurrent experiments. Each substitutes a different alternative action (or runs as-original) and walks forward independently. Trajectories share a visited-moments structure to prevent redundant exploration.
-- **Replay (per trajectory)** — step-by-step walk through the moment graph, accumulating simulated time, reading rewards and action sequences along the trajectory.
-- **Branch (for counterfactual)** — at any replay step, instead of sampling forward via edges, substitute an alternative action and walk to a sibling moment under shared parent patterns; continue from there.
-- **Select winner and reinforce action connections** — when the fan-out converges or budget expires, compare trajectories by accumulated reward over the simulated horizon. Walk the winning trajectory backward and update the action connections on its moments — strength up, reward smoothed toward each step's return-to-go (either direction) — in the temporal bin matching the summed Δt at which each lesson applies. Losing trajectories leave no trace beyond their contribution to the visited structure.
+- **Replay (per trajectory)** — imagined frames, each an event step that infers the next action from the active set's action slots and an action step that reads what follows that action from the records, accumulating simulated time and the estimates earned along the trajectory.
+- **Branch (for counterfactual)** — at any event step, substitute an alternative action for the one the vote would have chosen, and take the action step from the records that hold that action beside the active set; continue from there.
+- **Select winner and write it back as firings** — when the fan-out converges or budget expires, compare trajectories by accumulated reward over the simulated horizon. Walk the winning trajectory backward and re-present each step to the moments in it as an imagined firing carrying the action taken and the step's return-to-go, at the offset the summed Δt names; their slots are then re-read from their rings. Losing trajectories leave no trace beyond their contribution to the visited structure.
 - **Decay and evict** — apply moment-timeline decay; emit eviction records to the death ledger.
 
 The cortex does not know about the moment/pattern distinction. It just sees nodes firing and contributing votes. The hippocampus is the only thing that knows which nodes are moments and what experiments are running.
@@ -291,7 +297,7 @@ Novelty is not an input. Every observation contains some novelty; that does not 
 
 When the trigger fires, the hippocampus calls Mint over the currently active cortical state.
 
-In addition to salience-triggered minting, a **sampling rate** parameter mints occasional non-salient moments to provide a baseline graph of ordinary experience. This prevents the moment graph from being entirely composed of high-stakes nodes with no connective tissue between them. Sampled moments age and decay normally; if they don't get reactivated, they fade out without consequence.
+In addition to salience-triggered minting, a **sampling rate** parameter mints occasional non-salient moments to provide a baseline of ordinary experience. This prevents the moment population from being entirely composed of high-stakes nodes with nothing ordinary in their records between them. Sampled moments age and decay normally; if they don't get reactivated, they fade out without consequence.
 
 ---
 
@@ -301,54 +307,57 @@ When a salience trigger fires, the hippocampus mints a new moment by union:
 
 1. Read the currently active high-level patterns (those firing above some activation threshold).
 2. Create a new moment node in the appropriate cortical column.
-3. For each active pattern P, register the new moment as an outgoing connection in P's routing table, with link weight initialized to P's activation strength.
+3. Write the instant into the moment's ring as its first firing: the active set is its backward half. The moment's neighborhood is the collapse over that one firing, which is the whole set. No parent's table holds the moment — that is the structural difference from a pattern, which exactly one table holds, prices and offers. A moment has many parents and no owner.
 4. Record action connections for every action that fired during the encoded context window, with frame offsets, in the moment's long-term temporal bin scheme.
-5. Draw edges to the K most recently-minted moments (the temporal moment graph), with edge weights initialized by `1/Δt` and Δt metadata recorded directly.
+5. Nothing links it to earlier or later moments by hand. The moment's backward half already holds the moments and patterns active before it within its reach, and its forward record fills with what follows it as its activation stays open ([algorithm.md](algorithm.md), D6, §10.3). That record is the transition model replay walks (see "The transition model is the forward record").
 6. Set salience-at-birth from the triggering z-score; initialize moment strength accordingly.
 
 The moment now exists as a multi-parent node in the cortical graph. Future cortical pattern-formation can incorporate this moment into its contexts, exactly like sensory or pattern neurons. This is the structural mechanism for "lessons from specific experiences becoming reflexes" — System 2 enriches System 1 by adding moment nodes that cortex then abstracts over.
 
 ### Cold-start gating
 
-A freshly-minted moment has no replay history and no use-driven reinforcement on its links. It does not contribute to action voting until it has been activated K times (parameter, default K=3). Before that threshold, its action connections are silent — it accumulates evidence but does not project. This parallels the cold-start gating already used for newly-formed pattern neurons.
+A freshly-minted moment holds one firing in its ring. It does not contribute to action voting until it has been activated K times (parameter, default K=3). Before that threshold, its action connections are silent — it accumulates evidence but does not project. This parallels the cold-start gating already used for newly-formed pattern neurons.
 
 The same maturity gate governs inhibition, not just voting — it is one gate, not two. An immature moment neither votes nor inhibits: during its cold-start window its parent patterns keep voting normally, and voting and inhibition switch on together once the moment has earned its K activations. This closes what would otherwise be a dead zone (a fresh moment muting its parents while being too young to vote itself, emitting no action for the frame). It needs no moment-specific confidence knob because it is exactly how cortical neurons already behave: maturity gates participation as a whole, and inhibition is downstream of participation.
 
 ### Moments age into classes (mechanism)
 
-After minting, per-link decay reduces parent-link strengths over time. When the moment reactivates because some of its parents fire with matching context, those matched links get strengthened by use-driven reinforcement. Unmatched links continue to decay. Over time:
+After minting, the moment's ring fills from two sources, and its neighborhood is re-read from the ring after each:
 
-- Incidental parent connections (parents that happened to be active at mint time but don't recur with this moment) decay away.
-- Real parent connections (parents that capture the moment's actual context) get repeatedly reinforced.
+- **Real firings.** An instant in which more than half the moment's parents are present fires the moment, and the apex of that instant enters the ring. Parents shared with the original survive the majority; parents peculiar to the original do not.
+- **Imagined firings.** Every experiment that reaches the moment — any active parent suffices to reach it — writes the reconstructed instant it visited into the ring ("Action reinforcement" below). Reconstructions vary across trajectories, cues and sibling substitutions, so across many replays the parents consistent among them keep the majority and the incidental ones lose it. This is what narrows a moment too broad to be fired by anything but a near copy of its own instant; idle consolidation, which replays high-salience moments, is therefore the abstraction mechanism and not a reinforcement of it.
 
-The moment ends up sparsely connected to its core parents. Structurally, it has become a class — a node representing "this kind of situation" rather than "this specific instant." No separate machinery, no clustering pass, no centroid computation. The decay and reinforcement loops do the abstraction work over the moment's lifetime.
+The moment ends up naming only its core parents. Structurally, it has become a class — a node representing "this kind of situation" rather than "this specific instant." No separate machinery, no clustering pass, no centroid computation, no decay rate and no boost. The majority over the ring does the abstraction work over the moment's lifetime.
 
-This means there is no class neuron type. There are only moments at various stages of life. Young moments are episodic; old moments are semantic. Use-driven selection on a multi-parent substrate is the consolidation mechanism.
+This means there is no class neuron type. There are only moments at various stages of rehearsal. Young moments are episodic; rehearsed moments are semantic. The ring on a multi-parent substrate is the consolidation mechanism.
 
-Important: do not artificially renormalize per-link weights as link count drops. That would keep dead moments alive — moments that captured noise and never re-matched would still appear to fire because their few remaining links got boosted. The honest signal is "did this moment keep getting hit?" Useful moments survive and sharpen; useless moments fade. No compensation.
+Why the firing rule is a majority and not any parent: a moment fired by any one parent would fire on every instant of its most common parent, its ring would fill with that parent's ordinary company, and the majority over it would converge on that parent's usual context — a duplicate of a pattern the cortex already has, not the class of the salient situation. Any parent reaches; a majority fires; the ring is the class.
+
+A moment that captured noise and never recurs keeps its one firing and its one instant. It is never fired by the present, and it is never narrowed by it; only rehearsal or eviction touches it. Nothing keeps it alive artificially and nothing compensates for its breadth.
 
 ---
 
-## The temporal moment graph
+## The transition model is the forward record
 
-When a moment is minted, edges form to the K most recently minted moments. Edge weight is initialized by `1/Δt`. Δt is recorded as metadata.
+An earlier draft kept a temporal moment graph beside the moments: edges drawn at mint to the most recent moments, weighted by one over Δt, reinforced by co-reactivation, decayed by disuse, dropped below a threshold, carrying a Δt histogram, and sampled through a temperature-controlled kernel. None of it is needed, because every neuron already holds the thing the graph was approximating.
 
-Edges also form via co-reactivation: when two existing moments fire close in time during normal cortical operation or during replay, an edge is created (if absent) or reinforced (if present). Edge Δt metadata accumulates a small histogram over the long-term bin scheme (rather than a single mean), so an edge whose firings cluster bimodally at Δt=5 and Δt=500 carries mass in two bins.
+A moment is a neuron with a ring, and while one of its activations is open it soaks up what follows it at its own level — other moments, high-level patterns, and the actions that ran — at offsets out to its reach, with the rewards that arrived beside the actions ([algorithm.md](algorithm.md), D6, §10.3, R31). That is its forward record, and it *is* "this kind of situation tends to lead to that kind of situation":
 
-Edges decay by disuse, like everything else in the substrate. Edges below a strength threshold are dropped.
+- The **offset** is the Δt. Offsets are resolved logarithmically (D15), so a moment at a high level names what followed it coarsely and far, and the histogram over long-term bins the graph carried is the per-offset slot structure, already there.
+- The **count over the ring** is the edge strength, and the **majority** is the sampling rule. Nothing is initialized, reinforced, decayed or thresholded; a successor that stops following stops clearing the majority within `H` firings.
+- The **backward half** is the reverse edge. What was active before the moment, within its reach, is in its neighborhood at negative offsets, so rewind reads the same object in the other direction with nothing added at mint time.
+- **Co-reactivation needs no rule.** Two moments that fire close in time are in each other's rings as forward and backward neighbors by the ordinary accrual.
 
-The graph is directed. M_source's routing table points to M_target with Δt-histogram metadata. M_target does not necessarily point back. Backward traversal, when needed, requires explicit reverse edges (cheap to add at edge-creation time if desired).
-
-This graph is the substrate replay walks. It is also what gives "this kind of situation tends to lead to that kind of situation" structure — the system's learned long-horizon transition model.
+The record is collected by one mechanism for every neuron, event neurons and action neurons alike, and it holds both directions replay needs: what an event set is followed by, actions included, and what an action is followed by, events included. Replay reads it and writes nothing into it except imagined firings ("Action reinforcement"). This is what the experiment sections below walk.
 
 ---
 
 ## Recall — the involuntary forecast pass
 
-After cortex finishes its frame, any moment whose parents are firing with sufficient context overlap will already be active — this is normal cortical activation, not a special operation. The hippocampus reads the currently-firing moment set and, for each moment above an experiment-eligibility threshold:
+After cortex finishes its frame, any moment more than half of whose parents are firing will already be active — this is normal cortical activation, not a special operation. Moments with fewer parents active are not firing but are reachable, and the executor may pull them into an experiment from the cue. The hippocampus reads the currently-firing moment set and, for each moment above an experiment-eligibility threshold:
 
 - Notes that the moment is firing (it is already voting via its action connections; nothing extra needed).
-- May initiate a small-budget parallel replay fan-out. The rewind depth before fan-out is derived from the triggering salience: low-magnitude triggers start from the currently-active moment set (no rewind); high-magnitude triggers rewind further back along the temporal moment graph before branching forward. This is the involuntary "what should I have done differently?" reflex — its scope automatically matches how bad (or good) the trigger was.
+- May initiate a small-budget parallel replay fan-out. The rewind depth before fan-out is derived from the triggering salience: low-magnitude triggers start from the currently-active moment set (no rewind); high-magnitude triggers rewind further back through the backward halves before branching forward. This is the involuntary "what should I have done differently?" reflex — its scope automatically matches how bad (or good) the trigger was.
 
 This pass fires every cortex frame, even with zero think-actions. It is the always-on background channel — *"that reminds me…"*, mind-wandering, gut-feel forecasting.
 
@@ -360,7 +369,7 @@ When a voluntary think-action arrives mid-forecast, the forecast is pushed onto 
 
 ## The think-action interface (voluntary thinking)
 
-The cortex fires think-actions as ordinary actions. The cortex does not address moments by id — its world is nodes and patterns. A think-action says "think about *this cortical content*"; the hippocampus resolves the cue to candidate moments by driving the cue and reading off which moments fire.
+The cortex fires think-actions as ordinary actions: "remember", "think of" and the rest are members of the declared action alphabet in a channel of their own, so selection reaches them like any action and the exploration walk can try them ([algorithm.md](algorithm.md), R35, R37). Each of them means "run an experiment." The cortex does not address moments by id — its world is nodes and patterns. A think-action takes the currently active neighborhood as its cue, or the content it names; the hippocampus resolves the cue to candidate moments by driving the cue and reading off which moments fire, and the experiment begins with an event step from that set.
 
 ```
 think_action {
@@ -374,16 +383,14 @@ think_action {
     Compress,                        // find common structure across cued moments
   },
   budget: integer,                  // hippocampus frames to spend
-  lookback: integer,                // moment-graph hops to rewind backward from the
-                                     //   cued starting state before fanning forward;
-                                     //   0 = branch from here; larger = re-evaluate
-                                     //   decisions further upstream.
-  horizon: integer,                 // max simulated time (summed Δt) in frames
+  lookback: integer,                // steps to rewind backward through the active
+                                     //   moments' backward halves before fanning
+                                     //   forward; 0 = branch from here; larger =
+                                     //   re-evaluate decisions further upstream.
+  horizon: integer,                 // max simulated time in imagined frames
   fanout: integer,                  // number of parallel trajectories to dispatch
                                      //   from the rewound starting state (default
                                      //   pool size; may be capped by capacity)
-  temperature: float (0.0 - 1.0),   // breadth of sampling (low=peaked short-Δt;
-                                     //   high=associative drift to long-Δt)
   control: enum {
     Interrupt,                       // push current experiment, start new
     Integrate,                       // add cue to current experiment
@@ -424,7 +431,7 @@ An experiment starts with a *set* of currently-active moments — whatever was f
 
 ### Rewind — salience-modulated lookback
 
-Before fan-out, the starting state may be rewound `lookback` hops backward through the temporal moment graph. Lookback zero starts from the surfacing context; positive lookback walks the reverse edges to land on an earlier moment set along the recent trajectory.
+Before fan-out, the starting state may be rewound `lookback` steps backward. A step back reads the backward halves of the active moments — the moments and patterns present at negative offsets within their reach — and takes those as the earlier active set. Lookback zero starts from the surfacing context; positive lookback lands on an earlier set along the recent trajectory, at the offset grid of the moments' own level.
 
 For involuntary experiments, lookback is derived from the triggering salience magnitude — bigger surprise rewinds further back. The mapping (proposed: `lookback = floor(k · |z|)` capped by the available trajectory length) is parametric and tuned empirically. The intuition: short-term thinking does not always guarantee long-term optimum results; a bad outcome may have its real branch point several moments upstream. Salience-modulated lookback lets the brain re-evaluate at the scope that the surprise warrants — local for small mistakes, deep for large ones.
 
@@ -434,20 +441,24 @@ For voluntary think-actions, lookback is supplied explicitly.
 
 From the (possibly rewound) starting state, the hippocampus dispatches `fanout` concurrent trajectories. Each trajectory independently:
 
-- Substitutes a candidate alternative action at its branch point (sampled from sibling moments under shared parent patterns — see "Counterfactual via parent-pattern siblings" below), or runs as-original for a baseline.
+- Substitutes a candidate alternative action at its branch point (one for which a record says what follows it in this situation — see "Counterfactual via the joint conditional" below), or runs as-original for a baseline.
 - Walks forward step by step, accumulating simulated time and reward, until a termination condition fires.
 
-Constraint on alternatives: only actions whose effects in this context are *known* can be substituted — meaning sibling moments must exist under shared parents carrying that action. Actions with no prior context-relevant history cannot be replayed because the moment graph holds no trajectory to walk. Cortex's probabilistic action votes are the fallback (less precise) when no sibling exists.
+Constraint on alternatives: an action can be substituted only where some record says what follows it. The precise source is a child whose parent pattern names the action beside the active events — the joint conditional, "what follows this action in this situation" ([algorithm.md](algorithm.md), D17). Where no such child exists, the action neuron's own record is the fallback — "what follows this action anywhere," less precise but always present once the action has ever run. An action that has never run has no record at all and cannot be stepped through; it can only be tried in the world, which is the walk's job (R37).
 
 Trajectories share a visited-moments structure so that exploration doesn't redundantly retrace the same forward walks. Each trajectory's per-step state (active moment set, accumulated reward, accumulated Δt) is independent.
 
-### Single replay step
+### One imagined frame — an event step and an action step
 
-1. **Active set.** Read the currently active moment set from the top of the experiment stack.
-2. **Step forward.** For each moment in the active set, sample outgoing edges weighted by `edge_strength × context_overlap × Δt_kernel(temperature)`. The Δt kernel concentrates on short-Δt edges at low temperature (near-future prediction at fine grain) and broadens to long-Δt edges at high temperature (far-future associative drift at coarse grain). The union of sampled targets, weighted by their firing strength, becomes the new active set.
-3. **Accumulate simulated time.** Sum the Δts of edges traversed; this is the experiment's simulated horizon so far.
-4. **Evaluate.** For each moment in the new active set, read off rewards (via the cortex's value estimates for the moment's context) and action information (the moment's action connections).
+An experiment advances by imagined frames, and an imagined frame is the machine's own frame run over records instead of input: infer, then execute, then read the consequence ([algorithm.md](algorithm.md), R29). Every read is a forward record, and every record was collected the same way — while a neuron's activation is open it soaks up what follows it and the rewards that arrive, event neurons and action neurons alike (§10.3, R31). Nothing is built for replay that the neuron did not already hold.
+
+1. **Active set.** Read the currently active set — moments and patterns — from the top of the experiment stack.
+2. **Event step: what should I do next?** Read the action slots of every member of the active set at the offset ahead, expand them to base actions carrying their estimates, and resolve one action per action dimension by largest estimate — the same vote selection runs on a real frame (R36). A trajectory running as-original takes that winner; a counterfactual trajectory takes its substituted alternative instead. **Score** the step: the winner's estimate is what this step is expected to earn, and it is added to the trajectory's running total. This is the event→action direction of the record, read as a question.
+3. **Action step: what will happen as a result?** The chosen action is now a forward neighbor of the imagined set, exactly as a real action fires beside the events it runs alongside (D5, R31). Read what follows it: from the children whose parent patterns name this action beside the active events, and where none exists from the action neuron's own record (the constraint above). Take the majority event slots at the offset ahead, union them across the sources, and that is the next active set. This is the action→event direction of the record, read as a question.
+4. **Accumulate simulated time.** One imagined frame per step; a step at a moment level advances the horizon by that level's offset grain, so a long horizon is many steps at coarse offsets.
 5. **Continue, branch, or terminate** (see termination conditions below).
+
+Every step lands imagined firings on the members of the set it read from — the step's backward half, the action taken, and the estimate earned beside it — so that when the trajectory is chosen for writeback the firings are already in hand ("Action reinforcement" below). Losing trajectories' firings are discarded with them.
 
 ### Termination conditions
 
@@ -462,25 +473,25 @@ For involuntary experiments without an explicit budget or horizon, salience drop
 
 For voluntary think-actions, all four conditions apply, with budget and horizon caps coming from the request.
 
-### Counterfactual via parent-pattern siblings
+### Counterfactual via the joint conditional
 
-When the experiment asks "what if a different action had been taken at this moment in the trajectory?", it walks from the moment in question up to its parent patterns, then down to *other* moments under those same parents where a different action was taken. Replay forward from one of those sibling moments. Same parent patterns means similar context; different action means actual counterfactual.
+When the experiment asks "what if a different action had been taken at this step?", it substitutes the alternative at the event step and reads its consequence at the action step from the records that hold this action beside this situation: the children whose parent patterns name both. Same parents means similar context; different action means an actual counterfactual. Those children are what an earlier draft called sibling moments under shared parents, arrived at through the cortex's own minting rather than through union.
 
-If no sibling moments exist for the desired alternative action, the experiment can fall back to sampling actions from the cortex's probabilistic action votes for the moment's context — "what would cortex have done absent habit?" — but this is less precise than sibling substitution.
+If no such child exists, the action step falls back to the action neuron's own record — what has followed this action across every situation it ran in — which is "what would happen if I did this, as far as I know," less precise than the conditional but honest about what is known.
 
-### Imagined scenarios — construction beyond sibling recombination
+### Imagined scenarios — construction beyond recombination
 
-The sibling mechanism above recombines only *known* action→outcome links: it requires a sibling moment under shared parents that already carries the alternative. It cannot evaluate a situation that never occurred, or an action with no context-relevant history. That makes the counterfactual machinery a recombiner of past experience — narrower than the scenario-construction capacity the architecture claims biologically, where hippocampal damage abolishes imagining novel scenes, not just recalling old ones. This subsection closes that gap.
+The counterfactual mechanism above recombines only *known* action→outcome records: it requires a record that already holds the alternative beside this situation, or at least the action's own record. It cannot evaluate a situation that never occurred, or an action that has never run. That makes the counterfactual machinery a recombiner of past experience — narrower than the scenario-construction capacity the architecture claims biologically, where hippocampal damage abolishes imagining novel scenes, not just recalling old ones. This subsection closes that gap.
 
 The general operation is union-mint with a supplied active set. The hippocampus can construct a **hypothetical moment** by union over patterns and lower moments that need never have co-fired from sensation. This is the same union-creation used at salience triggers, except the active set comes from a cue (a think-action) rather than from the current frame. "If this co-occurs with that, and then this other thing happens…" is literally a constructed union — a situation assembled from familiar parts that were never assembled together by the world.
 
-Forward simulation runs as ordinary replay. The constructed moment is propagated forward through the temporal moment graph — already the system's learned long-horizon transition model — exactly as a normal forward replay. Forward prediction over a never-observed starting state is possible because the transition structure is over patterns and moments, not over specific episodes: a novel combination of familiar parts inherits the forward dynamics of those parts. The same termination conditions, reward accumulation, and winner selection apply.
+Forward simulation runs as ordinary replay. The constructed moment has no record of its own yet, so its first imagined frame reads the records of its constituents — the patterns and moments the cue bound — and steps from their union exactly as a normal forward replay. Forward prediction over a never-observed starting state is possible because the records are over patterns and moments, not over specific episodes: a novel combination of familiar parts inherits the forward dynamics of those parts. The same termination conditions, reward accumulation, and winner selection apply.
 
 Writeback targets the hypothetical moment. When the forward simulation concludes that action X is good in the constructed situation Y, the policy is written onto Y itself — "I will do X if I find myself in Y," for a Y that may never have happened before. When reality later produces situation Y, the real high-level patterns pattern-complete to that moment (it is just a cortical node, matched by context like any other), and it contributes its stored action through the normal voting machinery.
 
 The cold-start gate is the load-bearing safeguard here. A constructed moment is freshly minted and therefore immature: by cold-start gating it neither votes nor inhibits until it has been activated K times by *real* recurrence. So a purely imagined conclusion cannot drive behavior on its own — the world has to actually present the situation enough times to mature the node before its policy projects. **Imagination proposes; recurrence licenses.** This bounds the replay pathologies directly: the system can rehearse arbitrary hypotheticals cheaply, but only hypotheticals that reality subsequently confirms acquire voting power.
 
-This is strictly a generalization of the sibling mechanism. Sibling recombination is the special case where the constructed situation already exists as a real sibling under shared parents; imagined construction is the same operation when it does not.
+This is strictly a generalization of the counterfactual mechanism. Recombination is the special case where the constructed situation already has a record of its own — a child whose parent pattern names it; imagined construction is the same operation when it does not.
 
 ### Action reinforcement (writeback)
 
@@ -490,29 +501,22 @@ The as-original baseline is the reference for whether thinking changed the *reco
 
 Writeback walks the winning trajectory **backward** from its end. Walking back is what gives each step its **return-to-go** — that step's own reward plus everything downstream — rather than the trajectory's flat total. This matters: a moment ten steps before the payoff and one right before it must record *different* values, or the temporal-bin structure is corrupted. Return-to-go is computed naturally by the backward walk (each step = its immediate reward + the running downstream sum), and the return's reward-arrival-Δt selects which temporal bin the value lands in via the existing action-intrinsic-horizon mechanism — horizon-correct by construction.
 
-For every moment in each step, for the action that the trajectory took at that moment, two scalars on that action connection update:
+**Replay writes firings, not estimates.** For every moment in each step, the step is re-presented to that moment as a firing: a record in its ring carrying the backward half the step reconstructs, the action the trajectory took at the offset it ran, and this step's return-to-go beside that action as the reward. The firing is tagged as imagined, and otherwise it is a firing like any other — it enters the ring, evicts the oldest, and the moment's forward record is re-read from the ring ([algorithm.md](algorithm.md), R8, R31). No scalar on any slot is written directly. What the vote then sees follows from the ring:
 
-1. **Strength** increments — the action was tried here, one more observation. Strength only ever grows; writeback never lowers it.
-2. **Reward** (the connection's stored value estimate) is smoothed toward this step's return-to-go by exponential smoothing with `α = 1/strength`:
-   ```
-   reward ← reward + (1/strength)(return_to_go − reward)
-   ```
-   Because `α = 1/strength`, this is the incremental form of a plain arithmetic mean — every observation counts equally and the estimate converges on the action's true expected return. It moves in **either** direction.
+- The slot's **strength** is the number of firings in the ring, real or imagined, in which that action followed at that offset. It grows with every exposure and falls only when an exposure is evicted; nothing lowers it for an action not being chosen.
+- The slot's **estimate** is the plain mean of the rewards those firings carry. Every exposure counts equally, real and imagined alike, so the estimate converges on the action's expected return and moves in **either** direction. This is what lets the hippocampus learn *not* to do something: a tempting action whose rollouts end badly gathers imagined firings with bad returns, and its estimate falls until the moment stops voting for it. The hippocampus is a value-estimate *corrector*, not a positive-reward seeker — finding a bad outcome and correcting an estimate down is the same machinery as finding a good one, run symmetrically.
 
-All moments in the step are updated, every step, on the backward walk — there is no member-selection rule and no firing-strength weighting. The "which member of the step receives writeback" question dissolves: selectivity already lived at the firing threshold (a moment is in this step only because it fired), so nothing remains to weight downstream.
+All moments in the step receive the firing, every step, on the backward walk — there is no member-selection rule and no firing-strength weighting. The "which member of the step receives writeback" question dissolves: selectivity already lived at the firing threshold (a moment is in this step only because it fired), so nothing remains to weight downstream.
 
-**Two scalars, two laws — kept distinct:**
+This is the complementary-learning-systems rationale made literal: the hippocampus re-presents the instant until the cortex has effectively seen it enough times. It replaces both earlier rules — the max gate, which could only raise an estimate and so could never represent "I used to think this was good; it isn't", and the running-mean writeback, which smoothed a scalar the ring did not hold and so could not expire. A single unlucky trajectory still cannot condemn a good action, since one imagined firing among `H` moves a mean by one part in `H`; a habit worn in by many real firings takes many consistent bad rollouts to overturn, and it does get overturned within `H` of them, which a lifetime mean would not promise.
 
-- **Strength** is monotonic-up. It is the evidence count (the *n* in the running mean), it gates cold-start eligibility, and it sets the connection's share within the neuron's vote. Writeback never lowers it; only node death removes it. Action-connection strength does not decay. (The per-link decay that drives moments-becoming-classes acts on a moment's *context/parent* links, not on its action connections — that is disuse, not writeback.)
-- **Reward** is the value estimate. It moves up or down toward observed and simulated returns at equal per-sample weight. This is what lets the hippocampus learn *not* to do something: a tempting action whose rollouts end badly has its reward smoothed down until the moment stops voting for it. The hippocampus is a value-estimate *corrector*, not a positive-reward seeker — finding a bad outcome and correcting an estimate down is the same machinery as finding a good one, run symmetrically.
+**What imagined firings cost.** They occupy ring slots. A moment that is replayed often holds a ring that is mostly imagined, and its real exposures are evicted by its rehearsals. That is the price of re-presentation and it is bounded by `H`; whether replay should be rationed per moment so real evidence keeps a share of the ring is open (see "Open questions").
 
-This replaces the earlier max-gated rule ("update only if the simulated reward exceeds the current strongest connection"). Max-gating could only ever raise an estimate, so it could never represent "I used to think this was good; it isn't" — exactly the negative-learning case. The running mean represents it directly, and "it may take a few more thoughts" is just its convergence: one rollout nudges, consistent evidence settles it, and a single unlucky trajectory cannot condemn a good action. Habit-stickiness falls out for free — a high-strength action has a tiny `α`, so its estimate crawls and a well-worn habit takes many consistent bad experiences to overturn. Sticky, but correctable.
-
-**Connection-reward vs consensus-reward.** Keep the two uses of "reward" distinct. The *connection-reward* above is stored per (moment, action) and smoothed over a lifetime of executions and experiments. The *consensus-reward* is computed fresh each frame at voting time and never stored: for each candidate action the consensus takes the strength-weighted average of its voters' connection-rewards, and the action with the highest such average wins (Democratic consensus, `argmax`), tie-broken by strength. Writeback smooths the stored connection-reward; the consensus only reads it.
+**Slot-estimate vs consensus.** Keep the two readings distinct. The *slot estimate* above is stored nowhere: it is read off the moment's ring at voting time. The *consensus* is computed fresh each frame from the apex voters' slots, expanded to base actions, one winner per action dimension by largest estimate with strength breaking ties ([algorithm.md](algorithm.md), R36). Replay changes rings; the consensus only reads them.
 
 Generalization is left to the substrate. Don't write the lesson onto multiple moments simultaneously — write it onto the moments the trajectory actually visited. Over time, when those moments reactivate in similar contexts and vote their corrected actions successfully, the cortex builds patterns over the situations where the vote helped, and those patterns inherit the lesson through normal cortical abstraction.
 
-The payoff of storing the correction as state on the moment: when the cortex later auto-activates that moment by recognition — no deliberation — it already votes with the corrected value. Past thinking is available reflexively. Intuition is compiled deliberation; the gut feeling that something is a bad idea is a moment voting with a reward a prior experiment smoothed down.
+The payoff of storing the correction as state on the moment: when the cortex later auto-activates that moment by recognition — no deliberation — it already votes with the corrected value. Past thinking is available reflexively. Intuition is compiled deliberation; the gut feeling that something is a bad idea is a moment voting with an estimate that a prior experiment's imagined firings pulled down.
 
 ### Stack semantics
 
@@ -524,23 +528,17 @@ The stack also supports "what was I thinking about?" queries: each entry is time
 
 ## Forgetting
 
-The same death-ledger mechanism applies to all node kinds. Moments age on their own (slower) timeline, distinct from patterns.
+The same death-ledger mechanism applies to all node kinds, and the same evidence rule: a node's ring holds its last `H` firings and nothing older ([algorithm.md](algorithm.md), D24). Moments age slower than patterns only because they fire more rarely, so their rings turn over more slowly; no separate timeline is declared.
 
-**1. Per-link decay.** Each context-connection strength decays independently:
-```
-strength(link, t) = strength(link, t-1) * decay_rate_link + activation_boost_if_active_now
-```
-Initial value is the parent neuron's activation at minting time. Strongly active context neurons survive far longer than weakly active ones. When a link's strength falls below `link_eviction_threshold`, the connection is dropped.
+**1. No per-link decay.** A moment's parent set is the majority over its ring ("Moments age into classes"). A parent leaves when the moment's later firings, real or imagined, stop holding it, and at no other time. There is no link strength, no decay rate, no boost and no eviction threshold; the ring's `H` is the only horizon, as everywhere else ([algorithm.md](algorithm.md), R10).
 
-This is the mechanism that drives moments-becoming-classes. Do not apply renormalization or compensating weights as link count drops; let the use signal speak honestly.
+**2. Moment-level eviction.** Moments are not in the file, so the one test cannot price them (R12) and the hippocampus keeps its own rule. A moment's overall strength is initialized from its salience at minting and decays per cortex frame; activation boosts it; below `moment_eviction_threshold`, or when capacity is pressured, the lowest-strength moments are evicted. Whether this too can be read off the ring rather than off a clock is open. A moment whose ring gives no parent a majority names nothing, can never be fired or reached, and is dead by that fact; it is evicted on the next ledger pass.
 
-**2. Moment-level decay.** A moment's overall strength is initialized from its salience at minting and decays per cortex frame. Activation boosts it. Below `moment_eviction_threshold`, or when capacity is pressured, the lowest-strength moments are evicted. A moment is also evicted if its surviving link count drops below `min_context_refs`.
+**3. Action slots do not decay, and they do adapt.** An action slot is not a stored scalar; it is read off the node's ring ([algorithm.md](algorithm.md), R31, R34). Its **strength** is the number of ring firings in which the action followed, and its **estimate** is the mean reward those firings carry. Nothing weakens a slot for an action not being chosen: the brain executes one action per channel per frame, so an un-chosen action isn't a wrong prediction, it just wasn't tried, and its slot keeps exactly the value it had until the last firing that held it is evicted. What moves a slot is exposure entering the ring and exposure leaving it, so an estimate is exactly as current as the node's last `H` firings and a changed worth is absorbed within them. A lifetime estimate that never expired would have absorbed it at a rate falling with every exposure it already held, and would have been a second horizon beside `H`.
 
-**3. Action-connection strength does not decay.** An action connection carries two scalars with different laws. Its **strength** grows with every observation (execution or experiment) and is never weakened — only node death removes it. The brain executes one action per channel per frame, so an un-chosen action isn't a wrong prediction, it just wasn't tried; weakening unchosen actions would collapse the brain onto whichever action it tried first and destroy exploration. Its **reward** (the stored value estimate) is a different matter — see below — and does move in both directions, but that is correction of an estimate, not decay of a connection.
+Reinforcement comes from two sources and is one operation: real frames write firings into the ring (cortex), and replay writes imagined firings into the same ring (hippocampus, "Action reinforcement" above). Neither touches a slot directly. A node holds a slot for every action that followed it within its ring, and for the declared default and whatever the exploration walk has wired, which stand at strength 0 until tried; the highest estimate wins votes when the node fires, and an action the ring has forgotten is simply gone until the walk wires it again.
 
-Reinforcement comes from two sources: statistical reinforcement from observed action-reward pairs (cortex), and experiment-driven reinforcement from replay (hippocampus). Both increment strength; neither weakens it. Both smooth the connection's reward toward the observed-or-simulated return via the running mean (`α = 1/strength`), which can move the estimate up or down. The earlier max-gate ("the simulated reward must exceed the current strongest connection for the update to take effect") is gone — it could only raise estimates and so could never represent learning that a tempting action is bad. The moment accumulates a connection for every action explored, each carrying a strength (how much evidence) and a reward (a running-mean estimate of its return); the highest-reward action wins votes when the moment fires, and un-explored actions are simply never touched.
-
-**4. Cascade on cortical deletion.** When a context neuron is deleted, every node removes that connection. Moments dropping below `min_context_refs` are evicted.
+**4. Cascade on cortical deletion.** When a neuron is deleted, its name is scrubbed from every ring that holds it ([algorithm.md](algorithm.md), R17), and the neighborhoods that named it re-read. A moment left with no parent above the majority is dead as in item 2.
 
 **5. Death ledger.** Every eviction appends `{neuron_id, kind, frame, reason, salience_at_birth}` to the shared append-only ledger (ring-bounded). Uses:
 - Debugging — "why don't I remember X?"
@@ -639,7 +637,7 @@ loop:
         hippocampus.mint_moment(req)         // creates moment node, registers as
                                               //   child in active patterns'
                                               //   routing tables, draws temporal
-                                              //   edges, records initial actions
+                                              //   its first ring firing, actions within reach
 
     if hippocampus.experiment_pool.has_active():
         hippocampus.advance_all_trajectories()    // advance every trajectory in the
@@ -683,7 +681,7 @@ loop:
 - Add the moment kind tag to the existing cortical node type so moments live alongside patterns in the same columns. Reuse the existing thalamic id-translation layer.
 - Implement the brain coordinator with two-thread async (cortex + hippocampus, semaphore-coordinated).
 - Implement `mint_moment` driven by simple z-score salience (reward and prediction error only, no novelty).
-- Hard-code a trivial temporal graph (just record edges with Δt) and a trivial replay (return current moment set).
+- Let moments accrue forward records like any neuron, and hard-code a trivial replay (return the current moment set).
 - Verify: cortex fires a think-action, hippocampus runs experiment frames, action-connection updates land on a moment, that moment's votes show up in cortex's next action selection.
 
 ### Phase 2 — Salience, selective minting, and cold-start gating
@@ -703,22 +701,21 @@ loop:
 - Action intrinsic horizon: track reward-arrival-Δt distribution per action, use it to select which bin's connection strength is read at voting time.
 - Verify: a moment with strong long-bin connections votes loudly when long-horizon actions are being considered, and vice versa.
 
-### Phase 4 — Temporal moment graph and replay
+### Phase 4 — Forward records on moments, and replay
 
-- On each mint, draw weighted edges with Δt to recent moments.
-- Co-reactivation edge formation (when two moments fire close in time, create or reinforce edge).
-- Edge Δt-histogram over the long-term bin scheme.
-- Step replay: starting active set → step forward via edges weighted by `edge_strength × context_overlap × Δt_kernel(temperature)` → new active set → repeat.
+- A moment's activation stays open and accrues its forward record like any neuron: moments, patterns and actions at their offsets, rewards beside the actions.
+- Reading a record by id without firing (thinkability).
+- Step replay: starting active set → event step (infer the action from action slots) → action step (read what follows it from the joint children or the action's record) → new active set → repeat.
 - Termination conditions: budget, horizon, convergence, salience drop.
 - `mode: Replay` end-to-end.
 
 ### Phase 5 — Counterfactual experiments, parallel fan-out, salience-modulated lookback, and action reinforcement
 
-- Branch via parent-pattern sibling: walk up to a moment's parent patterns, find sibling moments under shared parents with the alternative action, replay forward from one.
-- **Parallel fan-out pool**: dispatch N concurrent trajectories from the starting state, each substituting a different sibling-derived alternative action (plus one as-original baseline). Shared visited structure across trajectories prevents redundant exploration.
-- **Rewind by salience-modulated lookback** before fan-out: walk the reverse temporal-moment-graph edges by `lookback` hops to land on an earlier moment set. For involuntary forecasts, derive `lookback` from the triggering z-score magnitude; for voluntary think-actions, use the supplied parameter.
+- Branch via the joint conditional: find the children whose parent patterns name the alternative action beside the active set, read their records for what follows, and fall back to the action's own record where none exists.
+- **Parallel fan-out pool**: dispatch N concurrent trajectories from the starting state, each substituting a different alternative action that some record holds beside the active set (plus one as-original baseline). Shared visited structure across trajectories prevents redundant exploration.
+- **Rewind by salience-modulated lookback** before fan-out: step backward through the active moments' backward halves `lookback` times to land on an earlier moment set. For involuntary forecasts, derive `lookback` from the triggering z-score magnitude; for voluntary think-actions, use the supplied parameter.
 - **Winner selection**: at pool termination (all trajectories ended, or global budget exhausted), pick the trajectory with the highest accumulated reward. Write its taken actions back regardless of the baseline — the as-original baseline only flags whether the *recommended* action changed; even a winning as-original trajectory refreshes the standard action's estimate.
-- Action update along the winning trajectory: walk the trajectory backward; for every moment in each step, increment the strength of the action it took and smooth that connection's reward toward the step's return-to-go via the running mean (`α = 1/strength`). The return's reward-arrival-Δt selects the temporal bin. Strength is monotonic-up; reward moves either direction. No max-gate.
+- Action update along the winning trajectory: walk the trajectory backward; for every moment in each step, write an imagined firing into its ring carrying the action it took at the offset the return's Δt names and the step's return-to-go as the reward. Strength and estimate are re-read from the ring; nothing is smoothed and there is no max-gate.
 - Verify: replaying a bad outcome with parallel alternatives discovers a better policy; subsequent encounters of the same context use the improved policy via the moment's reinforced action connections out-voting the old habit. Verify that increasing the triggering salience produces a deeper rewind and re-evaluates earlier branch points.
 
 ### Phase 6 — Involuntary forecast pass
@@ -729,17 +726,17 @@ loop:
 
 ### Phase 7 — Voluntary think-actions and metacognitive control
 
-- Full think-action parameters (mode, budget, horizon, temperature, control).
+- Full think-action parameters (mode, budget, horizon, lookback, fanout, control).
 - Interrupt / Integrate / Remember semantics.
 - Reward signals for think-actions (PE reduction, downstream action improvement, opportunity cost).
 - Train cortex to fire think-actions when expected value exceeds external action value.
-- **Imagined-scenario construction**: a cue-driven think-action mints a hypothetical moment by union over a supplied set of patterns/moments that need not have co-fired, forward-simulates it through the temporal moment graph, and writes the trajectory-optimum policy onto the hypothetical moment. The hypothetical moment is subject to ordinary cold-start gating — it neither votes nor inhibits until matured by real recurrence.
+- **Imagined-scenario construction**: a cue-driven think-action mints a hypothetical moment by union over a supplied set of patterns/moments that need not have co-fired, forward-simulates it through its constituents' records, and writes the trajectory-optimum policy onto the hypothetical moment as imagined firings. The hypothetical moment is subject to ordinary cold-start gating — it neither votes nor inhibits until matured by real recurrence.
 - Verify: a hypothetical situation assembled from never-co-fired parts simulates forward sensibly; its discovered policy stays silent until the situation actually arises K times, then projects through normal voting.
 
 ### Phase 8 — Sleep / idle consolidation
 
 - Detect idle.
-- High-temperature integrative replay over recent high-salience moments.
+- Coarse-grained integrative replay over recent high-salience moments, stepping through high-level records.
 - Reinforce strong moments, prune weak ones.
 - Observe moments-becoming-classes in real data — verify that aged moments retain only their core parent links.
 
@@ -755,12 +752,12 @@ Deferred until single-level moments (Phases 1-8) are validated, because the mech
 
 **What is clear:**
 
-- Each moment level uses the same structural machinery: context fingerprint, action connections in exponential temporal bins scaled to the level, per-link decay, use-driven reinforcement, cold-start gating, inhibition of lower levels.
+- Each moment level uses the same structural machinery: a neighborhood read off a ring, action slots in exponential temporal bins scaled to the level, any-parent reach and majority firing, cold-start gating, inhibition of lower levels.
 - A level-N moment is minted by union over co-active level-(N-1) moments when a level-N salience trigger fires.
-- The temporal moment graph at each level connects moments of the same level, with edge Δt-histograms at that level's bin scheme.
+- A moment's forward record at each level names moments of the same level, at that level's offset grain.
 - Action connections at level N operate at level-N exponential bins — much longer horizons than level-(N-1). The action intrinsic horizon mechanism already handles timescale selection: long-horizon actions naturally have strong connections in the appropriate bins.
 - Inhibition: when a level-2 moment fires, its level-1 parents don't independently vote. The highest-level moment that matches the current context dominates action selection at its appropriate timescale.
-- Graceful degradation: when a higher-level moment ages out of a context (per-link decay narrows it), inhibition lifts and lower-level moments resume voting. The system falls back down the hierarchy.
+- Graceful degradation: when a higher-level moment narrows past a context (its ring's majority drops the parents that context supplied), inhibition lifts and lower-level moments resume voting. The system falls back down the hierarchy.
 
 **What single-level implementation will inform (open questions for Phase 10):**
 
@@ -768,7 +765,7 @@ Deferred until single-level moments (Phases 1-8) are validated, because the mech
 
 2. **Co-activation window at each level.** At level 1, union binds everything active at one instant. At level 2, union binds level-1 moments that fired within a level-2 timescale window. The window width should follow the exponential scheme — approximately `contextLength^level` frames. The precise rule (fixed window? decaying activation strength? pattern-driven boundary detection?) needs empirical tuning.
 
-3. **Replay across moment levels.** Level-1 replay walks the level-1 temporal moment graph. Level-2 replay should walk a level-2 temporal graph (edges between level-2 moments) at coarser temporal steps. Whether this uses the same hippocampal clock (operating over coarser-grained steps) or needs a separate clock per level is an implementation question. The simplest approach: one hippocampal clock, but level-2 replay steps traverse level-2 edges with inherently larger Δt values, so each step covers more simulated time.
+3. **Replay across moment levels.** Level-1 replay steps through level-1 records; level-2 replay steps through level-2 records, whose offsets are coarser, so each step covers more simulated time. Whether this uses the same hippocampal clock or needs a clock per level is an implementation question. The simplest approach: one clock, and the level of the stepping set decides the grain.
 
 4. **Where level-2+ moments live.** Level-1 moments live in cortical columns alongside patterns. Level-2 moments should live in the same substrate (same neuron kind, same columns). Their context fingerprints point to level-1 moments rather than to patterns. Verify that the existing column and routing-table infrastructure handles this without modification.
 
@@ -784,19 +781,19 @@ Deferred until single-level moments (Phases 1-8) are validated, because the mech
 - Per-link decay: weak parent links drop out faster than strong ones.
 - Use-driven reinforcement: a parent link that matches recurring context strengthens; a parent link that doesn't fades.
 - Moments-age-into-classes: simulate skewed reactivation over time, verify the moment ends up sparsely connected to its true core parents.
-- Temporal moment graph: edge construction at mint and via co-reactivation; Δt-histogram accumulation; weighted sampling.
+- Forward records on moments: accrual while open, the majority per offset, and reading by id; the event step and the action step of an imagined frame.
 - Action-connection bins: linear (patterns) and exponential (moments); soft bin assignment kernel.
 - Action intrinsic horizon: tracking reward-arrival-Δt and using it as the bin selector.
 - Step replay: starting from a multi-moment set, step forward, accumulate simulated time.
 - Termination conditions: budget, horizon, convergence, salience drop — each fires correctly in isolation.
-- Counterfactual via parent-pattern sibling: find the right sibling under shared parents.
-- Action-connection updates: strength increments monotonically; reward is the running mean (`α = 1/strength`) of returns and moves up or down. A sequence of bad returns smooths a previously-high reward down until the action stops winning votes; a high-strength connection moves slowly (habit-stickiness).
+- Counterfactual via the joint conditional: find the children that hold the alternative beside the active set, and the action's own record where none does.
+- Action slot updates: an imagined firing enters the ring and the slot is re-read — strength is the exposures the ring holds, estimate their mean. A sequence of bad returns pulls a previously-high estimate down until the action stops winning votes; a habit worn in by many real firings moves slowly and is overturned within `H` consistent bad rollouts.
 - Salience: z-score thresholding over sliding windows.
 - Death ledger: eviction records, re-mint suppression.
 
 ### Integration tests
-- Full mint → temporal edge → replay → action reinforcement flow.
-- Counterfactual via parent-pattern sibling produces a better-than-original alternative; the moment's action connections reflect the new policy.
+- Full mint → accrual → replay → writeback-as-firings flow.
+- Counterfactual via the joint conditional produces a better-than-original alternative; the moment's action slots, re-read from its ring after writeback, reflect the new policy.
 - Subsequent encounter of the same context uses the improved policy via the moment's reinforced votes out-weighing the old habit.
 - Imagined-scenario construction: a hypothetical moment built by union over never-co-fired parts forward-simulates sensibly, its discovered policy is gated silent until real recurrence matures it, then fires through normal voting.
 - Involuntary forecast fires every frame with no cortex prompting.
@@ -814,10 +811,10 @@ Deferred until single-level moments (Phases 1-8) are validated, because the mech
 ### Multi-level moment hierarchy tests (Phase 10)
 - Level-2 moment minting: verify a level-2 moment is created when level-1 moments co-activate within the level-2 window and level-2 salience triggers.
 - Level-2 inhibition: when a level-2 moment fires, verify its level-1 parents stop voting independently.
-- Graceful degradation: when a level-2 moment ages out (per-link decay narrows its context), verify inhibition lifts and level-1 moments resume voting.
+- Graceful degradation: when a level-2 moment narrows past a context (its ring's majority drops the parents that context supplied), verify inhibition lifts and level-1 moments resume voting.
 - Horizon selection: verify that level-2 moments vote at longer-horizon temporal bins than level-1 moments, and that inhibition causes the appropriate horizon to dominate.
 - Level emergence: verify that the number of moment levels emerges from data — systems with short experience don't mint level-2+, systems with long diverse experience do.
-- Cross-level replay: verify that level-2 replay walks level-2 temporal graph edges with appropriate coarser-grained Δt steps.
+- Cross-level replay: verify that level-2 replay steps through level-2 records at that level's coarser offset grain.
 
 ### Stress tests
 - High-throughput cortex with many think-actions.
@@ -832,19 +829,20 @@ Deferred until single-level moments (Phases 1-8) are validated, because the mech
 1. **Salience-drop computation.** What signal exactly is the running average computed over (mean activation strength of the active set?), and what threshold ratio terminates? Default proposal: drop below 30% of starting average. Tune from observation.
 2. **Number of bins (short-term and long-term).** Default 10 each. Domain-dependent — algorithmic trading might want more long-term bins for finer-grain horizons; raw control tasks might want fewer.
 3. **Cold-start K.** How many activations before a new moment contributes to votes? Default 3. Should be the same as the cortex's existing pattern cold-start gating, whatever that turns out to be.
-4. **Moment sampling rate.** How often do we mint a non-salient moment to maintain baseline graph connectivity? Probably every few thousand cortex frames. Defer until we observe whether the temporal graph becomes too sparse with pure salience-triggered minting.
-5. **Δt-kernel shape for replay step sampling.** Gaussian over log-Δt is the default. Alternative kernels could bias toward specific horizons. Implementation detail.
+4. **Moment sampling rate.** How often do we mint a non-salient moment so that salient moments have ordinary moments in their records to step through? Probably every few thousand cortex frames. Defer until we observe whether salient moments' records are too sparse with pure salience-triggered minting — they may not be, since a record holds patterns as well as moments.
+5. **How far one step reaches.** A step reads the record at one offset of the stepping neuron's level, so one step at level `k` advances the horizon by that level's grain and no further ([algorithm.md](algorithm.md), D14, D15). A long horizon is many steps, and a coarse one is a walk over coarse moments. The earlier Δt kernel with a temperature is gone; whether an experiment should be allowed to choose which level's records it steps through, and so its grain, is the question that replaces it.
 6. **Cross-channel moments.** Can a single moment's parent set include patterns from multiple channels (stock + text + vision)? With unification, the answer is structurally yes — any high-level pattern active at mint time becomes a parent regardless of channel. Worth verifying in implementation that cross-channel parent registration is permitted and that cross-channel moments behave sensibly under replay.
 7. **Persistence.** Do moments persist across brain restarts? For long-term memory to be meaningful, yes. Need serialization for the column state plus the death ledger and temporal graph.
 8. **Multi-level salience triggers.** How does the system detect salience at level 2+ without a dedicated salience module per level? The hypothesis: patterns form over moment-sequences (moments are cortical neurons), prediction errors against those patterns serve as level-2 salience, and the same process recurses. Verify empirically in Phase 10.
 9. **Multi-level co-activation window.** At level 1, union binds everything active at one instant. At level 2+, union binds lower-level moments that fired within a window proportional to `contextLength^level` frames. The precise window boundary rule (fixed width? decaying activation? pattern-driven?) needs empirical tuning from a working level-1 system.
-10. **Replay across moment levels.** Does level-2 replay walk a separate level-2 temporal graph? Does it use the same hippocampal clock with coarser steps, or a separate clock? Simplest hypothesis: one clock, coarser edges with larger Δt values per step.
+10. **Replay across moment levels.** A level-2 moment's record is over level-2 symbols at level-2 offsets, so level-2 replay steps through the same kind of record at a coarser grain; there is no separate graph to walk. Whether one experiment steps at one level throughout, or descends when a coarse step needs a fine consequence, is open. Simplest hypothesis: one clock, and the level of the stepping set decides the grain.
 11. **Number of moment levels.** Should emerge from data, not configuration. A level-N moment is only minted when enough level-(N-1) moments exist and co-activate with sufficient salience. Systems with short experience horizons will have fewer levels.
 12. **The actual instruction set the cortex uses to invoke the hippocampus.** Will emerge from implementation rather than be designed up front. The conceptual operations are listed above; their precise signatures and the cortex-side action neurons that trigger them are TBD.
 13. **Salience-to-lookback mapping.** Proposal: `lookback = floor(k · |z|)` capped by available trajectory length. Tune `k` empirically from the first salience-driven rewind experiments. Possible refinement: separate coefficients for reward-z vs prediction-error-z (a large reward miss may want a different rewind depth than a large surprise).
 14. **Default fan-out width.** How many concurrent trajectories does a pool dispatch? Probably small (4-8) for involuntary forecasts and larger (up to capacity) for voluntary think-actions where the user explicitly requested deep deliberation. Capped by hippocampal compute budget.
-15. **Trajectory diversity.** When `fanout` > number of available sibling-derived alternatives, how are the extra slots filled? Resampling siblings under different parent-pattern subsets? Falling back to cortex's probabilistic action votes? Empirical question.
-16. **Hypothetical-union assembly.** For imagined-scenario construction, what determines which patterns/moments a cue binds into the hypothetical moment — the literal cue set only, or the cue plus its strongly-associated parents via pattern-completion? Over-completion risks reconstructing a familiar real situation instead of the intended novel one; under-completion risks a hypothetical too sparse to forward-simulate. And when the constructed union has no outgoing temporal edges (nothing exactly like it was ever minted), forward simulation must fall back to the edges of its constituent parts — confirm this composes sensibly rather than producing incoherent forward walks. Tune from the first imagined-construction experiments in Phase 7.
+15. **Trajectory diversity.** When `fanout` > number of alternatives some record holds beside the active set, how are the extra slots filled? Stepping through the action neurons' own records for actions with no situation-specific history? Leaving them empty? Empirical question.
+16. **Hypothetical-union assembly.** For imagined-scenario construction, what determines which patterns/moments a cue binds into the hypothetical moment — the literal cue set only, or the cue plus its strongly-associated parents via pattern-completion? Over-completion risks reconstructing a familiar real situation instead of the intended novel one; under-completion risks a hypothetical too sparse to forward-simulate. And since the constructed union has no record of its own, forward simulation reads the records of its constituent parts — confirm this composes sensibly rather than producing incoherent forward walks. Tune from the first imagined-construction experiments in Phase 7.
+17. **Rationing replay per moment.** Replay writes imagined firings into the same ring real frames do, so a moment rehearsed often holds a ring that is mostly imagined and its real exposures are evicted by its rehearsals. Whether replay should be rationed per moment — a cap on imagined firings per real one, or a rule that an imagined firing evicts the oldest imagined firing first — is open. The cost of not rationing is that a moment's estimate can come to rest on rollouts alone; the cost of rationing is a second horizon beside `H`, which the spec forbids everywhere else. Measure first: the imagined share of rings, per moment, over exposure.
 
 ---
 
@@ -882,7 +880,7 @@ All cognition emerges from:
 - and forgetting.
 
 - **Long-term memory** as cortical neurons minted by deliberate experimentation — not as a separate store, not as a context window.
-- **Episodic-to-semantic consolidation** as a structural consequence of per-link decay on multi-parent nodes, not as a separate process.
+- **Episodic-to-semantic consolidation** as a structural consequence of the majority over a multi-parent node's ring, not as a separate process.
 - **Two thinking modes** — involuntary background forecasting + voluntary think-actions — both running on the same machinery.
 - **Imagination as union-mint with a supplied cue** — the hippocampus constructs hypothetical situations from never-co-fired parts, forward-simulates them through the learned transition model, and caches a conditional policy onto the hypothetical that real recurrence later licenses. Scenario construction is a mechanism here, not just a cited capacity; imagination proposes, recurrence licenses.
 - **System 2 enriches System 1** — moments enter the cortical substrate and become raw material for further pattern formation. Expertise development is structural, not behavioral.

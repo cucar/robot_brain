@@ -11,8 +11,14 @@
 ///   - `base_neurons.csv`       neuron_id,channel_id,type,dimension_id,val
 ///   - `connections.csv`        from_neuron_id,to_neuron_id,distance,strength,reward
 ///   - `patterns.csv`           pattern_neuron_id,parent_neuron_id,strength
-///   - `contexts.csv`           pattern_neuron_id,context_neuron_id,context_age,strength
-///   - `neuron_error_stats.csv` neuron_id,age,n,mean,m2
+///   - `contexts.csv`           pattern_neuron_id,context_neuron_id,context_age,strength — each routing
+///                              entry's stored context. A child's rows are keyed by the child's pattern
+///                              id (age 0 spatial, >=1 temporal); a neuron's NORMAL is keyed by the
+///                              neuron's own id with context_age == u32::MAX (NORMAL_CONTEXT_AGE).
+///   - `spatial_history.csv`   neuron_id,frame,served_child,observed — the history window: one row per
+///                              remembered frame, `served_child` empty when the normal served, `observed`
+///                              a space-separated neighbor id list. This is the evidence the one test reads.
+///   - `neuron_error_stats.csv` neuron_id,age,n,mean,m2 — temporal per-age Welford error stats.
 
 use std::fs;
 use std::fs::File;
@@ -23,12 +29,18 @@ use rustc_hash::FxHashMap;
 
 use crate::neuron::{
     SerializedChild, SerializedConnection, SerializedContextRef,
-    SerializedErrorStats, SerializedNeuron,
+    SerializedErrorStats, SerializedHistoryRecord, SerializedNeuron,
 };
+
+/// Sentinel `context_age` marking a `contexts.csv` row as a neuron's **normal** (its stored context
+/// configuration) rather than a child's context. Real spatial contexts use age 0 and temporal ones a
+/// small distance, so `u32::MAX` can never collide. The row's pattern-id column holds the owning
+/// neuron's id, and the row routes straight to that neuron's normal — no parent/child lookup.
+const NORMAL_CONTEXT_AGE: Distance = u32::MAX;
 use crate::thalamus::{BaseNeuron, Snapshot, SnapshotNeuronEntry};
 use crate::types::{
     ChannelId, ContextEntry, Coordinate, DimensionId, Distance,
-    Level, NeuronId, NeuronType,
+    FrameNumber, Level, NeuronId, NeuronType,
 };
 
 /// Hard cap on retained backup folders. The 11th save evicts the oldest by
@@ -42,8 +54,7 @@ pub struct Backup {
 }
 
 impl Backup {
-    /// Create a new Backup instance carrying the brain-wide forget rate that
-    /// will be assigned to every pattern neuron when loading from disk.
+    /// Create a new Backup carrying the brain-wide forget rate assigned to every pattern neuron on load.
     pub fn new(pattern_forget_rate: f64) -> Self {
         Self { pattern_forget_rate }
     }
@@ -82,6 +93,7 @@ impl Backup {
         self.write_connections(&folder, snapshot)?;
         self.write_patterns(&folder, snapshot)?;
         self.write_contexts(&folder, snapshot)?;
+        self.write_spatial_history(&folder, snapshot)?;
         self.write_neuron_error_stats(&folder, snapshot)?;
 
         println!("💾 Backup saved: {} ({} neurons)", folder.display(), snapshot.neurons.len());
@@ -151,6 +163,8 @@ impl Backup {
                 children: Vec::new(),
                 context_refs: Vec::new(),
                 error_stats: Vec::new(),
+                normal_context: Vec::new(),
+                spatial_history: Vec::new(),
             });
             temporal_levels.insert(id, temporal_level);
             spatial_levels.insert(id, spatial_level);
@@ -212,6 +226,9 @@ impl Backup {
                 let pattern_id: NeuronId = row[0].parse().map_err(|e| format!("Bad pattern id: {}", e))?;
                 let parent_id: NeuronId = row[1].parse().map_err(|e| format!("Bad parent id: {}", e))?;
                 let strength: f64 = row[2].parse().map_err(|e| format!("Bad strength: {}", e))?;
+                // Extra trailing columns from older backups (a `fires` column, or the retired
+                // evidence/price payment state) are ignored — the add test prices a child before it is
+                // created, so a routing-table child carries no payment state to restore.
 
                 neuron_parents.insert(pattern_id, parent_id);
 
@@ -245,6 +262,16 @@ impl Backup {
                 let context_id: NeuronId = row[1].parse().map_err(|e| format!("Bad ctx neuron id: {}", e))?;
                 let context_age: Distance = row[2].parse().map_err(|e| format!("Bad ctx age: {}", e))?;
                 let strength: f64 = row[3].parse().map_err(|e| format!("Bad ctx strength: {}", e))?;
+
+                // A normal row (sentinel age): the neuron's own stored context configuration, keyed by
+                // its own id. Route straight to its normal — no parent/child lookup, and the normal is
+                // never a delete-cascade target, so no contextRef is built for it.
+                if context_age == NORMAL_CONTEXT_AGE {
+                    let neuron = neurons.get_mut(&pattern_id)
+                        .ok_or_else(|| format!("normal-context neuron not found: {}", pattern_id))?;
+                    neuron.normal_context.push(context_id);
+                    continue;
+                }
 
                 // Find the child entry on the parent and push the context entry
                 let parent_id = neuron_parents.get(&pattern_id)
@@ -287,7 +314,30 @@ impl Backup {
             }
         }
 
-        // Per-(neuron, age) Welford error stats — optional, older snapshots may not have this
+        // The history window. Rows are written in order per neuron, so appending as they are read
+        // preserves it. Absent file = an older backup with no history — the neuron restores empty,
+        // exactly as before this table existed.
+        let history_file = folder.join("spatial_history.csv");
+        if history_file.exists() {
+            for row in read_csv(&history_file)? {
+                if row.len() < 4 { continue; }
+                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad history neuron id: {}", e))?;
+                let frame: FrameNumber = row[1].parse().map_err(|e| format!("Bad history frame: {}", e))?;
+                let served_child: Option<NeuronId> = if row[2].is_empty() {
+                    None
+                } else {
+                    Some(row[2].parse().map_err(|e| format!("Bad history server: {}", e))?)
+                };
+                let mut observed = Vec::new();
+                for id in row[3].split_whitespace() {
+                    observed.push(id.parse::<NeuronId>().map_err(|e| format!("Bad history observed id: {}", e))?);
+                }
+                let neuron = neurons.get_mut(&neuron_id)
+                    .ok_or_else(|| format!("spatial_history neuron not found: {}", neuron_id))?;
+                neuron.spatial_history.push(SerializedHistoryRecord { frame, served_child, observed });
+            }
+        }
+
         let error_stats_file = folder.join("neuron_error_stats.csv");
         if error_stats_file.exists() {
             for row in read_csv(&error_stats_file)? {
@@ -445,6 +495,7 @@ impl Backup {
     fn write_contexts(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
         let mut w = open_csv(&folder.join("contexts.csv"))?;
         for entry in &snapshot.neurons {
+            // Each child's stored context configuration, keyed by the child's pattern id.
             for child in &entry.neuron.children {
                 for ctx in &child.context {
                     write_row(&mut w, &[
@@ -455,11 +506,42 @@ impl Backup {
                     ])?;
                 }
             }
+            // The neuron's normal — a routing entry like a child, but with no pattern neuron, so it is
+            // keyed by the owning neuron's own id and marked with the NORMAL_CONTEXT_AGE sentinel.
+            for &ctx_id in &entry.neuron.normal_context {
+                write_row(&mut w, &[
+                    entry.neuron.id.to_string(),
+                    ctx_id.to_string(),
+                    NORMAL_CONTEXT_AGE.to_string(),
+                    "1".to_string(),
+                ])?;
+            }
         }
         w.flush().map_err(|e| format!("Failed to flush contexts.csv: {}", e))
     }
 
-    /// Write the per-(neuron, age) Welford error-stats table. Sorted by (neuron_id, age).
+    /// Write the spatial history window — the frames each neuron was active for, in order. This is the
+    /// evidence the one test evaluates, so a snapshot that omitted it would restore a neuron that has
+    /// forgotten everything it ever saw and stops growing structure (docs/algorithm.md, "The history").
+    /// Streamed row-by-row: with a long horizon this is the largest table by far.
+    /// Row: `neuron_id,frame,served_child,observed` where `served_child` is empty when the normal served
+    /// and `observed` is a space-separated neighbor id list (kept in one field so the row stays fixed-arity).
+    fn write_spatial_history(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
+        let mut w = open_csv(&folder.join("spatial_history.csv"))?;
+        for entry in &snapshot.neurons {
+            for rec in &entry.neuron.spatial_history {
+                let observed = rec.observed.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(" ");
+                write_row(&mut w, &[
+                    entry.neuron.id.to_string(),
+                    rec.frame.to_string(),
+                    rec.served_child.map_or(String::new(), |id| id.to_string()),
+                    observed,
+                ])?;
+            }
+        }
+        w.flush().map_err(|e| format!("Failed to flush spatial_history.csv: {}", e))
+    }
+
     fn write_neuron_error_stats(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
         let mut rows: Vec<Vec<String>> = Vec::new();
         for entry in &snapshot.neurons {
@@ -749,6 +831,8 @@ mod tests {
                         children: Vec::new(),
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
+                        normal_context: Vec::new(),
+                        spatial_history: Vec::new(),
                     },
                     temporal_level: 0,
                     spatial_level: 0,
@@ -767,6 +851,8 @@ mod tests {
                         children: Vec::new(),
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
+                        normal_context: Vec::new(),
+                        spatial_history: Vec::new(),
                     },
                     temporal_level: 0,
                     spatial_level: 0,
@@ -804,6 +890,38 @@ mod tests {
         let neuron1 = loaded.neurons.iter().find(|e| e.neuron.id == 1).unwrap();
         assert_eq!(neuron1.neuron.connections.len(), 1);
         assert_eq!(neuron1.neuron.connections[0].to_neuron_id, 2);
+
+        // cleanup
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_load_reads_old_six_column_patterns_csv() {
+        // Older backups wrote patterns.csv with extra trailing columns (a `fires` column, and the
+        // retired evidence/price payment state — up to 6 columns). The add test prices a child before
+        // it is created, so restore ignores everything past strength but must still parse the leading
+        // columns correctly rather than choking on the extra fields.
+        let dir = temp_dir().join("brain_test_backup_legacy");
+        fs::remove_dir_all(&dir).ok();
+        let folder = dir.join("backups").join("legacy_test");
+        fs::create_dir_all(&folder).unwrap();
+
+        write_csv(&folder.join("channels.csv"), &[]).unwrap();
+        write_csv(&folder.join("dimensions.csv"), &[]).unwrap();
+        write_csv(&folder.join("neurons.csv"), &[
+            vec!["1".to_string(), "0".to_string(), "0".to_string()],
+            vec!["2".to_string(), "0".to_string(), "1".to_string()],
+        ]).unwrap();
+        write_csv(&folder.join("patterns.csv"), &[
+            vec!["2".to_string(), "1".to_string(), "3.0".to_string(), "7".to_string(), "12.5".to_string(), "4.0".to_string()],
+        ]).unwrap();
+
+        let backup = Backup::new(0.01);
+        let loaded = backup.load(&dir, "legacy_test").unwrap();
+
+        let parent = loaded.neurons.iter().find(|e| e.neuron.id == 1).unwrap();
+        let child = parent.neuron.children.iter().find(|c| c.pattern_id == 2).unwrap();
+        assert_eq!(child.activation_strength, 3.0);
 
         // cleanup
         fs::remove_dir_all(&dir).ok();
