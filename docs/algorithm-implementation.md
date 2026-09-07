@@ -283,7 +283,7 @@ forward-side deltas are the numbered list in the section above and land in Stage
 **Phase 2 — contraction.**
 
 16. **Price named-and-absent in bids.** Carry `1 + |e \ O⁻|` on the bid as its price and change the survival
-    test in `spatial_survivors` from a flat `≥ 2` to R23's `covers > price`.
+    test in `spatial_survivors` from a flat `≥ 2` to R23's `covered > price`.
 17. **Offer every pattern that applies.** Today a neuron bids its routed entry only. R18 step 3 sends a bid for
     every pattern with more than half its neighbors present, so the election sees the catalog.
 18. **Replace the above-base adjacency heuristics with the reach.** The eight-sector nearest rule

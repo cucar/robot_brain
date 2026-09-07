@@ -117,7 +117,7 @@ against an invariant that no longer holds, and the reach has to be derived from 
 digit (D6), so a neighbor 11 frames back is written as 8 and expanded to 8 (R27). Each level down adds its own
 group's slack, so a high unit places the base symbols of its farthest neighbors only to within the sum of the
 groups along the path — its connections can say what comes next but not, above a few levels, exactly when.
-The file says so (§2); what it does not say is how deep the stack stays useful before its far placements are
+The file says so (§1); what it does not say is how deep the stack stays useful before its far placements are
 too coarse for the prediction (§13) or a motor program (R30) to act on, which is a cap on useful depth that
 nothing declares. **Diagnostic:** per level, the placement error of expanded base symbols against where they
 fired, split by offset group; and the level above which a connection's base placements no longer win a
@@ -131,8 +131,8 @@ patterns always bought together never diverge at their own level; the level abov
 bought in against the overlap of their connections. Pairs high on both for a long stretch are the merge the level
 above has not made.
 
-**A newly minted child expects little for a while.** Its connections start forming the frame after its mint
-(R13) and then only in the frames it is bought in (D17), so until it has been bought a few times it expects
+**A newly minted child expects little for a while.** Its connections start forming at its first purchase and
+only in the frames it is bought in (R13, D17), so until it has been bought a few times it expects
 from one or two exposures and infers little but the default. The parent it was minted from is covered whenever
 the child is bought, so nothing speaks for that situation with much history until the child has some.
 **Diagnostic:** frames from a child's mint to the first time its expectation wins a dimension, against how
