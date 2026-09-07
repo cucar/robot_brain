@@ -203,8 +203,7 @@ The last pass commits the action for the frame ahead; the reward for it arrives 
 > **A child's activation inherits the parent activation's coordinate** — the frame, and the position in every
 > activation dimension — and never an average over what it covers.
 
-**Three objects, and the word for one of them is overloaded.** Everything below is one of these three, and most
-of the difficulty in reading the rest is losing track of which:
+**Three objects:**
 
 ```
 NEURON       a symbol, and a type. Sits at one level, in one dimension of one channel.
@@ -217,9 +216,9 @@ ACTIVATION   one occurrence of a neuron, at a frame and a position. Holds the
              neighborhood it observed, and the cover chosen for it.                      D19
 ```
 
-**The overload is `child`.** A neuron requests a pattern; the machine mints a neuron for it one level up. The
-**pattern** the parent now holds takes counts at once, and the **neuron** minted above it has none — two
-objects, created together, and the spec says so again where it matters (R16).
+**A pattern is a pointer to a child, and a child is a neuron.** One add request creates both: the parent
+gains a **pattern**, a line in its own table that takes counts at once, and the machine mints the **child** it
+points to, a neuron one level up (R16), and wires it to the parent.
 
 **A neuron never holds another neuron, and a pattern is never active.** What fires is an activation; what a
 level elects is a bid for a pattern's child; what the dictionary writes is a pattern's neighborhood.
@@ -484,7 +483,7 @@ decided to keep, and its connections, what followed it. Everything else it holds
 > are the future of the symbol over every situation it fires in. Either speaks only when nothing more specific
 > covers it (D10).
 >
-> **A neuron's own kind is written one level down; the other kind joins apex to apex.** A pattern child is a situation
+> **A neuron's own kind is written one level down; the other kind joins apex to apex.** A child is a situation
 > in the alphabet of its parent's level, so what follows it of its own kind — the events after an event — is recorded
 > in that alphabet: the neurons of the level below its own that fire while it is open, and for a base neuron, having
 > no level below, the base's. **An action neuron holds no connections of its own kind**: what actions follow an action
@@ -853,17 +852,14 @@ the design.
 > **One candidate per call, whether it pays or not.** What a single candidate leaves uncovered is the next
 > call's residual, and the next call's seed is whatever is then failing most.
 
-> **R16 — What a child is at birth.** The parent requests; the machine creates. The pattern inherits its
-> parent's channel and dimension and mints one level above it, all carried on the request. It is created with
-> **no counts**: its own neighborhood belongs to its own level, which it has not observed yet. Its *existence*
-> is decided by its parent, its *structure* by itself.
+> **R16 — What a child is at birth.** The parent requests; the machine creates. The child inherits its
+> parent's channel and dimension and is minted one level above it, all carried on the request. It is created
+> with **no counts**: its own neighborhood belongs to its own level, which it has not observed yet. Its
+> *existence* is decided by its parent, its *structure* by itself.
 >
 > **A neuron may hold many children, and they do not contend.** Each is one pattern's child, each covers the
 > part of an activation its pattern was assigned, and several of them may be promoted at one coordinate (D8). What
 > they share is a parent and a coordinate, not a slot.
->
-> **Two objects, one word.** The **neuron** minted one level up has no counts. The **pattern** the parent now
-> holds is a different object and takes counts at once — its share of every activation whose cover it joins (R6).
 >
 > **Release is the same shape reversed**: the parent retires, the machine reclaims. A retired pattern goes back
 > on the same request that carries the candidate (R19), so a call touches the alphabet once — in one direction,
@@ -908,7 +904,7 @@ the design.
 > death frame   =   when the child's last open activation closes
 >               =   this frame, when none is open
 > ```
-> That set only shrinks. A pattern neuron has one parent (D2), so once that parent stops covering with it
+> That set only shrinks. A child has one parent (D2), so once that parent stops covering with it
 > nothing can fire it again, and no level built afterward can name it either, because a level is built out of
 > what is firing (R25). Reach grows with the level (D4), so the last to close is the highest one and the wait
 > is at most `reach_t(D)` frames, `D` being the highest level the stack currently holds.
@@ -1065,7 +1061,7 @@ strengthening — there is no second call and nothing is saved twice.
 > **R20 — A bid is a neighborhood and a name.** A bid carries two things and no others:
 > ```
 > the neighborhood   the neighbors the pattern names — its dictionary line (D12)
-> the child          the id of the pattern neuron this bid would promote
+> the child          the id of the child this pattern would promote
 > ```
 > The neighborhood travels because it *is* the line for the symbol being proposed, and the bidder is implied,
 > because a child *is* its parent in that neighborhood. **No connection travels**: nothing at
