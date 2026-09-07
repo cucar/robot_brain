@@ -35,12 +35,12 @@ is the difficulty: the arithmetic is counting, and what has to be held is which 
 |-------------------|--------------------------------------------------------------------------------------|---|
 | neuron            | a symbol, and a type. Base or learned, event or action                               | D2 |
 | activation        | one occurrence of a neuron, at a frame and a position                                | D2 |
-| pattern           | a line in one neuron's table: a neighborhood, and the child neuron it promotes       | D19 |
+| pattern           | a line in one neuron's table: a neighborhood, and the child neuron it promotes       | D18, D19 |
 | child             | the neuron one level up that a pattern promotes                                      | R16 |
 | neighbor          | a neuron at an offset                                                                | D7 |
 | offset            | a coordinate difference, kept to one significant digit in base 2                     | D6 |
 | reach             | how far a neuron sees in every activation dimension — `2^k`, doubling every level    | D4 |
-| neighborhood      | what a pattern **names** — its dictionary line                                       | D18 |
+| neighborhood      | what a pattern **names** — its dictionary line                                       | D7, D18 |
 | `O` (observation) | what one activation **saw** — the neighbors adjacency admitted where it fired        | D7, D18 |
 | history           | the last `H` activations of one neuron, oldest first. The only free parameter is `H` | D23, R10 |
 | age               | frames since an activation fired, `0` through `reach_t`. Read, not just counted      | D9 |
@@ -113,7 +113,7 @@ structure as it now stands, and read the objective as: make that shorter.
 **There is no return, no horizon and no value function.** What the machine holds is one number per situation,
 distance and action: the mean reward that action received when it ran at that distance from that situation
 (R31). It is an exact mean over every exposure the connection has ever had, never discounted, never decayed and
-never windowed. Every frame, each action dimension runs the candidate with the largest such mean among the
+never windowed. Every frame, each action dimension runs the action with the largest such mean among the
 situations then standing on the apex (R36). That is the whole of it — **act on the best estimate you hold, for
 the situation you are actually in.**
 
@@ -129,49 +129,49 @@ space control acts over.
 
 ---
 
-# 2. A frame, in outline
+# 2. Frame processing
 
-Nothing below is stated here: this is the order the rest of the document is read in, and every step names
-where it is specified. A frame arrives carrying what each event dimension observed, what each action
-dimension is executing (D8), and any rewards for actions already run (R33). The machine works **up one stack,
-a level at a time**.
+A frame arrives carrying what each event dimension observed, what each action dimension executed (D8), and any 
+rewards for actions already run (R33). The machine works **up one stack, a level at a time**.
 
 ```
 per level, in this order and no other
 
-  bids       the machine calls every neuron that fired; each does everything structural for this
-             frame and returns a bid for every pattern that applies, with its requests      R19
-  election   the machine takes bids one at a time by what they cover per line they cost, each
-             credited the free neurons it names, until the best left covers no more than it
-             costs; the level's uncovered neurons stand as themselves                       R23
-  allocation the machine allocates every child requested at this level — an id, its parent, its
-             level and the coordinate it inherits — and activates it one level up beside the
-             election's winners. It does no work of its own until it next fires        R13, R16
+  bids + calls (R19)  
+  the machine calls every neuron that fired at that level to process the frame. 
+  inputs: past and present neighbors at age=0, future neighbors as they arrive age>0.
+  output (age=0): patterns to cover given neighborhood, add/delete child requests
+  
+  election (R23)
+  the machine greedily covers the residual based on their cost. 
+  each pattern is credited the free neurons it names, until the best left covers no more than it costs.
+  the level's uncovered neurons stand as themselves.
+  
+  allocation (R13, R16) 
+  the machine allocates every child requested at this level: 
+  neuron id, its parent, its level and the coordinate it inherits. 
+  then, it activates it one level up beside the election's winners. 
+  it does no work of its own until it next fires.        
 
   the level above is built out of what the election accepted and what allocation added, and
-  it happens again; a level that produced neither has no level above it this frame          §12
+  it happens again; a level that produced neither has no level above it this frame (§12)
 
 then, once the last level has run
 
-  ledger     the machine builds the neurons it allocated this frame, and deletes every retired
-             pattern now due                                                           R16, R17
-  learn      across kinds, and only for the apex-born: an event connects to the apex action that
-             ran, an action to the apex events that followed, and a reward moves the estimate
-             of the action connection at its distance                                §10.3, R33
-  predict    the apex reads its event connections — events and actions both expect — and every
-             expectation expands down to base events                                        §13
-  infer      the apex reads its action connections — only events infer — and every inference
-             expands down to base actions                                                   §16
-  consensus  one winner per dimension, at the base: an expected event by the share of voters
-             that placed it, an action by the estimate it carries                     R27, R36
+  ledger (R16, R17)    the machine builds the neurons it allocated this frame, and deletes every retired
+                       pattern now due                                                           
+  learn (§10.3, R33)   across kinds, and only for the apex-born: an event connects to the apex action that
+                       ran, an action to the apex events that followed, and a reward moves the estimate
+                       of the action connection at its distance
+  predict (§13)        the apex reads its event connections — events and actions both expect — and every
+                       expectation expands down to base events
+  infer (§16)          the apex reads its action connections — only events infer — and every inference
+                       expands down to base actions
+  consensus (R27, R36) one winner per dimension, at the base: an expected event by the share of voters
+                       that placed it, an action by the estimate it carries
 ```
 
 The last pass commits the action for the frame ahead; the reward for it arrives with that frame (R29).
-
-**Every decision above is made on complete evidence.** A neighborhood is whole the frame the neuron fires
-(D7), and nothing structural reads anything else — so no step is a bet, nothing is committed early, and
-nothing is revisited. What the remaining frames deliver is what the situation was followed by, and it is read
-only when a unit on the apex is expanded.
 
 ---
 

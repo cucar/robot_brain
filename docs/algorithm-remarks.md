@@ -7,7 +7,14 @@ keyed by the D, R or section they belong to, in the order the specification intr
 
 ---
 
-# 1. The machine
+# 2. Frame processing
+
+**On §2 — every decision in the frame is made on complete evidence.** A neighborhood is whole the frame the
+neuron fires (D7), and nothing structural reads anything else — so no step is a bet, nothing is committed
+early, and nothing is revisited (R13). What the remaining frames deliver is what the situation was followed
+by, and it is read only when a unit on the apex is expanded (R27).
+
+# 3. The machine
 
 **On D2 — why a child sits at offset zero.** A neighborhood is written relative to the parent's activation, so the
 child sits at offset zero by construction. A centroid over what the child covers would leave the level above
@@ -130,7 +137,7 @@ would, and the neighbors it names wrongly are literally the charges in the file 
 anywhere changes for it to do so: an activation costs 1 before and after, because the alphabet loses precisely
 the factor the coordinate gains.
 
-# 2. The objectives
+## 3.4 The file
 
 **On D12 — why the file holds nothing about the future.** The forward half of a pattern used to be a claim the
 file scored: a unit asserted what would follow, a wrong assertion was a correction, and the corrections were a
