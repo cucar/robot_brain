@@ -9,7 +9,7 @@ risk states what would be done about it, so measurement has a decision attached.
 
 Nothing in the design optimizes for prediction, and nothing scores it. A pattern is charged for the neurons it
 names beside the activation and never for what followed (D17); what followed it strengthens its connections,
-enters no test, and is not in the file (D9). What the machine expects next is an output it hands out (§13),
+enters no test, and is not in the file (D12). What the machine expects next is an output it hands out (§13),
 and no part of the machine reads whether it came true. Prediction is therefore a pure by-product: the machine
 gets better at predicting by compressing better — richer chunks are bought, patterns upstairs describe over
 richer symbols, and each child's connections are the distribution of what actually followed the situation it was
@@ -72,7 +72,7 @@ near zero the offer can be narrowed back at no loss.
 
 **Holding covers can hold a stale one.** R6 keeps an activation's cover unless the re-derived one is strictly
 cheaper, which is what makes the bill a descent (T6). It also means an activation saved under an old table keeps
-an old cover for as long as nothing beats it strictly, and two activations with one backward half can be covered
+an old cover for as long as nothing beats it strictly, and two activations with one neighborhood can be covered
 two ways. The counts a pattern re-centers on are then partly the table's past. **Diagnostic:** the share of
 activations whose held cover differs from the cover R18 would derive fresh, and the cost difference. If the share
 is large and the difference is zero, the hold is doing nothing but hysteresis and the tie rule could be
@@ -104,28 +104,28 @@ still decide the dimension long after the change, the hierarchy is not minting w
 compression side is where to look.
 
 **Several children per activation may not halve the level above.** A neuron used to promote at most one child,
-which is what made T11's halving argument work — and the halving is what D14's doubling reach is derived from,
+which is what made T11's halving argument work — and the halving is what D4's doubling reach is derived from,
 what T12's depth bound rests on, and what keeps `|O|` constant across levels. A cover of `m` patterns promotes
-up to `m` children at one coordinate (D5, R18), and the wide offer lets patterns outside the cover be bought
+up to `m` children at one coordinate (D8, R18), and the wide offer lets patterns outside the cover be bought
 too, so a level can be *wider* than the one below it wherever activations decompose into several chunks. Nothing
 caps `m`; what bounds it is that each extra child is another line and another set of charges, and the
 election stops buying the moment one does not pay. **Diagnostic:** bought bids per activation and units per
-level per frame, against the halving T11 assumes. If levels stop thinning, D14's reach schedule is calibrated
+level per frame, against the halving T11 assumes. If levels stop thinning, D4's reach schedule is calibrated
 against an invariant that no longer holds, and the reach has to be derived from measured spacing instead.
 
 **Far placement is lossy, and the loss compounds with height.** An offset is kept to one significant binary
-digit (D15), so a neighbor 11 frames back is written as 8 and expanded to 8 (R27). Each level down adds its own
+digit (D6), so a neighbor 11 frames back is written as 8 and expanded to 8 (R27). Each level down adds its own
 group's slack, so a high unit places the base symbols of its farthest neighbors only to within the sum of the
-groups along the path — its forward half can say what comes next but not, above a few levels, exactly when.
+groups along the path — its connections can say what comes next but not, above a few levels, exactly when.
 The file says so (§2); what it does not say is how deep the stack stays useful before its far placements are
 too coarse for the prediction (§13) or a motor program (R30) to act on, which is a cap on useful depth that
 nothing declares. **Diagnostic:** per level, the placement error of expanded base symbols against where they
-fired, split by offset group; and the level above which the forward half's base placements no longer win a
+fired, split by offset group; and the level above which a connection's base placements no longer win a
 dimension. If that level is low, the coarse groups are earning their reach on the backward side and losing it
 on the forward, and a finer offset alphabet above some level is the fallback.
 
 **Siblings agree until one is bought alone.** Two children bought at one coordinate see the same forward
-neighbors, so their connections agree until the first activation where one is bought and the other is not (D21). Two
+neighbors, so their connections agree until the first activation where one is bought and the other is not (D20). Two
 patterns always bought together never diverge at their own level; the level above is expected to merge them
 (§4 of the remarks). **Diagnostic:** for pairs of children of one neuron, the overlap of the frames they were
 bought in against the overlap of their connections. Pairs high on both for a long stretch are the merge the level
@@ -153,7 +153,7 @@ withheld.
 
 **The readout is unvalidated, and the position now lives outside the symbol.** Compressing harder can produce a
 worse classifier, because a readout may be living on exactly the position-and-class-specific duplicates that
-compression deletes — and D8 deletes them by construction rather than incidentally. The information is not
+compression deletes — and D11 deletes them by construction rather than incidentally. The information is not
 lost: it moved into the activation coordinates the body states. But a readout reading bare symbol identity
 sees a translation-invariant bag and loses every bit of *where*, so it has to consume `(symbol, coordinate)`
 pairs. A regression here will look like the compression was wrong when it was the decode. The readout gate in
@@ -186,7 +186,7 @@ collapse over a small population names most of what it holds. Re-centering large
 pulled toward whatever recurs, or starves. **Fallback if it still churns:** require the seed's population to
 span at least two activations before a candidate is priced. Exact, and costs one recurrence of latency.
 
-**Shared patterns fit every position worse than tuned ones would.** D8 pools activations from everywhere into one
+**Shared patterns fit every position worse than tuned ones would.** D11 pools activations from everywhere into one
 pattern, so a pattern describes statistics that genuinely differ by position and fits each of them worse. That
 is a real cost and it is paid in charges, which is the body half of `L` — the dictionary half falls in
 exchange, and R12 is what weighs the two. The design commits to the trade being worth it and offers no way to
@@ -194,11 +194,11 @@ buy back position-specificity except declaring a coarse position as a *neuron* d
 charges per activation against dictionary size, before and after, on the same data.
 
 **The cover pass is a greedy set cover, not a nearest-neighbor lookup.** One scan of the table per round, and
-a round is one pattern taken (R18). Cost is `O(|cover| · |table| · |O⁻|)`, and `|cover|` is exactly the
+a round is one pattern taken (R18). Cost is `O(|cover| · |table| · |O|)`, and `|cover|` is exactly the
 quantity the multi-child risk above says is unbounded. **Diagnostic:** cover-pass scans per activation against
 cover size, per level.
 
-**Routing cost at the base.** `|O|` is held constant across levels by construction (D14), but its value is set
+**Routing cost at the base.** `|O|` is held constant across levels by construction (D4), but its value is set
 by the reach and the base density, and the cover pass prices every pattern against it every frame.
 **Diagnostic:** scan volume per level, against `|O|`.
 
@@ -218,7 +218,7 @@ real structure are conflated in it. **Diagnostic:** solve one small window exact
 locates the realized slack inside the `H(n)` ceiling.
 
 **The composition gap.** Both scopes price in one currency against one `L`, and the neuron's prices and the
-machine's are meant to differ (D12). What remains is that candidates are *generated* locally: a demand no
+machine's are meant to differ (D16). What remains is that candidates are *generated* locally: a demand no
 neuron proposes is a symbol the election never gets to consider, and no neuron proposes one whose value lies in
 what it would let a *different* neuron stop paying for. Distinct from election slack, which measures the
 election against a perfect election over the same bids; this measures propose-then-elect against optimizing
@@ -234,13 +234,13 @@ variant would pay first.
 
 **Neighborhood space at higher levels.** Above level 0 the neighbors are patterns, and the per-dimension alphabet
 grows as patterns are created, so the space expands with the structure. What no longer expands is `|O|`:
-adjacency is a reach at every level (D4), and D14 sets that reach precisely to hold the expected neighbor count
+adjacency is a reach at every level (D5), and D4 sets that reach precisely to hold the expected neighbor count
 fixed as the level thins. So the open measurement is whether the invariant holds in practice, since it rests
 on T11's halving being close to what contraction actually achieves. **Diagnostic:** neighbors per activation, per
 level, against the constant the invariant predicts.
 
 **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering makes
-them slightly less independent, and D8 makes the neuron population smaller and each neuron busier — every
+them slightly less independent, and D11 makes the neuron population smaller and each neuron busier — every
 position sharing a type folds into one table, so the parallelism available shifts from across-neuron toward
 across-activation, and re-centering becomes the contended point. The election is not sequential: R23 is two
 decisions and a settling, each over every slot or every bid at once, with nothing revisited. The only ordering
@@ -253,7 +253,7 @@ the same reach. Whether one reach is right — "how much do I need to recognize 
 expect" are different questions — is unresolved, and it matters more now that the connections are the whole of
 the machine's expectation. One reach is the committed choice; separate reaches are the fallback if diagnostics
 show neighborhoods consistently reaching the bound in one direction only. **The same doubt applies across
-activation dimensions**: D14 grows every one of them by the same factor, which holds only if contraction thins
+activation dimensions**: D4 grows every one of them by the same factor, which holds only if contraction thins
 them equally, and a channel whose patterns chunk harder in time than in space would want otherwise.
 **Diagnostic:** mean spacing per activation dimension, per level, against the isotropic prediction.
 
@@ -287,7 +287,7 @@ that ran in an earlier frame moves at all — under R33 it must not.
 total on the neuron, strengthened on observation, never weakened, never collapsed; the estimate is the exact running
 mean; the walk wires the next untried action on a negative mean; covered ages are silenced; and the vote at the base
 normalizes each voter to one unit per dimension and distance, events winning by share and actions by the
-share-weighted mean estimate, with no level anywhere in it. All of that is D20, R31, R36 and R37 as written. What
+share-weighted mean estimate, with no level anywhere in it. All of that is D19, R31, R36 and R37 as written. What
 differs: the code wires the declared default at birth at strength 1, where R35 lets it run and be learned; action
 neurons vote for actions in the code, where R35 lets only events choose; the code wires every level's connections to
 the base set instead of the level below its own (D17), and so needs no expansion (R27, R30); and it shapes no reward

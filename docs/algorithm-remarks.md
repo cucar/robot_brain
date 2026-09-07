@@ -13,73 +13,126 @@ keyed by the D, R or section they belong to, in the order the specification intr
 child sits at offset zero by construction. A centroid over what the child covers would leave the level above
 differencing coordinates from origins its neighbors were never measured against.
 
-**On D4 — a neighborhood is a box.** Adjacency is a conjunction, so something far away in one dimension is not
+**On D4 — why the reach doubles.** Each level holds at most half the activations of the one below (T11), so
+its units stand twice as far apart, and the box has to double for the expected number of neighbors — a level's
+density times the volume of its box — to stand still.
+
+**On D4 — both ends are pinned by what is already given.** The declared alphabet fixes the bottom.
+`log₂N₀` levels of halving take `N₀` active neurons down to one, and at that depth the reach expression returns
+a reach spanning the whole active region — so nothing has to state that the apex should see everything.
+
+**On D4 — why every dimension grows by the same factor.** The thinning factor comes from a level's activation
+count, and a level has one of those, so the schedule cannot tell the axes apart. Growing them all by the same
+factor is the isotropic solution and the right default when nothing distinguishes them. Data that chunks harder
+along one dimension than another thins faster there and would want that dimension's reach to grow faster;
+measuring spacing per dimension instead of one count per level is what that would take, and whether it is
+worth it is open ([algorithm-evaluation.md](algorithm-evaluation.md)).
+
+**On D4 — the buffer, walked through.** With a reach of 1 — the base — an activation at frame 10:
+
+```
+                 frame 10        frame 11
+   buffer        [ 9 10]        [10 11]
+                      ▲              ▲
+   activation       fires        +1 fires, with its reward
+   at frame 10   newest edge    connects, closes
+                   sees −1
+```
+
+The neighborhood is read at the newest edge and never again; the buffer's only other job is to be the
+frames the next activations read their own neighborhoods from.
+
+**On D5 — a neighborhood is a box.** Adjacency is a conjunction, so something far away in one dimension is not
 a neighbor however close it is in another, and no dimension can rescue what another has ruled out.
 
-**On D4 — receptive fields grow with depth two ways at once.** Through composition, because a neighbor is itself
+**On D5 — receptive fields grow with depth two ways at once.** Through composition, because a neighbor is itself
 a chunk. And through the reach, because each level's units are sparser than the one below and have to reach
-further to find each other at all. Neither is declared per level: the first is what a pattern *is*, and D14
+further to find each other at all. Neither is declared per level: the first is what a pattern *is*, and D4
 derives the second from the first.
 
-**On D4 — why adjacency is not declared.** A conjunction over shared activation dimensions already says
+**On D5 — why adjacency is not declared.** A conjunction over shared activation dimensions already says
 everything a visibility declaration would, and it says it without a table to maintain: what a channel is laid
 out over settles which channels it can be adjacent to.
 
-**On D5 — many activations per coordinate.** The base bound is the input's: one symbol per channel at each point
+**On D6 — what made coarse offsets safe.** One neighbor per offset was a consequence of atomic offsets,
+never a rule. Logarithmic offsets make reach exponential in the alphabet, which is what makes the reaches D4
+schedules affordable to write down at all. Neither end of the offset alphabet is told which to use, and
+neither declares anything (R4).
+
+**On D6 — how the decay plays out.** A level whose units stand one position apart uses the exact end and
+votes the coarse offsets away for want of a majority; a level whose units stand twenty apart does the reverse.
+
+**On D7 — a pattern is a name for a chunk of spacetime.** One pattern-learning algorithm and one kind of
+pattern. There are four types only in the sense that two declarations cross: an **offset** may be zero or
+spanning in any activation dimension, which is spatial against temporal, and a **neuron dimension** is event or
+action. Neither is a separate mechanism. Spatial is a setting of the reach, and an offset does not know which
+kind it is. Event and action are not separate for a plainer reason than it looks — the machine observes its
+own actions, since each action dimension carries what was executed, so an action is a symbol read back the way
+a pixel is and a pattern over it is learned by the same counting. **You could not tell from a dictionary line
+which of the four you were holding.** The one asymmetry lives outside the pattern: an action is chosen and an
+event is only expected (R35).
+
+**On D7 — siblings at offset zero.** Several children promoted at one coordinate are activations of different
+neurons at the same place, and above the base they see each other at offset zero in every component. That is
+what lets the level above chunk them: two patterns of one neuron that keep being bought together are, one
+level up, two neighbors that keep co-occurring, and a pattern over the pair is the merge the neuron itself
+cannot build (R14).
+
+**On D8 — many activations per coordinate.** The base bound is the input's: one symbol per channel at each point
 of its layout. Above the base there is no bound at all, because a neuron covers its activation with a set of
 patterns and each of them may promote a child (R18). What replaced the bound is not a weaker version of it but
 a different kind of rule — the only exclusivity left is credit (R18, R23), and credit is about paying, not
 naming.
 
-**On D5 — the two halves are simultaneous, not sequential.** An action is not a reply appended to a frame.
+**On D8 — the two halves are simultaneous, not sequential.** An action is not a reply appended to a frame.
 Reading it as one puts the action a frame later than it is and breaks every offset measured across the two
 sides.
 
-**On D6 — ages in a single neuron.** A neuron active at frames 10 and 12 is at ages 0 and 2 in frame 10 + 2,
+**On D9 — ages in a single neuron.** A neuron active at frames 10 and 12 is at ages 0 and 2 in frame 10 + 2,
 then 1 and 3 in the next, and so on.
 
-**On D6 — an activation is an event, not a state.** It decides everything it will ever decide in the frame it
-fires, on a backward half that is already whole (D17). What it does afterwards is connect and speak. Connecting is
+**On D9 — an activation is an event, not a state.** It decides everything it will ever decide in the frame it
+fires, on a neighborhood that is already whole (D7). What it does afterwards is connect and speak. Connecting is
 transcription rather than judgement — the arriving neighbors and rewards strengthen the neuron's connections,
 where the *next* expansion reads them. Speaking is reading the neuron's own connections, and it changes
 nothing the neuron holds.
 
-**On D6 — why the window is exactly `reach_t`.** The last forward neighbor fires at offset `reach_t`, and an
+**On D9 — why the window is exactly `reach_t`.** The last neuron an activation can connect to fires at offset `reach_t`, and an
 action's reward arrives in the frame the action runs in (R29), so nothing can land after that frame and there
 is no frame to hold open for. An earlier draft paid the reward one frame after the action and had to keep every
 activation open one frame longer for that single arrival; the two-frame cycle removes the frame and the reason.
 
-**On D7 — three consequences of having no rest value.**
+**On D10 — three consequences of having no rest value.**
 
 - **Blank regions cost nothing** — no activation, no history, no dictionary, no compute.
 - **A frame is a set** — variable-size, containing only what happened.
 - **Absence discriminates in one direction only** — a pattern naming a filled disk is measurably wrong on a
-  hollow circle, because the interior neurons it names did not fire and each is charged (D16). The reverse is
+  hollow circle, because the interior neurons it names did not fire and each is charged (D15). The reverse is
   not an error: a circle-pattern on a filled disk covers what it names and leaves the interior in the residual,
   where it costs the same lines it always would. **What separates them is coverage, not penalty** — the
   disk-pattern covers more of the disk, so it wins the disk, and the circle-pattern is not charged for losing
   it.
 
-**On D7 — where sparsity comes from.** Whether a 0 pixel is a black event or nothing-to-see is the encoder's
+**On D10 — where sparsity comes from.** Whether a 0 pixel is a black event or nothing-to-see is the encoder's
 choice, made where the input is produced. A dimension where something always happens is simply always active;
 nothing depends on sparsity, it only profits from it.
 
-**On D7 — two units naming one neuron is not a defect.** The decoder expanding both gets the neuron twice and
+**On D10 — two units naming one neuron is not a defect.** The decoder expanding both gets the neuron twice and
 the neuron fires once; a set does not care how many times it is told a member. What would be a defect is
 paying two lines where one would do, and that is what exclusive credit prevents: a bid is worth only what
 would otherwise stand as its own line (R23), so a unit whose only contribution is a neuron another unit already
 delivers cannot clear its price. Naming is free, paying is exclusive.
 
-**On D8 — what position-specificity would buy is fit, and that is what it costs.** One pattern serving every
+**On D11 — what position-specificity would buy is fit, and that is what it costs.** One pattern serving every
 position describes statistics that differ by position, so it fits each worse than a position-tuned pattern
-would, and the neighbors it names wrongly are literally the charges in the file (D16). The dictionary half of
+would, and the neighbors it names wrongly are literally the charges in the file (D15). The dictionary half of
 `L` falls and the body half rises. **R12 adjudicates exactly that trade**, pattern by pattern, and no price
 anywhere changes for it to do so: an activation costs 1 before and after, because the alphabet loses precisely
 the factor the coordinate gains.
 
-# 2. The objective
+# 2. The objectives
 
-**On D9 — why the file holds nothing about the future.** The forward half of a pattern used to be a claim the
+**On D12 — why the file holds nothing about the future.** The forward half of a pattern used to be a claim the
 file scored: a unit asserted what would follow, a wrong assertion was a correction, and the corrections were a
 term of `L`. Three things were wrong with it. Nothing priced the corrections — no test read them and nothing
 was ever retired for predicting badly — so the term sat in the objective and decided nothing. The bid had to
@@ -88,16 +141,50 @@ resolution, which needed a second exclusivity beside coverage. Removing the clai
 left is a dictionary coder over the backward window, and what the machine expects next is an output it hands
 to whoever is reading, scored there or not at all.
 
-**On D9 — the file is not a log of how the machine got there.** A pattern that goes is not a line the file must
+**On D12 — the file is not a log of how the machine got there.** A pattern that goes is not a line the file must
 keep alive: the run is simply re-encoded without that symbol, and the frames it used to cover are expressed by
 whatever the dictionary now offers, with charges where that is worse. An unbounded file costs nothing because
 nothing was ever going to write it.
 
-**On D11 — where compression is actually paid out.** A unit firing at `h` names `[h − reach_t, h]`, so writing
+**On D13 — where compression is actually paid out.** A unit firing at `h` names `[h − reach_t, h]`, so writing
 it discharges up to `reach_t + 1` frames of the run at once. That is why a wider reach is worth paying a wider
 line for, and it is why the residual is free and a child is not.
 
-**On D12 — why `covers` counts what turned up rather than what the pattern names.** Take a neuron `x` whose
+**On D14 — why `L` never appears in the arithmetic.** `L` is what the differences are differences *in*; it is
+the reason the arithmetic is the arithmetic, and it is never a term in it.
+
+> **T1 — A fixed-length code is not a real file length, and no test can tell.** D13 prices a symbol at one
+> however often it is used. That is not what a decoder pays: naming a symbol out of a dictionary that grows
+> without bound (D3) costs about `log |alphabet|` bits, and that rises over the run. Write the true length as
+> `c · L`, with `c` the bits one symbol name currently costs.
+>
+> **Every test reads the sign of a difference, never a length.** `margin = benefit − cost` (R12), and both
+> terms are counted in the same symbols, so the true margin is `c · margin`. `c > 0`, so the sign is the same
+> one. The dictionary term and the body term scale together because both are counts of the same symbols —
+> if they did not, the constant would not cancel and this would fail.
+>
+> **So counting symbols and counting bits answer every question the machine asks the same way.** That is what
+> buys the integer arithmetic: no estimator, no smoothing, no boundary correction anywhere that decides what
+> structure exists. It is a property of a *fixed-length* code, and re-pricing the file by how often each symbol
+> occurs gives it up — the constant stops cancelling and probabilities do set costs, which is why
+> [forgetting.md](forgetting.md) is a document of its own.
+
+**Why a neuron's history states nothing.** It is evidence, not an encoding: it records what was seen so the
+collapse can center on it (R4), and a decoder never reads it. The one place a price is needed — does this
+pattern earn its dictionary line — is a drop in `L` the neuron works out for itself, over its own evidence, and
+nothing crosses between scopes to correct it. What that costs is stated in
+[algorithm-evaluation.md](algorithm-evaluation.md): a neuron whose territory another unit reliably takes keeps
+pricing its patterns as if it did not.
+
+# 4. The fit
+
+**On D15 — the price is not a notion invented for matching.** It is literally the symbols that would follow
+the activation in the file: a neuron named and absent has to be turned off, and that turn-off is the whole of
+what a neighborhood is charged. A neuron that fired and nothing named costs one line whether or not the
+neighborhood exists, so it is charged to nobody — which is why the residual is a term of the activation and not of
+any pattern.
+
+**On D16 — why `covers` counts what turned up rather than what the pattern names.** Take a neuron `x` whose
 pattern names `{a, b, c}` backward, in a frame where `a` and `b` fired, `c` did not, and an unnamed `m` did.
 
 ```
@@ -114,30 +201,13 @@ file got longer** — `b` and `c` would be credited as delivered *and* charged a
 name that never fires would be free to hold. The two error types are the ones being told apart: naming wrongly
 costs a symbol and delivers nothing, while a neighbor left unnamed costs its own line where stating it flat
 cost a line, so it is free either way.
-
-> **T1 — A fixed-length code is not a real file length, and no test can tell.** D10 prices a symbol at one
-> however often it is used. That is not what a decoder pays: naming a symbol out of a dictionary that grows
-> without bound (D3) costs about `log |alphabet|` bits, and that rises over the run. Write the true length as
-> `c · L`, with `c` the bits one symbol name currently costs.
->
-> **Every test reads the sign of a difference, never a length.** `margin = benefit − cost` (R12), and both
-> terms are counted in the same symbols, so the true margin is `c · margin`. `c > 0`, so the sign is the same
-> one. The dictionary term and the body term scale together because both are counts of the same symbols —
-> if they did not, the constant would not cancel and this would fail.
->
-> **So counting symbols and counting bits answer every question the machine asks the same way.** That is what
-> buys the integer arithmetic: no estimator, no smoothing, no boundary correction anywhere that decides what
-> structure exists. It is a property of a *fixed-length* code, and re-pricing the file by how often each symbol
-> occurs gives it up — the constant stops cancelling and probabilities do set costs, which is why
-> [forgetting.md](forgetting.md) is a document of its own.
-
-**On D12 — the two sums are what the two mechanisms work against, and that is the whole division of labor.**
+**On D16 — the two sums are what the two mechanisms work against, and that is the whole division of labor.**
 The election works on the body half over a given dictionary — it is priced in exactly that sum, for the
 frames it can see, though it does not minimize it (§11.3). The one test decides the dictionary half, pattern
 by pattern (R12). Neither can do the other's job: the election cannot create or destroy a symbol, and a neuron
 cannot see what its symbol saved.
 
-**On D12 — two readers, two numbers, and why that is economics rather than an inconsistency.** The neuron is
+**On D16 — two readers, two numbers, and why that is economics rather than an inconsistency.** The neuron is
 deciding what to hold and what to offer, over every situation it has been in; the machine is deciding what to
 buy, for the one window in front of it. The neuron's number says whether a pattern pays over its own history;
 the machine's says whether a bid pays on a board where earlier frames' credit stands and other neurons' bids
@@ -147,19 +217,19 @@ residual is not the neuron's (R18, R22). An earlier draft tried to make the two 
 worth "exactly what its entry was taken on" — and the claim was false the moment a past neighbor was already
 covered. The two are different by design, and the honest statement is that neither ever reads the other's.
 
-**On D12 — why the neuron can compute what a pattern is worth.** It knows what the file pays for an activation with
+**On D16 — why the neuron can compute what a pattern is worth.** It knows what the file pays for an activation with
 the pattern in its cover and what it would pay without: both are counts over the activation, and the neuron holds
-what every activation gives every pattern it has (D21). The difference between the two is the whole of the benefit,
+what every activation gives every pattern it has (D20). The difference between the two is the whole of the benefit,
 and it is a fit against the neuron's own evidence. What it never needs is the file — a length nothing computes
 cancels out of a difference (R12).
 
-**On D12 — conservative, and in a stated direction.** The line is paid once over the whole run, so a pattern
+**On D16 — conservative, and in a stated direction.** The line is paid once over the whole run, so a pattern
 that pays for itself within `H` of its neuron's own activations pays for itself many times over in the file. The
 test asks for the stronger thing. What it therefore drops is structure that still describes the run but has
-stopped describing the neuron's recent situation — which is the adaptation D24 is for, not an error in the
+stopped describing the neuron's recent situation — which is the adaptation D23 is for, not an error in the
 estimate.
 
-**On D12 — one baseline, two populations.** Every test asks what the file pays with the neighborhood against
+**On D16 — one baseline, two populations.** Every test asks what the file pays with the neighborhood against
 what it pays without. Without it, each neuron it held goes to whatever else names it — another pattern of the
 same cover, or another accepted bid one level up — and otherwise into the residual, where it costs the line it
 would always have cost. **The flat file is not a second baseline**; it is what that question returns when
@@ -169,82 +239,15 @@ What is left between the two tests is the population and the line. R12 sums over
 and charges `1 + |e|`; R21 sums over one frame and charges nothing, because the line was already weighed where
 the pattern lives.
 
-**On D12 — why `L` never appears in the arithmetic.** `L` is what the differences are differences *in*; it is
-the reason the arithmetic is the arithmetic, and it is never a term in it.
+# 5. State
 
-**Why a neuron's history states nothing.** It is evidence, not an encoding: it records what was seen so the
-collapse can center on it (R4), and a decoder never reads it. The one place a price is needed — does this
-pattern earn its dictionary line — is a drop in `L` the neuron works out for itself, over its own evidence, and
-nothing crosses between scopes to correct it. What that costs is stated in
-[algorithm-evaluation.md](algorithm-evaluation.md): a neuron whose territory another unit reliably takes keeps
-pricing its patterns as if it did not.
+**On D17 — why what follows is a different object.** An activation sees both directions; only one of them has
+arrived when the neuron must decide. What preceded it is a set, whole and priceable, so it can be named in a
+dictionary line. What follows it arrives a frame at a time and is never complete, so it is kept as a
+distribution instead, on the neuron. This binds action neurons no less than event ones: an action neuron fires
+when its action executes and connects forward the same way.
 
-# 4. Neighborhoods and distance
-
-**On D13 — a pattern is a name for a chunk of spacetime.** One pattern-learning algorithm and one kind of
-pattern. There are four types only in the sense that two declarations cross: an **offset** may be zero or
-spanning in any activation dimension, which is spatial against temporal, and a **neuron dimension** is event or
-action. Neither is a separate mechanism. Spatial is a setting of the reach, and an offset does not know which
-kind it is. Event and action are not separate for a plainer reason than it looks — the machine observes its
-own actions, since each action dimension carries what was executed, so an action is a symbol read back the way
-a pixel is and a pattern over it is learned by the same counting. **You could not tell from a dictionary line
-which of the four you were holding.** The one asymmetry lives outside the pattern: an action is chosen and an
-event is only expected (R35).
-
-**On D13 — siblings at offset zero.** Several children promoted at one coordinate are activations of different
-neurons at the same place, and above the base they see each other at offset zero in every component. That is
-what lets the level above chunk them: two patterns of one neuron that keep being bought together are, one
-level up, two neighbors that keep co-occurring, and a pattern over the pair is the merge the neuron itself
-cannot build (R14).
-
-**On D14 — why the reach doubles.** Each level holds at most half the activations of the one below (T11), so
-its units stand twice as far apart, and the box has to double for the expected number of neighbors — a level's
-density times the volume of its box — to stand still.
-
-**On D14 — both ends are pinned by what is already given.** The declared alphabet fixes the bottom.
-`log₂N₀` levels of halving take `N₀` active neurons down to one, and at that depth the reach expression returns
-a reach spanning the whole active region — so nothing has to state that the apex should see everything.
-
-**On D14 — why every dimension grows by the same factor.** The thinning factor comes from a level's activation
-count, and a level has one of those, so the schedule cannot tell the axes apart. Growing them all by the same
-factor is the isotropic solution and the right default when nothing distinguishes them. Data that chunks harder
-along one dimension than another thins faster there and would want that dimension's reach to grow faster;
-measuring spacing per dimension instead of one count per level is what that would take, and whether it is
-worth it is open ([algorithm-evaluation.md](algorithm-evaluation.md)).
-
-**On D14 — the buffer, walked through.** With a reach of 1 — the base — an activation at frame 10:
-
-```
-                 frame 10        frame 11
-   buffer        [ 9 10]        [10 11]
-                      ▲              ▲
-   activation       fires        +1 fires, with its reward
-   at frame 10   newest edge    connects, closes
-                   sees −1
-```
-
-The backward half is read at the newest edge and never again; the buffer's only other job is to be the
-frames the next activations read their own backward halves from.
-
-**On D15 — what made coarse offsets safe.** One neighbor per offset was a consequence of atomic offsets,
-never a rule. Logarithmic offsets make reach exponential in the alphabet, which is what makes the reaches D14
-schedules affordable to write down at all. Neither end of the offset alphabet is told which to use, and
-neither declares anything (R4).
-
-**On D15 — how the decay plays out.** A level whose units stand one position apart uses the exact end and
-votes the coarse offsets away for want of a majority; a level whose units stand twenty apart does the reverse.
-
-**On D16 — the price is not a notion invented for matching.** It is literally the symbols that would follow
-the activation in the file: a neuron named and absent has to be turned off, and that turn-off is the whole of
-what a neighborhood is charged. A neuron that fired and nothing named costs one line whether or not the
-neighborhood exists, so it is charged to nobody — which is why the residual is a term of the activation and not of
-any pattern.
-
-**On D17 — the split is availability, not meaning.** An activation sees both directions, and a pattern is minted
-after its chunk has been seen. Covering is simply what cannot wait. This binds action neurons no less than
-event ones: an action neuron fires when its action executes and connects forward the same way.
-
-**On D17 — the forward half is the child's, not the parent pattern's.** An earlier draft kept the forward half on the
+**On D17 — the connections are the child's, not the parent pattern's.** An earlier draft kept the forward half on the
 pattern: the collapse over what followed every activation the pattern covered, read by the child when the child stood
 on the apex. Three things argued for moving it to the child's own connections. The child exists in exactly one
 situation — its parent's pattern was bought — so its connections are already the distribution of what that situation
@@ -260,7 +263,7 @@ the time it is first bought it already holds what followed the situation it was 
 **On D17 — why connections are written one level down.** An earlier draft wrote a child's connections in its own
 level's alphabet. But a level consists only of what the election bought, so a child's forward neighbors were other
 bought children, and in a thin stack that is almost nothing — while the base neurons it covered held rich marginals
-and were silenced (D7). Buying a child over a chunk could make the prediction worse. Written in the level below, the
+and were silenced (D10). Buying a child over a chunk could make the prediction worse. Written in the level below, the
 child sees exactly the firings its members would have seen, over its situation and at its own reach, so silence under
 it loses nothing, and the rule needs no exception at the base: a base neuron's definition is itself, and its
 connections are the base's. What is given up — after this situation, that situation, in the child's own alphabet —
@@ -271,15 +274,15 @@ way down at the cost of composition.
 **On D17 — the base speaks its marginal.** A base neuron on the apex has been recognized as nothing more
 specific than itself, so its own connections — what follows the symbol over every situation it fires in — are the
 best expectation anything has for it in that frame. It is coarse, and it is silenced the moment something
-more specific is bought over it (D7). The alternative, the base expecting nothing, left the machine mute and
+more specific is bought over it (D10). The alternative, the base expecting nothing, left the machine mute and
 its exploration stalled until the first pattern was bought, which was a real gap.
 
 **On D17 — siblings.** Two children promoted at one coordinate are two neurons with two sets of connections. While
-they are always bought together their activations see the same forward neighbors and their connections agree; the
+they are always bought together their activations see the same firings follow them and their connections agree; the
 first time one is bought without the other, they diverge. Where they never diverge, the level above sees them as two
 neighbors at offset zero that always co-occur and merges them (§4).
 
-**At `R_t = 1` the vocabulary collapses.** `O⁻` **is** `O` backward, nothing is in flight, and the forward call
+**At `R_t = 1` the vocabulary collapses.** `O` is whole at once, nothing is in flight, and the forward call
 delivers one frame. Contraction loses its cross-frame contention, since every bid spans one frame. Read the
 document with the temporal parts struck out and it is the spatial algorithm, unchanged — the whole machine, not
 a stage of it, which is what makes a reach a configuration rather than an architecture.
@@ -295,33 +298,31 @@ when a neuron fires, because that is where counts move and where both tests run 
 re-derived from whatever the table currently says, while a structural move — adding, retiring (R15, R17) — is a
 decision that stands until something reverses it.
 
-# 5. State
-
 **On D18 — why the two objects can never be one.** Being a center (T2), a neighborhood is typically a set no
 activation ever was.
 
-**On D20 — why the record holds no absolute time.** Expiry was the frame number's only reader and expiry is a
+**On D19 — why the record holds no absolute time.** Expiry was the frame number's only reader and expiry is a
 FIFO depth (R9), so the record has nothing absolute in it but the `position`, which the machine supplied when
 it called — and which no comparison, price, count or vote ever reads.
 
-**On D20 — why there are no bins.** An earlier design grouped activations by identical backward half and gave the
-group one cover, on the grounds that R18 reads the backward half and nothing else, so equal inputs get equal
+**On D19 — why there are no bins.** An earlier design grouped activations by identical neighborhood and gave the
+group one cover, on the grounds that R18 reads the neighborhood and nothing else, so equal inputs get equal
 covers. R6 breaks that: an activation keeps the cover it has unless a re-derived one is strictly cheaper, so two
-activations with one backward half can hold different covers depending on what the table was when each was saved.
+activations with one neighborhood can hold different covers depending on what the table was when each was saved.
 The group could no longer share, so the group is gone. Nothing was lost but a cache — every sum the tests need
 is a sum over activations either way (T3).
 
-**On D20 — why the connections are one set, on the neuron.** The design used to keep forward tallies on the
+**On D19 — why the connections are one set, on the neuron.** The design used to keep forward tallies on the
 pattern and connections on the neuron: per-offset counts of what followed, and per-age estimates of what an
 action was worth. Both were indexed by a forward offset and a neighbor, and the distance a connection was held
-at was exactly the offset the action fired at. So the connection was a forward neighbor that happened to be an
-action, carrying one more number. D20 says so: an action connection is a forward neighbor with a strength and an
+at was exactly the offset the action fired at. So the connection was a following neuron that happened to be an
+action, carrying one more number. R31 says so: an action connection is one connection with a strength and an
 estimate, the event connections sit beside it, and the set is the neuron's over its own life — which is where
 the connections always were.
 
-**On D20 — weights, not sets, and no window.** The backward side needs a window and a majority because it is
+**On D19 — weights, not sets, and no window.** The backward side needs a window and a majority because it is
 written into the file: a pattern has to be a set, since a set is the only thing a decoder can expand, and the
-ring is what the majority is taken over. The forward side is never written anywhere (D9), so it needs neither.
+ring is what the majority is taken over. The forward side is never written anywhere (D12), so it needs neither.
 What a neuron keeps forward is every neighbor that ever followed it, at every offset, with how often — the
 empirical distribution of what follows the symbol — and for an action the sample mean of what it earned. That
 is the maximum-likelihood statistic for a thing that is only ever read, and the vote at the base is a mixture
@@ -331,20 +332,20 @@ the file gives, and a window would forget for no reason the file gives.
 An earlier draft kept the connections as a majority over the ring, on the argument that a weight that only
 ever grows answers a changed world at the rate it can be outgrown. It does; and that is not where the design
 answers a changed world. A neuron's connections are the lifetime marginal of what follows its symbol. Specificity
-comes from the hierarchy: when the world changes the neuron's patterns turn over within `H` (D24), a new child
+comes from the hierarchy: when the world changes the neuron's patterns turn over within `H` (D23), a new child
 is minted, and that child's connections are over the new situation alone from its first exposure. The old estimate
 is not wrong; it is the general case, which is what a base neuron is for (R35). Responsiveness is bought with
 structure, not with forgetting, and the window stays where the file needs it.
 
-**On D21 — why handover is arithmetic.** What an activation holds against each pattern is the index R6 says nothing
+**On D20 — why handover is arithmetic.** What an activation holds against each pattern is the index R6 says nothing
 has to be added to — a pattern that moved recomputes what it covers in each of them, and every activation reaching
 for it is current again. An activation's share moves whole, so a pattern joining or leaving a cover transfers its
-share in `O(offsets)`. The offset grid grows with the level, since D14's reach does, while the number of
+share in `O(offsets)`. The offset grid grows with the level, since D4's reach does, while the number of
 neighbors in it stays fixed by construction — that is the invariant the reach is chosen to hold.
 
 # 6. Counts, the collapse, re-centering
 
-**On D23 — why a pattern tallies neighbors it does not name.** A pattern used to count only the neighbors
+**On D22 — why a pattern tallies neighbors it does not name.** A pattern used to count only the neighbors
 assigned to it. That is enough to decide whether to *keep* a named slot and never enough to decide whether to
 *enter* one: a neighbor the pattern does not name is never assigned to it, so its count was identically zero
 and R4 could never take it. R4's abstention paragraph says a pattern grows into the residual, and the state as
@@ -369,8 +370,8 @@ evict in turn. **No candidate could have done this**: a candidate is built on th
 
 > **T2 — The collapse is the per-slot minimizer of the pattern's margin over its population.** Over the
 > activations a pattern covers, naming a neighbor moves the summed margin by `+1` wherever that neighbor was in the
-> residual — one more neuron covered — by `−1` wherever it did not fire — one more symbol charged (D16) — and by
-> `−1` once, for its place in the line (D10). Where another pattern of the same cover already holds it,
+> residual — one more neuron covered — by `−1` wherever it did not fire — one more symbol charged (D15) — and by
+> `−1` once, for its place in the line (D13). Where another pattern of the same cover already holds it,
 > nothing moves at all: no `covers` to gain, no `price` to pay. So the population for that slot is the activations
 > of the first two kinds, and the neighbor pays exactly when `2 · count − n − 1 > 0`, which is R4's rule. The
 > slots are independent, so the per-slot rule minimizes the sum. It is a *center*, not a medoid: synthesized,
@@ -382,7 +383,7 @@ be written into the file, and has no symmetric difference. The counts **are** th
 collapse is how the design gets from it to something the decoder can expand.
 
 **On R4 — why the line is in the slot rule, and why the rule is not `2 · count > n`.** The threshold is a
-file-length statement, not a majority statement, and the dictionary line is part of the file (D9). Naming `p`
+file-length statement, not a majority statement, and the dictionary line is part of the file (D12). Naming `p`
 in a pattern that covers `n` activations, `count(p)` of which have `p` in the residual:
 
 ```
@@ -414,15 +415,15 @@ neighbor covered.
 
 **On R4 — why there is no forward rule.** The collapse exists to turn counts into a set, and a set is needed
 only because the file has to be expanded. A connection is charged nothing: it is not in the line and not in
-the body (D9). So there is nothing to break even against and nothing that has to become a set. An event
+the body (D12). So there is nothing to break even against and nothing that has to become a set. An event
 slot goes down as a vote at its strength (§13), an action connection as an inference at its strength and estimate
 (R36), and a majority would throw away exactly the minority the vote still needs and exactly the alternatives
 the walk is for (R37).
 
 **On R4 — uniqueness is not assumed and is no longer guaranteed.** At the base, an offset naming one position
-holds one neuron of a dimension (D5), so those counts sum to at most `n` and only one can clear the half. Above
+holds one neuron of a dimension (D8), so those counts sum to at most `n` and only one can clear the half. Above
 the base several units may fire at one coordinate, so several can clear it and the neighborhood names them all
-— which is D15's coarse-offset case arriving for a second reason. `|e|` counts them, and nothing else in the
+— which is D6's coarse-offset case arriving for a second reason. `|e|` counts them, and nothing else in the
 design had to change for it.
 
 **On R5 — three consequences, and they are the point of the design.**
@@ -447,25 +448,25 @@ old assignment unless the new one is strictly better. That is one comparison ove
 holds, and it is the difference between a bill that descends `L` and one that can raise it (T6).
 
 **On R6 — why nothing is indexed the other way.** What each activation holds against each pattern is already the
-index (D21), so a reverse map from pattern to the activations it covers would be a second copy of the same fact.
+index (D20), so a reverse map from pattern to the activations it covers would be a second copy of the same fact.
 
 **On §6.2 — why a set and not a distribution.** Covering needs a set. So does the file: every slot it states
 holds one symbol or nothing.
 
 # 7. The history
 
-**On D24 — one count, so one denominator.** What R12 needs is not a shared clock but a shared divisor: a
+**On D23 — one count, so one denominator.** What R12 needs is not a shared clock but a shared divisor: a
 pattern's benefit is a sum over the activations it covers, and for two neurons' tests to mean the same thing that
 sum must be over comparably much evidence. A uniform `H` gives that directly. A shared *window* gave it only
 for neurons firing at similar rates, and gave a rare neuron almost nothing to decide on.
 
-**On D24 — this is adaptation, not forgetting.** A neuron that keeps firing sheds its old activations as new ones
+**On D23 — this is adaptation, not forgetting.** A neuron that keeps firing sheds its old activations as new ones
 arrive, so patterns describing a situation that has passed stop being taken into covers, drain their benefit
 and are retired (R17). A neuron that falls silent sheds nothing: it holds its `H` activations and its patterns
 intact, indefinitely, and resumes from them when its situation returns. An active neuron adapts exactly as
 fast as its evidence turns over, and a silent one simply waits.
 
-**On D24 — `H` does three jobs.** It is the structural memory — connections are outside it (R31) — it
+**On D23 — `H` does three jobs.** It is the structural memory — connections are outside it (R31) — it
 is R12's selectivity — double it and every pattern's
 benefit roughly doubles against an unchanged line, so more survive — and it is the rate at which the stack
 deepens (T13). One number, three effects, all monotone in it, and it should be tuned knowing that.
@@ -476,18 +477,18 @@ the election ties to the older symbol (R23) — but the neuron never hears the e
 has to be able to do it alone, and it can.
 
 > **T3 — Counts are sums over activations, and nothing reads an activation whole but eviction.** Re-centering sums
-> `present` and `held` over the activations a pattern covers (D23), both tests sum margins over activations, and the
+> `present` and `held` over the activations a pattern covers (D22), both tests sum margins over activations, and the
 > candidate collapses over a population of activations — every one of these is a per-slot count, and the per-slot
-> counts are what a pattern keeps (D23). Forward, there are no activations to sum over at all: a connection is
+> counts are what a pattern keeps (D22). Forward, there are no activations to sum over at all: a connection is
 > a total on the neuron, strengthened as neighbors fire and never read back per activation (R31). Nothing asks
 > whether `c` at `+1` came with `d` at `+2`. The one operation that needs an activation as a unit is removing it
 > (R8), because a sum cannot say which of its terms was the oldest.
 
-> **T4 — What covers is what was priced.** An earlier design chose a cover on the backward half and then priced
+> **T4 — What covers is what was priced.** An earlier design chose a cover on the neighborhood and then priced
 > the activation on the whole span, so the pattern that won the prefix could end up a worse describer than one that
 > lost it, and no pass could reconcile them.
 >
-> There is nothing left to reconcile. The cover is chosen on `O⁻` and priced on `O⁻` (D17), so the pattern that
+> There is nothing left to reconcile. The cover is chosen on `O` and priced on `O` (D17), so the pattern that
 > took a neuron is the pattern charged for it, at every reading and for the life of the activation. **The forward
 > half is never a term in that comparison**, so it cannot contradict it.
 
@@ -515,7 +516,7 @@ the problem rather than tuning the algorithm. Everything about depth is derived:
 conjunctively, and the reach per level comes out of one expression.
 
 **On R11 — there is no floor relating `H` to the reach.** There is no window for a span to be wider than: the
-file is the run (D9), so every symbol is priceable at any reach.
+file is the run (D12), so every symbol is priceable at any reach.
 
 # 8. The one test
 
@@ -530,7 +531,7 @@ elect     does this BID cover more than it costs, once slots are split? one bid,
 retire    does what e still keeps out of the residual pass 1 + |e|?     the line, retrospectively (R17)
 ```
 
-**Cover and elect are one expression** (D12) — what a neighborhood covers against what it costs to state —
+**Cover and elect are one expression** (D16) — what a neighborhood covers against what it costs to state —
 asked over one activation and over the board. Build and retire are that same expression summed over the history
 with the dictionary line added, read in opposite directions: what an absent pattern would take out of the
 residual, and what a present one is still keeping out of it. The offer is the one row that is not a price, and
@@ -554,10 +555,10 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 > **T6 — On a fixed history, the bill descends the neuron's file and stops.** Write the neuron's file over its
 > ring as
 > ```
-> L_N  =  Σ over activations f  [ |residual(f)|  +  Σ over the cover of f ( 1 + |e⁻ \ f⁻| ) ]
+> L_N  =  Σ over activations f  [ |residual(f)|  +  Σ over the cover of f ( 1 + |e \ f| ) ]
 >      +  Σ over patterns  ( 1 + |e| )
 > ```
-> the uncovered neurons, a line and its charges per covering pattern per activation, and the dictionary — D12 read
+> the uncovered neurons, a line and its charges per covering pattern per activation, and the dictionary — D16 read
 > over one neuron's evidence. Freeze the ring. Then each pass of R19 is non-increasing on `L_N`:
 >
 > - **Build.** Adding `C` changes `L_N` by exactly the negative of R15's margin: over the activations whose cover
@@ -609,7 +610,7 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 
 # 9. The two moves
 
-**On R13 — why a mint activation.** A pattern is minted at the parent's age 0, on a backward half that is
+**On R13 — why a mint activation.** A pattern is minted at the parent's age 0, on a neighborhood that is
 whole (D17), and everything that follows that frame is exactly the future of the situation the child was
 minted for. Had the child waited for its first purchase to open an activation, that future would have gone by
 unrecorded, and the child would begin its life one situation behind. The activation costs nothing structural:
@@ -620,7 +621,7 @@ every activation does between activations — strengthen its neuron's connection
 neuron of every activation is in the residual.
 
 ```
-o₁⁻ = {a,b,c}   o₂⁻ = {a,b,d}   o₃⁻ = {a,b,c}   o₄⁻ = {a,b,e}   o₅⁻ = {x,y}
+o₁ = {a,b,c}   o₂ = {a,b,d}   o₃ = {a,b,c}   o₄ = {a,b,e}   o₅ = {x,y}
 
 seed        a and b are each in four residuals; a is earlier in declaration order, so a
 population  o₁ … o₄, the activations whose residual holds a       n = 4,  2·count > 5 to name
@@ -628,7 +629,7 @@ population  o₁ … o₄, the activations whose residual holds a       n = 4,  
 collapse    a: 4 → 8 > 5  named      b: 4 → named      c: 2 → 4 > 5?  no
             d: 1  no      e: 1  no
 
-C⁻ = {a,b}      reach   2, 2, 2, 2  over o₁…o₄;  o₅ names nothing C holds, so R18 would not take it
+C = {a,b}      reach   2, 2, 2, 2  over o₁…o₄;  o₅ names nothing C holds, so R18 would not take it
                 saving  1, 1, 1, 1, 0        benefit 4  >  line 1 + 2 = 3     requested
 ```
 
@@ -666,7 +667,7 @@ itself** once every pattern's slots sit near `0` or near `n`, which is exactly w
 **On R14 — what a candidate costs to build.** One tally over the ring for the seed — how many residuals hold
 each neighbor — and one collapse over the seed's population, per slot. Both are the walk a re-center makes.
 The whole construction is `O(H · w̄)` with `w̄` the neighbors an activation holds, and it is the reach that sets
-`w̄` (D14).
+`w̄` (D4).
 
 **This is facility location.** Activations are customers, patterns are facilities, opening one costs `1 + |e|`,
 serving costs what the neighborhood names wrongly, and the cover pass is the assignment. The opening cost is
@@ -764,7 +765,7 @@ neuron's own books, and T6 needs the neuron's books to be the file's. So the cov
 the offer takes the majority, and the two sets differ exactly where the neuron's residual and the machine's
 would.
 
-**On R18 — why nothing comes back.** The neuron has already decided everything, on a whole backward half, and
+**On R18 — why nothing comes back.** The neuron has already decided everything, on a whole neighborhood, and
 the election settles who the machine paid. An earlier design reported the election back as a fact per
 neighbor — which of this activation's neighbors another bid was credited — so the neuron could price its
 patterns on what it actually sold. The report is gone because the accrual it needed was the most involved
@@ -795,7 +796,7 @@ speech reads the connections without touching them.
 
 > **T8 — Nothing between activations is read.** Counts move when an activation is saved, when one is evicted, or
 > when a cover changes (R3), and all three happen in the frame the neuron fires. Between activations the forward
-> call does write — forward neighbors and rewards strengthen the neuron's connections (D6) — but **nothing prices
+> call does write — what fires next, and the rewards with it, strengthen the neuron's connections (D9) — but **nothing prices
 > them, ever**: no neighborhood, cost or cover reads a connection, and nothing is recomputed in between. The
 > connections are read between activations, by the apex, and reading them moves nothing.
 >
@@ -825,22 +826,22 @@ M names  {(g,−1), (h,0)}
 the neuron's connections so far:  an event connection (c,+1), and an action connection (u,+1) at estimate 0
 ```
 
-**Frame 10 — the neuron fires, and everything is decided.** Its backward half is `{(a,−2), (b,−1), (g,−1),
+**Frame 10 — the neuron fires, and everything is decided.** Its neighborhood is `{(a,−2), (b,−1), (g,−1),
 (z,0)}` — whole, because backward is what an activation already has. The bill runs first.
 
 The cover pass runs over the residual, which starts as all four neighbors. The neuron's own activation is not in
-`O⁻` and so is not a slot the cover can take — that is the one place the neuron's population differs from the
+`O` and so is not a slot the cover can take — that is the one place the neuron's population differs from the
 board's, where the bidding activation is the first slot a bought bid subsumes (R21).
 
 ```
-K⁻ = {a,b}   covers 2 of the residual                     price 1 + |{}|  = 1     ratio 2
-M⁻ = {g,h}   covers g;  h did not fire                    price 1 + |{h}| = 2     ratio 0.5
+K = {a,b}   covers 2 of the residual                     price 1 + |{}|  = 1     ratio 2
+M = {g,h}   covers g;  h did not fire                    price 1 + |{h}| = 2     ratio 0.5
 ```
 
 `K` goes first and takes `a` and `b`. On the second round `M` is re-measured against what is left: it still
 covers only `g`, at a price of 2, so it does not pay and is not taken. **The cover is `{K}`**, `g` and `z` are
 the residual, and `K` counts `a` and `b` as its own share and `g` and `z` as `present` it does not yet name
-(D23).
+(D22).
 
 Then the rest of the bill: the activation joins the ring and the oldest leaves; `K` re-centers; a candidate is
 seeded on the neighbor most often in the residual — `g` and `z` are in it this time — and priced; the worst
@@ -875,7 +876,7 @@ verdict on the last one.
 ```
    frame 10                                  frames 11 … 14
    ────────────────────────────────────────  ───────────────────────────────
-   fire — the backward half is whole         (e,+1), (u,+1) land, then +2, +3
+   fire — the neighborhood is whole         (e,+1), (u,+1) land, then +2, +3
    cover, save, evict, re-center             connections strengthened
    build one, retire one
    offer every pattern that applies          the reward for u lands beside it
@@ -897,10 +898,10 @@ flowchart TD
     B --> M["BUILD ONE candidate<br/>seed, population, collapse, price — R19 step 3"]
     M --> DEL["RETIRE ONE<br/>the worst margin, if strictly negative — R19 step 4"]
     DEL --> P["OFFER, and one request<br/>a bid for every pattern that applies — R19 step 5"]
-    P -.->|"bids: child id + backward neighborhood"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R23"]
-    X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D14 gives it — §12"]
+    P -.->|"bids: child id + neighborhood"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R23"]
+    X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §12"]
     O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §9.2"]
-    Z --> W["PROCESS ACTIONS, every open activation at its own age<br/>forward neighbors and rewards in; from the apex,<br/>expectations and inferences out — §10.3"]
+    Z --> W["PROCESS ACTIONS, every open activation at its own age<br/>firings and rewards in; from the apex,<br/>expectations and inferences out — §10.3"]
     W --> Y["PREDICT — expand the apex's expectations to base symbols,<br/>one winner per event dimension by share of voters — §13"]
     Y --> S["SELECT — expand the inferences to base actions,<br/>one winner per action dimension by estimate; it executes at f+1 — §16"]
 ```
@@ -916,7 +917,7 @@ free set, credits it what it names there, and asks the question again over what 
 describes is the outcome of that procedure, not an instruction to anyone**, which is why it belongs here and
 not in the spec.
 
-**On R20 — why the bid carries no forward half.** Nothing at `Δt > 0` has fired, so the machine could settle
+**On R20 — why the bid carries nothing forward.** Nothing at `Δt > 0` has fired, so the machine could settle
 nothing against it; the file holds no line for it, so nothing would be priced on it; and it would make the bid
 a claim about a frame nobody has seen, which is what the assertion was and what §13 says was removed. A bid is
 a dictionary line and a name, and a dictionary line is backward.
@@ -929,14 +930,14 @@ the other unit names it rightly — is not different, because a decoder expandin
 wrong symbol and needs it turned off. Being right somewhere else does not make being wrong here free.
 
 **On R21 — with the line in this price, promotion would be impossible outright.** A cover is at most the named
-backward neighbors plus the bidder, so it never exceeds `|e| + 1`; a price carrying the line starts at
+neighbors plus the bidder, so it never exceeds `|e| + 1`; a price carrying the line starts at
 `1 + |e|`. `cover > price` could then never hold — not on a perfect match with nothing contested, let alone
 under overlap. A test that asks one bid to pay an aggregate charge declines every bid.
 
 **On R21 — there are not two clocks to reconcile.** R12 optimizes the dictionary against a neuron's own
 history; this price optimizes one bid against the board's coverage. They answer different questions over
 different evidence, and neither needs the other's span. What R12 does need is a denominator, and `H` is that
-directly (D24).
+directly (D23).
 
 **On R22 — what earlier-bidder priority costs, and why re-electing the past would cost more.** A bid at `f`
 that wins a neuron at `f − 2` keeps it, and a better bid at `f + 1` for the same neuron is credited nothing
@@ -946,7 +947,7 @@ bias is real and it is stated; the cases where it bites are boundary neurons bet
 that loses one counts one fewer.
 
 > **T9 — Coverage settles at `g + reach_t`, and nothing has to wait for it.** An activation firing at `g` names
-> backward neighbors across `[g − reach_t, g]`. A neighbor at `f` can be covered by a bid firing anywhere in
+> neighbors across `[g − reach_t, g]`. A neighbor at `f` can be covered by a bid firing anywhere in
 > `[f, f + reach_t]`, so the last bid that can touch any of them fires at `g + reach_t` — and the neuron itself,
 > at `g`, is coverable until exactly the same frame. Every bid in the argument is at this neuron's own level,
 > so one `reach_t` governs throughout.
@@ -993,7 +994,7 @@ the others' stale ratios it is the true maximum. **The election is a heap pop wi
 not a re-scan.**
 
 **What the rewrite does not touch.** R22's priority for earlier frames — the greedy runs over the free set,
-which already excludes everything an earlier election credited. D26's board. R26's frontier. And the fact that
+which already excludes everything an earlier election credited. D25's board. R26's frontier. And the fact that
 the election delivers nothing to any neuron.
 
 **On R23 — why nothing has to be handed back.** A promoted unit's neighborhood *is* its dictionary line (R20),
@@ -1041,10 +1042,10 @@ structural.
 **What settlement settles is the election, not the file.** It marks the point past which no further bid can
 reach a frame. What the winning units then *expand to* is the current dictionary's business:
 neighborhoods keep re-centering underneath them, and a unit whose pattern has been deleted stops being
-available at all, so the run is re-encoded from what remains. **Contraction settles who covers what; D9
+available at all, so the run is re-encoded from what remains. **Contraction settles who covers what; D12
 settles what that costs to say.**
 
-**On R24 — since the reach grows with the level (D14), the levels that settle last are also the ones that reach
+**On R24 — since the reach grows with the level (D4), the levels that settle last are also the ones that reach
 furthest.** A bid accepted at `g + reach_t` can add a level after the fact, so `D` is not available at `g` — and
 nothing needs it in advance.
 
@@ -1052,12 +1053,12 @@ nothing needs it in advance.
 > than it costs, and a price is at least 1, so it holds at least 2. **The assignment is a partition** (R23), so
 > no two accepted bids hold the same slot — disjointness is definitional here. One accepted bid promotes
 > exactly one unit, firing at the bid's own coordinate. Writing `A_k[a, b]` for the level-`k` activations in
-> frames `[a, b]`, and `reach_t(k)` for D14's reach at that level:
+> frames `[a, b]`, and `reach_t(k)` for D4's reach at that level:
 > ```
 > A_{k+1}[a, b]   ≤   ½ · A_k[a − reach_k, b]
 > ```
 > A bid holding only its own slot can never clear its price, which is what forces the halving. **This halving
-> is what D14's schedule is derived from**, so the two are one statement read in opposite directions: the count
+> is what D4's schedule is derived from**, so the two are one statement read in opposite directions: the count
 > falls because bids must cover more than they cost, and the reach grows because the count fell.
 >
 > **The span widens because coverage reaches back.** A bid firing at `b` covers activations as far back as
@@ -1070,16 +1071,16 @@ nothing needs it in advance.
 > ```
 > Level `D` is active at `f` only if `A_D[f, f] ≥ 1`, so **a frame reaches depth `D` only when the base fired
 > at least `2^D` times inside the span feeding it.** Since a frame holds at most one activation per
-> `(dimension, position)` (D5) the base rate is bounded by the declared **slot** count `B` — dimensions times
+> `(dimension, position)` (D8) the base rate is bounded by the declared **slot** count `B` — dimensions times
 > the extent they are laid out over. **Nothing is declared or capped: the bound is read off the alphabet and
 > the reach, both already given.**
 >
-> **Whether it binds depends on `dim`.** With D14's schedule the span grows as `2^(D/dim)`, so for `dim ≥ 2` it
+> **Whether it binds depends on `dim`.** With D4's schedule the span grows as `2^(D/dim)`, so for `dim ≥ 2` it
 > grows slower than the `2^D` opposite it and the inequality resolves. For `dim = 1` the two sides grow
 > together and this stops binding; T13 bounds depth there.
 >
 > **At `R_t = 1` the temporal span collapses and the spatial box carries it.** `2^D ≤ A_0[box]`, where
-> the box is the region D14's reaches admit around `f`. MNIST is this case — `dim = 2`, one event dimension
+> the box is the region D4's reaches admit around `f`. MNIST is this case — `dim = 2`, one event dimension
 > laid out over 28×28, so `B = 784` and `2^D ≤ 784` gives `D ≤ 9` once the box covers the frame. On real
 > digits it binds tighter still, since about a fifth of the frame is ever active.
 >
@@ -1088,14 +1089,14 @@ nothing needs it in advance.
 > needs extent, not just breadth.
 
 > **T13 — Depth is bounded by the run, logarithmically.** A neuron decides nothing until it has evidence, and
-> `H` is how much (D24, R12). A level-`D` neuron fires at `2^(−D)` of the base rate (T11), so filling its ring
+> `H` is how much (D23, R12). A level-`D` neuron fires at `2^(−D)` of the base rate (T11), so filling its ring
 > takes `H · 2^D` of its channel's frames. After `F` frames the stack has therefore reached at most
 > ```
 > D   ≤   log₂( F / H )
 > ```
 > **This holds at every `dim`, and it is what bounds the temporal case where T12 does not.** It is the reason
 > an unbounded file does not license an unbounded stack. Raising `H` makes the machine both more selective and
-> shallower for a given run, which is one of the three effects D24 attributes to it.
+> shallower for a given run, which is one of the three effects D23 attributes to it.
 
 **What contraction builds.** Each surviving bid contributes one unit above. The reduction is set by the data,
 not the topology: a neighborhood the patterns describe well collapses hard; one full of surprise barely
@@ -1105,16 +1106,16 @@ collapses at all, which is the correct outcome for it.
 sum is prize-collecting set cover. The file is never finished, and an election improves it the way a bill
 improves a table — one step, taken against evidence that has already moved on.
 
-**On D25 — an uncovered neuron does not make the file approximate.** It is stated, just not by a unit above.
+**On D24 — an uncovered neuron does not make the file approximate.** It is stated, just not by a unit above.
 Reading coverage as fidelity turns a pricing question into a correctness one.
 
 **On R24 — the delay stacks and the memory does not.** Each level needs only its own coverage set,
-`reach(k) + 1` wide in time and one box wide in every other activation dimension (D14, D26), and nothing global
+`reach(k) + 1` wide in time and one box wide in every other activation dimension (D4, D25), and nothing global
 is held for the prediction, which is an output and not a map.
 
 # 12. The order of a frame
 
-> **T14 — One pass resolves inside the frame.** A bid carries only backward neighbors (R20), so every election
+> **T14 — One pass resolves inside the frame.** A bid carries only neighbors (R20), so every election
 > runs on frames already in hand, and the bill that fed it ran before it — bill, offer and election are all
 > inside the level and inside the frame, which is why nothing in the loop costs latency in the stack. A unit
 > promoted at `f` is available as an offset-0 neighbor to the level above at `f`, and its own connections
@@ -1123,7 +1124,7 @@ is held for the prediction, which is an output and not a map.
 
 **Why there is no phase boundary.** Splitting the stack would declare a schedule of a different kind — one
 reach below the boundary, another above it, and a transition wherever the lower half happened to stop firing
-children. D14's reach also varies with level, but it is not that: it is one expression applied uniformly to
+children. D4's reach also varies with level, but it is not that: it is one expression applied uniformly to
 every activation dimension of every channel at every level, with the level entering only as the exponent T11
 puts there. **The distinction is between a boundary and a formula.** A boundary has to be placed, and nothing
 places this one; a formula is evaluated wherever it is read.
@@ -1153,7 +1154,7 @@ escape (R35). One rule, three readings, and all three are the same rule against 
 # 13. The prediction
 
 **Why the assertion went, and what the prediction is instead.** The assertion was the machine's forward claim
-about the run: every uncovered unit's forward half, expanded, resolved to one owner per base slot by a vote
+about the run: what every uncovered unit expected, expanded, resolved to one owner per base slot by a vote
 within a level and a cascade across levels, then scored against what arrived, with the misses written into the
 file. It was the second most involved mechanism in the design after the adjustment, and it decided nothing —
 no test read the corrections, no pattern was ever retired for them, and the election never saw a completed
@@ -1176,7 +1177,7 @@ chunked more of the frame spoke first about a slot inside it, whether or not it 
 that slot. The vote reads no level. Every apex activation is one voter, normalized to one unit per dimension
 so a voter hedging between two symbols is not two voters, and the symbol most voters expect wins. A coarse
 unit that is usually right where a fine unit is usually wrong wins by being right, not by rank — and the
-same is true in reverse. Nesting is already handled before the vote by D7: a covered activation does not vote,
+same is true in reverse. Nesting is already handled before the vote by D10: a covered activation does not vote,
 so no unit ever votes beside the unit that subsumes it, and the double-counting the precedence rule was
 guarding against cannot happen.
 
@@ -1194,16 +1195,16 @@ one unit between them by their counts and no more.
 # 14–16. Actions, reward, and selection
 
 **On R29 — why the action cannot be at offset 0.** The events at `f` are recognized before the action is
-chosen, so an action in their own column would be part of a backward half that is not yet in hand when they
+chosen, so an action in their own column would be part of a neighborhood that is not yet in hand when they
 are covered (D17), and a bid could name a neighbor the election has not picked yet (R20).
 
 **On R31 — why the connection is a neighbor after all.** An earlier design held it apart: it crossed kinds, it
 was temporal only, its ends need not sit at one level, and it was formed after every level had settled. Every
-one of those is true of a forward neighbor in an action dimension. A forward neighbor crosses kinds whenever
+one of those is true of a connection in an action dimension. A connection crosses kinds whenever
 an event neuron's connections hold an action; it is temporal because `Δt > 0` is temporal; its two ends are the
 neuron and whatever fired, at whatever level fired it; and every activation connects after every level has run
 (§10.3). What the connection had that a neighbor did not was an estimate, and an estimate is one more number
-beside a count. So it is a forward neighbor with a strength and an estimate, and the neuron holds one set of
+beside a count. So it is a connection with a strength and an estimate, and the neuron holds one set of
 connections instead of two.
 
 **On R31 — why the frontier is not enough.** Structure is recoverable by expansion, which is what lets the
@@ -1223,7 +1224,7 @@ speaks.
 its constituents, so connecting to the base would reward subsumed subordinates and calcify primitive-level policy.
 
 **On R32 — why a pattern fires when its program completes and not when it starts.** Firing at the start would
-give it a backward half not yet in hand (D17); firing at completion puts it where recognition would. What the
+give it a neighborhood not yet in hand (D17); firing at completion puts it where recognition would. What the
 program earned reaches it through the reward span (R33), so the estimate that selects a pattern is what the
 pattern earned, which is the only reading that makes a multi-frame candidate comparable to a single-frame one.
 
@@ -1340,7 +1341,7 @@ The claim the specification can make, and the one it cannot, stated once.
 Each structural move is a non-increase on the file it is measured against, evaluated over the population it is
 measured on at the moment it is made. Strict where marked.
 
-- **Add (R15).** Strict. The candidate joins iff its summed saving exceeds `1 + |C⁻|`, and R19 step 3 lets every
+- **Add (R15).** Strict. The candidate joins iff its summed saving exceeds `1 + |C|`, and R19 step 3 lets every
   activation do at least as well as the test counted, so the ring's file shrinks by at least the margin the test
   found.
 - **Retire (R17).** Strict. A pattern's margin *is* the change in the ring's file on its removal: the body
@@ -1348,7 +1349,7 @@ measured on at the moment it is made. Strict where marked.
   sign reversed. Negative margin, shorter file.
 - **Re-centering (R5).** Non-increase. Entering a slot changes the ring's file by `(n − 2 · count + 1)` over the
   pattern's population at that slot, dropping one by the negative of that, and R4 fires only when the sign is
-  right and holds still at zero. This depends on D23 keeping `present` and `held`: with only the assigned share
+  right and holds still at zero. This depends on D22 keeping `present` and `held`: with only the assigned share
   counted, the count that decides entry is not maintained and the claim does not hold.
 - **Re-derivation (R6).** Non-increase, by construction: a re-derived cover replaces the held one only when
   strictly cheaper.
@@ -1373,7 +1374,7 @@ and no move is priced on them (R34). "The file is shorter after frame `f + 1` th
 is false of any compressor reading a stream, this one included. What holds is the statement above: never longer
 than flat, and every structural move a descent on the evidence in hand.
 
-**Across the two objectives.** D12 is explicit that the neuron prices over its ring and the machine over its
+**Across the two objectives.** D16 is explicit that the neuron prices over its ring and the machine over its
 frames, that the numbers differ, and that they are meant to. A neuron's descent is therefore on its own
 history, and a pattern that pays on the ring but is never bought is a dictionary line with no realized saving
 at the machine's level. The design forbids the coupling that would close this — the election delivers nothing
