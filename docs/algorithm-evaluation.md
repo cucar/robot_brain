@@ -23,7 +23,7 @@ prediction directly.** Instrument both and plot them against each other. If they
 mechanically. If they do not, the coupling between compression and prediction is where to look, and it is the
 assumption everything else rests on.
 
-The standing metric is **apex units per level per frame, paired with the dictionary size that bought them**.
+The standing metric is **apex neurons per level per frame, paired with the dictionary size that bought them**.
 It should fall with exposure on recurring data: early structure is provisional, re-centering consolidates it,
 and R17 takes what is left.
 
@@ -41,7 +41,7 @@ pattern count. The gap is the basin.
 **The neuron never hears what it sold.** This is the design's largest deliberate omission. The election writes
 the coverage set and reports nothing back (R23), so a neuron prices every pattern on what it saw, whether or
 not the machine ever buys it. A pattern that describes the neuron's activations well but is consistently outbid on
-the same ground — a neighbor's unit reliably takes the territory first — stays in the dictionary, keeps being
+the same ground — a neighbor's child reliably takes the territory first — stays in the dictionary, keeps being
 offered, and keeps paying its line in `L`. The design bets this is rare: a neuron finds itself in many
 situations and wins some and loses others. **Diagnostic:** per pattern, the fraction of its bids bought over
 its life. A pattern below some low fraction for a long stretch is the case the omission gets wrong. **Fallback
@@ -109,13 +109,13 @@ what T12's depth bound rests on, and what keeps `|O|` constant across levels. A 
 up to `m` children at one coordinate (D8, R18), and the wide offer lets patterns outside the cover be bought
 too, so a level can be *wider* than the one below it wherever activations decompose into several chunks. Nothing
 caps `m`; what bounds it is that each extra child is another line and another set of charges, and the
-election stops buying the moment one does not pay. **Diagnostic:** bought bids per activation and units per
+election stops buying the moment one does not pay. **Diagnostic:** bought bids per activation and neurons per
 level per frame, against the halving T11 assumes. If levels stop thinning, D4's reach schedule is calibrated
 against an invariant that no longer holds, and the reach has to be derived from measured spacing instead.
 
 **Far placement is lossy, and the loss compounds with height.** An offset is kept to one significant binary
 digit (D6), so a neighbor 11 frames back is written as 8 and expanded to 8 (R27). Each level down adds its own
-group's slack, so a high unit places the base symbols of its farthest neighbors only to within the sum of the
+group's slack, so a high neuron places the base symbols of its farthest neighbors only to within the sum of the
 groups along the path — its connections can say what comes next but not, above a few levels, exactly when.
 The file says so (§1); what it does not say is how deep the stack stays useful before its far placements are
 too coarse for the prediction (§13) or a motor program (R30) to act on, which is a cap on useful depth that
@@ -142,12 +142,12 @@ often it is bought.
 beside it, and never on what its child was followed by (D17, R17). So a child whose connections are worthless keeps
 its line as long as its parent's pattern covers, and the machine's expectation from it is noise. Nothing
 clears a bad connection: the connections keep every symbol that ever followed, and the claim is that the vote
-dilutes what it cannot clear — a neuron whose connections spread over many symbols splits its one unit thinly
+dilutes what it cannot clear — a neuron whose connections spread over many symbols splits its one vote thinly
 across them, so it decides
 a dimension only where no sharper voter contends — and that a pattern whose *backward* half is good is worth
 its line regardless. A diluted voter still places something in every dimension it has ever seen, so it never
-falls silent. **Diagnostic:** expected symbols per apex unit that did not arrive, per level, and the share of
-dimensions decided by a voter whose winning symbol held under a tenth of its unit. If either does not fall
+falls silent. **Diagnostic:** expected symbols per apex neuron that did not arrive, per level, and the share of
+dimensions decided by a voter whose winning symbol held under a tenth of its vote. If either does not fall
 with exposure, dilution is not enough and the consumer of the output is getting noise the machine could have
 withheld.
 
@@ -213,7 +213,7 @@ partition is sticky and R14 is carrying more of the load than intended.
 **Election slack, bounded but unmeasured.** R23 is ratio-greedy weighted set cover, so its slack against the
 best cover buildable from the same bids is bounded by `H(n)` and no better
 ([algorithm-remarks.md](algorithm-remarks.md) §17). The bound is worst-case and
-says nothing about the slack on real frames, and since apex-units-per-frame is the headline metric, slack and
+says nothing about the slack on real frames, and since apex-neurons-per-frame is the headline metric, slack and
 real structure are conflated in it. **Diagnostic:** solve one small window exactly (ILP) and compare, which
 locates the realized slack inside the `H(n)` ceiling.
 
@@ -257,16 +257,16 @@ activation dimensions**: D4 grows every one of them by the same factor, which ho
 them equally, and a channel whose patterns chunk harder in time than in space would want otherwise.
 **Diagnostic:** mean spacing per activation dimension, per level, against the isotropic prediction.
 
-**Whether a coarse voter should count as one.** The vote at the base gives every apex activation one unit per
-dimension whatever level it stands at (§13, R36). A level-4 unit that expanded to forty base symbols and a base neuron
-that expects one symbol are then equal voters in the dimension they share, and the level-4 unit's expectation about
+**Whether a coarse voter should count as one.** The vote at the base gives every apex activation one vote per
+dimension whatever level it stands at (§13, R36). A level-4 neuron that expanded to forty base symbols and a base neuron
+that expects one symbol are then equal voters in the dimension they share, and the level-4 neuron's expectation about
 that dimension rests on a situation the base neuron's does not. Level was taken out of the vote because ranking by
 level let compression override reward; whether some other reading of the voter — the strength behind its connection,
 the exposures its estimate rests on — should weight it is not decided. **Diagnostic:** per dimension, how often the
 winner was placed by a base voter over a pattern voter that disagreed, and which was right.
 
 **The cross-neuron seam.** R4's abstention teaches a pattern not to name what another pattern of the *same
-cover* holds. Across neurons nothing teaches it: a neighbor some other neuron's unit reliably covers is still
+cover* holds. Across neurons nothing teaches it: a neighbor some other neuron's child reliably covers is still
 present, still wins its majority, and stays in the neighborhood, paying its slot in the line. This is the same
 omission as the neuron never hearing what it sold, seen from the neighborhood's side rather than the bid's,
 and it is the same bet. The one-bit fallback above would not close it; closing it takes the per-neighbor report
@@ -286,7 +286,7 @@ that ran in an earlier frame moves at all — under R33 it must not.
 **The forward side of the code is the design, with four deliberate differences.** A connection is a lifetime
 total on the neuron, strengthened on observation, never weakened, never collapsed; the estimate is the exact running
 mean; the walk wires the next untried action on a negative mean; covered ages are silenced; and the vote at the base
-normalizes each voter to one unit per dimension and distance, events winning by share and actions by the
+normalizes each voter to one vote per dimension and distance, events winning by share and actions by the
 share-weighted mean estimate, with no level anywhere in it. All of that is D19, R31, R36 and R37 as written. What
 differs: the code wires the declared default at birth at strength 1, where R35 lets it run and be learned; action
 neurons vote for actions in the code, where R35 lets only events choose; the code wires every level's connections to
