@@ -1304,12 +1304,13 @@ ladder work: a level-1 pattern fires in many contexts and averages coarsely acro
 pattern fires rarely and averages sharply over one, and the estimate is waiting at whichever level ends up
 uncovered.
 
-**On R31 — why only the apex learns across kinds.** An earlier draft let a covered neuron learn the action that
-ran, on the argument that its estimate is the general case and should be sampled everywhere. But its own kind is
-learned one level down whether it is covered or not (D17), and across kinds the sample a covered activation would
-take is the sample its coverer takes, over a narrower situation; taking it twice lets the general case keep pace
-with the specific one the coverer was minted to be. The frontier learns across kinds, and the frontier is what
-speaks.
+**On R31 — why only the apex-born learn across kinds.** An earlier draft let a neuron covered at age 0 learn
+the action that ran, on the argument that its estimate is the general case and should be sampled everywhere. But
+its own kind is learned one level down whether it is covered or not (D17), and across kinds the sample a
+neuron covered at age 0 would take is the sample its coverer takes, over a narrower situation; taking it twice
+lets the general case keep pace with the specific one the coverer was minted to be. The apex-born set learns
+across kinds, and that set is fixed at age 0 (D9) so it keeps learning after coverage silences it from speaking
+— coverage only ever takes the frontier that speaks, never the population that learns.
 
 **On R32 — why the apex action and not the base.** A completed higher action holds the dimension and subsumes
 its constituents, so connecting to the base would reward subsumed subordinates and calcify primitive-level policy.
@@ -1369,7 +1370,7 @@ complex event sequence.
 neuron at birth, at strength 1 and neutral estimate, so that every apex activation had an inference from the first
 frame. It was a fiction twice over: a level-5 pattern born holding a base action it had never seen run, and a
 strength counting an exposure nobody had. Under the apex rule it is also unnecessary. A dimension no inference
-reaches runs the default, the default is then the apex action of that frame, and every uncovered activation
+reaches runs the default, the default is then the apex action of that frame, and every apex-born activation
 connects to it with its reward exactly as it would to any other action. Nothing is lost at cold start — the base
 is not mute, it is silent for one frame and then holds what ran — and nothing pretends to have been judged. What
 stands from the earlier draft is the other lesson: connections are held on the base as well as on patterns, or

@@ -155,7 +155,7 @@ then, once the last level has run
 
   ledger     the machine builds the neurons it allocated this frame, and deletes every retired
              pattern now due                                                           R16, R17
-  learn      across kinds, and only for the uncovered: an event connects to the apex action that
+  learn      across kinds, and only for the apex-born: an event connects to the apex action that
              ran, an action to the apex events that followed, and a reward moves the estimate
              of the action connection at its distance                                §10.3, R33
   predict    the apex reads its event connections — events and actions both expect — and every
@@ -340,7 +340,7 @@ carries the action executing in that same frame (if there is one).
 > not arrive together:
 > ```
 > its own kind     the neurons one level down that fire while it is open      in its level's own call
-> the other kind   the apex, and only while the activation is uncovered       after every level has run
+> the other kind   the apex, if the activation was apex-born                  after every level has run
 > the rewards      for the actions among those, each in the frame its own     after every level has run
 >                  action runs in                                                        D17, R29, R31
 > ```
@@ -350,12 +350,19 @@ carries the action executing in that same frame (if there is one).
 > elapsed since it fired, `0` through `reach_t`; a new activation is the one at age 0. **Age is read, not just
 > counted** — it is the offset at which the activation strengthens connections and reads what comes next
 > (R31, R36).
+>
+> **Apex-born** means the activation was uncovered at age 0 — it stood on the apex in the frame it fired,
+> as decided by that frame's election (R26). The flag is set once, from that one frame, and never changes:
+> coverage acquired at a later age does not revoke it, and an activation covered already at age 0 never
+> acquires it.
 
 > **D10 — Inhibition.** A neuron an accepted bid covers does not stand in the file, does not
 > predict events and does not infer actions. **Silenced is not stopped.** A neuron is covered only after it has
 > fired (R26), and its activation goes on strengthening **its own kind's** connections exactly as an uncovered
-> one does (R19 step 1). **What coverage does take is the other kind**: only an uncovered activation connects
-> across kinds or takes a reward (§10.3). That is the whole of inhibition in the design.
+> one does (R19 step 1). **Coverage acquired after age 0 takes speaking only**: the activation stops standing
+> in the file, predicting and voting. Whether it learns the other kind was settled at age 0 (D9): an
+> apex-born activation goes on connecting across kinds and taking rewards until its window closes; one
+> covered already at age 0 never does (§10.3). That is the whole of inhibition in the design.
 
 There is no rest value. A dimension where nothing happens supplies no symbol, and silence is what the decoder
 assumes for anything the file does not state.
@@ -484,12 +491,12 @@ decided to keep, and its connections, what followed it. Everything else it holds
 > is a chunk, and the action hierarchy writes it as a pattern (D5). A child therefore sees exactly the firings the
 > neurons it covers would have seen, over the situation its pattern names and at its own level's reach, so silencing
 > them under it loses nothing (D10); a base neuron's connections are the marginal over every situation it fires in, and
-> speak only where nothing covers it. **Across kinds no level is read**: an uncovered event activation connects to the
-> apex action that ran (R31), at whatever level that action stands, and an uncovered action activation connects to the
-> apex events that follow it the same way, so a level-8 event can learn to name a level-5 action. Only the apex learns
-> across kinds; a covered activation learns nothing of the other kind (D10). **An event neuron therefore holds both
-> kinds and an action neuron holds events only**: an action neuron expects, and nothing about the next action is ever
-> read from one (R35).
+> speak only where nothing covers it. **Across kinds no level is read**: an apex-born event activation connects to the
+> apex action that ran (R31), at whatever level that action stands, and an apex-born action activation connects to the
+> apex events that follow it the same way, so a level-8 event can learn to name a level-5 action. Only apex-born
+> activations learn across kinds; an activation covered at age 0 learns nothing of the other kind (D10). **An event
+> neuron therefore holds both kinds and an action neuron holds events only**: an action neuron expects, and nothing
+> about the next action is ever read from one (R35).
 
 > **D18 — Observed and named.** Two things have the shape of a neighborhood and must not be confused. Both
 > span the whole box D5 admits, and D15 measures one against the other.
@@ -516,16 +523,17 @@ decided to keep, and its connections, what followed it. Everything else it holds
 >                    written one level down: over the level below the holder's, the base's own    D17
 >
 > held by the machine, not the neuron (D9):
-> open activation  = (the activation, its age)             one per (neuron, age, position)
+> open activation  = (the activation, its age, apex-born)  one per (neuron, age, position)
 > ```
 > An `id` is creation order, a handle that survives re-centering and the tie-break R18 and R23 reach for.
 >
 > **No activation carries a frame number**, and nothing anywhere holds absolute time: an open activation's `age`
-> is a counter.
+> is a counter. Its `apex-born` flag is set once, from the election at age 0 (D9), and never changes.
 >
-> **An open activation carries no commitment.** It holds its neighborhood and nothing else, because
-> everything it was going to decide was decided at age 0 (D9). What it does for the rest of its life is strengthen
-> its neuron's connections, and speak from them while it is on the apex.
+> **An open activation carries no commitment beyond that one flag.** It holds its neighborhood, its
+> apex-born flag, and nothing else, because everything else it was going to decide was decided at age 0 (D9).
+> What it does for the rest of its life is strengthen its neuron's own-kind connections, strengthen the other
+> kind and take rewards if it was apex-born, and speak from them while it is on the apex.
 >
 > **Every neuron holds connections, base neurons included, and a pattern holds none.** An open activation
 > strengthens one each time a neuron of the level below its own fires at its age (R19 step 1), and nothing ever
@@ -776,6 +784,13 @@ the design.
 > votes (R19, R26, R36) — it has no history at its own level to do any of it on. **Without that exclusion one
 > mint would cascade up the levels inside a single frame.**
 >
+> **The mint frame costs one exposure, and that is deliberate.** A parent whose candidate is accepted is
+> covered by its fresh child in the same frame — at age 0 — so the parent was never apex-born for that
+> activation (D9). The child, being uncalled in its mint frame, opens no connections until the frame after
+> (D17). Neither one records the action that ran or the reward that arrived for that single frame: the parent
+> because coverage arrived before age 0 closed, the child because it was not yet open. One lost exposure per
+> mint, and no more.
+>
 > **Its own work begins the next time it fires.** From then it is called with its level like any neuron (R19),
 > and what it comes to hold is over the situations its parent's pattern actually took (D17).
 >
@@ -1010,8 +1025,8 @@ frame, re-centered on it, and retired against it.
 
 ```
 the other kind          for an event neuron, the apex action that ran this frame; for an action neuron,
-                        the apex events that followed it. **Only while the activation is uncovered** —
-                        a covered one learns nothing across kinds                          D10, D17, R31
+                        the apex events that followed it. **Only if the activation is apex-born** —
+                        one covered at age 0 learns nothing across kinds                   D10, D17, R31
 the reward              any reward that arrived, for the action that ran this frame and for any earlier
                         frame the reward spans, at the distance each one names                       R33
 ```
@@ -1210,9 +1225,10 @@ apex-units-per-frame is read, the settled frames are the ones whose numbers are 
 
 > **R26 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** — the
 > uncovered set, at every level at once — so a base neuron nothing found worth chunking stands in it beside a
-> level-4 pattern. This is the frontier the file's body writes, **the one that predicts** (§13), **the one
-> that votes** (§16), and **the one reward credits** (R32): the uncovered set does all four, and coverage
-> silences a neuron in every one of them at once (D10). Everything underneath it is recovered by expanding it.
+> level-4 pattern. This is the frontier the file's body writes, **the one that predicts** (§13), and **the one
+> that votes** (§16): the uncovered set does all three, and coverage silences a neuron in every one of them at
+> once (D10). **Reward credits go to the apex-born set instead** (R32): fixed at age 0, it does not shrink as
+> coverage silences speaking. Everything underneath the current frontier is recovered by expanding it.
 >
 > **Uncovered, not childless.** A neuron that offered a child and had its bid declined with nothing else
 > covering it is still on the frontier, and stands in the file as its own line.
@@ -1346,13 +1362,13 @@ structural test can see (R34).
 
 > **R31 — An action connection carries an estimate.** What executes at `f + 1` is not known at `f`:
 > it is settled only once every level has run and the inferences resolve (R36). So the action that ran fires in
-> its dimension at `f + 1` (D8), with its reward beside it (R29), and **every uncovered activation open at that
+> its dimension at `f + 1` (D8), with its reward beside it (R29), and **every apex-born activation open at that
 > frame connects to the apex action at its own age** (D17, §10.3) — the highest action pattern
 > that fired in that dimension that frame, the base action when none did. That connection binds what the
 > neuron stands for to what the machine did — formed against what actually ran, so
 > **a neuron that inferred a different action, or none, learns from the one that ran.**
 >
-> **Every uncovered open activation connects to it, at every age it is open at.** The offset is the age — the distance
+> **Every apex-born open activation connects to it, at every age it is open at.** The offset is the age — the distance
 > from the frame the activation opened to the frame the action ran — so a neuron open at ages 1, 2 and 3 holds the
 > same action at three offsets. **Strengthening and reading sit one frame apart**: selection is choosing an action
 > that will run *next* frame, so an activation reads the offset one beyond the age it stands at (R36). Fan-out is
@@ -1378,7 +1394,7 @@ structural test can see (R34).
 > at neutral reward would create it, and from then on it is a connection like any other.
 
 > **R32 — What is learned is what ran.** No inference is credited and nothing is in control: the action that
-> executed is the one every uncovered activation connects to and the one its reward lands on (R31), whether
+> executed is the one every apex-born activation connects to and the one its reward lands on (R31), whether
 > that activation inferred it, inferred something else, or inferred nothing. Before any action pattern exists
 > the apex action is the base action, so the rule holds across all of development.
 >
@@ -1415,7 +1431,7 @@ structural test can see (R34).
 > the reward — a reward is not in short supply, and the point of spreading it is not to conserve it but to say
 > how likely each frame is to have earned it. What is genuinely responsible recurs and accumulates; what is not
 > is sampled once and averaged away. Each share is delivered, in the `process actions` call (§10.3), to every
-> uncovered activation that saw the apex action of a paid channel (R31) run at the frame that distance names, into
+> apex-born activation that saw the apex action of a paid channel (R31) run at the frame that distance names, into
 > the connection at the age the activation stood at then: at distance `0` the connection this call strengthens,
 > further back one strengthened `d` frames ago (R31).
 >
@@ -1483,7 +1499,7 @@ Five steps. It is §13's shape with one term changed — the winner is chosen on
 > an event: what the machine expects to observe is an output (§13), never a choice.
 >
 > **The default runs; it is not wired.** An action dimension no inference reaches runs the declared default
-> action. Nothing holds it in advance: when it runs it is the apex action of that frame, every uncovered
+> action. Nothing holds it in advance: when it runs it is the apex action of that frame, every apex-born
 > activation connects to it with its reward by the ordinary path (R31), and from then on it is an action like
 > any other. A neuron is born holding no action connection at all — a base neuron at cold start and a freshly
 > minted pattern alike say nothing about the next action until something has run under them, and what they
