@@ -73,7 +73,7 @@ delivers cannot clear its price. Naming is free, paying is exclusive.
 **On D8 — what position-specificity would buy is fit, and that is what it costs.** One pattern serving every
 position describes statistics that differ by position, so it fits each worse than a position-tuned pattern
 would, and the neighbors it names wrongly are literally the charges in the file (D16). The dictionary half of
-`L` falls and the history half rises. **R12 adjudicates exactly that trade**, pattern by pattern, and no price
+`L` falls and the body half rises. **R12 adjudicates exactly that trade**, pattern by pattern, and no price
 anywhere changes for it to do so: an activation costs 1 before and after, because the alphabet loses precisely
 the factor the coordinate gains.
 
@@ -122,7 +122,7 @@ cost a line, so it is free either way.
 >
 > **Every test reads the sign of a difference, never a length.** `margin = benefit − cost` (R12), and both
 > terms are counted in the same symbols, so the true margin is `c · margin`. `c > 0`, so the sign is the same
-> one. The dictionary term and the history term scale together because both are counts of the same symbols —
+> one. The dictionary term and the body term scale together because both are counts of the same symbols —
 > if they did not, the constant would not cancel and this would fail.
 >
 > **So counting symbols and counting bits answer every question the machine asks the same way.** That is what
@@ -132,7 +132,7 @@ cost a line, so it is free either way.
 > [forgetting.md](forgetting.md) is a document of its own.
 
 **On D12 — the two sums are what the two mechanisms work against, and that is the whole division of labor.**
-The election works on the history half over a given dictionary — it is priced in exactly that sum, for the
+The election works on the body half over a given dictionary — it is priced in exactly that sum, for the
 frames it can see, though it does not minimize it (§11.3). The one test decides the dictionary half, pattern
 by pattern (R12). Neither can do the other's job: the election cannot create or destroy a symbol, and a neuron
 cannot see what its symbol saved.
@@ -386,14 +386,14 @@ file-length statement, not a majority statement, and the dictionary line is part
 in a pattern that covers `n` activations, `count(p)` of which have `p` in the residual:
 
 ```
-history    − count(p)          those residual lines are gone
-history    + (n − count(p))    the activations without p now carry a wrong name
+body       − count(p)          those residual lines are gone
+body       + (n − count(p))    the activations without p now carry a wrong name
 dictionary + 1                 the pattern's line is one symbol longer
 ```
 
 Net change `n − 2 · count(p) + 1`; the slot is taken when that is negative, `2 · count(p) > n + 1`. Dropping it
-is the mirror. **The plain majority counts the history and forgets the line**: at three of five, naming saves
-one line of history and costs one of dictionary, and the file is the same length. An earlier draft took a slot
+is the mirror. **The plain majority counts the body and forgets the line**: at three of five, naming saves
+one line of body and costs one of dictionary, and the file is the same length. An earlier draft took a slot
 at that bare majority and charged the line only in the tests that add and retire (R15, R17), which left the
 per-slot decision off the objective by exactly one. Charging it where the slot is decided makes every slot
 decision a strict descent on the margin, which is what T6 needs, and it removes the last place a neighborhood
@@ -414,7 +414,7 @@ neighbor covered.
 
 **On R4 — why there is no forward rule.** The collapse exists to turn counts into a set, and a set is needed
 only because the file has to be expanded. A connection is charged nothing: it is not in the line and not in
-the history (D9). So there is nothing to break even against and nothing that has to become a set. An event
+the body (D9). So there is nothing to break even against and nothing that has to become a set. An event
 slot goes down as a vote at its strength (§13), an action connection as an inference at its strength and estimate
 (R36), and a majority would throw away exactly the minority the vote still needs and exactly the alternatives
 the walk is for (R37).
@@ -978,7 +978,7 @@ E  names s9 s10           price 1   ratio 2
 
 Old R23: `s1, s2` to A; `s9` to D, since 3 > 2; `s10` to E. A holds 4 > 1 and is accepted. D holds 1, not > 1,
 rejected. E holds 1, rejected. The old step 3 moved slots only among accepted bids, so `s9` and `s10` stood as
-residual: history term `1 + 2 = 3`. R18 over the board: take A; the free set is `{s9, s10}`; D covers 1 at price
+residual: body term `1 + 2 = 3`. R18 over the board: take A; the free set is `{s9, s10}`; D covers 1 at price
 1 and E covers 2 at price 1, so take E. History term `1 + 1 = 2`.
 
 **The frozen ratio is the whole defect.** D's claim on `s9` was worth something only if D was going to pay, and
@@ -1034,12 +1034,12 @@ structural.
 > **It is ragged in space as well as in time**, since reach is bounded in every activation dimension: a slot
 > far from anything active settles while one in a busy region, at the same frame, is still open.
 >
-> Nothing depends on the order, because nothing is streamed. The file is re-derived whole from current
-> structure (D9), so an unsettled frame is not a gap — it has an encoding like any other, one still liable to
+> Nothing depends on the order, because nothing is streamed. The file is whatever current structure gives, so
+> an unsettled frame is not a gap — it has an encoding like any other, one still liable to
 > change. "Settled" says what can no longer move, never what has been emitted.
 
 **What settlement settles is the election, not the file.** It marks the point past which no further bid can
-reach a frame. What the winning units then *expand to* is the current dictionary's business (D9):
+reach a frame. What the winning units then *expand to* is the current dictionary's business:
 neighborhoods keep re-centering underneath them, and a unit whose pattern has been deleted stops being
 available at all, so the run is re-encoded from what remains. **Contraction settles who covers what; D9
 settles what that costs to say.**
@@ -1138,7 +1138,7 @@ would have been unrepresentable.
 nothing in the rule distinguishes a spatial component from a temporal one, so the two are compressed together
 by construction rather than in sequence.
 
-**On R26 — why a flat top level would be none of those things.** The history writes exactly the frontier,
+**On R26 — why a flat top level would be none of those things.** The body writes exactly the frontier,
 rewards credit exactly the frontier, the prediction is expanded from exactly the frontier and the next action
 is chosen by exactly the frontier. In the worked drawing, `i` and `j` are covered by nothing, so they stand in
 the frontier beside a level-3 pattern — whether that is because they offered no child or because the child
@@ -1343,7 +1343,7 @@ measured on at the moment it is made. Strict where marked.
 - **Add (R15).** Strict. The candidate joins iff its summed saving exceeds `1 + |C⁻|`, and R19 step 3 lets every
   activation do at least as well as the test counted, so the ring's file shrinks by at least the margin the test
   found.
-- **Retire (R17).** Strict. A pattern's margin *is* the change in the ring's file on its removal: the history
+- **Retire (R17).** Strict. A pattern's margin *is* the change in the ring's file on its removal: the body
   term rises by `Σ (covers − price)` and the dictionary term falls by `1 + |e|`, which is the margin with the
   sign reversed. Negative margin, shorter file.
 - **Re-centering (R5).** Non-increase. Entering a slot changes the ring's file by `(n − 2 · count + 1)` over the
@@ -1362,13 +1362,13 @@ R18 and R23 are one procedure, and that procedure is ratio-greedy weighted set c
 set with cost `price`, and every slot also has a singleton set of cost 1, standing as its own line. Chvátal's
 bound (1979) applies directly — the cover the greedy returns costs at most `H(n)` times the cheapest cover
 buildable from the same sets, where `H(n) = 1 + 1/2 + … + 1/n ≈ ln n` and `n` is the largest set's size, here
-the largest neighborhood offered. **So per frame the machine's history term is within `H(n)` of the best it
+the largest neighborhood offered. **So per frame the machine's body term is within `H(n)` of the best it
 could have done with the bids it was offered**, and the one-pass election this replaced had no such bound.
 
 ## Not provable, and why
 
 **Across frames.** Every frame adds an activation to each active neuron's ring, evicts one, and adds raw lines to
-the machine's history before any election runs. Connections are outside all of this: they are in no file,
+the machine's body before any election runs. Connections are outside all of this: they are in no file,
 and no move is priced on them (R34). "The file is shorter after frame `f + 1` than after frame `f`"
 is false of any compressor reading a stream, this one included. What holds is the statement above: never longer
 than flat, and every structural move a descent on the evidence in hand.

@@ -154,7 +154,7 @@ withheld.
 **The readout is unvalidated, and the position now lives outside the symbol.** Compressing harder can produce a
 worse classifier, because a readout may be living on exactly the position-and-class-specific duplicates that
 compression deletes — and D8 deletes them by construction rather than incidentally. The information is not
-lost: it moved into the activation coordinates the history states. But a readout reading bare symbol identity
+lost: it moved into the activation coordinates the body states. But a readout reading bare symbol identity
 sees a translation-invariant bag and loses every bit of *where*, so it has to consume `(symbol, coordinate)`
 pairs. A regression here will look like the compression was wrong when it was the decode. The readout gate in
 [algorithm-implementation.md](algorithm-implementation.md) is the check.
@@ -188,7 +188,7 @@ span at least two activations before a candidate is priced. Exact, and costs one
 
 **Shared patterns fit every position worse than tuned ones would.** D8 pools activations from everywhere into one
 pattern, so a pattern describes statistics that genuinely differ by position and fits each of them worse. That
-is a real cost and it is paid in charges, which is the history half of `L` — the dictionary half falls in
+is a real cost and it is paid in charges, which is the body half of `L` — the dictionary half falls in
 exchange, and R12 is what weighs the two. The design commits to the trade being worth it and offers no way to
 buy back position-specificity except declaring a coarse position as a *neuron* dimension. **Diagnostic:**
 charges per activation against dictionary size, before and after, on the same data.

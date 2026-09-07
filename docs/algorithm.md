@@ -98,47 +98,51 @@ assumes for anything the file does not state.
 
 ---
 
-# 2. The objective: it is all one file
+# 2. The objectives
 
-Write every frame observed so far as a single file a decoder could read back to reproduce each of them —
-every symbol in its dimension, placed to the resolution the offset alphabet keeps (D15). **The compression is
-lossy, and the loss is in placement only**: the file never misstates which symbol fired or where in the
-alphabet, and it places a far neighbor to within the power of two its offset is rounded to. **The file is the
-run.** There is no window and no horizon: nothing is dropped from the objective
-because it happened long ago, and everything the machine's structure is worth is measured against the whole of
-what it has seen.
+There are two objectives: **compress what is observed**, and **act on the best reward estimate**. 
+The compression decides what the current situation *is*, and that's provided to the second objective as input. 
 
-> **D9 — The file.** Two parts, both over the whole run. **The dictionary**: one line per pattern, its
-> neighborhood — the backward neighbors that define it (D18). **The history**: the apex units (R26), each
-> followed by the neighbors it names that did not fire, and the neurons no unit covers, each standing as
-> itself. Anything unstated is silence.
->
-> **It is the current optimum encoding of the run.** The file is re-derived from the structure as it now
-> stands, exactly as a price is (R2), so no past decision has to be honored and nothing is retained that the
-> machine could not expand.
->
-> **Nothing ever materializes it.** The coverage set spans `reach(k) + 1` frames, `reach(k)` being the reach at
-> level `k` (D14, D26), and a neuron's history is `H` activations deep — `H` the history size, the last activations
-> a neuron keeps (D24). No pass anywhere walks the run.
->
-> **The file holds nothing about the future.** A neuron's connections — what followed its activations — are in
-> no dictionary line and not in the history (D17). What the machine expects to see next is its output
-> (§13), and nothing inside the machine scores it.
+## 2.1 Compression: classify the situation
 
-**One file, one dictionary.** A neuron's history (§7) is its own connections of what it saw. A pattern in a
-neuron's table is a **standing claim on a dictionary line**, and whether that claim is honored is settled
-where the file is (R12).
+**The machine compresses by naming.** A pattern is a symbol standing for a set of lower level symbols or patterns 
+that keep occurring together. The run can be shortened by using these patterns. Patterns can name base symbols 
+or other patterns, so one symbol high in the stack can stand for a long stretch of the run. 
+This substitution is the whole mechanism for compression.
+
+**The compression is lossy, in two places.**
+```
+placement   an offset is kept to one significant digit in base 2, so a far neighbor is placed
+            only to within the power of two it rounds to                                        D15
+evidence    a neuron decides its structure over its last H activations and the ring slides, so
+            the structure that would restate a frame long past is neither held nor recoverable  D24
+```
+
+Both losses are why the file below is a yardstick and not an artifact. Imagine the run written out under the
+structure as it now stands, and read the objective as: make that shorter.
+
+> **D9 — The file.** Two parts, both spanning the whole run. **The dictionary**: one line per pattern, its
+> neighborhood — the backward neighbors that define it (D18). **The body**: the apex symbols/neurons (R26), each
+> followed by the neighbors it names that did not fire (error correction), and the uncovered neurons, each standing as
+> itself.
+>
+> **Both sides are in it.** An action the machine executed is a neuron that fired (D5), and it stands in the
+> file exactly as an observed event does, compressed by the same hierarchy (§14).
+>
+> **It holds nothing about the future.** A neuron's connections — what followed its activations — are in no
+> dictionary line and not in the body (D17), and neither is an inference that did not run (R32).
+> The file is simply a log of what happened.
 
 > **D10 — Prices.** Every cost in the design is part of a file, counted in symbols:
 > ```
-> activating an apex unit  =  1                 a line in the history
+> activating an apex unit  =  1                 a line in the body
 > what it got wrong        =  the neighbors it names that did not fire, one each
 > a neuron no unit covers  =  1                 its own line
 > having a pattern         =  1 + |e|           a line in the dictionary, |e| its backward neighbors
 > ```
 > This is a fixed-length code: a symbol costs one regardless of how often it is used.
 
-> **D11 — What the file holds.** The dictionary, and the history encoded against it. A pattern's neighborhood
+> **D11 — What the file holds.** The dictionary, and the body encoded against it. A pattern's neighborhood
 > must be written: it is the collapse of activations no ring still holds, so nothing in the file recovers it.
 > **A symbol is not one line per frame** — a unit firing at `h` names `[h − reach_t, h]`, so writing it
 > discharges up to `reach_t + 1` frames of the run at once. What the machine holds and the file does not is
@@ -180,6 +184,25 @@ where the file is (R12).
 > put it, and what it covers
 > follows. **§8's test is the derivative of `L` with respect to holding one pattern**, read over the activations
 > the neuron holds.
+
+## 2.2 Execution: the best estimate for the situation
+
+**There is no return, no horizon and no value function.** What the machine holds is one number per situation,
+distance and action: the mean reward that action received when it ran at that distance from that situation
+(R31). It is an exact mean over every exposure the connection has ever had, never discounted, never decayed and
+never windowed. Every frame, each action dimension runs the candidate with the largest such mean among the
+situations then standing on the apex (R36). That is the whole of it — **act on the best estimate you hold, for
+the situation you are actually in.**
+
+**Credit is attributed, never propagated.** A reward names the frames it pays for and reaches each of them at a
+strength falling with distance (R33). No estimate is ever computed from another estimate, so nothing bootstraps
+and nothing has to converge before anything else can be read.
+
+**The two objectives meet in the neuron, and nowhere else.** An estimate is held by a neuron, so which
+situations can hold an estimate at all is settled entirely by the compression objective: a situation acquires an
+estimate of its own exactly when a pattern is minted for it, and until then only the coarser situations
+containing it have anything to say (R35). Compression is not preprocessing for control; it is what defines the
+space control acts over.
 
 ---
 
@@ -297,7 +320,7 @@ offset, with one activation dimension and a reach of 1:
 > `reach(k) = 2^k`, so `G = k`.
 >
 > **Near offsets come out exact and distant ones are named coarsely. Nothing is cut off; precision decays
-> instead — and this is where the file is lossy.** An offset written as `2^g` stands for any distance in
+> instead — and this is the placement loss of §2.1.** An offset written as `2^g` stands for any distance in
 > `[2^g, 2^(g+1))`. The true distance is not in the file, the decoder places the neighbor at `2^g` (R27), and
 > nothing charges the difference: the price counts symbols named and absent (D10), never where a present one
 > landed. **What the file guarantees is the symbol, its dimension, and its place to within its offset's group.**
@@ -961,7 +984,7 @@ strengthening — there is no second bill and nothing is saved twice.
 > the bid   the pattern's backward neighborhood, and the child's id                          (R20)
 > covers    the neurons it names that fired and no earlier unit covers — the slots it asks to subsume,
 >           the bidder among them
-> price     1 + |e \ O⁻|   its own line in the history, and the neurons it names in those
+> price     1 + |e \ O⁻|   its own line in the body, and the neurons it names in those
 >                          same frames that did not fire
 > ```
 > `covers − price` is the saving over stating the chunk flat, D12's expression over the machine's population.
@@ -1018,7 +1041,7 @@ one: a bid arrives as a definition, and everything it is worth this frame the ma
 ## 11.3 The election
 
 **The file over one frame is the units promoted plus what they got wrong**: `Σ over the accepted (1 + |e \ O⁻|)
-+ the neurons no unit covered`, the history half of `L` (D12) over the frames the election can see. **The two
++ the neurons no unit covered`, the body half of `L` (D12) over the frames the election can see. **The two
 terms do not overlap**: a neuron a promoted unit fails to name is in the second and not the first, which is why
 the price counts only the neighbors named and absent (R21). The dictionary half is R12's, and neither test
 touches the other's sum.
@@ -1109,7 +1132,7 @@ apex-units-per-frame is read, the settled frames are the ones whose numbers are 
 
 > **R26 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** — the
 > uncovered set, at every level at once — so a base neuron nothing found worth chunking stands in it beside a
-> level-4 pattern. This is the frontier the file's history writes, **the one that predicts** (§13), **the one
+> level-4 pattern. This is the frontier the file's body writes, **the one that predicts** (§13), **the one
 > that votes** (§16), and **the one reward credits** (R32): the uncovered set does all four, and coverage
 > silences a neuron in every one of them at once (D7). Everything underneath it is recovered by expanding it.
 >
