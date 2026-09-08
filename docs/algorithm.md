@@ -167,7 +167,7 @@ then, once the last level has run
                        expectation expands down to base events
   infer (§16)          the apex reads its action connections — only events infer — and every inference
                        expands down to base actions
-  consensus (R27, R36) one winner per dimension, at the base: an expected event by the share of voters
+  consensus (R27, R36) one winner per dimension, at the base, for the frame ahead: an expected event by the share of voters
                        that placed it, an action by the estimate it carries
 ```
 
@@ -329,8 +329,8 @@ carries the action executing in that same frame (if there is one).
 >
 > **Age is per activation, and a neuron can carry several ages at once.** An activation's age is the frames
 > elapsed since it fired, `0` through `reach_t`; a new activation is the one at age 0. **Age is read, not just
-> counted** — it is the offset at which the activation strengthens connections and reads what comes next
-> (R31, R36).
+> counted** — rounded as every offset is (D6), it is the offset at which the activation strengthens connections,
+> and every offset beyond it is read against it for what comes next (R31, R36).
 >
 > **Apex-born** means the activation was uncovered at age 0 — it stood on the apex in the frame it fired,
 > as decided by that frame's election (R26). The flag is set once, from that one frame, and never changes:
@@ -452,7 +452,8 @@ decided to keep, and its connections, what followed it. Everything else it holds
 
 > **D17 — Connections.** What fires while an activation is open (D9) is recorded on its **neuron**, and
 > never in the activation's neighborhood. A connection is a distribution, not a record: per
-> `(neuron, offset > 0)`, how often that neuron has followed, and for an action what it earned (R31). Nothing
+> `(neuron, offset > 0)`, how often that neuron has followed, and for an action what it earned (R31). The offset
+> is a D6 offset like every other, so a wide slot pools the followers of every frame in its group. Nothing
 > about any one activation is kept.
 >
 > **They are measured, never chosen.** A connection is not in the bid (R20), not in any dictionary line (D13),
@@ -1013,11 +1014,12 @@ for the action that ran this frame, the connection just strengthened, in the sam
 the activation. **Nothing is decided, priced or compared here**, and no test is waiting on any of it.
 
 **If the activation stands on the apex (R26), the call returns what it speaks.** It reads its own neuron's connections
-at the offsets ahead of its age — `age + 1` for the frame ahead, out to its reach — and returns two things in the
-alphabet of the level below its own (D17): the event connections there, each with its strength, are its
-**expectations** (§13), and the action connections there, each with its strength and estimate, are its **inferences**
-(§16). A base neuron on the apex speaks from its own connections like any other; what it expects is the marginal over
-every situation it fires in, and it speaks only because nothing more specific covers it.
+at every offset beyond its age, out to its reach — a connection at offset `b` read at age `a` is a claim about
+`b − a` frames ahead (R27) — and returns two things in the alphabet of the level below its own (D17): the event
+connections there, each with its strength, are its **expectations** (§13), and the action connections there, each
+with its strength and estimate, are its **inferences** (§16). Only what reaches the frame ahead is resolved. A base
+neuron on the apex speaks from its own connections like any other; what it expects is the marginal over every
+situation it fires in, and it speaks only because nothing more specific covers it.
 
 **An activation closes at age `reach_t`** (D9), once that frame is taken. Closing does nothing but stop the
 strengthening — there is no second call and nothing is saved twice.
@@ -1234,7 +1236,7 @@ settled, so it is recorded in the `process actions` pass instead (R31).
 
 **Predicting is the machine's act, and it is an output, not a claim.** Every activation on the apex returns its
 expectations in the alphabet of the level below its own (D17); the machine expands each to base symbols and resolves
-one expected symbol per event dimension per frame ahead. That set is the machine's first output. **Nothing inside the
+one expected symbol per event dimension for the frame ahead. That set is the machine's first output. **Nothing inside the
 machine scores it**: the file holds no line for what was expected (D12), so a wrong expectation costs nothing, retires
 nothing, and is not a correction. What settles it is the input, and only whoever reads the output is the wiser.
 
@@ -1247,13 +1249,15 @@ by what it is estimated to earn (R36).
 Four steps, and the last is the only one that compares anything:
 
 ```
-1. read      every apex activation reads its own neuron's event connections at the offsets
-             ahead of its age — `age + 1` for the frame ahead, out to its reach        §10.3
-2. expand    each connection names a neuron one level down; recover what its neighborhood
-             names, level by level, to base symbols, at composed offsets                  R27
-3. discard   drop every symbol landing at or before the expecting activation's own frame         R28
-4. resolve   per (dimension, frame, position): one vote per voter, split across the symbols
-             that voter placed by strength; the largest share wins the dimension           R27
+1. read      every apex activation reads its own neuron's event connections at every
+             offset beyond its age, out to its reach                                    §10.3
+2. expand    each connection names a neuron one level down, placed at its rounded
+             coordinate; recover what its neighborhood names, level by level, to base
+             symbols, at composed offsets                                                 R27
+3. discard   keep only what lands at the frame ahead; the rest has happened, cannot,
+             or is not yet due                                                            R28
+4. resolve   per (dimension, position) at the frame ahead: one vote per voter, split
+             across the symbols that voter placed by strength; the largest share wins     R27
 ```
 
 > **R27 — Expansion.** A connection held at level `k` names a level-`k − 1` neuron (D17), which above the base is not
@@ -1266,6 +1270,13 @@ Four steps, and the last is the only one that compares anything:
 > A's connections name  (C, +2)  expand it:
 >   C's line is {(p, 0), (q, −1)}                → p's dimension at f+2, q's dimension at f+1
 > ```
+> **A connection is placed the way a neighbor is.** A connection at offset `b`, read by an activation at age `a`,
+> puts the neuron it names `b − a` frames ahead — the coordinate the code writes for it — and that neuron's
+> expansion hangs from there. **A wide slot is not a window.** Its neuron completes at `b`, not somewhere in the
+> group `b` stands for, exactly as a neighbor named at `−b` is placed at `−b` and nowhere else. So the columns
+> of a long chunk reach the frame ahead one at a time, in order, each at exactly one age, from one connection
+> and with nothing held: what an activation places beyond the frame ahead it places again next frame, one
+> frame nearer.
 > **A coarse offset expands to its rounded coordinate.** A neighbor named at `sign · 2^g` is placed at exactly
 > that distance whatever distance in the group it fired at, and several neighbors at one coarse offset (D6)
 > are each placed there. **The rounding composes.** Each step down adds its own group's slack, so a level-`k`
@@ -1281,7 +1292,7 @@ Four steps, and the last is the only one that compares anything:
 > is re-weighted on the way down: a level-3 neuron expecting one level-3 symbol places every base symbol of its
 > line at the same strength.
 >
-> **One winner per event dimension, by share of voters.** For each `(dimension, frame, position)`, every apex
+> **One winner per event dimension, by share of voters.** For each `(dimension, position)` at the frame ahead, every apex
 > activation whose expansion placed a symbol there is one voter, contributing one vote split across the
 > symbols it placed in that dimension in proportion to their strengths, so a voter that hedges between two
 > symbols counts as one voter and not two. The symbol with the largest share wins the dimension; ties go to
@@ -1291,9 +1302,14 @@ Four steps, and the last is the only one that compares anything:
 > **An action connection in the expectation is what the machine expects itself to do**; what it does is chosen from
 > the inferences (R36), and neither read enters the other.
 
-> **R28 — The expectation only reaches forward.** Expansion reaches both directions, so a connection at `+2` whose
-> line reaches `−3` lands at `−1`. Symbols landing at or before the expecting activation's own frame are discarded,
-> and nothing is lost: the output for a frame is what the machine expected *before* it.
+> **R28 — The expectation is for the frame ahead only.** The read reaches out to the voter's whole reach and
+> expansion reaches both directions, so a connection at `+8` whose line spans four frames places symbols at `+5`
+> through `+8`, and one at `+2` whose line reaches `−3` lands at `−1`. Only what lands at `f + 1` is kept.
+> What lands at or before `f` has happened or cannot; what lands beyond `f + 1` is neither resolved nor stored,
+> because the same connection places it again next frame and it is resolved when it arrives. Nothing is lost:
+> the output for a frame is what the machine expected of it the frame before, and no forecast is ever
+> materialized — a level-`k` voter reads at most `k` slots, and expansion walks only the branches whose composed
+> offset can reach the one frame being resolved.
 
 ---
 
@@ -1345,10 +1361,13 @@ structural test can see (R34).
 > **a neuron that inferred a different action, or none, learns from the one that ran.**
 >
 > **Every apex-born open activation connects to it, at every age it is open at.** The offset is the age — the distance
-> from the frame the activation opened to the frame the action ran — so a neuron open at ages 1, 2 and 3 holds the
-> same action at three offsets. **Strengthening and reading sit one frame apart**: selection is choosing an action
-> that will run *next* frame, so an activation reads the offset one beyond the age it stands at (R36). Fan-out is
-> bounded — a neuron names actions only in the channels its activations have seen follow.
+> from the frame the activation opened to the frame the action ran — rounded as every offset is (D6), so a neuron open
+> at ages 1, 2 and 3 holds the same action at two offsets, `1` and `2`, and the exposure at age 3 strengthens the
+> second. **A wide slot takes one exposure per frame of its group**, so the outer slots pool the apex actions of
+> many frames, each at its own strength, as a coarse offset carries several neighbors (D6). **Strengthening and
+> reading are inverses**: an exposure is written at the slot its age rounds to, and read back at the age from
+> which that slot decodes one frame ahead (R27, R36), so what a replay earns lands in the slot it was learned
+> from. Fan-out is bounded — a neuron names actions only in the channels its activations have seen follow.
 >
 > **Making and strengthening are one operation.** A neuron's action connection at `(action, offset)` has a
 > **strength**, the number of its exposures — the times an activation of the neuron saw that action follow at that
@@ -1441,12 +1460,14 @@ Five steps. It is §13's shape with one term changed — the winner is chosen on
 
 ```
 1. read      every voter — one apex activation at one age — reads its own neuron's action
-             connections at offset `age + 1`, the distance it will stand at when the
-             action runs. Each such connection is one inference                            R36
-2. expand    each inference expands through its dictionary line to the base actions it
-             places at the frames ahead, carrying its strength and its estimate       R30, R36
-3. drop      a base action placed at `f` or before is gone; the placements further ahead
-             stand as standing inferences, contending again each frame                     R36
+             connections at every offset beyond its age, out to its reach. Each such
+             connection is one inference                                                   R36
+2. expand    each inference is placed at its rounded coordinate and expands through its
+             dictionary line to the base actions it places at the frames ahead, carrying
+             its strength and its estimate                                      R27, R30, R36
+3. drop      a base action placed at `f` or before is gone, and one placed beyond `f + 1`
+             is not resolved; the placements ahead of a selected pattern stand as
+             standing inferences, contending again each frame                              R36
 4. resolve   per action dimension at `f + 1`: one vote per voter, split by strength; the
              candidate with the largest estimate runs                                      R36
 5. execute   it runs next frame, its neuron fires in that column, and its reward arrives
@@ -1487,14 +1508,17 @@ Five steps. It is §13's shape with one term changed — the winner is chosen on
 > estimate. What runs is chosen from the
 > inferences and nothing else; the expectation (§13) is never read here, and what runs is never read there.
 >
-> **Inferences expand before they are resolved.** An inferred action at level `k` is expanded through its
-> dictionary line to the base actions it places at the frames ahead (R30), and every base action placed
-> carries the strength and the estimate of the connection it came from. Resolution then runs at the base and only
-> there.
+> **Inferences expand before they are resolved.** An inferred action at level `k` is placed at its rounded
+> coordinate — a connection at offset `b` read at age `a` puts its completion `b − a` frames ahead (R27) — and
+> expanded through its dictionary line to the base actions it places at the frames back from there (R30), every
+> one carrying the strength and the estimate of the connection it came from. Resolution then runs at the base and
+> only there. **This is what launches a program**: a pattern of span `s` puts its first step at `f + 1` when read
+> from the slot `a + s` decodes to, which is why the read is over every slot beyond the age and not the next one
+> alone.
 >
-> **A selected pattern stands until its span runs out.** Choosing an action pattern at `f` places base actions
-> at the frames ahead its line reaches; a member its line places at `f` or before is dropped, since it has run
-> or cannot, the counterpart of R28 — and the placements ahead are **standing inferences**, contending for their
+> **A selected pattern stands until its span runs out.** When the action that wins `f + 1` was placed by a
+> pattern's expansion, the rest of that expansion — the members its line places beyond `f + 1`; one at `f` or
+> before is dropped, since it has run or cannot, the counterpart of R28 — are **standing inferences**, contending for their
 > dimensions exactly as this frame's fresh ones do, at the strength and estimate they were selected on. **A
 > plan holds because it keeps winning**: a better estimate displaces it, and when its span ends it is simply
 > gone. Nothing is retracted and nothing is held.
@@ -1508,9 +1532,11 @@ Five steps. It is §13's shape with one term changed — the winner is chosen on
 >   less  every activation at age reach_t             it has no offset left to read
 >   read as (neuron, age)                             position carries no connection          (D11)
 > ```
-> Each reads its neuron's action connections at **offset `age + 1`**, the distance at which it will stand from the
-> action it is choosing (R29). Every connection at that offset is one inference, naming an action neuron and
-> carrying a strength and an estimate, and it expands as above.
+> Each reads its neuron's action connections at **every offset beyond its age**, out to its reach. Every
+> connection there is one inference, naming an action neuron and carrying a strength and an estimate, and it
+> expands as above; what its expansion puts at `f + 1` is what it proposes, and a connection whose expansion
+> puts nothing there proposes nothing this frame. A base action is proposed by the one slot the age decodes
+> to `f + 1` from (R29); a pattern's first step by a farther one.
 >
 > **Position drops out.** Two activations of one neuron at two positions read one set of connections, so they offer
 > the identical inference and the argmax is indifferent to the duplicate. Two *ages* are two voters and do not
