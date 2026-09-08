@@ -190,6 +190,17 @@ nothing crosses between scopes to correct it. What that costs is stated in
 [algorithm-evaluation.md](algorithm-evaluation.md): a neuron whose territory another neuron reliably takes keeps
 pricing its patterns as if it did not.
 
+# 4. The neuron
+
+**On §4 — what a neuron holds outright.** Two things in D16 are held because nothing else the neuron holds
+could rebuild them: the history, which is the evidence itself, and the table of patterns, which is what the
+neuron has decided over that evidence. The counts, covers and assignments are totals over those two, marked `°`
+in D16: recoverable by a walk over the history, and kept only to avoid one.
+
+**On R1 — there is nothing to wait for.** `O` is complete when the neuron fires (D7), so no decision in the call
+is made on partial evidence, none is committed for later, and none is revisited. The neuron remembers nothing
+between one activation and the next beyond what is in its table and its history.
+
 # 5. State
 
 **On D15 — why the two objects can never be one.** Being a center (T5), a pattern is typically a set no

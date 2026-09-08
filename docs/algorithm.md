@@ -396,30 +396,34 @@ assumes for anything the file does not state.
 
 # 4. The neuron
 
-A neuron is a symbol, and a type (D2). Two things it holds cannot be recomputed from the past and present: the
-history of what it saw, and the patterns it has decided to keep (D16). Everything else it holds is a total. What
-followed its activations is a third thing, its connections, and it is defined in Part III (D25).
+A neuron is a symbol, and a type (D2). It holds a table of patterns and a history of past/present observations (D16).
 
-**The neuron prices, the machine holds the board.** Every test the neuron runs is its own arithmetic over its
-own evidence, and it is never told what the board did with its bids (R24).
+**The machine reaches a neuron through five calls, and nothing else writes into one.**
+```
+create neuron            the machine mints it once the last level has run, one level above its
+                         parent, holding nothing                                                R16
+process frame            in its level's turn: it strengthens what the neuron's open activations
+                         saw follow them one level down, and does everything structural for the
+                         activations that fired this frame                                      R20
+wire child to pattern    the machine hands back the child it minted for the candidate the call
+                         requested, and the pattern points to it                            R16, R17
+delete pattern neighbor  the machine removes a neuron that no longer exists from every pattern
+                         and saved activation that names it                                     R18
+process actions          after every level has finished, reaching every open activation at
+                         whatever age it stands at: it delivers the other kind's apex and any
+                         reward, and collects what the apex speaks                              §17
+```
 
-The machine calls a neuron twice in a frame. `process frame` runs in its own level's turn: it strengthens what
-the neuron's open activations saw follow them one level down, and does everything structural for the activations
-that fired **this** frame (R20). `process actions` runs after every level has finished, and reaches every
-**open** activation at whatever age it stands at: it delivers the apex action and any reward, and collects what
-the apex speaks (§17). Nothing is written into a neuron outside those two calls.
+Every test the neuron runs is its own arithmetic over its own evidence, and it is never told what the board did
+with its bids (R24).
 
-This part is the first call: what a neuron holds, and what it does in the frame it fires. The second call, and
-everything a neuron learns about what followed, is Part III.
+Part I covers `process frame`: what a neuron holds, and what it does in the frame it fires. 
+Part III covers `process actions` call, where a neuron learns and infers about what followed.
 
 > **R1 — One decision point: the frame it fires.** A neuron is called once per activation, at age 0, and
 > everything structural happens in that call: it covers its neighborhood and saves it, re-centers, builds and
 > prices one candidate, retires at most one pattern, and returns a bid for every pattern that applies together
 > with its requests (R20).
->
-> **There is nothing to wait for.** `O` is complete when the neuron fires (D25), so no decision here is made
-> on partial evidence, none is committed for later, and none is revisited. The neuron remembers nothing
-> between one activation and the next beyond what is in its history.
 
 # 5. State
 
