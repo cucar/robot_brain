@@ -16,7 +16,7 @@ by, and it is read only when a neuron on the apex is expanded (R27).
 
 # 3. The machine
 
-**On D2 — why a child sits at offset zero.** A neighborhood is written relative to the parent's activation, so the
+**On D2 — why a child sits at offset zero.** A pattern is written relative to the parent's activation, so the
 child sits at offset zero by construction. A centroid over what the child covers would leave the level above
 differencing coordinates from origins its neighbors were never measured against.
 
@@ -194,8 +194,8 @@ pricing its patterns as if it did not.
 
 **On D15 — the price is not a notion invented for matching.** It is literally the symbols that would follow
 the activation in the file: a neuron named and absent has to be turned off, and that turn-off is the whole of
-what a neighborhood is charged. A neuron that fired and nothing named costs one line whether or not the
-neighborhood exists, so it is charged to nobody — which is why the residual is a term of the activation and not of
+what a pattern is charged. A neuron that fired and nothing named costs one line whether or not the
+pattern exists, so it is charged to nobody — which is why the residual is a term of the activation and not of
 any pattern.
 
 **On D16 — why `covered` counts what turned up rather than what the pattern names.** Take a neuron `x` whose
@@ -243,7 +243,7 @@ test asks for the stronger thing. What it therefore drops is structure that stil
 stopped describing the neuron's recent situation — which is the adaptation D23 is for, not an error in the
 estimate.
 
-**On D16 — one baseline, two populations.** Every test asks what the file pays with the neighborhood against
+**On D16 — one baseline, two populations.** Every test asks what the file pays with the pattern against
 what it pays without. Without it, each neuron it held goes to whatever else names it — another pattern of the
 same cover, or another accepted bid one level up — and otherwise into the residual, where it costs the line it
 would always have cost. **The flat file is not a second baseline**; it is what that question returns when
@@ -303,7 +303,7 @@ a stage of it, which is what makes a reach a configuration rather than an archit
 
 **On R1 — nothing waits.** An earlier design held every structural decision open until the forward half had
 landed, on the argument that a child names a whole span and half of it had not happened. But the half that had
-not happened was never a term in either test. What follows a neighborhood is measured rather than chosen
+not happened was never a term in either test. What follows an activation is measured rather than chosen
 (D17), so waiting for it bought nothing and cost the entire apparatus of commitments, horizons and provisional
 answers that used to sit between the two ages.
 
@@ -312,8 +312,8 @@ when a neuron fires, because that is where counts move and where both tests run 
 re-derived from whatever the table currently says, while a structural move — adding, retiring (R15, R17) — is a
 decision that stands until something reverses it.
 
-**On D18 — why the two objects can never be one.** Being a center (T2), a neighborhood is typically a set no
-activation ever was.
+**On D18 — why the two objects can never be one.** Being a center (T2), a pattern is typically a set no
+neighborhood ever was.
 
 **On D19 — why the record holds no absolute time.** Expiry was the frame number's only reader and expiry is a
 FIFO depth (R9), so the record has nothing absolute in it but the `position`, which the machine supplied when
@@ -411,7 +411,7 @@ is the mirror. **The plain majority counts the body and forgets the line**: at t
 one line of body and costs one of dictionary, and the file is the same length. An earlier draft took a slot
 at that bare majority and charged the line only in the tests that add and retire (R15, R17), which left the
 per-slot decision off the objective by exactly one. Charging it where the slot is decided makes every slot
-decision a strict descent on the margin, which is what T6 needs, and it removes the last place a neighborhood
+decision a strict descent on the margin, which is what T6 needs, and it removes the last place a pattern
 could grow at no gain.
 
 **On R4 — why the slot holds at equality.** With the line charged the boundary is `2 · count = n + 1`, and at
@@ -436,13 +436,13 @@ the walk is for (R37).
 
 **On R4 — uniqueness is not assumed and is no longer guaranteed.** At the base, an offset naming one position
 holds one neuron of a dimension (D8), so those counts sum to at most `n` and only one can clear the half. Above
-the base several neurons may fire at one coordinate, so several can clear it and the neighborhood names them all
+the base several neurons may fire at one coordinate, so several can clear it and the pattern names them all
 — which is D6's coarse-offset case arriving for a second reason. `|e|` counts them, and nothing else in the
 design had to change for it.
 
 **On R5 — three consequences, and they are the point of the design.**
 
-- **Neighborhoods track their demand.** A pattern created on thin evidence is pulled toward its cluster.
+- **Patterns track their demand.** A pattern created on thin evidence is pulled toward its cluster.
 - **Coincidence is voted out.** A neighbor present once loses its majority to silence and drops out.
 - **Reach emerges.** Offsets where nothing recurs fall away. How far a pattern reaches is discovered, not
   declared. The reach bounds it; it does not set it.
@@ -485,7 +485,7 @@ is R12's selectivity — double it and every pattern's
 benefit roughly doubles against an unchanged line, so more survive — and it is the rate at which the stack
 deepens (T13). One number, three effects, all monotone in it, and it should be tuned knowing that.
 
-**On R7 — duplicates die in the table, not the market.** Two patterns with one neighborhood are taken into a
+**On R7 — duplicates die in the table, not the market.** Two patterns with the same neighbors are taken into a
 cover older first, so the younger holds nothing anywhere and retires. The market would kill the younger too —
 the election ties to the older symbol (R23) — but the neuron never hears the election's verdict, so the table
 has to be able to do it alone, and it can.
@@ -545,7 +545,7 @@ elect     does this BID cover more than it costs, once slots are split? one bid,
 retire    does what e still keeps out of the residual pass 1 + |e|?     the line, retrospectively (R17)
 ```
 
-**Cover and elect are one expression** (D16) — what a neighborhood covers against what it costs to state —
+**Cover and elect are one expression** (D16) — what a pattern covers against what it costs to state —
 asked over one activation and over the board. Build and retire are that same expression summed over the history
 with the dictionary line added, read in opposite directions: what an absent pattern would take out of the
 residual, and what a present one is still keeping out of it. The offer is the one row that is not a price, and
@@ -685,7 +685,7 @@ The whole construction is `O(H · w̄)` with `w̄` the neighbors an activation h
 `w̄` (D4).
 
 **This is facility location.** Activations are customers, patterns are facilities, opening one costs `1 + |e|`,
-serving costs what the neighborhood names wrongly, and the cover pass is the assignment. The opening cost is
+serving costs what the pattern names wrongly, and the cover pass is the assignment. The opening cost is
 the only thing standing between the design and memorizing every frame: if opening were free you would put a
 warehouse on every customer. The local search is usually given four moves; here **split**, **merge** and
 **swap** need no machinery of their own. Split is what R14 does — a candidate takes the part of a pattern's
@@ -812,7 +812,7 @@ speech reads the connections without touching them.
 > **T8 — Nothing between activations is read.** Counts move when an activation is saved, when one is evicted, or
 > when a cover changes (R3), and all three happen in the frame the neuron fires. Between activations the forward
 > call does write — what fires next, and the rewards with it, strengthen the neuron's connections (D9) — but **nothing prices
-> them, ever**: no neighborhood, cost or cover reads a connection, and nothing is recomputed in between. The
+> them, ever**: no pattern, cost or cover reads a connection, and nothing is recomputed in between. The
 > connections are read between activations, by the apex, and reading them moves nothing.
 >
 > **So connecting is evidence in escrow.** It changes what the next answer will be and never an answer already
@@ -845,7 +845,7 @@ chooses; two bids from one neuron can both be bought.
 **The cover and R23 are one procedure over two populations.** The neuron runs it over its table against one
 activation's residual; the machine runs it over a frame's bids against the free slots of the board. Both take
 the best ratio, re-measure what is left, and stop when the best remaining does not pay. **The criterion is
-the same in both** — what a neighborhood covers against what it costs to state (D16) — and the price is
+the same in both** — what a pattern covers against what it costs to state (D16) — and the price is
 the same expression on both sides, `1 + |e \ O|`.
 
 **Two things differ, and neither is the procedure.** The populations, so the numbers do (D16) — and in
@@ -863,8 +863,8 @@ That is the shortest file available to it, not a failure.
 ```
 4 after 3   a cover is measured on a residual, and the residual is all of `O` until a round takes from it
 6 after 5   re-centering reads the counts, and the counts only move as activations enter and leave    R3
-7 after 6   the retire test prices against the neighborhoods re-centering has just settled            R5
-8 after 6   the bid carries the pattern's neighborhood, so it must carry the re-centered one          R20
+7 after 6   the retire test prices against the patterns re-centering has just settled                 R5
+8 after 6   the bid carries the pattern, so it must carry the re-centered one                         R20
 8 after 7   a retired pattern must not be bid — it stops competing the instant it leaves the table    R17
 9 after 7   a candidate is built out of the residual, and retiring a pattern enlarges the residual    R14
 10 last     one request carries both moves, so sending it is what settles what they are               R16
@@ -953,7 +953,7 @@ seeded on the neighbor most often in the residual — `g` and `z` are in it this
 margin is read and retired if negative.
 
 Then the offer. `K` applies: both of its neighbors are present. `M` applies too: one of its two neighbors is
-present, and `2 · 1 > 2` fails — so `M` does not apply, and the neuron returns **one bid**, `K`'s neighborhood
+present, and `2 · 1 > 2` fails — so `M` does not apply, and the neuron returns **one bid**, `K`'s neighbors
 and `K`'s child. Had `M` named `g` alone, it would have applied and been offered beside `K`, cover or no cover.
 
 **The election runs.** Say a neighbor's accepted bid takes `a`, and `K`'s bid is bought on `b` and the bidder.
@@ -1003,7 +1003,7 @@ flowchart TD
     B --> M["BUILD ONE candidate<br/>seed, population, collapse, price — R19 step 3"]
     M --> DEL["RETIRE ONE<br/>the worst margin, if strictly negative — R19 step 4"]
     DEL --> P["OFFER, and one request<br/>a bid for every pattern that applies — R19 step 5"]
-    P -.->|"bids: child id + neighborhood"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R23"]
+    P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R23"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §12"]
     O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §9.2"]
     Z --> W["PROCESS ACTIONS, every open activation at its own age<br/>activations and rewards in; from the apex,<br/>expectations and inferences out — §10.3"]
@@ -1102,7 +1102,7 @@ not a re-scan.**
 which already excludes everything an earlier election credited. D25's board. R26's frontier. And the fact that
 the election delivers nothing to any neuron.
 
-**On R23 — why nothing has to be handed back.** A promoted neuron's neighborhood *is* its dictionary line (R20),
+**On R23 — why nothing has to be handed back.** A promoted neuron's pattern *is* its dictionary line (R20),
 so expanding it recovers every neighbor it names, credited or not: coverage is a fact about what the accepted
 neurons expand to, and the assignment has no power over it. The old pass needed a third step to make the
 bookkeeping match that, because a slot held by a rejected bid would otherwise read as uncovered and stand as
@@ -1126,7 +1126,7 @@ some and loses some, and a pattern consistently outbid on the same ground is not
 is, [algorithm-evaluation.md](algorithm-evaluation.md) says what to measure.
 
 **What is given up.** Greedy is the classical approximation for weighted set cover, and its slack against the
-optimum is bounded — `H(n)`, where `n` is the largest neighborhood offered (§17). What it does not give is the
+optimum is bounded — `H(n)`, where `n` is the largest pattern offered (§17). What it does not give is the
 optimum itself, and the case it loses is a boundary one: two chunks sharing a boundary neuron is how a stream
 tiles, and the bid that loses that neuron simply counts one fewer. Accepted deliberately, and cheaply —
 **contraction mints nothing that lasts**, so a marginal cover costs a bounded handful of lines and nothing
@@ -1146,7 +1146,7 @@ structural.
 
 **What settlement settles is the election, not the file.** It marks the point past which no further bid can
 reach a frame. What the winning neurons then *expand to* is the current dictionary's business:
-neighborhoods keep re-centering underneath them, and a child whose pattern has been deleted stops being
+patterns keep re-centering underneath them, and a child whose pattern has been deleted stops being
 available at all, so the run is re-encoded from what remains. **Contraction settles who covers what; D12
 settles what that costs to say.**
 
@@ -1240,7 +1240,7 @@ temporal or mixed, rather than being whichever the phase that minted it allowed.
 neighbor in its own frame and one two frames back is an ordinary pattern, and there is no stage at which it
 would have been unrepresentable.
 
-**On R25 — there is no spatial stack that resolves before a temporal one.** A neighborhood names offsets, and
+**On R25 — there is no spatial stack that resolves before a temporal one.** A pattern names offsets, and
 nothing in the rule distinguishes a spatial component from a temporal one, so the two are compressed together
 by construction rather than in sequence.
 
@@ -1469,7 +1469,7 @@ R18 and R23 are one procedure, and that procedure is ratio-greedy weighted set c
 set with cost `price`, and every slot also has a singleton set of cost 1, standing as its own line. Chvátal's
 bound (1979) applies directly — the cover the greedy returns costs at most `H(n)` times the cheapest cover
 buildable from the same sets, where `H(n) = 1 + 1/2 + … + 1/n ≈ ln n` and `n` is the largest set's size, here
-the largest neighborhood offered. **So per frame the machine's body term is within `H(n)` of the best it
+the largest pattern offered. **So per frame the machine's body term is within `H(n)` of the best it
 could have done with the bids it was offered**, and the one-pass election this replaced had no such bound.
 
 ## Not provable, and why
@@ -1489,7 +1489,7 @@ own file; nothing descends the sum, and a proof cannot be had without a rule the
 have.
 
 **Beyond a local optimum.** Greedy cover plus coordinate descent — hold covers and take the majority, hold
-neighborhoods and re-derive covers — reaches a state in which no single move shortens the file. It does not
+patterns and re-derive covers — reaches a state in which no single move shortens the file. It does not
 reach the shortest file. Weighted set cover is NP-hard and `ln n` is within a constant of the best any
 polynomial-time procedure achieves in general, so the `H(n)` ceiling is where every practical design stops, not
 a weakness of this one.

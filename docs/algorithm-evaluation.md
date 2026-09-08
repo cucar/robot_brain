@@ -252,7 +252,7 @@ of this needs revisiting.
 the same reach. Whether one reach is right — "how much do I need to recognize myself" and "how far do I need to
 expect" are different questions — is unresolved, and it matters more now that the connections are the whole of
 the machine's expectation. One reach is the committed choice; separate reaches are the fallback if diagnostics
-show neighborhoods consistently reaching the bound in one direction only. **The same doubt applies across
+show patterns consistently reaching the bound in one direction only. **The same doubt applies across
 activation dimensions**: D4 grows every one of them by the same factor, which holds only if contraction thins
 them equally, and a channel whose patterns chunk harder in time than in space would want otherwise.
 **Diagnostic:** mean spacing per activation dimension, per level, against the isotropic prediction.
@@ -267,8 +267,8 @@ winner was placed by a base voter over a pattern voter that disagreed, and which
 
 **The cross-neuron seam.** R4's abstention teaches a pattern not to name what another pattern of the *same
 cover* holds. Across neurons nothing teaches it: a neighbor some other neuron's child reliably covers is still
-present, still wins its majority, and stays in the neighborhood, paying its slot in the line. This is the same
-omission as the neuron never hearing what it sold, seen from the neighborhood's side rather than the bid's,
+present, still wins its majority, and stays in the pattern, paying its slot in the line. This is the same
+omission as the neuron never hearing what it sold, seen from the pattern's side rather than the bid's,
 and it is the same bet. The one-bit fallback above would not close it; closing it takes the per-neighbor report
 the design removed. **Diagnostic:** per pattern, the share of its named neighbors that its bought bids were
 never credited for, over its life.
