@@ -7,7 +7,7 @@ them.
 
 ## Neuron state
 
-The complete per-neuron state, D17 read as storage. Sets are sorted id lists; nothing stores a frame number.
+The complete per-neuron state, D16 read as storage. Sets are sorted id lists; nothing stores a frame number.
 
 ```
 id                                          // (dim, bucket) at base; opaque id above
@@ -16,7 +16,7 @@ id                                          // (dim, bucket) at base; opaque id 
 patterns:     Map<pattern_id, {
                  neighborhood,              // sorted set of (neuron, offset ≤ 0); the line; moves at re-center
                  child,                     // the pattern neuron one level up
-                 counts }>                  // per (neuron, offset ≤ 0) over the activations it covers, credited only
+                 counts }>                  // present, held and n per (neuron, offset ≤ 0) — see Pattern counts
 
 // the evidence
 history:
@@ -33,9 +33,9 @@ actions:      Map<(action_neuron, offset > 0), { strength, estimate }>  // event
 **What must always hold.** Each is checkable in a test by recomputing from the ring and comparing against the
 incrementally maintained state:
 
-- Every pattern's `counts` equal a from-scratch recount over the activations whose held cover holds it, restricted
-  to the neighbors assigned to it. Its `neighborhood` is R7's collapse over those counts, with the line
-  charged and equality held.
+- Every pattern's `counts` equal a from-scratch recount over the activations whose held cover holds it — `present`
+  and `held` per slot as defined under Pattern counts below. Its `neighborhood` is R7's collapse over those counts,
+  with the line charged and equality held.
 - Every activation's `cover` is one R9 could have produced against some past table, and no re-derivation against
   the current table is strictly cheaper than it (R10).
 - `actions` only ever grows: no strength falls, and a connection leaves only with the death of either of its
@@ -46,11 +46,88 @@ incrementally maintained state:
 rather than a rescan; whether `cover` is stored as pattern ids or as an index the way the old histogram stored
 servers; and what the three-way comparison in R10 costs when a candidate is installed against a full ring. The
 old histogram, `normal`, `fallback` and running-benefit structures are retired: the spec has no default
-pattern (D19) and no per-activation server, and the benefit is R12's margin read off `counts`.
+pattern (D21) and no per-activation server, and the benefit is R12's margin read off `counts`.
+
+## Pattern counts
+
+The collapse (R7) reads two numbers per pattern per slot: how many activations are in the population there, and how
+many of them name the neuron there. Both are sums over the activations the pattern covers, and the code keeps them
+as running tallies so that re-centering never re-reads the ring. Nothing in this section is design: every tally
+equals a from-scratch recount, and the invariant above checks that it does.
+
+**What a pattern keeps.** Over exactly the activations it covers, two sparse tallies per `(neuron, offset)` —
+indexed by the neighbors actually seen, not by everything the box admits — and `n`, the number of activations it
+covers:
+```
+present(p)   the covered activations in which p fired and no other pattern of that activation's cover
+             holds it — its own share plus the residual
+held(p)      the covered activations in which another pattern of the cover holds p
+```
+At slot `p` the collapse's population is `n − held(p)` and its count is `present(p)`. A pattern therefore tallies
+neighbors it does not name, because whether it should name them is the question re-centering asks (R8), and a
+slot only the residual has ever held is how a pattern grows. A neighbor another pattern of the same cover holds is
+that pattern's evidence, not this one's, and is counted here only as an abstention; a neighbor in the residual is
+nobody's yet, and is evidence for every pattern of the cover.
+
+**What moves them.** The three events R8 names, and every one of them moves a whole activation's worth:
+```
+an activation is saved          every pattern of its cover adds the activation's contribution — one to `n`,
+                                `present` for each neighbor it holds or the residual holds, `held` for
+                                each neighbor another pattern of the cover holds
+an activation is evicted        every pattern of its cover subtracts the same; no connection is
+                                touched (R31)
+an activation's cover changes   every pattern of the old cover subtracts the activation's old contribution,
+                                every pattern of the new cover adds its new one
+```
+A pattern that stays in a changed cover still subtracts and re-adds, because what the other patterns took or gave
+back moves its `present` and `held`. An activation whose cover has changed takes its counts with it, so the pattern
+that received an activation's share is always the pattern that gives it back, and a share moves whole, so a
+pattern joining or leaving a cover transfers it in `O(offsets)`. Counts move only in `process frame`, so
+re-centering costs nothing to trigger: the counts it reads are current by the time the call reaches it.
+
+**In dependency order**, so the list also says what to recompute when something moves:
+```
+activation.cover          =  the patterns covering its neighborhood, chosen by R9 and held by R10
+activation.assignment[n]  =  the pattern of the cover credited with present neighbor n — none, when
+                             n is in the residual
+pattern.counts            =  Σ over the activations it covers: its share and the residual as
+                             `present`, what other patterns of the cover hold as `held`
+```
+
+**The ring makes eviction exact.** Removing the oldest activation means subtracting the neighbors *it* contributed,
+which a tally cannot recover, so each activation keeps its own neighborhood and a pattern's counts are the cached
+aggregate over them. Eviction reads a neighborhood whole; everything else reads it per slot, off the counts.
+
+**Why records and not a summary.** A total cannot answer retirement: when a pattern goes, its neighbors
+have to be re-covered from the table, which needs the activations and what each holds against each pattern — a
+single number per pattern could not produce it. Keeping the ring is not a storage saving; it buys that both
+tests scan distinct backward contexts and read pre-summed counts.
+
+**Why a pattern tallies neighbors it does not name.** A pattern used to count only the neighbors
+assigned to it. That is enough to decide whether to *keep* a named slot and never enough to decide whether to
+*enter* one: a neighbor the pattern does not name is never assigned to it, so its count was identically zero
+and R7 could never take it. R7's abstention paragraph says a pattern grows into the residual, and the state as
+defined could not support that sentence; R8's claim that re-centering needs no pass of its own was not true of
+the one count that growth depends on.
+
+The fix is the smallest that makes R7 exact. At each slot R7 wants two numbers: how many covered activations had
+the neighbor there and unclaimed by another pattern of the cover, and how many abstain because another pattern
+holds it. Those are `present(p)` and `held(p)`, and the population is `n − held(p)`. Both are sparse — indexed
+by neighbors actually seen — and both move a whole activation's worth at a time, so the granularity above is
+unchanged. The one new obligation is the third event above: when an activation's cover changes, a pattern that
+*stays* in the cover still subtracts and re-adds, because what another pattern took from the residual moves this
+pattern's `present` to `held`, or back.
+
+**Worked case.** `e = {b@0, c@0}` covers ten activations and `d@0` begins to appear. `d` is residual in every
+activation that has it, so `present_e(d)` climbs by one per such activation while `held_e(d)` stays zero. At
+`2 · present_e(d) > 11` — six of ten — re-centering enters `d` and `e` becomes `{b, c, d}`. The four activations
+without `d` now price `e` at 2, which is what they were paying before (line plus one residual), so R10 lets them
+keep it, and they evict in turn. **No candidate could have done this**: a candidate is built on the residual alone (R14), `b` and
+`c` are held by `e` in those activations, and `{d}` alone saves nothing (R15).
 
 ## The machine–neuron interface
 
-**The machine owns the open activations; the neuron owns its table, its history and its connections** (D6, D17).
+**The machine owns the open activations; the neuron owns its table, its history and its connections** (D9, D16).
 An open activation is `(position, age, covered at, its activation)`, held one per `(neuron, age, position)` on the
 machine side. Nothing about a frame lives in the neuron.
 
@@ -90,7 +167,7 @@ R20's five passes, in order. All prices are D22's fit over `O⁻`; all sums run 
 
 **`cover_and_fold(O)`** — pass 1. R9 steps 1 and 2 over the current table: the greedy cover by ratio, the
 assignment by first-namer. Push the activation with its cover and assignment; if the ring was full, pop the oldest
-and subtract its contribution from its cover's counts (R6). The connections are untouched. Add the new activation's
+and subtract its contribution from its cover's counts (Pattern counts). The connections are untouched. Add the new activation's
 contribution to its cover's counts.
 
 **`recenter()`** — pass 2. Every pattern whose counts moved re-collapses per slot with the line charged and
@@ -250,7 +327,7 @@ forward-side deltas are the numbered list in the section above and land in Stage
 3. **Replace the server with the cover.** Routing chooses one closest entry today; it becomes R9's greedy
    cover by ratio with the first-namer assignment, and both are written into the activation.
 4. **Delete the normal.** `spatial_normal_config`, `refresh_normal_config`, `served`, `spatial_target_channels`
-   and the channel plumbing that feeds it go. The spec has no default pattern (D19); what no pattern covers is
+   and the channel plumbing that feeds it go. The spec has no default pattern (D21); what no pattern covers is
    the residual, one line each.
 5. **Replace the delete scan with R18.** `spatial_delete_candidate` and `spatial_delete_candidate_uncached` are
    deleted outright. Retire becomes: read every margin off `counts`, retire the smallest if strictly negative,
