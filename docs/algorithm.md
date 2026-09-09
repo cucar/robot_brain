@@ -322,7 +322,10 @@ carries the action executing in that same frame (if there is one).
 > the rewards      for that action, and for the actions of earlier frames the reward spans,
 >                  each at the distance its frame names                                       R29, R33
 > ```
-> The machine holds the activation open, not the neuron.
+> The machine holds the activation open, not the neuron:
+> ```
+> open activation  =  (the activation, its age, covered at)      one per (neuron, age, position)
+> ```
 >
 > **Age is per activation, and a neuron can carry several ages at once.** An activation's age is the frames
 > elapsed since it fired, `0` through `reach_t`; a new activation is the one at age 0. **Age is read, not just
@@ -332,6 +335,11 @@ carries the action executing in that same frame (if there is one).
 > **Covered at** is the age at which an accepted bid first covered the activation, none until one does.
 > Coverage is acquired late and never revoked (R27), so this one number says for every frame of the window
 > whether the activation stood on the apex there: it did at every age before it, and at none from it on.
+>
+> **An open activation carries no commitment beyond that one number.** It holds its neighborhood, the age it
+> was covered at, and nothing else, because everything else it was going to decide was decided at age 0 (R1).
+> What it does for the rest of its life is connect to what ran and speak from its connections while it is on
+> the apex, and that is Part III.
 
 > **D10 — Inhibition.** A neuron an accepted bid covers does not stand in the file, does not infer actions,
 > and does not connect to the action that runs. **A neuron is covered only after it has fired** (R27), so
@@ -437,19 +445,11 @@ Part III covers the `process actions` call, where a neuron learns what action fo
 >
 > history          = the last H activations, oldest first
 > activation       = (position, neighborhood, cover, assignment)
->
-> held by the machine, not the neuron (D9):
-> open activation  = (the activation, its age, covered at)  one per (neuron, age, position)
 > ```
 > An `id` is creation order, a handle that survives re-centering and the tie-break R9 and R24 reach for.
 >
-> **No activation carries a frame number**, and nothing anywhere holds absolute time: an open activation's `age`
-> is a counter, and `covered at` is the age at which an accepted bid first covered it (D9).
->
-> **An open activation carries no commitment beyond that one number.** It holds its neighborhood, the age it
-> was covered at, and nothing else, because everything else it was going to decide was decided at age 0 (D9).
-> What it does for the rest of its life is connect to what ran and speak from its connections while it is on
-> the apex, and that is Part III.
+> **No activation carries a frame number**, and nothing anywhere holds absolute time; what the machine keeps of
+> when an activation fired is its age, a counter (D9).
 >
 > **The cover is the set of patterns chosen to explain an activation's neighborhood**, chosen once, when the
 > activation is saved (R9). Each pattern of the cover is credited the neurons it names that fired — its `covered`
