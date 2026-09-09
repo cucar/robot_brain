@@ -439,10 +439,8 @@ Part III covers the `process actions` call, where a neuron learns what action fo
 
 > **D16 — Neuron state.**
 > ```
-> neuron           = (coordinate, patterns, history)      and its connections, defined in Part III  D25
->
-> pattern          = (id, neighbors, child)               the neighbors are what it is
->
+> neuron           = (coordinate, patterns, history, connections)      connections defined in Part III D25
+> pattern          = (id, neighbors, child)               patterns name the neighbors and activate child
 > history          = the last H activations, oldest first
 > activation       = (position, neighborhood, cover, assignment)
 > ```
