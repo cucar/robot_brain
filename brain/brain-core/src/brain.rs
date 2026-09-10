@@ -38,7 +38,7 @@ use crate::types::{
 
 /// Laplace-style floor added inside the Nb consensus log so a zero posterior (reward == 0) doesn't send a
 /// candidate to negative infinity. Out-of-range rewards (< 0 or > 1) are rejected upstream, not floored.
-const NB_EPS: f64 = 1e-3;
+const NB_EPS: f64 = 1e-6;
 
 // ── Re-exports for the N-API layer ──────────────────────────────────────────
 // These types live in crate-private modules but are part of Brain's public API.
@@ -58,11 +58,11 @@ struct FramePoint {
 /// Resolved frame neurons, split by role.
 ///
 /// `events` are this frame's quantized observations from the input scalars.
-/// They drive the spatial co-activation sweep and are the only thing activated in spatial[0].
+/// They drive the spatial co-activation and are the only thing activated in spatial[0].
 ///
 /// `actions` are the actions inferred by the previous frame's vote, carried forward.
 /// They bypass spatial entirely and get injected into temporal[0] alongside the spatial apex set,
-/// so the temporal sweep sees both "what just happened" (events through spatial) and
+/// so temporal processing sees both "what just happened" (events through spatial) and
 /// "what the agent just did" (carry-forward actions).
 struct FrameNeurons {
     events: Vec<PointLookup>,
@@ -134,6 +134,11 @@ pub struct FrameVote {
 pub struct InspectedNeuron {
     pub neuron_id: NeuronId,
     pub temporal_level: Level,
+    pub spatial_level: Level,
+    /// Channel of the neuron's own anchor coordinate: for sensory neurons their registered
+    /// channel, for spatial-correction neurons the founding pixel's channel (inherited at mint —
+    /// see thalamus.rs allocate_spatial_pattern_neuron). None only for coordinate-less neurons.
+    pub channel_id: Option<ChannelId>,
     pub parent_id: Option<NeuronId>,
     /// (context_neuron_id, distance, strength) tuples from the parent's
     /// routing-table entry for this child pattern.
@@ -289,14 +294,23 @@ struct DimBestEntry {
     strength: f64,
 }
 
-/// Output of a single phase's level-sweep. Spatial and temporal share the same shape; only
-/// `fired_set` / `subsumed_set` are consumed (by the apex handoff) and only on the spatial side.
-struct SweepResult {
+/// Output of spatial processing.
+/// The two sets feed the apex handoff: everything that activated, and everything whose child
+/// pattern fired one level up and therefore no longer represents itself. The spatial phase creates
+/// and commits its children inline in the thalamus, so it defers no neuron specs.
+struct SpatialProcessingResult {
+    fired_set: FxHashSet<NeuronId>,
+    subsumed_set: FxHashSet<NeuronId>,
+    /// Neurons inhibited by contraction (covered by a winning bid, winners excluded). They contributed
+    /// nothing, so their inline normal-serve record is dropped from their history.
+    inhibited_set: FxHashSet<NeuronId>,
+}
+
+/// Output of temporal processing.
+struct TemporalProcessingResult {
     votes: Vec<FlatVote>,
     neuron_specs: Vec<NeuronCreateSpec>,
     dispatch_results: Vec<Vec<crate::column::ColumnProcessResult>>,
-    fired_set: FxHashSet<NeuronId>,
-    subsumed_set: FxHashSet<NeuronId>,
 }
 
 // ── Brain ───────────────────────────────────────────────────────────────────
@@ -319,13 +333,19 @@ pub struct Brain {
     /// harness actually consumes the per-vote detail.
     emit_votes: bool,
 
+    /// Frames processed while learning was disabled. The substrate clock (which drives forgetting,
+    /// activation decay, and reaping) is the frame counter minus this, so a frozen evaluation pass
+    /// ages nothing — decay resumes exactly where it stopped when learning turns back on.
+    disabled_frames: FrameNumber,
+
     /// When true (default), process_frame mutates connections and learns error correction patterns.
     /// When false, process_frame skips forget/decay and error-correction pattern neuron creation.
     /// It also skips event→event connection strengthening, child-activation strengthening, and accuracy-stats tracking.
     /// Sensory neuron creation (op-1) still runs because without it the frame cannot be processed at all.
     /// Pattern activation and voting still run.
     /// The harness still reads predictions out of FrameResult.inferences exactly as during training.
-    /// The supervised evaluation path is `set_learning(false)` followed by ordinary `process_frame` calls.
+    /// The supervised evaluation path is a SEPARATE brain instance constructed frozen (learning=false)
+    /// from a saved backup, running ordinary `process_frame` calls.
     learning: bool,
 
     /// Current frame data from all channels (rebuilt each frame).
@@ -365,6 +385,11 @@ impl Brain {
     /// * `columns` — C — number of columns per region (1 for single-thread)
     /// * `consensus_mode` — how action votes combine into a winner ('democratic' | 'nb')
     /// * `debug` — enable verbose logging
+    /// * `learning` — fixed for the life of the instance: train with true and save; load into a fresh
+    ///   instance constructed with false for frozen evaluation
+    ///
+    /// The trailing parameters are TEMPORARY experimental toggles for the spatial mechanisms
+    /// under test — each is deleted when its experiment concludes; this list must shrink.
     pub fn new(
         context_length: u32,
         group_threshold: f64,
@@ -374,13 +399,16 @@ impl Brain {
         columns: usize,
         consensus_mode: ConsensusMode,
         debug: bool,
+        learning: bool,
+        horizon: u32,
     ) -> Self {
         Self {
             context_length,
             debug,
             consensus_mode,
             emit_votes: false,
-            learning: true,
+            learning,
+            disabled_frames: 0,
             frame: Vec::new(),
             rewards: Vec::new(),
             frame_number: 0,
@@ -394,6 +422,8 @@ impl Brain {
                 group_mode,
                 regions,
                 columns,
+                learning,
+                horizon,
             ),
             memory: Memory::new(debug, context_length),
         }
@@ -418,6 +448,17 @@ impl Brain {
         self.thalamus.set_spatial_neighbors(name, neighbor_names);
     }
 
+    /// Declare per-level SPATIAL neighbor sets for a registered channel — the level-based radius.
+    /// See `Thalamus::set_spatial_neighbor_levels`.
+    pub fn set_spatial_neighbor_levels(&mut self, name: &str, neighbor_names_by_level: &[Vec<String>]) {
+        self.thalamus.set_spatial_neighbor_levels(name, neighbor_names_by_level);
+    }
+
+    /// Set a channel's 2D retinotopic position — see `Thalamus::set_channel_position`.
+    pub fn set_channel_position(&mut self, name: &str, x: i32, y: i32) {
+        self.thalamus.set_channel_position(name, x, y);
+    }
+
     /// Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
     /// See `Thalamus::set_temporal_neighbors`.
     pub fn set_temporal_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
@@ -436,14 +477,6 @@ impl Brain {
     /// Inference/debug harnesses that consume votes flip this on.
     pub fn set_emit_votes(&mut self, enabled: bool) {
         self.emit_votes = enabled;
-    }
-
-    /// Toggle the master learning flag.
-    /// See `Brain.learning` for the list of mutating operations that get skipped when learning is off.
-    /// Voting and inference still run, so `process_frame` continues to populate FrameResult.inferences identically.
-    /// Only the learning side effects are suppressed.
-    pub fn set_learning(&mut self, learning: bool) {
-        self.learning = learning;
     }
 
     /// Inspect the current learning flag (test-only).
@@ -549,7 +582,9 @@ impl Brain {
 
         // votes.csv: neuron_id, activation_offset, voted_neuron_id, strength, reward, distance
         let mut vote_rows: Vec<Vec<String>> = Vec::new();
-        for (id, frame, _level, state) in &activations {
+        // level is not part of this CSV's schema (see column comment above) — active_neurons.csv is
+        // the only export that needs it.
+        for (id, frame, _, state) in &activations {
             let offset = frame - self.frame_number;
             if let Some(ref votes) = state.votes {
                 for vote in votes {
@@ -565,7 +600,9 @@ impl Brain {
 
         // context_refs.csv: neuron_id, activation_offset, ref_neuron_id, ref_distance
         let mut ref_rows: Vec<Vec<String>> = Vec::new();
-        for (id, frame, _level, state) in &activations {
+        // level is not part of this CSV's schema (see column comment above) — active_neurons.csv is
+        // the only export that needs it.
+        for (id, frame, _, state) in &activations {
             let offset = frame - self.frame_number;
             if let Some(ref ctx) = state.context {
                 for entry in ctx {
@@ -771,11 +808,13 @@ impl Brain {
     /// for level-0 sensory neurons (no parent → no stored context).
     pub fn inspect_neuron(&self, neuron_id: NeuronId) -> InspectedNeuron {
         let temporal_level = self.thalamus.get_neuron_temporal_level(neuron_id).unwrap_or(0);
+        let spatial_level = self.thalamus.get_neuron_spatial_level(neuron_id);
+        let channel_id = self.thalamus.get_neuron_channel_id(neuron_id);
         let parent = self.thalamus.get_neuron_parent(neuron_id);
         let context = parent
             .and_then(|_| self.thalamus.get_pattern_context_entries(neuron_id))
             .unwrap_or_default();
-        InspectedNeuron { neuron_id, temporal_level, parent_id: parent, context }
+        InspectedNeuron { neuron_id, temporal_level, spatial_level, channel_id, parent_id: parent, context }
     }
 
     /// Inspection: dump a neuron's outgoing connections. Returns
@@ -789,6 +828,12 @@ impl Brain {
         self.thalamus.get_spatial_correction_count()
     }
 
+    /// Diagnostic: cumulative number of spatial children retired by the delete test.
+    /// Paired with the mint count, this is the cold-start churn the Phase-1 gate watches.
+    pub fn get_spatial_deletion_count(&self) -> u64 {
+        self.thalamus.get_spatial_deletion_count()
+    }
+
     /// Diagnostic: number of correction neurons currently sitting above the base spatial level.
     pub fn count_active_spatial_corrections(&self) -> usize {
         self.thalamus.count_active_spatial_corrections()
@@ -798,6 +843,12 @@ impl Brain {
     /// returned[0] = count at level 1, returned[1] = count at level 2, etc. Length = highest level reached.
     pub fn spatial_level_counts(&self) -> Vec<u32> {
         self.thalamus.spatial_level_counts()
+    }
+
+    /// Diagnostic: per-level count of PAID correction neurons. Every child in a routing table has
+    /// passed the one test, so there are no unpaid trial children and this equals [spatial_level_counts].
+    pub fn spatial_level_paid_counts(&self) -> Vec<u32> {
+        self.thalamus.spatial_level_paid_counts()
     }
 
     /// Export a snapshot of all active neurons in context with their levels and phase.
@@ -887,23 +938,21 @@ impl Brain {
         // Skipped in non-learning mode so learned neurons do not decay or get forgotten.
         self.cleanup_dead_patterns(&mut timings);
 
-        // Spatial phase: clear spatial[0], activate sensory events, run d=0 co-activation sweep, mint
+        // Spatial phase: clear spatial[0], activate sensory events, run d=0 co-activation, mint
         // corrections, hand off the apex set (fired \ subsumed) into temporal_level_index[0].
         // Event-only — actions skip spatial entirely. No rewards, no inference performance tracking.
-        let spatial = self.process_spatial(&frame_neurons.events, &mut timings);
+        self.process_spatial(&frame_neurons.events, &mut timings);
 
         // Temporal phase: push rewards, inject carry-forward actions into temporal[0] alongside spatial's
-        // apex set, track inference performance for last frame's predictions, run the d>0 sequence sweep.
+        // apex set, track inference performance for last frame's predictions, run the d>0 sequences.
         let temporal = self.process_temporal(rewards, &frame_neurons.actions, &mut timings);
 
-        // Op-4 + Op-5: flush deferred neuron creation and contextRef updates across both phases.
-        // Spatial-correction specs are already folded into spatial.neuron_specs by process_spatial.
-        // Partial-move spec/dispatch fields out of both sweeps so we can keep temporal.votes owned
-        // and pass it into inference without cloning.
+        // Op-4 + Op-5: flush deferred neuron creation and contextRef updates. Only the temporal phase
+        // defers these — the spatial phase creates and wires its children inline in the thalamus.
+        // Partial-move spec/dispatch fields out of temporal processing so we can keep
+        // temporal.votes owned and pass it into inference without cloning.
         self.apply_merged_results(
-            spatial.neuron_specs,
             temporal.neuron_specs,
-            spatial.dispatch_results,
             temporal.dispatch_results,
             &mut timings,
         );
@@ -930,7 +979,17 @@ impl Brain {
     /// Called once per frame, at the very top of process_frame, before anything else reads the frame number.
     fn tick_frame(&mut self) {
         self.frame_number += 1;
+        // Frames processed without learning do not advance the substrate clock, so decay and
+        // reaping are frozen for exactly the duration of an evaluation pass.
+        if !self.learning { self.disabled_frames += 1; }
         self.memory.sync_frame(self.frame_number);
+    }
+
+    /// The substrate clock: wall frames minus frames spent with learning disabled.
+    /// Everything that decays — activation strengths, forgetting, reaping — reads this clock;
+    /// the wall frame keeps driving the temporal window so frozen sequence evals still age.
+    fn substrate_frame(&self) -> FrameNumber {
+        self.frame_number - self.disabled_frames
     }
 
     // ── Frame building ──────────────────────────────────────────────────────
@@ -1032,7 +1091,7 @@ impl Brain {
     /// Sensory neurons are level-0 substrate by definition — no thalamus lookup needed for the level.
     /// Age doesn't apply: spatial is fundamentally same-frame and gets wiped each frame, so this
     /// writes only to spatial_level_index (no age_index, no neuron_states, no frame keying).
-    /// Events reach the temporal sweep — if at all — via the apex handoff at the end of spatial
+    /// Events reach temporal processing — if at all — via the apex handoff at the end of spatial
     /// processing, where the non-subsumed survivors get activated in temporal[0] for real.
     fn activate_sensory_events(&mut self, frame_events: &[PointLookup], timings: &mut FrameTimings) {
         let t = Instant::now();
@@ -1044,7 +1103,7 @@ impl Brain {
 
     /// Inject the previous frame's inferred actions, carried forward, into temporal[0].
     /// Actions bypass spatial entirely — they're motor outputs, not perceptual co-activation context.
-    /// They land alongside spatial's apex set in temporal_level_index[0], so the temporal sweep sees
+    /// They land alongside spatial's apex set in temporal_level_index[0], so temporal processing sees
     /// both "what just happened" (events through the spatial pipeline) and "what the agent just did".
     /// Action neurons are level-0 substrate, so we pass level=0 directly without a thalamus lookup.
     fn activate_carry_forward_actions(&mut self, frame_actions: &[PointLookup], timings: &mut FrameTimings) {
@@ -1073,21 +1132,16 @@ impl Brain {
 
     // ── Level processing ────────────────────────────────────────────────────
 
-    /// Run the spatial level-by-level sweep over `spatial_level_index`.
+    /// Run spatial processing level by level over `spatial_level_index`.
     /// Walks levels bottom-up: at each level, runs the d=0 co-activation pass over every active
     /// neuron, activates any matched higher-level pattern at level+1, and stops when no new
     /// activations push the max-level higher.
     ///
     /// Returns accumulated votes, deferred neuron creation specs, raw dispatch results, plus the
     /// fired set and the subsumed set that the apex handoff consumes to bridge spatial → temporal.
-    /// Per-section timings are written into `timings` (with `+=` so the temporal sweep's flush
+    /// Per-section timings are written into `timings` (with `+=` so temporal processing's flush
     /// folds into the same buckets).
-    fn process_spatial_levels(&mut self, timings: &mut FrameTimings) -> SweepResult {
-
-        // The sensory axis the thalamus uses for vote-error evaluation and connection learning.
-        // For spatial this is the co-active set at level 0 of the spatial index — a single set,
-        // no recency dimension.
-        let sensory_neurons = self.memory.get_spatial_base_level();
+    fn process_spatial_levels(&mut self, timings: &mut FrameTimings) -> SpatialProcessingResult {
 
         // Maximum currently-active spatial level. Walked bottom-up; can grow as patterns at
         // higher levels fire and get activated.
@@ -1097,10 +1151,6 @@ impl Brain {
         // their own level (prevents double connection-learning and context leak).
         let mut new_error_pattern_ids: FxHashSet<NeuronId> = FxHashSet::default();
 
-        // Accumulate votes, new neuron specs, and dispatch results across levels.
-        let mut votes = Vec::new();
-        let mut neuron_specs = Vec::new();
-        let mut dispatch_results = Vec::new();
         let mut neuron_timings = crate::neuron::NeuronOpTimings::default();
         let mut orch_timings = crate::thalamus::OrchestrationTimings::default();
         let mut mem_timings = MemoryTimings::default();
@@ -1109,42 +1159,64 @@ impl Brain {
         // The apex set is `fired \ subsumed` and feeds `temporal_level_index[0]` via the handoff.
         let mut fired_set: FxHashSet<NeuronId> = FxHashSet::default();
         let mut subsumed_set: FxHashSet<NeuronId> = FxHashSet::default();
+        let mut winner_set: FxHashSet<NeuronId> = FxHashSet::default();
+        // Children the one test retired across levels — created/committed in the thalamus this frame; the
+        // brain purges them from its active-set memory afterwards.
+        let mut deleted_all: Vec<NeuronId> = Vec::new();
+
+        // Each active unit's anchor — the base neuron it sits on — carried up the levels so each level
+        // can place its units relative to one another and derive adjacency by occlusion. At the base a
+        // neuron anchors on itself; a promoted unit inherits the anchor of the bidder that won it, so an
+        // anchor stays a single cell no matter how much the unit covers.
+        let mut anchors: FxHashMap<NeuronId, NeuronId> = FxHashMap::default();
 
         // Process neurons level-by-level — Op-3 dispatch is the only per-level round-trip.
         let mut level: Level = 0;
         loop {
             if self.debug { println!("Processing Spatial level {}", level); }
 
-            // Get the level's active neuron ids. Spatial neurons carry no per-neuron state, so
-            // this is just a flat set.
+            // The level's active neuron ids serve both roles under lateral inference: they identify
+            // each neuron (context) and they are what it predicts (inference). Spatial neurons carry
+            // no per-neuron state, so this is just a flat set. Level 0 needs no special case — its
+            // own level IS the sensory set.
             let t = Instant::now();
             let level_neuron_ids = self.memory.get_spatial_level_neurons(level);
             mem_timings.get_level_neurons += t.elapsed().as_secs_f64();
 
-            // Snapshot what fired at this level. Used by the apex handoff after the sweep.
+            // Snapshot what fired at this level. Used by the apex handoff at the end.
             for &nid in &level_neuron_ids { fired_set.insert(nid); }
+
+            // At the base, every neuron anchors on itself; higher levels inherit their anchors from the
+            // level below's election (set at the end of the previous iteration).
+            if level == 0 {
+                anchors = level_neuron_ids.iter().map(|&id| (id, id)).collect();
+            }
 
             // Process the level: aggregate view, match spatial patterns, generate d=0 votes.
             let result = self.thalamus.process_spatial_level(
                 level,
                 &level_neuron_ids,
-                &sensory_neurons,
-                self.frame_number,
-                &mut new_error_pattern_ids,
+                &anchors,
+                self.substrate_frame(),
                 self.learning,
+                &mut new_error_pattern_ids,
             );
             orch_timings.add(&result.orchestration);
 
             // Spatial state is ephemeral — nothing to write back, by design.
 
-            // Activate matched patterns at level+1. Each activation marks its parent_id as
-            // subsumed — that parent's role this frame is already represented by the
-            // higher-level pattern it activated.
+            // Contraction promoted a subset of this level's fired children to units at level+1; only
+            // those propagate. Every neuron a surviving bid covers is subsumed — its role is already
+            // represented by the promoted unit — so the apex is what contraction left uncovered.
             let t = Instant::now();
             for activation in &result.activations {
                 self.memory.activate_spatial_pattern(activation.pattern_id, level + 1);
-                subsumed_set.insert(activation.parent_id);
+                // A promoted bid's own neuron won and propagated — it contributed, so it is NOT inhibited
+                // even though it sits in its own covered set.
+                winner_set.insert(activation.parent_id);
             }
+            for &id in &result.subsumed { subsumed_set.insert(id); }
+            deleted_all.extend(result.deleted.iter().copied());
             mem_timings.activate_patterns += t.elapsed().as_secs_f64();
 
             // If we produced any activations, push the max active level up.
@@ -1153,22 +1225,31 @@ impl Brain {
                 if new_level > max_active_level { max_active_level = new_level; }
             }
 
-            // Accumulate this level's votes, neuron specs, and dispatch results.
-            votes.extend(result.votes);
-            neuron_specs.extend(result.neuron_specs);
+            // Fold this level's per-neuron op timings into the running totals.
             for col_res in &result.results { neuron_timings.add(&col_res.timings); }
-            dispatch_results.push(result.results);
+
+            // Carry the promoted units' anchors up so the next level can place them against each other.
+            anchors = result.unit_anchors;
 
             // If we reached the top of the active hierarchy, exit.
             if level as usize >= max_active_level { break; }
             level += 1;
         }
 
-        Self::flush_sweep_timings(timings, &neuron_timings, &orch_timings, &mem_timings);
-        SweepResult { votes, neuron_specs, dispatch_results, fired_set, subsumed_set }
+        // Purge the retired children (created/committed in the thalamus this frame) from the active-set
+        // memory so temporal processing does not dispatch a neuron its column no longer owns.
+        if !deleted_all.is_empty() { self.memory.purge_neurons(&deleted_all); }
+
+        // Inhibited = covered by a winning bid, excluding the winners themselves — a normal-serve a
+        // neighbor's unit now represents. Its inline record is dropped so it does not read as serving
+        // its neighborhood badly (docs/algorithm.md, "Contraction").
+        let inhibited_set: FxHashSet<NeuronId> = subsumed_set.difference(&winner_set).copied().collect();
+
+        Self::flush_processing_timings(timings, &neuron_timings, &orch_timings, &mem_timings);
+        SpatialProcessingResult { fired_set, subsumed_set, inhibited_set }
     }
 
-    /// Run the temporal level-by-level sweep over `temporal_level_index`.
+    /// Run temporal processing level by level over `temporal_level_index`.
     /// Walks levels bottom-up: at each level, runs the d>0 sequence pass over every (active
     /// neuron, age) pair, activates any matched higher-level pattern at level+1, and stops
     /// when no new activations push the max-level higher.
@@ -1176,8 +1257,8 @@ impl Brain {
     /// Returns accumulated votes, deferred neuron creation specs, raw dispatch results, plus the
     /// fired and subsumed sets (populated harmlessly — the apex handoff doesn't consume them on
     /// the temporal side). Per-section timings are written into `timings` (with `+=` so the
-    /// spatial sweep's flush folds into the same buckets).
-    fn process_temporal_levels(&mut self, timings: &mut FrameTimings) -> SweepResult {
+    /// spatial processing's flush folds into the same buckets).
+    fn process_temporal_levels(&mut self, timings: &mut FrameTimings) -> TemporalProcessingResult {
 
         // The sensory axis the thalamus uses for vote-error evaluation and connection learning.
         // For temporal this is the level-0 active set per recency slot — index 0 is the current
@@ -1201,10 +1282,8 @@ impl Brain {
         let mut mem_timings = MemoryTimings::default();
 
         // Fired / subsumed are populated harmlessly on the temporal side — the apex handoff
-        // only consumes them from the spatial sweep — but the SweepResult shape carries them
+        // only consumes them from spatial processing — but the TemporalProcessingResult shape carries them
         // so the spatial and temporal paths share return types.
-        let mut fired_set: FxHashSet<NeuronId> = FxHashSet::default();
-        let mut subsumed_set: FxHashSet<NeuronId> = FxHashSet::default();
 
         // Process neurons level-by-level — Op-3 dispatch is the only per-level round-trip.
         let mut level: Level = 0;
@@ -1218,9 +1297,6 @@ impl Brain {
             let mut level_neurons = self.memory.get_temporal_level_neurons(level);
             mem_timings.get_level_neurons += t.elapsed().as_secs_f64();
 
-            // Snapshot what fired at this level. Harmless for temporal (apex doesn't consume).
-            for &nid in level_neurons.keys() { fired_set.insert(nid); }
-
             // Process the level: aggregate view, recognize temporal patterns, mint error
             // corrections, collect d>0 votes.
             let result = self.thalamus.process_temporal_level(
@@ -1229,9 +1305,8 @@ impl Brain {
                 self.memory.depth(),
                 &sensory_neurons,
                 &self.rewards,
-                self.frame_number,
+                self.substrate_frame(),
                 &mut new_error_pattern_ids,
-                self.learning,
             );
             orch_timings.add(&result.orchestration);
 
@@ -1247,7 +1322,6 @@ impl Brain {
             let t = Instant::now();
             for activation in &result.activations {
                 self.memory.activate_temporal_pattern(activation.pattern_id, level + 1, activation.parent_id, activation.age);
-                subsumed_set.insert(activation.parent_id);
             }
             mem_timings.activate_patterns += t.elapsed().as_secs_f64();
 
@@ -1268,13 +1342,13 @@ impl Brain {
             level += 1;
         }
 
-        Self::flush_sweep_timings(timings, &neuron_timings, &orch_timings, &mem_timings);
-        SweepResult { votes, neuron_specs, dispatch_results, fired_set, subsumed_set }
+        Self::flush_processing_timings(timings, &neuron_timings, &orch_timings, &mem_timings);
+        TemporalProcessingResult { votes, neuron_specs, dispatch_results }
     }
 
-    /// Roll one sweep's sub-bucket accumulators into the frame-level timings. Uses += so spatial
-    /// and temporal sweeps fold into the same fields without overwriting each other.
-    fn flush_sweep_timings(
+    /// Roll one side's sub-bucket accumulators into the frame-level timings. Uses += so spatial
+    /// and temporal fold into the same fields without overwriting each other.
+    fn flush_processing_timings(
         timings: &mut FrameTimings,
         neuron_timings: &crate::neuron::NeuronOpTimings,
         orch_timings: &crate::thalamus::OrchestrationTimings,
@@ -1297,11 +1371,11 @@ impl Brain {
     }
 
     /// Full spatial phase: activate this frame's sensory events in the spatial index, run the d=0
-    /// co-activation sweep, mint and install corrections, and hand off the non-subsumed apex
-    /// set into temporal_level_index[0]. Returns the merged spec batch (sweep + corrections)
+    /// co-activation, mint and install corrections, and hand off the non-subsumed apex
+    /// set into temporal_level_index[0]. Returns the merged spec batch (processing + corrections)
     /// and dispatch results for the deferred-creation flush at the end of the frame.
     /// Spatial is sensory-only — no rewards, no inference performance tracking.
-    fn process_spatial(&mut self, frame_events: &[PointLookup], timings: &mut FrameTimings) -> SweepResult {
+    fn process_spatial(&mut self, frame_events: &[PointLookup], timings: &mut FrameTimings) {
         let t = Instant::now();
 
         // Wipe last frame's spatial state.
@@ -1315,25 +1389,18 @@ impl Brain {
         // Any sensory event subsumed by a higher-level spatial pattern this frame stays out of temporal entirely; only the absorbing pattern represents it.
         self.activate_sensory_events(frame_events, timings);
 
-        // Run the d=0 co-activation sweep over spatial_level_index.
+        // Run the d=0 co-activation over spatial_level_index.
         // Walks every active spatial level, matches the active set against each parent's routing table, casts same-frame predictions, and propagates matched patterns up to level+1.
         // Returns the fired_set (everything that activated anywhere) and subsumed_set (anything whose parent pattern fired at level+1) — the two sets the apex handoff needs.
-        let mut spatial = self.process_spatial_levels(timings);
+        let spatial = self.process_spatial_levels(timings);
 
-        // Mint corrections for parents whose d=0 predictions mismatched the actual fired set.
-        // Each correction is a new pattern that gets installed in its parent's routing table for next frame's matching pass.
-        // Also collects per-parent error-rate samples so dynamic error modes (conservative/neutral/aggressive) have data to adapt their thresholds.
-        // Skipped in eval mode: minting and installing corrections mutates the spatial substrate, so a
-        // setLearning(false) pass must not do it — otherwise the "frozen" eval keeps growing the hierarchy
-        // (corrections install into routing tables that survive resetContext, so an image minted on can vote
-        // on a later one) and the result becomes order-dependent and irreproducible.
+        // New children (error corrections) are now created and fired inside spatial processing itself —
+        // gated on winning the contraction election, in-frame — and retired children are already released
+        // there. The only thing left to settle is contraction's retraction: a normal-serve a winning
+        // neighbor subsumed drops its inline history record so it does not read as serving badly
+        // (docs/algorithm.md, "Contraction"). Skipped in eval — a frozen pass writes no history to drop.
         if self.learning {
-            let correction_specs = self.process_spatial_corrections(&spatial);
-
-            // Fold the freshly-minted correction specs into spatial's spec batch.
-            // The end-of-frame flush in apply_merged_results materializes them alongside temporal's specs in one cross-region pass.
-            // Their install ContextRefUpdates were already dispatched inline by process_spatial_corrections — only the neuron-creation half is deferred.
-            spatial.neuron_specs.extend(correction_specs);
+            self.thalamus.prune_inhibited_spatial_history(&spatial.inhibited_set, self.substrate_frame());
         }
 
         // Lift the apex set (fired \ subsumed) into temporal_level_index[0].
@@ -1341,23 +1408,22 @@ impl Brain {
         self.compute_apex_and_handoff(&spatial.fired_set, &spatial.subsumed_set, timings);
 
         timings.process_spatial = t.elapsed().as_secs_f64();
-        spatial
     }
 
     /// Full temporal phase: push this frame's rewards onto the history, record inference
     /// performance for last frame's predictions vs. this frame's actuals, then run the d>0
-    /// sequence sweep over `temporal_level_index`. By the time we get here, spatial has
+    /// sequences over `temporal_level_index`. By the time we get here, spatial has
     /// already populated temporal_level_index[0] with its apex set via the handoff.
     fn process_temporal(
         &mut self,
         rewards: &FxHashMap<ChannelId, Reward>,
         frame_actions: &[PointLookup],
         timings: &mut FrameTimings,
-    ) -> SweepResult {
+    ) -> TemporalProcessingResult {
         let t = Instant::now();
 
         // Push this frame's channel rewards onto the rewards history and trim to the context window.
-        // Action neurons need the current frame's rewards to resolve their per-edge expected reward during the d>0 sweep below.
+        // Action neurons need the current frame's rewards to resolve their per-edge expected reward during temporal processing below.
         // Spatial never sees this — it was kept reward-free upstream.
         self.push_rewards(rewards);
 
@@ -1377,9 +1443,9 @@ impl Brain {
         // The aggregated stats drive the diagnostic per-channel summary printed at frame end and the run-wide accuracy reports.
         self.track_inference_performance();
 
-        // Run the d>0 sequence sweep over temporal_level_index.
+        // Run the d>0 sequences over temporal_level_index.
         // temporal_level_index[0] now holds spatial's apex set plus the carry-forward actions just activated above.
-        // The sweep walks up through temporal patterns that match the recent activation history, casting next-frame votes that infer_neurons will aggregate into a consensus.
+        // Temporal processing walks up through temporal patterns that match the recent activation history, casting next-frame votes that infer_neurons will aggregate into a consensus.
         let result = self.process_temporal_levels(timings);
 
         timings.process_temporal = t.elapsed().as_secs_f64();
@@ -1387,7 +1453,7 @@ impl Brain {
     }
 
     /// Apex handoff: any spatial-fired neuron that did NOT subsume into a higher-level spatial
-    /// pattern this frame is inserted into `temporal_level_index[0]` so the temporal sweep can observe it.
+    /// pattern this frame is inserted into `temporal_level_index[0]` so temporal processing can observe it.
     /// Subsumed parents are silenced — the higher-level pattern that absorbed them represents them.
     /// On a fresh brain with no spatial routing, subsumed is empty and apex == fired == sensory.
     fn compute_apex_and_handoff(
@@ -1398,84 +1464,38 @@ impl Brain {
     ) {
         let t = Instant::now();
 
-        // Walk every neuron that fired anywhere in the spatial sweep this frame.
-        // fired_set includes sensory events at level 0 and any spatial correction patterns that matched at level 1+.
-        for &neuron_id in spatial_fired {
+        // The apex is what fired anywhere in spatial processing, minus the subsumed. A neuron is
+        // subsumed when a higher-level spatial pattern that absorbs it also fired this frame — the
+        // pattern represents its role, so letting it through would double-count in temporal voting.
+        let apex: FxHashSet<NeuronId> = spatial_fired.iter()
+            .filter(|id| !spatial_subsumed.contains(id))
+            .copied()
+            .collect();
 
-            // Skip subsumed neurons.
-            // A neuron is subsumed when a higher-level spatial pattern that absorbs it also fired this frame.
-            // Subsumed parents are silenced — the higher-level pattern represents their role in temporal.
-            // If we let them through, they'd vote alongside the pattern that subsumed them and double-count.
-            if spatial_subsumed.contains(&neuron_id) { continue; }
-
-            // Activate the survivor in temporal_level_index[0].
-            // This is the only path sensory events and spatial corrections take into the temporal sweep.
+        // Activate the survivors in temporal_level_index[0] — the only path sensory events and
+        // spatial corrections take into temporal processing.
+        for &neuron_id in &apex {
             self.memory.activate_temporal_neuron(neuron_id, 0);
         }
 
         timings.apex_handoff = t.elapsed().as_secs_f64();
     }
 
-    /// Spatial error pass: mint corrections from the d=0 sweep's results, install them in their
-    /// parents' routing tables for next frame, and record per-parent Welford error stats (when
-    /// learning). Returns the spec batch so the caller can fold the new correction neurons into the
-    /// deferred-creation flush.
-    /// Not timed — these passes are bookkeeping around the spatial sweep, not their own bucket.
-    fn process_spatial_corrections(&mut self, spatial: &SweepResult) -> Vec<NeuronCreateSpec> {
-
-        // Mint correction specs from the d=0 sweep's dispatch results.
-        // For every non-subsumed fired neuron whose d=0 predictions mismatched the actual fired set, this builds a NeuronCreateSpec for a new correction pattern, an install op to wire it into the parent's routing table, and an error-rate sample for the parent's Welford stats.
-        // Returned specs are deferred — they'll be materialized in the end-of-frame flush along with temporal specs.
-        let (specs, install_ops, feedback) = self.thalamus.mint_spatial_corrections(
-            &spatial.dispatch_results,
-            &spatial.fired_set,
-            &spatial.subsumed_set,
-        );
-
-        // Install the corrections into their parents' routing tables so the parents can recognize the correction's context next frame.
-        // This is a single dispatch per frame, not one per level.
-        self.thalamus.install_spatial_corrections(install_ops, self.frame_number);
-
-        // Record per-parent error-rate samples for the spatial Welford stats.
-        // These samples are what let dynamic error-correction modes adapt the threshold over time.
-        // Without them, get_error_threshold falls back to a static value forever.
-        self.thalamus.record_spatial_errors(&feedback);
-
-        // Return the spec batch.
-        // process_spatial folds these into spatial.neuron_specs so they get materialized in the same flush as temporal specs.
-        specs
-    }
-
-    /// Op-4 + Op-5: flush deferred neuron creation and contextRef updates across both phases in
-    /// one batch. Spatial correction specs were already folded into `spatial_specs` by
-    /// `process_spatial`. Their install ContextRefUpdates were dispatched inline by
-    /// install_spatial_corrections — they aren't batched here.
+    /// Op-4 + Op-5: flush the temporal phase's deferred neuron creation and contextRef updates in one
+    /// batch. The spatial phase creates its children and wires their references inline in the thalamus
+    /// during spatial processing (install_spatial_corrections), so it contributes nothing here.
     fn apply_merged_results(
         &mut self,
-        spatial_specs: Vec<NeuronCreateSpec>,
-        temporal_specs: Vec<NeuronCreateSpec>,
-        spatial_dispatch: Vec<Vec<crate::column::ColumnProcessResult>>,
+        neuron_specs: Vec<NeuronCreateSpec>,
         temporal_dispatch: Vec<Vec<crate::column::ColumnProcessResult>>,
         timings: &mut FrameTimings,
     ) {
         let t = Instant::now();
 
-        // Merge spec batches from both phases into one Vec.
-        // spatial_specs already includes the spatial-correction specs that process_spatial folded in.
-        // Reuses spatial_specs as the accumulator to avoid reallocating — temporal_specs gets extended onto it in place.
-        let mut neuron_specs = spatial_specs;
-        neuron_specs.extend(temporal_specs);
-
-        // Merge dispatch results from both phases.
-        // Same reuse trick: spatial_dispatch is the accumulator; temporal_dispatch gets extended onto it.
-        // The merged Vec is what thalamus uses to apply ContextRefUpdates across all parents that processed this frame.
-        let mut dispatch_results = spatial_dispatch;
-        dispatch_results.extend(temporal_dispatch);
-
-        // Flush Op-4 (deferred neuron creation) and Op-5 (deferred ContextRef updates) in one cross-region pass.
-        // Neuron specs become real Neuron objects in their owning columns; ContextRef updates patch parents' routing tables with whatever each child's process_level produced.
-        // Spatial-correction installs were already dispatched inline by process_spatial_corrections, so they aren't in dispatch_results.
-        self.thalamus.apply_level_results(&neuron_specs, &dispatch_results);
+        // Flush deferred neuron creation and deferred context-reference updates in one cross-region pass.
+        // Only the temporal side defers reference updates: spatial wires its references inline at
+        // correction-install time, so its dispatch results carry none.
+        self.thalamus.apply_level_results(&neuron_specs, &temporal_dispatch);
 
         timings.apply_results = t.elapsed().as_secs_f64();
     }
@@ -1914,7 +1934,7 @@ impl Brain {
         // Wire every (voter → action) edge at the supplied distance with smoothed-reward accumulation.
         self.learn_action_connections(&voter_ids, &action_targets, distance);
 
-        // Run a read-only vote sweep + consensus pass over all active voters at all their valid ages.
+        // Collect votes read-only and take the consensus over all active voters at all their valid ages.
         // The caller can then observe the prediction the brain would make for this input post-supervision.
         let (inferences, votes) = self.compute_inferences(&mut timings);
 
@@ -2015,17 +2035,22 @@ impl Brain {
         if self.debug { println!("=== CLEANUP STARTING ==="); }
 
         // reap neurons scheduled to die at this frame
-        let dead_pattern_ids = self.thalamus.reap_dead_neurons(self.frame_number);
+        let dead_pattern_ids = self.thalamus.reap_dead_neurons(self.substrate_frame());
         if dead_pattern_ids.is_empty() {
             timings.cleanup_dead = t.elapsed().as_secs_f64();
             return;
         }
 
         // delete dead patterns (with recursive cleanup of context references)
-        let deleted_pattern_ids = self.thalamus.delete_patterns(&dead_pattern_ids, self.frame_number);
+        let deleted_pattern_ids = self.thalamus.delete_patterns(&dead_pattern_ids, self.substrate_frame());
 
-        // verify no deleted patterns are active — that would be a bug
-        self.memory.assert_not_active(&deleted_pattern_ids);
+        // Retract the reaped neurons from memory's activation indices. A neuron can fire (entering the
+        // sliding window) and then decay to death a frame or two later, so with a multi-frame window a
+        // reaped neuron is often still active in the window. Leaving its activations behind is exactly
+        // what let a deleted id reach temporal dispatch and panic the column; its votes must die with
+        // it. (This replaces an assert that only held at context-length 1, where the window is a single
+        // frame and a neuron active this frame could not yet be reaped.)
+        self.memory.purge_neurons(&deleted_pattern_ids);
 
         if self.debug { println!("=== CLEANUP COMPLETED ===\n"); }
         timings.cleanup_dead = t.elapsed().as_secs_f64();
@@ -2073,6 +2098,8 @@ mod tests {
             1,                        // columns
             ConsensusMode::Democratic, // consensus_mode
             false,                    // debug
+            true,                     // learning
+            100,                      // horizon
         )
     }
 

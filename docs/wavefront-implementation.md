@@ -117,8 +117,8 @@ to identical numbers.
 ### Stage 4 — Remove stored levels (the wave is now pure)
 
 Delete `neuron_spatial_levels` / `neuron_temporal_levels`. Repoint the four readers: mint reads the parent's
-depth from the sweep loop variable; diagnostics recompute from the activation index; serialization drops the
-level columns; `skip_action_neuron`'s base test becomes an explicit base-neuron predicate. The sweep is now a
+depth from the level loop variable; diagnostics recompute from the activation index; serialization drops the
+level columns; `skip_action_neuron`'s base test becomes an explicit base-neuron predicate. The climb is now a
 settling wave driven solely by the loop variable. Backup: drop both level columns; rebuild footprints on load in
 dependency order (memoized recursion from base / topo-sort the constituent graph); format-version bump.
 

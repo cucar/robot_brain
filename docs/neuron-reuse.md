@@ -253,7 +253,7 @@ inhibit: the originally-planned `correction_wired_this_frame` set has nothing to
 active this frame only via its **own** routing match (a normal recognition).
 
 The remaining activation case is **multi-parent routing**: a shared neuron can be routing-matched from several
-parents at different depths in one sweep. It is activated **at each matched depth** — the multi-depth
+parents at different depths in one frame. It is activated **at each matched depth** — the multi-depth
 `neuron_states` holds a neuron active across levels rather than collapsing it to one — and needs **no** extra
 inhibition set; the existing newly-minted-correction inhibition (fires next frame, this-frame vote suppressed
 via `get_suppressed_ages`) carries over unchanged.
