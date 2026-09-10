@@ -132,6 +132,10 @@ keep it, and they evict in turn. **No candidate could have done this**: a candid
 An open activation is `(its activation, coordinate, age, covered at)`, held one per `(neuron, age, position)` on the
 machine side. Nothing about a frame lives in the neuron.
 
+**The frame buffer** is a sliding window `reach_t + 1` frames deep per level (D4) — 2 at the base. An activation
+sits at its newest edge when it fires, with `reach_t` frames of context behind it, and reads them there and never
+again (D7).
+
 There are two calls and no others:
 
 ```

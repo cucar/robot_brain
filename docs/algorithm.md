@@ -37,7 +37,7 @@ is the difficulty: the arithmetic is counting, and what has to be held is which 
 | activation        | one occurrence of a neuron, at a frame and a position                                | D2 |
 | pattern           | a set of past and present neighbors, held in one neuron's table; it promotes a child | D15, D16 |
 | child             | the neuron one level up that a pattern promotes                                      | R16 |
-| neighbor          | a neuron at an offset — behind or beside, never after                                | D7 |
+| neighbor          | a neuron at an offset — behind or beside, never after                                | D26 |
 | offset            | a coordinate difference, kept to one significant digit in base 2                     | D6 |
 | reach             | how far a neuron sees in every activation dimension — `2^k`, doubling every level    | D4 |
 | neighborhood, `O` | the past and present neighbors one activation **observed** at age 0                  | D7, D15 |
@@ -90,7 +90,7 @@ The compression decides what the current situation *is*, and that's provided to 
 ## 1.1 Compression: classify the situation
 
 **The machine compresses by naming.** A pattern is a set of lower level symbols or patterns that keep occurring
-together — past and present neighbors of one another (D7) — and one symbol stands for all of them. The run can be shortened by using
+together — past and present neighbors of one another (D26) — and one symbol stands for all of them. The run can be shortened by using
 these patterns. Patterns can name base symbols 
 or other patterns, so one symbol high in the stack can stand for a long stretch of the run. 
 This substitution is the whole mechanism for compression.
@@ -229,25 +229,10 @@ what the dictionary writes is a pattern.
 > ```
 > reach(k)   =   2^k          every activation dimension
 > ```
-> `reach_t` is this reach in the time dimension, at the neuron's own level — its window. In time,
-> `W = reach_t + 1` is the depth of the frame buffer — 2 at the base. The buffer is a sliding window:
-> an activation sits at its newest edge when it fires, with `reach_t` frames of context behind it, and reads
-> them there and never again.
+> `reach_t` is this reach in the time dimension, at the neuron's own level — its window.
 
-> **D5 — Adjacency.** Two activations are neighbors when they are **within reach in every activation dimension
-> they share** (D4), and **adjacency reaches only toward the past**: what an activation's neighborhood holds is
-> what fired beside it and what led to it. In space both directions count — a neighbor three positions to the
-> right arrives in the same frame as one three positions to the left, and both are in the neighborhood. In time
-> only the past is, because compression only reads the past. **What fires after an activation is not a
-> neighbor.** The one thing about it the machine keeps — the action that ran — is recorded on the neuron as a
-> connection (D25), and it is never in the neighborhood and never in a pattern.
->
-> Neighbors are always at the neuron's own level, since the symbols a level offers are what its neurons draw
-> neighbors from, **and always of the neuron's own kind**: an event's neighbors are events and an action's are
-> actions.
-
-> **D6 — Offsets.** An offset component is the coordinate difference `x` with its magnitude **rounded down to
-> a power of two**:
+> **D6 — Offsets.** The offset between two activations is the difference of their coordinates, one component per
+> activation dimension they share (D1, D2), each with its magnitude **rounded down to a power of two**:
 > ```
 > offset(x)   =   sign(x) · 2^floor(log2 |x|)          x ≠ 0
 > offset(0)   =   0
@@ -256,31 +241,40 @@ what the dictionary writes is a pattern.
 > `0, ±1, ±2, ±4, ±8, ±16, …`; `G` groups give `2 + G` offsets per direction across a reach of `2^G`, and
 > `reach(k) = 2^k`, so `G = k`. **The reach and the granularity are therefore the same power of two**: a level
 > reaching `2^k` names its outermost offsets in groups of `2^k`.
+
+> **D5 — Adjacency.** Two activations are adjacent when they are **at the same level, of the same kind, within
+> reach in every activation dimension they share** (D4), **and the second is not later than the first**. The
+> level, since the symbols a level offers are what its neurons draw from; the kind, since an event's neighbors
+> are events and an action's are actions. In space both directions count — an activation three positions to the
+> right arrives in the same frame as one three positions to the left. In time only the past does, because
+> compression only reads the past. **What fires after an activation is not adjacent to it.** The one thing about
+> it the machine keeps — the action that ran — is recorded on the neuron as a connection (D25), and it is never in
+> a neighborhood and never in a pattern.
+
+> **D26 — Neighbor.** **A neighbor is a neuron at an offset**: the neuron of an adjacent activation (D5), at its
+> offset (D6). At temporal offset 0 a neighbor co-occurs and at negative offsets it led here; **both are the same
+> kind of thing**, and a spatial component is one more of the same.
 >
 > **A coarse offset may carry more than one neighbor**, since it spans a range and several activations of one
 > dimension can fall inside it. A pattern names per `(neuron, offset)` (D15) and `|e|` counts every neighbor named
 > there. Above the base a `(dimension, position)` may itself carry several activations (D8), which this handles the
 > same way and needs no rule of its own.
-
-> **D7 — Neighborhood.** An activation observes the active neurons that adjacency admits (D5), each tagged
-> with its **offset** — the difference of activation coordinates, one component per activation dimension the two
-> share (D1, D2). That set is the activation's **neighborhood**, written `O`:
-> ```
-> O = { (p, −4), (a, −3), (r, −2), (i, −1) }             a stream:  one component, time
-> O = { (k, 0, −1, 0), (k, 0, +1, 0), (m, 0, 0, −2) }    an image:  three, time and two axes
-> ```
-> the first for a neuron `s` in a stream reading `p a r i s`. At temporal offset 0 a neighbor co-occurs and at
-> negative offsets it led here; **both are the same kind of thing**, and a spatial component is one more of the
-> same. **A neighbor is a neuron at an offset**, whichever way the offset points in space; in time it is at or before
-> the frame, and nothing after the frame is a neighbor (D5).
->
-> **A neighborhood is whole the frame the neuron fires**, since nothing in it is later than that frame (D5), and
-> every structural decision is made on it.
 >
 > **A neuron can be its own neighbor.** Two activations of one type at different positions each name the other
 > at a nonzero spatial offset. At the base, offset zero in every component is the activation itself, and that
 > is the center; above the base several children promoted at one coordinate (D8) are each other's neighbors at
 > offset zero.
+
+> **D7 — Neighborhood.** The set of neighbors (D26) one activation observes is its **neighborhood**, written `O`:
+> ```
+> O = { (i, −1) }                                        text stream:  time
+> O = { (k, 0, −1, 0), (k, 0, +1, 0), (m, 0, 0, −1) }    image stream:  time, x and y
+> ```
+> the first could be for a neuron `s` in a stream reading `p a r i s`: at the base the reach is 1 (D4), so `i` is its one
+> neighbor and `p a r` are out of reach.
+>
+> **A neighborhood is the frame around the fired neuron**, since adjacency admits nothing later (D5), and every
+> structural decision is made on it.
 
 A neighborhood is a set of neighbors, each at its own offset. Drawn with a row per dimension and a column per
 offset, with one activation dimension and a reach of 1:
@@ -1153,9 +1147,10 @@ the apex, and it is the whole of what the machine does.
 > **They are written apex to apex, and no level is read.** An uncovered event activation connects to the apex
 > action that ran — the highest action pattern that fired in that dimension that frame, the base action when
 > none did — at whatever level either stands, so a level-8 event can learn to name a level-5 action. **Whether
-> an activation writes is decided frame by frame, by the frontier** (R27): it writes an exposure at a frame iff
-> no accepted bid covers it at that frame. Coverage is acquired late and never revoked (R27), so an activation
-> writes from age 0 until the frame it is covered, and never again; one covered at age 0 never writes (R17).
+> an activation connects is decided frame by frame, by the frontier** (R27): it connects at a frame iff no
+> accepted bid covers it at that frame. Coverage is acquired late and never revoked (R27), so an activation
+> stands on the apex from age 0 until the frame it is covered, and never again; one covered at age 0 never
+> stands on it (R17).
 >
 > **They are measured, never chosen.** A connection is not in the bid (R21), not in any dictionary line (D13),
 > and it enters no test. Connections are read in one place — **when the activation stands on the apex** (R27) —
@@ -1279,8 +1274,9 @@ structural test can see (R34).
 > what the machine did — formed against what actually ran, so **a neuron that inferred a different action, or
 > none, learns from the one that ran.**
 >
-> **Every uncovered open activation connects to it, at every age it is open at.** The offset is the age — the
-> distance from the frame the activation opened to the frame the action ran — rounded as every offset is (D6),
+> **One activation connects to the action of every frame it is open through, and one action is connected to by
+> every uncovered activation open when it ran.** The offset is the age — the distance from the frame the
+> activation opened to the frame the action ran — rounded as every offset is (D6),
 > so a neuron open at ages 1, 2 and 3 holds the same action at two offsets, `1` and `2`, and the exposure at age
 > 3 strengthens the second. **A coarse offset takes one exposure per frame of its group**, so the outer offsets pool the
 > apex actions of many frames, each at its own strength, as a coarse offset carries several neighbors (D6). An
