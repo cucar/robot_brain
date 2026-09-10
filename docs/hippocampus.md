@@ -500,7 +500,7 @@ neuron.
 > that follow it, apex to apex, at the offset its age names, exactly as an uncovered event activation connects
 > to the apex action (D25, R31): per `(event neuron, offset > 0)`, a strength — the times an activation of the
 > action saw that event follow at that offset — and no estimate. It is written in the `process actions` call
-> beside the action connections (§17), one exposure per frame per event dimension, at the offset the age rounds
+> beside the action connections (§18), one exposure per frame per event dimension, at the offset the age rounds
 > to; a coarse offset pools the events of every frame in its group (D6). It is never in the file and enters no
 > test (D12), nothing collapses it (R7), nothing weakens it (R31), and nothing in the machine reads it: it is not
 > an output. A pattern's child of the action kind holds it from the frame after its mint on (R17); a base action
@@ -517,7 +517,7 @@ repeat
 ```
 
 Nothing is built for replay that the neurons do not already hold. The record is collected by the one call for
-every neuron, event and action alike (§17), and it holds both directions replay needs: what a situation is
+every neuron, event and action alike (§18), and it holds both directions replay needs: what a situation is
 followed by, as an action with an estimate, and what an action is followed by, as events. Replay reads it and
 writes nothing into it except through the writeback ("Action reinforcement"). An earlier draft kept a temporal
 moment graph beside the moments — edges drawn at mint to the most recent moments, weighted by one over Δt,
@@ -635,7 +635,7 @@ Trajectories share a visited-moments structure so that exploration doesn't redun
 
 ### One imagined frame — an event step and an action step
 
-An experiment advances by imagined frames, and an imagined frame is the machine's own two-frame cycle run over connections instead of input: infer, then execute, then read the consequence ([algorithm.md](algorithm.md), R29). Every read is a connection, and every connection was written the same way — while a neuron's activation is open and uncovered it connects to what follows it, an event neuron to the action that ran with its reward (D25, R31) and an action neuron to the events that followed (H4), in the one `process actions` call (§17). Nothing is built for replay that the neuron did not already hold.
+An experiment advances by imagined frames, and an imagined frame is the machine's own two-frame cycle run over connections instead of input: infer, then execute, then read the consequence ([algorithm.md](algorithm.md), R29). Every read is a connection, and every connection was written the same way — while a neuron's activation is open and uncovered it connects to what follows it, an event neuron to the action that ran with its reward (D25, R31) and an action neuron to the events that followed (H4), in the one `process actions` call (§18). Nothing is built for replay that the neuron did not already hold.
 
 1. **Active set.** Read the currently active set — moments and patterns — from the top of the experiment stack.
 2. **Event step: what should I do next?** Read the action connections of every member of the active set at the offset ahead, place and expand them to base actions carrying their estimates, and resolve one action per action dimension by largest estimate — the same vote selection runs on a real frame (R36). A trajectory running as-original takes that winner; a counterfactual trajectory takes its substituted alternative instead. **Score** the step: the winner's estimate is what this step is expected to earn, and it is added to the trajectory's running total. This is the event→action direction of the record, read as a question.
@@ -744,7 +744,7 @@ are over the situations the moment fires in, and a changed situation is answered
 forgetting.
 
 Reinforcement comes from two sources and is one operation: real frames write exposures into the connections
-(the cortex, §17), and replay writes imagined ones into the same connections (the hippocampus, "Action
+(the cortex, §18), and replay writes imagined ones into the same connections (the hippocampus, "Action
 reinforcement" below). A neuron holds a connection for every action that followed it, and for whatever the
 exploration walk has wired, at strength 1 and estimate 0 until tried (R37); the largest estimate wins votes
 when the neuron stands on the apex.
@@ -922,7 +922,7 @@ Built on the substrate [algorithm-implementation.md](algorithm-implementation.md
 ### Phase 3 — Event connections on action neurons
 
 - In the `process actions` call, every uncovered action activation connects to the apex events that follow it,
-  at the offset its age names, beside the action connections the event activations write (H4, §17).
+  at the offset its age names, beside the action connections the event activations write (H4, §18).
 - Reading them by id without firing.
 - Prediction error from them (H3): what the action that ran said would follow, against what arrived.
 - Verify: an action that has run holds, per event and offset, how often that event followed; one that never

@@ -7,7 +7,9 @@ them.
 
 ## Neuron state
 
-The complete per-neuron state, D16 read as storage. Sets are sorted id lists; nothing stores a frame number.
+The complete per-neuron state, D16 read as storage. Sets are sorted id lists. Nothing stores a coordinate:
+expiry was the frame number's only reader and expiry is a FIFO depth (R3), and no comparison, price, count or
+vote ever reads a position (D11). The coordinate is the machine's, on the open activation (D9).
 
 ```
 id                                          // (dim, bucket) at base; opaque id above
@@ -21,8 +23,7 @@ patterns:     Map<pattern_id, {
 // the evidence
 history:
   ring:       FIFO<activation>                  // capacity H; arrival order = eviction order
-  activation:     { position,
-                backward:  set of (neuron, offset ≤ 0),
+  activation:     { backward:  set of (neuron, offset ≤ 0),
                 cover:     the patterns covering it, held (R10),
                 assignment: which pattern of the cover holds each present backward neighbor }
 
@@ -128,7 +129,7 @@ keep it, and they evict in turn. **No candidate could have done this**: a candid
 ## The machine–neuron interface
 
 **The machine owns the open activations; the neuron owns its table, its history and its connections** (D9, D16).
-An open activation is `(position, age, covered at, its activation)`, held one per `(neuron, age, position)` on the
+An open activation is `(its activation, coordinate, age, covered at)`, held one per `(neuron, age, position)` on the
 machine side. Nothing about a frame lives in the neuron.
 
 There are two calls and no others:
@@ -398,7 +399,7 @@ f + 1     the action only      the digit call executes and its neuron fires; eve
                                silent. Process actions runs and every uncovered event activation
                                open here increments its neuron's connection to the action at
                                its own age (R31)
-f + 2     the reward only      the label arrives as input, not as a symbol (§19), and is
+f + 2     the reward only      the label arrives as input, not as a symbol (§20), and is
                                folded into that connection's estimate in every neuron that
                                wrote it (R31, R33). Nothing fires.
 f + 3     next example         = the next example's f
