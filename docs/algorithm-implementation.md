@@ -403,7 +403,7 @@ f + 1     the action only      the digit call executes and its neuron fires; eve
                                silent. Process actions runs and every uncovered event activation
                                open here increments its neuron's connection to the action at
                                its own age (R31)
-f + 2     the reward only      the label arrives as input, not as a symbol (§20), and is
+f + 2     the reward only      the label arrives as input, not as a symbol (§23), and is
                                folded into that connection's estimate in every neuron that
                                wrote it (R31, R33). Nothing fires.
 f + 3     next example         = the next example's f

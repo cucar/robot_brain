@@ -126,7 +126,7 @@ on the forward, and a finer offset alphabet above some level is the fallback.
 **Siblings agree until one is bought alone.** Two children bought at one coordinate see the same actions
 follow them, so their connections agree until the first activation where one is bought and the other is not (D25). Two
 patterns always bought together never diverge at their own level; the level above is expected to merge them
-(§10 of the remarks). **Diagnostic:** for pairs of children of one neuron, the overlap of the frames they were
+(§12 of the remarks). **Diagnostic:** for pairs of children of one neuron, the overlap of the frames they were
 bought in against the overlap of their connections. Pairs high on both for a long stretch are the merge the level
 above has not made.
 
@@ -209,7 +209,7 @@ partition is sticky and R14 is carrying more of the load than intended.
 
 **Election slack, bounded but unmeasured.** R24 is ratio-greedy weighted set cover, so its slack against the
 best cover buildable from the same bids is bounded by `H(n)` and no better
-([algorithm-remarks.md](algorithm-remarks.md) §22). The bound is worst-case and
+([algorithm-remarks.md](algorithm-remarks.md) §25). The bound is worst-case and
 says nothing about the slack on real frames, and since apex-neurons-per-frame is the headline metric, slack and
 real structure are conflated in it. **Diagnostic:** solve one small window exactly (ILP) and compare, which
 locates the realized slack inside the `H(n)` ceiling.
