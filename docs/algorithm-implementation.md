@@ -7,8 +7,8 @@ them.
 
 ## Neuron state
 
-The complete per-neuron state, D16 read as storage. Sets are sorted id lists. Nothing stores a coordinate:
-expiry was the frame number's only reader and expiry is a FIFO depth (R3), and no comparison, price, count or
+The complete per-neuron state, the neuron of §4 read as storage. Sets are sorted id lists. Nothing stores a coordinate:
+expiry was the frame number's only reader and expiry is a FIFO depth (D18), and no comparison, price, count or
 vote ever reads a position (D11). The coordinate is the machine's, on the open activation (D9).
 
 ```
@@ -25,7 +25,7 @@ history:
   ring:       FIFO<activation>                  // capacity H; arrival order = eviction order
   activation:     { backward:  set of (neuron, offset ≤ 0),
                 cover:     the patterns covering it, held (R10),
-                assignment: which pattern of the cover holds each present backward neighbor }
+                owners:    which pattern of the cover owns each present backward neighbor }
 
 // the connections — lifetime totals; in no line of the file, and not recomputable from anything
 actions:      Map<(action_neuron, offset > 0), { strength, estimate }>  // event neurons only; born empty (R35)
@@ -60,11 +60,11 @@ equals a from-scratch recount, and the invariant above checks that it does.
 indexed by the neighbors actually seen, not by everything the box admits — and `n`, the number of activations it
 covers:
 ```
-present(p)   the covered activations in which p fired and no other pattern of that activation's cover
+present(s)   the covered activations in which s fired and no other pattern of that activation's cover
              holds it — its own share plus the residual
-held(p)      the covered activations in which another pattern of the cover holds p
+held(s)      the covered activations in which another pattern of the cover holds s
 ```
-At slot `p` the collapse's population is `n − held(p)` and its count is `present(p)`. A pattern therefore tallies
+At slot `s` the collapse's population is `n − held(s)` and its count is `present(s)`. A pattern therefore tallies
 neighbors it does not name, because whether it should name them is the question re-centering asks (R8), and a
 slot only the residual has ever held is how a pattern grows. A neighbor another pattern of the same cover holds is
 that pattern's evidence, not this one's, and is counted here only as an abstention; a neighbor in the residual is
@@ -89,7 +89,7 @@ re-centering costs nothing to trigger: the counts it reads are current by the ti
 **In dependency order**, so the list also says what to recompute when something moves:
 ```
 activation.cover          =  the patterns covering its neighborhood, chosen by R9 and held by R10
-activation.assignment[n]  =  the pattern of the cover credited with present neighbor n — none, when
+activation.owner[n]       =  the pattern of the cover credited with present neighbor n — none, when
                              n is in the residual
 pattern.counts            =  Σ over the activations it covers: its share and the residual as
                              `present`, what other patterns of the cover hold as `held`
@@ -105,30 +105,30 @@ single number per pattern could not produce it. Keeping the ring is not a storag
 tests scan distinct backward contexts and read pre-summed counts.
 
 **Why a pattern tallies neighbors it does not name.** A pattern used to count only the neighbors
-assigned to it. That is enough to decide whether to *keep* a named slot and never enough to decide whether to
-*enter* one: a neighbor the pattern does not name is never assigned to it, so its count was identically zero
+owned by it. That is enough to decide whether to *keep* a named slot and never enough to decide whether to
+*enter* one: a neighbor the pattern does not name is never owned by it, so its count was identically zero
 and R7 could never take it. R7's abstention paragraph says a pattern grows into the residual, and the state as
 defined could not support that sentence; R8's claim that re-centering needs no pass of its own was not true of
 the one count that growth depends on.
 
 The fix is the smallest that makes R7 exact. At each slot R7 wants two numbers: how many covered activations had
 the neighbor there and unclaimed by another pattern of the cover, and how many abstain because another pattern
-holds it. Those are `present(p)` and `held(p)`, and the population is `n − held(p)`. Both are sparse — indexed
+holds it. Those are `present(s)` and `held(s)`, and the population is `n − held(s)`. Both are sparse — indexed
 by neighbors actually seen — and both move a whole activation's worth at a time, so the granularity above is
 unchanged. The one new obligation is the third event above: when an activation's cover changes, a pattern that
 *stays* in the cover still subtracts and re-adds, because what another pattern took from the residual moves this
 pattern's `present` to `held`, or back.
 
-**Worked case.** `e = {b@0, c@0}` covers ten activations and `d@0` begins to appear. `d` is residual in every
-activation that has it, so `present_e(d)` climbs by one per such activation while `held_e(d)` stays zero. At
-`2 · present_e(d) > 11` — six of ten — re-centering enters `d` and `e` becomes `{b, c, d}`. The four activations
-without `d` now price `e` at 2, which is what they were paying before (line plus one residual), so R10 lets them
+**Worked case.** `p = {b@0, c@0}` covers ten activations and `d@0` begins to appear. `d` is residual in every
+activation that has it, so `present_p(d)` climbs by one per such activation while `held_p(d)` stays zero. At
+`2 · present_p(d) > 11` — six of ten — re-centering enters `d` and `p` becomes `{b, c, d}`. The four activations
+without `d` now price `p` at 2, which is what they were paying before (line plus one residual), so R10 lets them
 keep it, and they evict in turn. **No candidate could have done this**: a candidate is built on the residual alone (R14), `b` and
-`c` are held by `e` in those activations, and `{d}` alone saves nothing (R15).
+`c` are held by `p` in those activations, and `{d}` alone saves nothing (R15).
 
 ## The machine–neuron interface
 
-**The machine owns the open activations; the neuron owns its table, its history and its connections** (D9, D16).
+**The machine owns the open activations; the neuron owns its table, its history and its connections** (D9, D15, D18, D25).
 An open activation is `(its activation, coordinate, age, covered at)`, held one per `(neuron, age, position)` on the
 machine side. Nothing about a frame lives in the neuron.
 
@@ -171,7 +171,7 @@ delivers a reward share for any frame they wrote (R33).
 R20's five passes, in order. All prices are D22's fit over `O⁻`; all sums run over the ring.
 
 **`cover_and_fold(O)`** — pass 1. R9 steps 1 and 2 over the current table: the greedy cover by ratio, the
-assignment by first-namer. Push the activation with its cover and assignment; if the ring was full, pop the oldest
+owners by first-namer. Push the activation with its cover and owners; if the ring was full, pop the oldest
 and subtract its contribution from its cover's counts (Pattern counts). The connections are untouched. Add the new activation's
 contribution to its cover's counts.
 
@@ -289,7 +289,7 @@ task accuracy (train and held-out), neuron counts per level, and wall-clock per 
 ### Stage 1 — the bill
 
 **Phase 1 — substrate, evidence, and the table.** Sparse activation (a dimension with nothing happening
-supplies no symbol); the history of activations with held covers and assignments; the greedy cover; the five-pass bill
+supplies no symbol); the history of activations with held covers and owners; the greedy cover; the five-pass bill
 with one build and one retirement per activation; the request-and-reply mint. The invariants above become
 `debug_assertions` that recompute from the ring on every mutation. Gate on the exposure curves: dictionary
 size sublinear in exposures, apex per frame falling, churn decaying. Also measure history memory and per-frame
@@ -324,13 +324,13 @@ forward-side deltas are the numbered list in the section above and land in Stage
    omitting a dimension — or a whole channel — already works with no change in the brain. On MNIST it is the
    encoder skipping off pixels.
 2. **Rebuild the history.** `SpatialHistory` becomes a FIFO history of activations, each carrying its backward half,
-   its held cover and its assignment. The per-config `frames: Vec<FrameNumber>`
+   its held cover and its owners. The per-config `frames: Vec<FrameNumber>`
    and the absolute-frame `age_spatial_history` cutoff both go: capacity is `H` in the neuron's own activations,
    and eviction is one-out-one-in off the ring. `SpatialHistory::rebase` goes with the frame numbers. The
    histogram keyed on identical contexts goes: covers are held per activation, so identical backward halves no
    longer share one (R10).
 3. **Replace the server with the cover.** Routing chooses one closest entry today; it becomes R9's greedy
-   cover by ratio with the first-namer assignment, and both are written into the activation.
+   cover by ratio with first-namer owners, and both are written into the activation.
 4. **Delete the normal.** `spatial_normal_config`, `refresh_normal_config`, `served`, `spatial_target_channels`
    and the channel plumbing that feeds it go. The spec has no default pattern (D21); what no pattern covers is
    the residual, one line each.
@@ -371,7 +371,7 @@ forward-side deltas are the numbered list in the section above and land in Stage
 
 **Phase 2 — contraction.**
 
-16. **Price named-and-absent in bids.** Carry `1 + |e \ O⁻|` on the bid as its price and change the survival
+16. **Price named-and-absent in bids.** Carry `1 + |p \ O⁻|` on the bid as its price and change the survival
     test in `spatial_survivors` from a flat `≥ 2` to R24's `covered > price`.
 17. **Offer every pattern that applies.** Today a neuron bids its routed entry only. R9 step 3 sends a bid for
     every pattern with more than half its neighbors present, so the election sees the catalog.
@@ -403,7 +403,7 @@ f + 1     the action only      the digit call executes and its neuron fires; eve
                                silent. Process actions runs and every uncovered event activation
                                open here increments its neuron's connection to the action at
                                its own age (R31)
-f + 2     the reward only      the label arrives as input, not as a symbol (§23), and is
+f + 2     the reward only      the label arrives as input, not as a symbol (§22), and is
                                folded into that connection's estimate in every neuron that
                                wrote it (R31, R33). Nothing fires.
 f + 3     next example         = the next example's f
@@ -416,8 +416,8 @@ dimension is silent in them (D5).
 
 **Base event processing is spatial.** The backward slot at `−1` lands on the previous example's reward frame,
 which is silent. So every neighbor a base event neuron names
-sits at temporal offset `0`. The temporal slots are voted out for want of a majority (R7, R5) and cost
-nothing in `|e|`.
+sits at temporal offset `0`. The temporal slots are voted out for want of a majority (R7) and cost
+nothing in `|p|`.
 
 **No action patterns form.** An action neuron's own backward slots land on frames carrying no actions, so the action hierarchy stays flat. R32's apex active action is therefore always the base action,
 which R32 states explicitly holds before any action pattern exists.

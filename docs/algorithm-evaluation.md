@@ -35,7 +35,7 @@ and R18 takes what is left.
 sum, and a bill takes one candidate and one retirement rather than iterating (R20). The table provably reaches
 a local optimum on a fixed history (T7), and a local optimum is what it is: two patterns straddling one
 cluster, each paying while the other stands, are never merged at their own level. **Diagnostic:** on a small
-neuron, compare the standing file cost against an exact assignment solved offline over the same activations and
+neuron, compare the standing file cost against an exact cover solved offline over the same activations and
 pattern count. The gap is the basin.
 
 **The neuron never hears what it sold.** This is the design's largest deliberate omission. The election writes
@@ -65,7 +65,7 @@ is not binding.
 
 **The offer is wider than the cover, and the election pays for it.** Every pattern that applies is sent (R9),
 not only the cover, so the slot resolution sees more bids per activation than it did, and bids from one
-neuron now contend with each other on the board. Cost is `O(bids · |e|)` per level per frame where bids used
+neuron now contend with each other on the board. Cost is `O(bids · |p|)` per level per frame where bids used
 to be bounded by the cover. **Diagnostic:** bids per activation against cover size, per level, and the share
 of bought bids that the cover would not have offered — which is the wide offer's whole benefit, and if it is
 near zero the offer can be narrowed back at no loss.
@@ -126,7 +126,7 @@ on the forward, and a finer offset alphabet above some level is the fallback.
 **Siblings agree until one is bought alone.** Two children bought at one coordinate see the same actions
 follow them, so their connections agree until the first activation where one is bought and the other is not (D25). Two
 patterns always bought together never diverge at their own level; the level above is expected to merge them
-(§12 of the remarks). **Diagnostic:** for pairs of children of one neuron, the overlap of the frames they were
+(§11 of the remarks). **Diagnostic:** for pairs of children of one neuron, the overlap of the frames they were
 bought in against the overlap of their connections. Pairs high on both for a long stretch are the merge the level
 above has not made.
 
@@ -160,8 +160,8 @@ pairs. A regression here will look like the compression was wrong when it was th
 beyond them. `H` too small and patterns form on coincidences and the stack deepens faster than the evidence
 warrants; too large and a neuron follows a moving situation slowly and keeps more structure than earns its
 keep. Reach too small and no chunk spans what recurs; too large and every neighborhood is mostly noise at
-build time. Measure both early and jointly — they interact through `|e|`, not through R7, whose denominator is
-the same at every offset (R5). **Diagnostic:** how often the outermost offset is named against offset 0, swept
+build time. Measure both early and jointly — they interact through `|p|`, not through R7, whose denominator is
+the same at every offset (R7). **Diagnostic:** how often the outermost offset is named against offset 0, swept
 over `H`. If the outer reaches stay empty at every `H`, the reach is bigger than the data supports and
 evidence is not what is limiting it. Sweep depth against `H` in the same runs — T13 makes the two move
 together, and conflating them is easy.
@@ -209,7 +209,7 @@ partition is sticky and R14 is carrying more of the load than intended.
 
 **Election slack, bounded but unmeasured.** R24 is ratio-greedy weighted set cover, so its slack against the
 best cover buildable from the same bids is bounded by `H(n)` and no better
-([algorithm-remarks.md](algorithm-remarks.md) §25). The bound is worst-case and
+([algorithm-remarks.md](algorithm-remarks.md) §24). The bound is worst-case and
 says nothing about the slack on real frames, and since apex-neurons-per-frame is the headline metric, slack and
 real structure are conflated in it. **Diagnostic:** solve one small window exactly (ILP) and compare, which
 locates the realized slack inside the `H(n)` ceiling.
