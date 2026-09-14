@@ -657,7 +657,7 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 > the level above's (§9). And not that `L`, the file over the run, descends: `L_N` is one neuron's reading of
 > it, and what the election does with the neuron's patterns is not in `L_N` at all.
 
-**On R13 — nothing waits.** An earlier design held every structural decision open until the forward half had
+**On R1 — nothing waits.** An earlier design held every structural decision open until the forward half had
 landed, on the argument that a child names a whole span and half of it had not happened. But the half that had
 not happened was never a term in either test. What follows an activation is measured rather than chosen
 (D25), so waiting for it bought nothing and cost the entire apparatus of commitments, horizons and provisional
@@ -851,7 +851,7 @@ activation's costs.
 
 **On R20 — why the call learns nothing.** What an open activation learns of what followed names the apex
 action, a frontier over the whole stack (R27), and no level knows it, so it is written after every level has
-run (§20). Nothing in the call reads a connection either (R13, D25), so the call is structural from end to end,
+run (§20). Nothing in the call reads a connection either (R1, D25), so the call is structural from end to end,
 and a new activation, at age 0, has nothing forward to learn in any case — a connection lives at `offset > 0`.
 
 **On R20 — why the build precedes the offer.** A candidate is offered in the call that built it (R17), so the

@@ -514,12 +514,6 @@ empty table covers nothing and bids nothing.
 
 A pattern is added only when its margin is strictly positive (R15) and retired only when strictly negative (R18).
 
-> **R13 — One comparison.** There is no second one. An activation is covered on `O`, priced on `O`, and the tests
-> that add and retire read the same numbers over the history. No quantity in the design waits for anything.
->
-> **What arrives later is evidence, not a verdict.** The action that runs after an activation, and the reward
-> with it, strengthen the neuron's connections (D25), which the next inference from the apex reads, never a test.
-
 # 14. Deleting a pattern
 
 > **R18 — Retire one, then delete.** Read every margin in the table (D30) — the table as the last call left
