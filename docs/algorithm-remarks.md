@@ -94,8 +94,8 @@ cannot build (R14).
 
 **On D8 — many activations per coordinate.** The base bound is the input's: one symbol per channel at each point
 of its layout. Above the base there is no bound at all, because a neuron covers its activation with a set of
-patterns and each of them may promote a child (R9). What replaced the bound is not a weaker version of it but
-a different kind of rule — the only exclusivity left is credit (R9, R24), and credit is about paying, not
+patterns and each of them may promote a child (D28). What replaced the bound is not a weaker version of it but
+a different kind of rule — the only exclusivity left is credit (D28, R24), and credit is about paying, not
 naming.
 
 **On D8 — the two halves are simultaneous, not sequential.** An action is not a reply appended to a frame.
@@ -272,14 +272,14 @@ its outer neighbors and they drop.
 
 **On D18 and R10 — what a neuron holds outright.** Two things are held because nothing else the neuron holds
 could rebuild them: the history, which is the evidence itself, and the table of patterns, which is what the
-neuron has decided over that evidence. The cover and owners an activation carries are what R9 chose over
+neuron has decided over that evidence. The cover and owners an activation carries are what D28 chose over
 those two when it was saved, and they are held rather than recomputed because a re-derivation need not
 reproduce them (R10).
 
 # 7. The cover
 
 **On D17 — why there are no bins.** An earlier design grouped activations by identical neighborhood and gave the
-group one cover, on the grounds that R9 reads the neighborhood and nothing else, so equal inputs get equal
+group one cover, on the grounds that D28 reads the neighborhood and nothing else, so equal inputs get equal
 covers. R10 breaks that: an activation keeps the cover it has unless a re-derived one is strictly cheaper, so two
 activations with one neighborhood can hold different covers depending on what the table was when each was saved.
 The group could no longer share, so the group is gone. Nothing was lost but a cache — every sum the tests need
@@ -347,7 +347,7 @@ buy, for the one window in front of it. The neuron's number says whether a patte
 the machine's says whether a bid pays on a board where earlier frames' credit stands and other neurons' bids
 contend. A pattern the neuron holds because it pays in most of its activations can lose at the election in this
 one, and a pattern the neuron's own cover passed over can be the machine's best purchase, because the machine's
-residual is not the neuron's (R9, R23). An earlier draft tried to make the two numbers agree — the bid was
+residual is not the neuron's (D28, R23). An earlier draft tried to make the two numbers agree — the bid was
 worth "exactly what its entry was taken on" — and the claim was false the moment a past neighbor was already
 covered. The two are different by design, and the honest statement is that neither ever reads the other's.
 
@@ -375,14 +375,14 @@ the pattern lives.
 
 # 9. The greedy cover
 
-**On R9 — why the cover is a set and the criterion is a ratio.** A neuron picking one pattern has a nearest
+**On D28 — why the cover is a set and the criterion is a ratio.** A neuron picking one pattern has a nearest
 neighbor problem; a neuron picking several has a covering problem, and covering is where a ratio belongs. A
 line is paid once per pattern however many neurons it accounts for, so what matters is not which pattern is
 closest but which buys the most residual per line. **That is not merely the same criterion R24 uses one level
 up; it is the same procedure**, run by the neuron over its table and by the machine over a frame's bids. What
 differs is the population and the fact that only the neuron may mint or retire a symbol.
 
-**On R9 — why the offer is wider than the cover.** The cover is the neuron's own partition, chosen on the
+**On D28 — why the offer is wider than the cover.** The cover is the neuron's own partition, chosen on the
 neuron's residual. Take an activation `a, b, c, d, e` with patterns `E1` naming `a, b, c, d` and `E2` naming
 `c, d, e`. The cover takes `E1` first and leaves `E2` with `e` alone, one neuron against a price of one, so
 `E2` is not in the cover. Now let the machine already hold `a` and `b` from a past frame's child. `E1` is worth
@@ -390,7 +390,7 @@ neuron's residual. Take an activation `a, b, c, d, e` with patterns `E1` naming 
 offer restricted to the cover never shows it to the machine. The offer is therefore every pattern that
 applies, and the machine ranks.
 
-**On R9 — why the apply test is a majority and not a price.** The offer needs a filter that drops nothing
+**On D28 — why the apply test is a majority and not a price.** The offer needs a filter that drops nothing
 the machine could buy and sends nothing it could not. A pattern whose present neighbors do not outnumber its
 absent ones has `covers ≤ price − 1` on any board, since the board can only take present neighbors away, so it
 can never clear R24 and there is no reason to send it. A pattern whose present neighbors do outnumber its
@@ -399,13 +399,13 @@ loosest safe filter is exactly the majority, and it is the collapse read backwar
 statement over the activations it covers, and an activation is one the pattern describes when it agrees with the
 majority of the statement. The price belongs to the buyer.
 
-**On R9 — why the cover keeps its own test.** The cover is not an offer; it is where the neuron's counts come
+**On D28 — why the cover keeps its own test.** The cover is not an offer; it is where the neuron's counts come
 from. Taking a pattern into a cover on a bare majority would credit it neighbors it does not pay for on the
 neuron's own books, and T7 needs the neuron's books to be the file's. So the cover keeps `coverage > price` and
 the offer takes the majority, and the two sets differ exactly where the neuron's residual and the machine's
 would.
 
-**On R9 — why nothing comes back.** The neuron has already decided everything, on a whole neighborhood, and
+**On D28 — why nothing comes back.** The neuron has already decided everything, on a whole neighborhood, and
 the election settles who the machine paid. An earlier design reported the election back as a fact per
 neighbor — which of this activation's neighbors another bid was credited — so the neuron could price its
 patterns on what it actually sold. The report is gone because the accrual it needed was the most involved
@@ -416,7 +416,7 @@ stays as long as it describes the neuron's own activations.
 > **T6 — There is no ownership pass.** The only consumer of a table-wide picture of covers is R14's
 > residual, and R18 reads it only through the activations a pattern covers. Both scan the whole
 > table anyway. Everything else wants one activation's cover: the cover pass computes it for the activation in hand
-> (R9), eviction reads it per departing activation. **So no pass exists to keep every owner current, and
+> (D28), eviction reads it per departing activation. **So no pass exists to keep every owner current, and
 > none is needed** — the scan that prices a move is the scan that makes it.
 
 ## The offer, and the one procedure
@@ -445,7 +445,7 @@ That is the shortest file available to it, not a failure.
 
 ## One cover, worked
 
-**On R9.** One pass over a table of three. `O` is what this activation saw; `x`, `y` and `z` are neurons the
+**On D28.** One pass over a table of three. `O` is what this activation saw; `x`, `y` and `z` are neurons the
 patterns name that did not fire, and each is a symbol its pattern pays for.
 
 ```
@@ -538,7 +538,7 @@ holds one symbol or nothing.
   declared. The reach bounds it; it does not set it.
 
 **On R8 — why once per bill and not twice.** An earlier draft re-centered after the activation was saved and again
-after the tests that add and retire, because the cover was a partition R9 made fresh every time, and a pattern
+after the tests that add and retire, because the cover was a partition D28 made fresh every time, and a pattern
 joining or leaving moved every other pattern's share. R10 holds covers, so a pattern added this bill joins an
 activation's cover only where that is cheaper, and a retired pattern's activations re-derive once. What those
 moves do to other patterns' counts is real, and it is re-centered at the next bill. Re-centering it now would
@@ -547,7 +547,7 @@ to read.
 
 # 12. Recognition
 
-**On R10 — why covers are held.** R9 is greedy, and a greedy cover re-derived after a pattern moved can cost
+**On R10 — why covers are held.** D28 is greedy, and a greedy cover re-derived after a pattern moved can cost
 more than the one that stood. In Lloyd's algorithm the assignment step is exact, so re-assigning after the
 centers move can only help. Here it cannot be exact — an exact cover is set cover — so the design keeps the
 old cover unless the new one is strictly better. That is one comparison over numbers the neuron already
@@ -568,8 +568,8 @@ elections fill in the middle. Every row is stated by the rule it cites; this is 
 
 ```
 build     would what C takes out of the residual sum past 1 + |C|?      the line, prospectively   (R15)
-cover     does this PATTERN take more of the residual than it costs?    one activation, no line       (R9)
-offer     does more than half of this PATTERN fire?                     one activation, no price      (R9)
+cover     does this PATTERN take more of the residual than it costs?    one activation, no line       (D28)
+offer     does more than half of this PATTERN fire?                     one activation, no price      (D28)
 elect     does this BID cover more than it costs, once slots are split? one bid, no line          (R24)
 retire    does what p still keeps out of the residual pass 1 + |p|?     the line, retrospectively (R18)
 ```
@@ -720,14 +720,14 @@ population  o₁ … o₄, the activations whose residual holds a       n = 4,  
 collapse    a: 4 → 8 > 5  named      b: 4 → named      c: 2 → 4 > 5?  no
             d: 1  no      e: 1  no
 
-C = {a,b}      reach   2, 2, 2, 2  over o₁…o₄;  o₅ names nothing C holds, so R9 would not take it
+C = {a,b}      reach   2, 2, 2, 2  over o₁…o₄;  o₅ names nothing C holds, so D28 would not take it
                 saving  1, 1, 1, 1, 0        benefit 4  >  line 1 + 2 = 3     requested
 ```
 
 By hand. `o₁` used to pay three lines. With `C` in its cover it pays `1` for `C`, which names both `a` and `b`
 and gets neither wrong, plus one line for `c` in the residual — two symbols instead of three. So do `o₂`, `o₃`
 and `o₄`. `o₅` shares nothing with `C`: taking it would cost `1 + |{a,b}| = 3` against two neurons it does not
-even name, so R9 never puts `C` in that cover and `o₅` pays its two lines exactly as before.
+even name, so D28 never puts `C` in that cover and `o₅` pays its two lines exactly as before.
 
 **On R14 — what the loop was doing, and why a seed does it in one step.** The earlier build grew `C` a
 neighbor at a time, taking the largest net gain each round and stopping when none paid. Every round was a
@@ -769,8 +769,8 @@ demand that shares a seed — merge is what retiring does to redundant patterns,
 at one bill and a pattern retired at the next — the child takes the activations, and the pattern it stranded fails
 R18 at the next one.
 
-**On R15 — the test asks the question R9 will answer.** It prices `C` on the residual of the activations in the
-ring, and R9 will take `C` into a cover on the residual of an activation — the same quantity, over the same
+**On R15 — the test asks the question D28 will answer.** It prices `C` on the residual of the activations in the
+ring, and D28 will take `C` into a cover on the residual of an activation — the same quantity, over the same
 evidence. **There is no bet left for R18 to collect on**, and nothing can hand `C` less than the
 test counted except the history moving on, which is R18's ordinary business.
 
@@ -1002,9 +1002,9 @@ that loses one counts one fewer.
 
 ## The election
 
-**On R24 — why the election is R9, and what the earlier rule got wrong.** An earlier R24 resolved every slot
+**On R24 — why the election is D28, and what the earlier rule got wrong.** An earlier R24 resolved every slot
 once, on each bid's ratio over the whole free board, and then accepted each bid on what that resolution left
-it. That is not the same procedure as R9, though the specification said it was: R9 re-measures after every
+it. That is not the same procedure as D28, though the specification said it was: D28 re-measures after every
 take and lets a bid that has fallen below its price take nothing, while the earlier R24 let a bid take slots on
 its original ratio, fail its own test, and keep those slots away from the bids that failed *because* of it.
 
@@ -1018,7 +1018,7 @@ E  names s9 s10           price 1   ratio 2
 
 Old R24: `s1, s2` to A; `s9` to D, since 3 > 2; `s10` to E. A holds 4 > 1 and is accepted. D holds 1, not > 1,
 rejected. E holds 1, rejected. The old step 3 moved slots only among accepted bids, so `s9` and `s10` stood as
-residual: body term `1 + 2 = 3`. R9 over the board: take A; the free set is `{s9, s10}`; D covers 1 at price
+residual: body term `1 + 2 = 3`. D28 over the board: take A; the free set is `{s9, s10}`; D covers 1 at price
 1 and E covers 2 at price 1, so take E. History term `1 + 1 = 2`.
 
 **The frozen ratio is the whole defect.** D's claim on `s9` was worth something only if D was going to pay, and
@@ -1446,13 +1446,13 @@ measured on at the moment it is made. Strict where marked.
   claim does not hold.
 - **Re-derivation (R10).** Non-increase, by construction: a re-derived cover replaces the held one only when
   strictly cheaper.
-- **Cover (R9) and election (R24).** Each accepted pattern or bid names strictly more than it costs, so a
+- **Cover (D28) and election (R24).** Each accepted pattern or bid names strictly more than it costs, so a
   covered activation or frame is strictly shorter than the same activation or frame stated flat, by at least one line
   per acceptance.
 
 ## Provable, per frame, against the best available
 
-R9 and R24 are one procedure, and that procedure is ratio-greedy weighted set cover: each pattern or bid is a
+D28 and R24 are one procedure, and that procedure is ratio-greedy weighted set cover: each pattern or bid is a
 set with cost `price`, and every neighbor also has a singleton set of cost 1, standing as its own line. Chvátal's
 bound (1979) applies directly — the cover the greedy returns costs at most `H(n)` times the cheapest cover
 buildable from the same sets, where `H(n) = 1 + 1/2 + … + 1/n ≈ ln n` and `n` is the largest set's size, here

@@ -63,7 +63,7 @@ is a rate, not a cap. **Diagnostic:** the fraction of bills whose candidate paid
 long stretch means the neuron is building as fast as it is allowed and has a backlog; near zero means the rate
 is not binding.
 
-**The offer is wider than the cover, and the election pays for it.** Every pattern that applies is sent (R9),
+**The offer is wider than the cover, and the election pays for it.** Every pattern that applies is sent (D28),
 not only the cover, so the slot resolution sees more bids per activation than it did, and bids from one
 neuron now contend with each other on the board. Cost is `O(bids · |p|)` per level per frame where bids used
 to be bounded by the cover. **Diagnostic:** bids per activation against cover size, per level, and the share
@@ -74,7 +74,7 @@ near zero the offer can be narrowed back at no loss.
 cheaper, which is what makes the bill a descent (T7). It also means an activation saved under an old table keeps
 an old cover for as long as nothing beats it strictly, and two activations with one neighborhood can be covered
 two ways. The counts a pattern re-centers on are then partly the table's past. **Diagnostic:** the share of
-activations whose held cover differs from the cover R9 would derive fresh, and the cost difference. If the share
+activations whose held cover differs from the cover D28 would derive fresh, and the cost difference. If the share
 is large and the difference is zero, the hold is doing nothing but hysteresis and the tie rule could be
 loosened.
 
@@ -106,7 +106,7 @@ compression side is where to look.
 **Several children per activation may not halve the level above.** A neuron used to promote at most one child,
 which is what made T11's halving argument work — and the halving is what D4's doubling reach is derived from,
 what T12's depth bound rests on, and what keeps `|O|` constant across levels. A cover of `m` patterns promotes
-up to `m` children at one coordinate (D8, R9), and the wide offer lets patterns outside the cover be bought
+up to `m` children at one coordinate (D8, D28), and the wide offer lets patterns outside the cover be bought
 too, so a level can be *wider* than the one below it wherever activations decompose into several chunks. Nothing
 caps `m`; what bounds it is that each extra child is another line and another set of charges, and the
 election stops buying the moment one does not pay. **Diagnostic:** bought bids per activation and neurons per
@@ -190,7 +190,7 @@ buy back position-specificity except declaring a coarse position as a *neuron* d
 charges per activation against dictionary size, before and after, on the same data.
 
 **The cover pass is a greedy set cover, not a nearest-neighbor lookup.** One scan of the table per round, and
-a round is one pattern taken (R9). Cost is `O(|cover| · |table| · |O|)`, and `|cover|` is exactly the
+a round is one pattern taken (D28). Cost is `O(|cover| · |table| · |O|)`, and `|cover|` is exactly the
 quantity the multi-child risk above says is unbounded. **Diagnostic:** cover-pass scans per activation against
 cover size, per level.
 

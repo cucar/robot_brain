@@ -37,7 +37,7 @@ incrementally maintained state:
 - Every pattern's `counts` equal a from-scratch recount over the activations whose held cover holds it — `present`
   and `held` per neighbor as defined under Pattern counts below. Its `neighborhood` is D27's collapse over those counts,
   with the line charged.
-- Every activation's `cover` is one R9 could have produced against some past table, and no re-derivation against
+- Every activation's `cover` is one D28 could have produced against some past table, and no re-derivation against
   the current table is strictly cheaper than it (R10).
 - `actions` only ever grows: no strength falls, and a connection leaves only with the death of either of its
   ends (R31). Its estimate is the mean of the shares it has received, over its strength.
@@ -88,7 +88,7 @@ re-centering costs nothing to trigger: the counts it reads are current by the ti
 
 **In dependency order**, so the list also says what to recompute when something moves:
 ```
-activation.cover          =  the patterns covering its neighborhood, chosen by R9 and held by R10
+activation.cover          =  the patterns covering its neighborhood, chosen by D28 and held by R10
 activation.owner[n]       =  the pattern of the cover credited with present neighbor n — none, when
                              n is in the residual
 pattern.counts            =  Σ over the activations it covers: its share and the residual as
@@ -141,7 +141,7 @@ There are two calls and no others:
 ```
 process frame   — made at age 0 only, once per neuron per frame, with every activation that fired
                 in:  each activation's backward half
-                out: per activation, a bid for every pattern that applies (R9 step 3)
+                out: per activation, a bid for every pattern that applies (D28 step 3)
                      plus one request: the candidate that paid, and the pattern that retired (R20)
 
 process actions — made once per frame after every level has run, with every open activation the machine holds
@@ -170,7 +170,7 @@ delivers a reward share for any frame they wrote (R33).
 
 R20's five passes, in order. All prices are D22's fit over `O⁻`; all sums run over the ring.
 
-**`cover_and_fold(O)`** — pass 1. R9 steps 1 and 2 over the current table: the greedy cover by ratio, the
+**`cover_and_fold(O)`** — pass 1. D28 steps 1 and 2 over the current table: the greedy cover by ratio, the
 owners by first-namer. Push the activation with its cover and owners; if the ring was full, pop the oldest
 and subtract its contribution from its cover's counts (Pattern counts). The connections are untouched. Add the new activation's
 contribution to its cover's counts.
@@ -329,7 +329,7 @@ forward-side deltas are the numbered list in the section above and land in Stage
    and eviction is one-out-one-in off the ring. `SpatialHistory::rebase` goes with the frame numbers. The
    histogram keyed on identical contexts goes: covers are held per activation, so identical backward halves no
    longer share one (R10).
-3. **Replace the server with the cover.** Routing chooses one closest entry today; it becomes R9's greedy
+3. **Replace the server with the cover.** Routing chooses one closest entry today; it becomes D28's greedy
    cover by ratio with first-namer owners, and both are written into the activation.
 4. **Delete the normal.** `spatial_normal_config`, `refresh_normal_config`, `served`, `spatial_target_channels`
    and the channel plumbing that feeds it go. The spec has no default pattern (D21); what no pattern covers is
@@ -373,7 +373,7 @@ forward-side deltas are the numbered list in the section above and land in Stage
 
 16. **Price named-and-absent in bids.** Carry `1 + |p \ O⁻|` on the bid as its price and change the survival
     test in `spatial_survivors` from a flat `≥ 2` to R24's `covered > price`.
-17. **Offer every pattern that applies.** Today a neuron bids its routed entry only. R9 step 3 sends a bid for
+17. **Offer every pattern that applies.** Today a neuron bids its routed entry only. D28 step 3 sends a bid for
     every pattern with more than half its neighbors present, so the election sees the catalog.
 18. **Replace the above-base adjacency heuristics with the reach.** The eight-sector nearest rule
     (`directional_neighbors`) and the reuse-the-last-declared-set fallback both go: adjacency is D4's box at
@@ -395,7 +395,7 @@ spans the frame before and the frame after its own.
 ```
 frame     carries              what happens
 -----     -------              ------------
-f         events only          base event neurons fire, bill, and offer (R9, R20); contraction
+f         events only          base event neurons fire, bill, and offer (D28, R20); contraction
                                runs; process actions delivers nothing new and collects the
                                apex's inferences; the vote at the base commits the digit call
                                for f + 1 (R36)

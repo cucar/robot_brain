@@ -237,7 +237,7 @@ carries the action executing in that same frame (if there is one).
 > is a property of the input, not a rule the machine imposes.
 >
 > **Above the base level, multiple neurons can fire for the same dimension and position.** A neuron can choose to cover with
-> multiple patterns (R9), so several of its children may be active at one coordinate, since they inherit coordinates. 
+> multiple patterns (D28), so several of its children may be active at one coordinate, since they inherit coordinates. 
 
 > **D9 — Activation window.** An activation at frame `f` stays open through `f + reach_t`, the reach in
 > time at its neuron's own level (D4). Two things reach it over that span, one frame at a time, after every
@@ -360,7 +360,7 @@ Part III covers the `process actions` call, where a neuron learns what action fo
 > **D15 — The pattern.** A set of past and present neighbors that a neuron **names**: one line of its table,
 > spanning the same box a neighborhood does (D5), and shaped exactly like one (D7). It is the collapse of the
 > neighborhoods it covers (D27), moves as they move (R8), and promotes a child (R16). Its `id` is its creation
-> order, a handle that survives re-centering and the tie-break R9 and R24 reach for.
+> order, a handle that survives re-centering and the tie-break D28 and R24 reach for.
 >
 > **A pattern is not a neighborhood.** A neighborhood is what one activation saw where it fired, saved once and
 > evicted `H` activations later; a pattern is what the neuron claims. A neighborhood is a fact, a pattern a claim.
@@ -425,36 +425,34 @@ residual. Every price in the design (D13) is counted off them.
 > it costs its own line whether the pattern exists or not.
 >
 > **This is the only valuation in the design**, and it is read over two different sets — the neuron's own
-> activations (R12, R9) and the machine's board (R22, R24) — so the two numbers differ, and are meant to.
+> activations (R12, D28) and the machine's board (R22, R24) — so the two numbers differ, and are meant to.
 
 # 9. The greedy cover
 
 One procedure appears twice in the design — once inside a neuron, over its own table, and once inside the
 machine, over a frame's bids. It is stated here and cited from both.
 
-> **R9 — The greedy cover.** One procedure with two callers, stated here once and run nowhere else. Given a set
-> of **claimants**, each naming some neurons, and a set of neurons to cover, repeat:
+> **D28 — The greedy cover.** The operation that chooses, from a set of **claimants** each naming some neurons,
+> the ones that cover a set of neurons, and credits each covered neuron to exactly one of them. It repeats:
 >
 > 1. **Measure** every claimant not yet taken against the neurons still uncovered:
 >    ```
 >    coverage =  1 + | the still-uncovered neurons it names |     the activation itself, and what it names
 >    price    =  1 + | the neurons it names that did not fire |            D22
 >    ```
-> 2. **Take** the one with the highest `coverage / price`, **iff `coverage > price`**. The neurons it was measured
->    on are credited to it and leave the uncovered set.
-> 3. **Stop** when the best remaining claimant does not pay. Otherwise return to 1 over the smaller set.
+> 2. **Take** the one with the highest `coverage / price` if `coverage > price`, and **stop** otherwise. It becomes
+>    the owner (D19) of the neurons it was measured on, which leave the uncovered set, and the round repeats from 1.
 >
-> **What it returns is the taken set and the credit.** Every neuron a taken claimant covers is credited to
-> exactly one of them — the round that took it — so nothing is accounted for twice, and what no round took is
-> the **residual** (D21). `price` is fixed by what fired and cannot change between rounds; `coverage` only falls.
->
-> **The two callers differ in what they cover and in tie-break, in nothing else.**
-> ```
-> caller       claimants               to cover                    ties
-> R20 step 3   a neuron's patterns     one activation's `O`        the older `id`
-> R24          a frame's bids          the free set of the board   the older symbol, then the
->                                                                  earlier coordinate
-> ```
+> **What it returns is the cover and the owners.** The cover is the claimants taken (D17); the owner of a
+> covered neuron is the claimant of the round that took it (D19), so each is credited once; what no round took
+> is the residual (D21). `price` is fixed by what fired and cannot change between rounds; `coverage` only falls.
+
+**The two callers differ in what they cover and in tie-break, in nothing else.**
+
+| caller                     | claimants | to cover                      | ties                                               |
+|----------------------------|---|-------------------------------|----------------------------------------------------|
+| neuron - recognition (R10) | patterns | the history (D18) | the older `pattern id`                             |
+| machine - election (R24)  | bids | the board (§17.2) | the older `neuron id`, then the earlier coordinate |
 
 # 10. The collapse
 
@@ -493,7 +491,7 @@ smoothing or probability estimate enters.
 > **A pattern re-centers whenever the neighborhoods it covers change** — no test and no gate. Three things move it, all in
 > `process frame` (R20): an activation it covers is saved, one is evicted, or an activation's cover changes so
 > that the pattern joins it, leaves it, or is credited differently within it. A cover changes when the table
-> changes under it — a pattern added, retired, or re-centered so that R9 reads the activation differently — and
+> changes under it — a pattern added, retired, or re-centered so that D28 reads the activation differently — and
 > only when the new cover is cheaper (R10). Every move disturbs a whole activation's worth, so a re-center is
 > always over all offsets and never per activation.
 >
@@ -514,12 +512,12 @@ Recognition is the procedure that chooses a cover (D17).
 > **R10 — Covers are held, not patched.** A moved pattern changes what it covers. What is maintained is
 > **one pattern's `coverage`-and-price against every activation**: a pattern that re-centers recomputes those, and
 > nothing else is repaired. An activation whose table changed under it — a pattern re-centered, added or retired —
-> re-derives its cover by R9 over its neighborhood, **and the re-derived cover replaces the one it holds only
+> re-derives its cover by D28 over its neighborhood, **and the re-derived cover replaces the one it holds only
 > when it is strictly cheaper**, a cover costing the prices of its patterns plus a line for each residual
 > neuron (D22):
 > ```
 > cost(O)  =  Σ over the patterns of the cover ( price(p, O) )  +  |residual(O)|
-> ``` R9 is greedy, so re-deriving can cost more than what stands; holding
+> ``` D28 is greedy, so re-deriving can cost more than what stands; holding
 > the cheaper is what makes every move a descent (R12). A retired pattern leaves every cover it was in at once,
 > and the cover without it is the one the re-derivation has to beat. **A pattern that was just added gives an
 > activation three options, not two**: the cover it holds, that cover with the newcomer appended and taking the
@@ -529,7 +527,7 @@ Recognition is the procedure that chooses a cover (D17).
 > **Owners move with the table.** When a pattern of the cover re-centers (R8) or retires (R18), a neighbor it
 > stops naming falls to another pattern of the cover that names it — the older id, when two do — and to the
 > residual when none does; a neighbor it starts naming it takes from the residual only, never from a pattern
-> that owns it (D27). When the cover itself is replaced, R9 rewrites the owners with it (D19).
+> that owns it (D27). When the cover itself is replaced, D28 rewrites the owners with it (D19).
 
 > **R11 — A price is a measurement, not a record.** What an activation costs is read off its cover as that cover now
 > stands (D22), and the cover can change: re-centering (R8) moves a pattern, which moves what it covers in every
@@ -622,7 +620,7 @@ empty table covers nothing and bids nothing.
 > table stops covering with it.
 
 
-> **R19 — The table needs no rule against duplicates.** Two patterns with equal neighbors present R9 with
+> **R19 — The table needs no rule against duplicates.** Two patterns with equal neighbors present D28 with
 > identical input. It takes the older first, so the older covers everything the younger would, the younger
 > owns nothing anywhere, and a pattern covering nothing fails R18. The tests remove them.
 
@@ -736,8 +734,8 @@ One call per level per frame: everything structural for the activations that fir
 >                once, and the activations it covered re-derive without it     R18, R10
 >  3  admit      the new activation joins the ring, whole (D7). No pattern has taken      each new
 >                anything yet, so the whole of `O` is residual                    D21     activation
->  4  cover      run R9 over the table against `O`. What it takes is the **cover**      each new
->                and what it credits is each neighbor's **owner**       R9, D17, D19      activation
+>  4  cover      run D28 over the table against `O`. What it takes is the **cover**      each new
+>                and what it credits is each neighbor's **owner**       D28, D17, D19      activation
 >  5  re-center  every pattern whose covered activations changed — one joined it,            the
 >                left it, or is credited differently — re-centers, once; every             neuron
 >                activation whose table moved under it re-derives its cover and
@@ -865,13 +863,13 @@ election stops at the first that does not pay. **The election does not minimize 
 returns a good solution, not a proved minimum. **Every neuron a bid covers ends up credited to exactly one
 bid**, which is what stops a chunk being paid for twice.
 
-> **R24 — The election is R9, run by the machine.** The claimants are this frame's bids and what they cover is
+> **R24 — The election is D28, run by the machine.** The claimants are this frame's bids and what they cover is
 > the **free set**: every active activation of the level below, at its own full coordinate — frame and position —
 > that some bid names and no earlier election has credited (R23).
 >
 > Bids arrive naming relative offsets, so each is resolved against its own coordinate before the first round.
 > `price` is `1 + |p \ O|` (R22). **Ties go to the older symbol, then to the earlier coordinate** — creation
-> order for a pattern and declaration order (D1) for a base neuron, then frame, then position. Then R9 runs,
+> order for a pattern and declaration order (D1) for a base neuron, then frame, then position. Then D28 runs,
 > and what it takes are the accepted bids.
 >
 > **The bound is structural.** An accepted bid takes at least two slots, since `covered > price ≥ 1`, so the
