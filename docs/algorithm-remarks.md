@@ -140,7 +140,7 @@ delivers cannot clear its price. Naming is free, paying is exclusive.
 **On D11 — what position-specificity would buy is fit, and that is what it costs.** One pattern serving every
 position describes statistics that differ by position, so it fits each worse than a position-tuned pattern
 would, and the neighbors it names wrongly are literally the charges in the file (D22). The dictionary half of
-`L` falls and the body half rises. **R12 adjudicates exactly that trade**, pattern by pattern, and no price
+`L` falls and the body half rises. **D30 adjudicates exactly that trade**, pattern by pattern, and no price
 anywhere changes for it to do so: an activation costs 1 before and after, because the alphabet loses precisely
 the factor the coordinate gains.
 
@@ -173,7 +173,7 @@ the reason the arithmetic is the arithmetic, and it is never a term in it.
 > without bound (D3) costs about `log |alphabet|` bits, and that rises over the run. Write the true length as
 > `c · L`, with `c` the bits one symbol name currently costs.
 >
-> **Every test reads the sign of a difference, never a length.** `margin = benefit − cost` (R12), and both
+> **Every test reads the sign of a difference, never a length.** `margin = benefit − cost` (D30), and both
 > terms are counted in the same symbols, so the true margin is `c · margin`. `c > 0`, so the sign is the same
 > one. The dictionary term and the body term scale together because both are counts of the same symbols —
 > if they did not, the constant would not cancel and this would fail.
@@ -209,7 +209,7 @@ neighborhood ever was.
 
 # 6. The history
 
-**On D18 — one count, so one denominator.** What R12 needs is not a shared clock but a shared divisor: a
+**On D18 — one count, so one denominator.** What D30 needs is not a shared clock but a shared divisor: a
 pattern's benefit is a sum over the activations it covers, and for two neurons' tests to mean the same thing that
 sum must be over comparably much evidence. A uniform `H` gives that directly. A shared *window* gave it only
 for neurons firing at similar rates, and gave a rare neuron almost nothing to decide on.
@@ -230,7 +230,7 @@ close the activation: the open activation is the machine's (D9), and it keeps co
 apex until its window ends or coverage arrives, whether or not its neuron still holds it.
 
 **On D18 — `H` does three jobs.** It is the structural memory — connections are outside it (R31) — it
-is R12's selectivity — double it and every pattern's
+is D30's selectivity — double it and every pattern's
 benefit roughly doubles against an unchanged line, so more survive — and it is the rate at which the stack
 deepens (T13). One number, three effects, all monotone in it, and it should be tuned knowing that.
 
@@ -338,8 +338,8 @@ costs a symbol and delivers nothing, while a neighbor left unnamed costs its own
 cost a line, so it is free either way.
 **On D22 — the two sums are what the two mechanisms work against, and that is the whole division of labor.**
 The election works on the body half over a given dictionary — it is priced in exactly that sum, for the
-frames it can see, though it does not minimize it (§17.3). The one test decides the dictionary half, pattern
-by pattern (R12). Neither can do the other's job: the election cannot create or destroy a symbol, and a neuron
+frames it can see, though it does not minimize it (§17.3). The margin decides the dictionary half, pattern
+by pattern (D30). Neither can do the other's job: the election cannot create or destroy a symbol, and a neuron
 cannot see what its symbol saved.
 
 **On D22 — two readers, two numbers, and why that is economics rather than an inconsistency.** The neuron is
@@ -356,7 +356,7 @@ covered. The two are different by design, and the honest statement is that neith
 the pattern in its cover and what it would pay without: both are counts over the activation, and the neuron holds
 what every activation gives every pattern it has (D19). The difference between the two is the whole of the benefit,
 and it is a fit against the neuron's own evidence. What it never needs is the file — a length nothing computes
-cancels out of a difference (R12).
+cancels out of a difference (D30).
 
 **On D22 — conservative, and in a stated direction.** The line is paid once over the whole run, so a pattern
 that pays for itself within `H` of its neuron's own activations pays for itself many times over in the file. The
@@ -370,7 +370,7 @@ same cover, or another accepted bid one level up — and otherwise into the resi
 would always have cost. **The flat file is not a second baseline**; it is what that question returns when
 nothing else names the neuron.
 
-What is left between the two tests is the population and the line. R12 sums over the `H` activations in the ring
+What is left between the two tests is the population and the line. D30 sums over the `H` activations in the ring
 and charges `1 + |p|`; R22 sums over one frame and charges nothing, because the line was already weighed where
 the pattern lives.
 
@@ -568,9 +568,19 @@ when a neuron fires, because that is where counts move and where both tests run 
 the cover as it now stands (D22) and never stored, while a structural move — adding, retiring (R15, R18) — is a
 decision that stands until something reverses it.
 
-# 13. The one test
+# 13. The margin of a pattern
 
-**On R12 — the tests a symbol passes through, in one place.** The line brackets the symbol's life and the
+**On D30 — `coverage` is what nothing else would have covered.** A pattern is worth what it saves over what
+would account for those neurons if it were gone: the residual, where each stands as its own line (D21). A saving
+some other pattern already delivers is not this one's, which is what owners (D19) enforce.
+
+**On D30 — the same expression prices a bid over one frame** (R22). There is one valuation in the design (D22);
+the two readings differ in what they sum it over and in whether the dictionary line is in the sum.
+
+**On D30 — at equality nothing happens.** A pattern is added only on a strictly positive margin and retired only
+on a strictly negative one (R15, R18), so a pattern at zero is neither, and the boundary cannot flip-flop.
+
+**On D30 — the tests a symbol passes through, in one place.** The line brackets the symbol's life and the
 elections fill in the middle. Every row is stated by the rule it cites; this is a reading aid, not a rule.
 
 ```
@@ -587,16 +597,16 @@ with the dictionary line added, read in opposite directions: what an absent patt
 residual, and what a present one is still keeping out of it. The offer is the one row that is not a price, and
 §9 says why.
 
-**On R12 — a benefit can be zero for two different reasons**, and both are the signal. Zero because the
+**On D30 — a benefit can be zero for two different reasons**, and both are the signal. Zero because the
 neighbors are already covered by another pattern of the same cover — no sharper child here would shorten the
 file. Zero because the next pattern in line fits the activation just as well — the pattern duplicates something the
 table already holds. A pattern accumulating either drags itself toward retirement, and neither needs a
 mechanism aimed at it.
 
-**On R12 — the movement of benefit is cheap.** A pattern gaining or losing an activation and an activation joining or
+**On D30 — the movement of benefit is cheap.** A pattern gaining or losing an activation and an activation joining or
 being evicted are `O(offsets)` off the counts; a re-center is the walk the scan is already making (R20).
 
-**On R12 — a newborn needs exactly the bracket and nothing more.** Where its territory was residual, the neighbors
+**On D30 — a newborn needs exactly the bracket and nothing more.** Where its territory was residual, the neighbors
 are free and it is bought on its first recurrence — no line at the election means no deadlock at birth. Where
 its territory turns out to be another neuron's, the election declines it and the neuron never learns why; the
 pattern stays as long as it pays on the neuron's own books, which is the trade
@@ -702,7 +712,7 @@ has to be able to do it alone, and it can.
 **On §15 and §14 — the two moves.** A neuron can do exactly two things to its table: **add** a pattern and
 **retire** one. Re-centering is neither — it is what moving counts means (D29). So the whole of restructuring is two
 tests, asked in that order, at a call and nowhere else, **and each is asked once per call: one candidate built and
-priced, one pattern retired at most** (R20). **Both are R12 over different sets** — one margin, read over the
+priced, one pattern retired at most** (R20). **Both are D30 over different sets** — one margin, read over the
 neurons a candidate would take out of the residual and over the neurons a pattern holds — and there is no second
 currency anywhere in the design.
 
@@ -968,9 +978,9 @@ neighbors plus the bidder, so it never exceeds `|p| + 1`; a price carrying the l
 `1 + |p|`. `cover > price` could then never hold — not on a perfect match with nothing contested, let alone
 under overlap. A test that asks one bid to pay an aggregate charge declines every bid.
 
-**On R22 — there are not two clocks to reconcile.** R12 optimizes the dictionary against a neuron's own
+**On R22 — there are not two clocks to reconcile.** D30 optimizes the dictionary against a neuron's own
 history; this price optimizes one bid against the board's coverage. They answer different questions over
-different evidence, and neither needs the other's span. What R12 does need is a denominator, and `H` is that
+different evidence, and neither needs the other's span. What D30 does need is a denominator, and `H` is that
 directly (D18).
 
 **On R23 — what earlier-bidder priority costs, and why re-electing the past would cost more.** A bid at `f`
@@ -1123,7 +1133,7 @@ nothing needs it in advance.
 > needs extent, not just breadth.
 
 > **T13 — Depth is bounded by the run, logarithmically.** A neuron decides nothing until it has evidence, and
-> `H` is how much (D18, R12). A level-`D` neuron fires at `2^(−D)` of the base rate (T11), so filling its ring
+> `H` is how much (D18, D30). A level-`D` neuron fires at `2^(−D)` of the base rate (T11), so filling its ring
 > takes `H · 2^D` of its channel's frames. After `F` frames the stack has therefore reached at most
 > ```
 > D   ≤   log₂( F / H )

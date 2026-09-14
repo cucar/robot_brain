@@ -47,7 +47,7 @@ incrementally maintained state:
 rather than a rescan; whether `cover` is stored as pattern ids or as an index the way the old histogram stored
 servers. The
 old histogram, `normal`, `fallback` and running-benefit structures are retired: the spec has no default
-pattern (D21) and no per-activation server, and the benefit is R12's margin read off `counts`.
+pattern (D21) and no per-activation server, and the benefit is D30's margin read off `counts`.
 
 ## Pattern counts
 
@@ -186,7 +186,7 @@ the population, collapse per neighbor with the same abstention. R15: price it ov
 would join, on residual neighbors only, against `1 + |C|`. If it pays, return the request with the definition
 `C` carries at the end of the bill.
 
-**`retire_one() → Option<pattern_id>`** — pass 4. Read every margin (R12), this bill's candidate included;
+**`retire_one() → Option<pattern_id>`** — pass 4. Read every margin (D30), this bill's candidate included;
 retire the smallest if strictly negative (R18). It leaves the table now; the neighbors it owned fall to the
 residual (D21); its child goes on the request as a delete.
 

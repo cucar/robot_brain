@@ -316,7 +316,7 @@ assumes for anything the file does not state.
 > ```
 > summing D13's prices over the two parts D12 gives. **There is one `L`**, and every neuron's structure is
 > priced against it. Nothing computes it: every quantity the design uses is a **difference** in `L`, which is
-> finite however long the run is (R12).
+> finite however long the run is (D30).
 
 ---
 
@@ -425,7 +425,7 @@ residual. Every price in the design (D13) is counted off them.
 > it costs its own line whether the pattern exists or not.
 >
 > **This is the only valuation in the design**, and it is read over two different sets — the neuron's own
-> activations (R12, D28) and the machine's board (R22, R24) — so the two numbers differ, and are meant to.
+> activations (D30, D28) and the machine's board (R22, R24) — so the two numbers differ, and are meant to.
 
 # 9. The greedy cover
 
@@ -498,29 +498,19 @@ Recognition is the procedure that chooses a cover for a new activation/neighborh
 **Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
 empty table covers nothing and bids nothing.
 
-# 13. The one test
+# 13. The margin of a pattern
 
-> **R12 — The one test.** A pattern earns its dictionary line when the file is shorter for holding it than it
-> costs to state. **Nothing measures a file to find that out**: both terms are counts over what the neuron
-> already holds, so the margin is the difference in `L` reached directly (§1).
+> **D30 — The margin of a pattern.** What a pattern is worth over the history: its margin over each activation
+> it covers (D22), summed, less its dictionary line (D13).
 > ```
-> benefit(p)  =  Σ over the activations p covers:  coverage − price
-> cost(p)     =  1 + |p|                                              the line  (D13)
+> benefit(p)  =  Σ over the activations p covers:  coverage(p, O) − price(p, O)     D22
+> cost(p)     =  1 + |p|                                                            D13
 > margin(p)   =  benefit(p) − cost(p)
 > ```
-> A pattern is **added** only when its margin is strictly positive and **retired** only when strictly negative
-> (R15, R18). At equality nothing happens, so the boundary cannot flip-flop.
->
-> **`coverage` is what nothing else would have covered.** A pattern is worth what it saves over what would
-> account for those neurons if it were gone — another pattern of the same cover if one names them, and the
-> residual otherwise, where each stands as its own line (D21). A saving some other pattern already
-> delivers is not this one's.
->
-> **The same expression prices a bid over one frame** (R22). There is one valuation in the design (D22); the
-> two readings differ in what they sum it over and in whether the dictionary line is in the sum.
->
-> **Benefit is a measurement, so it moves when anything under it moves** — an activation saved or evicted, a
-> pattern re-centered, a cover re-derived. **No test needs a pass of its own.**
+> It is the difference in `L` (D14) between the file with the pattern and the file without it, and both terms
+> are counts over what the neuron already holds.
+
+A pattern is added only when its margin is strictly positive (R15) and retired only when strictly negative (R18).
 
 > **R13 — One comparison.** There is no second one. An activation is covered on `O`, priced on `O`, and the tests
 > that add and retire read the same numbers over the history. No quantity in the design waits for anything.
@@ -530,7 +520,7 @@ empty table covers nothing and bids nothing.
 
 # 14. Deleting a pattern
 
-> **R18 — Retire one, then delete.** Read every margin in the table (R12) — the table as the last call left
+> **R18 — Retire one, then delete.** Read every margin in the table (D30) — the table as the last call left
 > it, less the activation just evicted, and before this call's activation is admitted (R20):
 > ```
 > benefit  =  Σ over the activations it covers:  |neighbors only this pattern names|  −  ( 1 + |p \ o| )
@@ -620,8 +610,9 @@ never charged for what came after — only for what it names that did not fire b
 > **What `C` is worth.** Against an activation, `C` takes neurons out of the residual and names some that did not
 > fire:
 > ```
-> reach(o)   =  |residual(o) ∩ C|  −  |C \ o|          what C is worth there, before its line
-> saving(o)  =  max( 0,  reach(o) − 1 )                    what it is worth once the line is paid
+> reach(o)   =  |residual(o) ∩ C|  −  |C \ o|          coverage − price there (D22): what C takes from
+>                                                        the residual, less what it names that did not fire
+> saving(o)  =  max( 0,  reach(o) )                        C joins the cover only where it pays (D28)
 > ```
 > **A candidate is only ever credited the residual.** A neuron a pattern already covers is not `C`'s to take —
 > a candidate that fits a chunk beautifully earns nothing for it if something already accounts for it.
@@ -634,9 +625,10 @@ never charged for what came after — only for what it names that did not fire b
 > choice anywhere in it, and one candidate per call, which is the rhythm the machine keeps with one election
 > per frame.
 
-> **R15 — The solo test.** R12, asked of a table `C` is not in yet.
+> **R15 — The add test.** The margin (D30) of a candidate, which is in no cover: it is credited the residual
+> only, and only in the activations where it pays (R14).
 > ```
-> benefit  =  Σ over the whole history:  saving(o)      (R14, floored — one line per activation already in it)
+> benefit  =  Σ over the history:  saving(o)                                          R14
 > commit iff  benefit > 1 + |C|
 > ```
 > **An accepted add shortens the file**, against the table it was priced on.
@@ -773,7 +765,7 @@ against this frame, saved it, re-centered on it, and built from it.
 > differ, and are meant to (D22).
 >
 > **This is a price for one bid, not for the symbol.** The dictionary line `1 + |p|` is weighed by the one test
-> (R12) and appears nowhere in this price and nowhere in the election.
+> (D30) and appears nowhere in this price and nowhere in the election.
 
 **Contraction proposes nothing.** Every candidate comes from a neuron's own history, and the machine only
 accepts or declines one — it never edits a bid, merges two, or invents a third. What it does do is *measure*
@@ -810,7 +802,7 @@ one: a bid arrives as a definition, and everything it is worth this frame the ma
 **The file over one frame is the neurons promoted plus what they got wrong**: `Σ over the accepted (1 + |p \ O|)
 + the neurons no bid covered`, the body half of `L` (D14) over the frames the election can see. **The two
 terms do not overlap**: a neuron a promoted neuron fails to name is in the second and not the first, which is why
-the price counts only the neighbors named and absent (R22). The dictionary half is R12's, and neither test
+the price counts only the neighbors named and absent (R22). The dictionary half is D30's, and neither test
 touches the other's sum.
 
 **That sum is the objective; R24 is the procedure that serves it.** **Nothing anywhere forms a subset of bids

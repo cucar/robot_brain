@@ -185,7 +185,7 @@ span at least two activations before a candidate is priced. Exact, and costs one
 **Shared patterns fit every position worse than tuned ones would.** D11 pools activations from everywhere into one
 pattern, so a pattern describes statistics that genuinely differ by position and fits each of them worse. That
 is a real cost and it is paid in charges, which is the body half of `L` — the dictionary half falls in
-exchange, and R12 is what weighs the two. The design commits to the trade being worth it and offers no way to
+exchange, and D30 is what weighs the two. The design commits to the trade being worth it and offers no way to
 buy back position-specificity except declaring a coarse position as a *neuron* dimension. **Diagnostic:**
 charges per activation against dictionary size, before and after, on the same data.
 

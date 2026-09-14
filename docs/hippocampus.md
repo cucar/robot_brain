@@ -726,7 +726,7 @@ no decay rate, no boost and no eviction threshold; the history's `H` is the only
 (R4).
 
 **2. A moment dies when it names nothing.** Moments are not in the file, so the one test cannot price them
-(R12), and no clock touches them: nothing anywhere is measured in frames (D18). A moment's evidence adapts the
+(D30), and no clock touches them: nothing anywhere is measured in frames (D18). A moment's evidence adapts the
 way a pattern's does — its history slides, what it names is re-collapsed (D27, D29) — and a moment whose history
 gives no neighbor a majority names nothing, can never be fired or reached, and is dead by that fact.
 
