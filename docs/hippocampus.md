@@ -11,7 +11,7 @@ departs.
 Two organs run continuously in parallel over the same neurons:
 
 - **Cortex (System 1)** — fast, reflexive, short-term. Builds patterns by the collapse over recurring
-  activations (R7), and every frame executes the action with the best estimate among the situations on the apex
+  activations (D27), and every frame executes the action with the best estimate among the situations on the apex
   (R36).
 - **Hippocampus (System 2)** — slow, deliberate, long-term. Mints moments — neurons that bind everything on the
   apex at a salient instant — runs replay experiments over them, and reinforces the action connections of the
@@ -26,7 +26,7 @@ moment is a neuron with a kind tag. What distinguishes a moment from a pattern's
 and consequently *how much it names* — not what kind of neuron it is.
 
 - **Patterns** are formed by *intersection*: a pattern names what recurs across the activations it covers — the
-  collapse, a majority per neighbor (R7). It starts narrow and stays narrow. Created gradually, by counting.
+  collapse, a majority per neighbor (D27). It starts narrow and stays narrow. Created gradually, by counting.
 - **Moments** are formed by *union*: at a salience trigger, the hippocampus binds every neuron on the apex as a
   neighbor of the moment. A moment names a great deal at birth. Created in one shot.
 
@@ -62,7 +62,7 @@ Thought emerges from replay traversal through compressed contextual structure.
 
 A moment is born naming a great deal: the apex at the instant it was minted, all of it (R27).
 It keeps a history of its last `H` activations like every neuron (D18), and what it names is the collapse over
-that history — a neuron stays named while it is present in more than half of the moment's activations (R7).
+that history — a neuron stays named while it is present in more than half of the moment's activations (D27).
 At birth the history holds one activation, and a majority over one activation is everything, so the moment is
 born as broad as the instant was.
 Every later activation is another instant; the neurons those instants share keep their majority and the
@@ -72,7 +72,7 @@ child. No link decays, no link is boosted, and no threshold is set: the history 
 moves at the rate the moment fires rather than at the rate of the clock.
 
 > **H1 — A moment.** A neuron (D2) of the event kind that holds its own pattern: the set of neurons it names, at
-> their offsets, the collapse over its history (R7). No parent's table holds it (R16) — that is the structural
+> their offsets, the collapse over its history (D27). No parent's table holds it (R16) — that is the structural
 > difference from a pattern's child, which exactly one table holds, prices and offers. A moment is priced by
 > nothing, offered by nothing and elected by nothing; it holds a history and connections exactly as any neuron
 > does (D18, D25), and the rest of this document is what it does with them.
@@ -113,7 +113,7 @@ The full architecture forms a graph with three tiers:
 
 - **Bottom tier: base event and action neurons.** Input and output. The raw interface with the environment (D1).
 - **Middle tier: pattern neurons.** Created by the cortex through intersection — the collapse over recurring
-  activations (R7). Many levels, each at a doubled reach (D4). A pattern names neighbors one level down and is
+  activations (D27). Many levels, each at a doubled reach (D4). A pattern names neighbors one level down and is
   itself named by patterns one level up. The cortex builds this tier bottom-up.
 - **Top tier: moment/class neurons.** Created by the hippocampus through union — one-shot binding of the apex at
   salience triggers. Moments name patterns as neighbors, and their connections hold what action followed them
@@ -259,7 +259,7 @@ history has made it.
 A neuron, whether minted as a pattern's child or as a moment, holds (D15, D18, D25):
 
 - **What it names**: for a pattern's child, the line in its parent's table (D15); for a moment, its own pattern
-  (H1). Either is the collapse over a history (R7), and nothing on it is weighted; a neuron is in the set or not.
+  (H1). Either is the collapse over a history (D27), and nothing on it is weighted; a neuron is in the set or not.
 - **A history**: its last `H` activations, each with the neighborhood it observed (D18).
 - **Connections**: per `(action neuron, offset > 0)`, a strength and an estimate — what action followed the
   neuron's activations and what it earned, written apex to apex while the activation is uncovered (D25, R31).
@@ -457,7 +457,7 @@ not drive behavior on its own, is addressed where imagined scenarios are constru
 
 ### Moments age into classes (mechanism)
 
-After minting, the moment's history fills from two sources, and what it names is re-collapsed after each (R7,
+After minting, the moment's history fills from two sources, and what it names is re-collapsed after each (D27,
 R8):
 
 - **Real activations.** An instant in which more than half of what the moment names is present fires the
@@ -502,8 +502,8 @@ neuron.
 > action saw that event follow at that offset — and no estimate. It is written in the `process actions` call
 > beside the action connections (§20), one exposure per frame per event dimension, at the offset the age rounds
 > to; a coarse offset pools the events of every frame in its group (D6). It is never in the file and enters no
-> test (D12), nothing collapses it (R7), nothing weakens it (R31), and nothing in the machine reads it: it is not
-> an output. A pattern's child of the action kind holds it from the frame after its mint on (R17); a base action
+> test (D12), nothing collapses it (D27), nothing weakens it (R31), and nothing in the machine reads it: it is not
+> an output. A pattern's child of the action kind holds it from its mint frame on (R17); a base action
 > holds the marginal over every situation it ran in. The hippocampus reads it, and nothing else does.
 
 An experiment alternates the two kinds, and that alternation is the transition model:
@@ -727,7 +727,7 @@ no decay rate, no boost and no eviction threshold; the history's `H` is the only
 
 **2. A moment dies when it names nothing.** Moments are not in the file, so the one test cannot price them
 (R12), and no clock touches them: nothing anywhere is measured in frames (D18). A moment's evidence adapts the
-way a pattern's does — its history slides, what it names is re-collapsed (R7, R8) — and a moment whose history
+way a pattern's does — its history slides, what it names is re-collapsed (D27, R8) — and a moment whose history
 gives no neighbor a majority names nothing, can never be fired or reached, and is dead by that fact.
 
 > **H5 — Moment death.** A moment that names nothing goes on the death ledger, and the ledger takes it on its
@@ -778,7 +778,7 @@ Without forgetting:
 - memories become overly specific,
 - and generalization fails.
 
-Forgetting is the collapse over a sliding history (R7, D18): what stops recurring stops being named, and what
+Forgetting is the collapse over a sliding history (D27, D18): what stops recurring stops being named, and what
 keeps recurring is all that is kept.
 
 Over time, this transforms detailed episodic moments into compressed semantic classes.
@@ -1056,7 +1056,7 @@ discovered empirically from a working level-1 system.
 - Moment minting: verify the new moment names every neuron on the apex at the instant, and the actions that ran
   within reach, at their offsets (H1).
 - The collapse on a moment: a neighbor absent from more than half of the moment's history leaves what it names
-  (R7); one present in more than half stays.
+  (D27); one present in more than half stays.
 - Moments-age-into-classes: simulate skewed reactivation over time, verify the moment ends up naming only its
   true core neighbors.
 - Connections on moments: written while the activation is open and uncovered (D25, R31); reading by id without

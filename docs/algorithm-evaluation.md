@@ -126,7 +126,7 @@ on the forward, and a finer offset alphabet above some level is the fallback.
 **Siblings agree until one is bought alone.** Two children bought at one coordinate see the same actions
 follow them, so their connections agree until the first activation where one is bought and the other is not (D25). Two
 patterns always bought together never diverge at their own level; the level above is expected to merge them
-(§11 of the remarks). **Diagnostic:** for pairs of children of one neuron, the overlap of the frames they were
+(§9 of the remarks). **Diagnostic:** for pairs of children of one neuron, the overlap of the frames they were
 bought in against the overlap of their connections. Pairs high on both for a long stretch are the merge the level
 above has not made.
 
@@ -160,20 +160,19 @@ pairs. A regression here will look like the compression was wrong when it was th
 beyond them. `H` too small and patterns form on coincidences and the stack deepens faster than the evidence
 warrants; too large and a neuron follows a moving situation slowly and keeps more structure than earns its
 keep. Reach too small and no chunk spans what recurs; too large and every neighborhood is mostly noise at
-build time. Measure both early and jointly — they interact through `|p|`, not through R7, whose denominator is
-the same at every offset (R7). **Diagnostic:** how often the outermost offset is named against offset 0, swept
+build time. Measure both early and jointly — they interact through `|p|`, not through D27, whose denominator is
+the same at every offset (D27). **Diagnostic:** how often the outermost offset is named against offset 0, swept
 over `H`. If the outer reaches stay empty at every `H`, the reach is bigger than the data supports and
 evidence is not what is limiting it. Sweep depth against `H` in the same runs — T13 makes the two move
 together, and conflating them is easy.
 
-**Boundary flicker on stationary input.** R7 holds at equality, which stops a slot flip-flopping when the same
-population is re-read, but the ring is a FIFO and its population moves at every bill. A slot whose count sits
+**Boundary flicker on stationary input.** The ring is a FIFO and its population moves at every bill. A neighbor whose count sits
 at the boundary follows the activations entering and leaving, naming it raises the pattern's price wherever it
-is absent, that can drop the pattern out of a cover, and the smaller population re-decides every other slot.
-The claim is that on stationary input this is flicker around a fixed point, confined to boundary slots, with an
+is absent, that can drop the pattern out of a cover, and the smaller population re-decides every other neighbor.
+The claim is that on stationary input this is flicker around a fixed point, confined to boundary neighbors, with an
 amplitude that does not grow with run length — a claim about noise, which nothing in the rules proves. **This is
-the standing test.** Per pattern per bill: slot flips against the slot's distance from the boundary,
-`2 · count − n − 1`, and cover changes per bill for the cascade. Expected: flips concentrated within a step or
+the standing test.** Per pattern per bill: neighbor flips against the neighbor's distance from the boundary,
+`2 · count − s − 1`, and cover changes per bill for the cascade. Expected: flips concentrated within a step or
 two of the boundary, at a rate that settles once the ring is full and does not drift. A flip rate that rises with
 run length, or flips far from the boundary, is the churn engine and a bug. Early tests are also decided by very
 little evidence, so read the same numbers over the first thousand frames and again in steady state.
@@ -200,7 +199,7 @@ by the reach and the base density, and the cover pass prices every pattern again
 **Diagnostic:** scan volume per level, against `|O|`.
 
 **An early partition can freeze.** A pattern never acquires a neighbor another pattern of the same cover already
-holds — the slot's population excludes those activations entirely (R7) — so patterns grow into the residual and
+holds — the neighbor's population excludes those activations entirely (D27) — so patterns grow into the residual and
 never into each other. That is what stops two patterns converging, and T7 rests on it, and it also means a bad
 early split of one chunk across two patterns is not repaired by re-centering. It can only be repaired by one
 of them retiring and the other growing into what it left, one per bill. **Diagnostic:** how often a retirement
@@ -262,9 +261,9 @@ level let compression override reward; whether some other reading of the voter �
 the exposures its estimate rests on — should weight it is not decided. **Diagnostic:** per dimension, how often the
 winner was placed by a base voter over a pattern voter that disagreed, and which paid.
 
-**The cross-neuron seam.** R7's abstention teaches a pattern not to name what another pattern of the *same
+**The cross-neuron seam.** D27's abstention teaches a pattern not to name what another pattern of the *same
 cover* holds. Across neurons nothing teaches it: a neighbor some other neuron's child reliably covers is still
-present, still wins its majority, and stays in the pattern, paying its slot in the line. This is the same
+present, still wins its majority, and stays in the pattern, paying its neighbor in the line. This is the same
 omission as the neuron never hearing what it sold, seen from the pattern's side rather than the bid's,
 and it is the same bet. The one-bit fallback above would not close it; closing it takes the per-neighbor report
 the design removed. **Diagnostic:** per pattern, the share of its named neighbors that its bought bids were

@@ -35,8 +35,8 @@ actions:      Map<(action_neuron, offset > 0), { strength, estimate }>  // event
 incrementally maintained state:
 
 - Every pattern's `counts` equal a from-scratch recount over the activations whose held cover holds it — `present`
-  and `held` per slot as defined under Pattern counts below. Its `neighborhood` is R7's collapse over those counts,
-  with the line charged and equality held.
+  and `held` per neighbor as defined under Pattern counts below. Its `neighborhood` is D27's collapse over those counts,
+  with the line charged.
 - Every activation's `cover` is one R9 could have produced against some past table, and no re-derivation against
   the current table is strictly cheaper than it (R10).
 - `actions` only ever grows: no strength falls, and a connection leaves only with the death of either of its
@@ -51,7 +51,7 @@ pattern (D21) and no per-activation server, and the benefit is R12's margin read
 
 ## Pattern counts
 
-The collapse (R7) reads two numbers per pattern per slot: how many activations are in the population there, and how
+The collapse (D27) reads two numbers per pattern per neighbor: how many activations are in the population there, and how
 many of them name the neuron there. Both are sums over the activations the pattern covers, and the code keeps them
 as running tallies so that re-centering never re-reads the ring. Nothing in this section is design: every tally
 equals a from-scratch recount, and the invariant above checks that it does.
@@ -60,13 +60,13 @@ equals a from-scratch recount, and the invariant above checks that it does.
 indexed by the neighbors actually seen, not by everything the box admits — and `n`, the number of activations it
 covers:
 ```
-present(s)   the covered activations in which s fired and no other pattern of that activation's cover
+present(n)   the covered activations in which n fired and no other pattern of that activation's cover
              holds it — its own share plus the residual
-held(s)      the covered activations in which another pattern of the cover holds s
+held(n)      the covered activations in which another pattern of the cover holds n
 ```
-At slot `s` the collapse's population is `n − held(s)` and its count is `present(s)`. A pattern therefore tallies
+For neighbor `n` the collapse's population is `s − held(n)` and its count is `present(n)`. A pattern therefore tallies
 neighbors it does not name, because whether it should name them is the question re-centering asks (R8), and a
-slot only the residual has ever held is how a pattern grows. A neighbor another pattern of the same cover holds is
+neighbor only the residual has ever held is how a pattern grows. A neighbor another pattern of the same cover holds is
 that pattern's evidence, not this one's, and is counted here only as an abstention; a neighbor in the residual is
 nobody's yet, and is evidence for every pattern of the cover.
 
@@ -97,7 +97,7 @@ pattern.counts            =  Σ over the activations it covers: its share and th
 
 **The ring makes eviction exact.** Removing the oldest activation means subtracting the neighbors *it* contributed,
 which a tally cannot recover, so each activation keeps its own neighborhood and a pattern's counts are the cached
-aggregate over them. Eviction reads a neighborhood whole; everything else reads it per slot, off the counts.
+aggregate over them. Eviction reads a neighborhood whole; everything else reads it per neighbor, off the counts.
 
 **Why records and not a summary.** A total cannot answer retirement: when a pattern goes, its neighbors
 have to be re-covered from the table, which needs the activations and what each holds against each pattern — a
@@ -105,15 +105,15 @@ single number per pattern could not produce it. Keeping the ring is not a storag
 tests scan distinct backward contexts and read pre-summed counts.
 
 **Why a pattern tallies neighbors it does not name.** A pattern used to count only the neighbors
-owned by it. That is enough to decide whether to *keep* a named slot and never enough to decide whether to
+owned by it. That is enough to decide whether to *keep* a named neighbor and never enough to decide whether to
 *enter* one: a neighbor the pattern does not name is never owned by it, so its count was identically zero
-and R7 could never take it. R7's abstention paragraph says a pattern grows into the residual, and the state as
+and D27 could never take it. D27's abstention paragraph says a pattern grows into the residual, and the state as
 defined could not support that sentence; R8's claim that re-centering needs no pass of its own was not true of
 the one count that growth depends on.
 
-The fix is the smallest that makes R7 exact. At each slot R7 wants two numbers: how many covered activations had
+The fix is the smallest that makes D27 exact. For each neighbor D27 wants two numbers: how many covered activations had
 the neighbor there and unclaimed by another pattern of the cover, and how many abstain because another pattern
-holds it. Those are `present(s)` and `held(s)`, and the population is `n − held(s)`. Both are sparse — indexed
+holds it. Those are `present(n)` and `held(n)`, and the population is `s − held(n)`. Both are sparse — indexed
 by neighbors actually seen — and both move a whole activation's worth at a time, so the granularity above is
 unchanged. The one new obligation is the third event above: when an activation's cover changes, a pattern that
 *stays* in the cover still subtracts and re-adds, because what another pattern took from the residual moves this
@@ -153,9 +153,9 @@ process actions — made once per frame after every level has run, with every op
 ```
 
 **The bill runs inside `process frame`, before the offer** (R20). The neuron covers and folds the new activation,
-re-centers once, builds one candidate, retires one pattern, then offers. The election runs after the call
+retires one pattern, recognizes, re-centers once, builds one candidate, then offers. The election runs after the call
 returns and reports nothing back (R24). The machine returns the requested child's identity on the next call or
-as a separate reply; either way the pattern is in the table from the next frame (R17).
+before the election; the pattern is in the table in the call that built it (R17).
 
 **`process actions` is age-blind by construction.** It walks every open activation the machine holds and hands
 each what landed. A neuron with reach `r` is therefore reached `r + 1` times per activation on the forward
@@ -175,12 +175,12 @@ owners by first-namer. Push the activation with its cover and owners; if the rin
 and subtract its contribution from its cover's counts (Pattern counts). The connections are untouched. Add the new activation's
 contribution to its cover's counts.
 
-**`recenter()`** — pass 2. Every pattern whose counts moved re-collapses per slot with the line charged and
-equality held (R7). Every activation whose table moved under it re-derives its cover and keeps the cheaper (R10).
+**`recenter()`** — pass 2. Every pattern whose counts moved re-collapses per neighbor with the line charged and
+(D27). Every activation whose table moved under it re-derives its cover and keeps the cheaper (R10).
 
 **`build_one() → Option<Request>`** — pass 3. R14: tally the residual per neighbor over the ring, seed on the
 largest (ties to declaration order then the nearer offset), take the activations whose residual holds the seed as
-the population, collapse per slot with the same abstention. R15: price it over the activations whose cover it
+the population, collapse per neighbor with the same abstention. R15: price it over the activations whose cover it
 would join, on residual neighbors only, against `1 + |C|`. If it pays, return the request with the definition
 `C` carries at the end of the bill.
 
@@ -194,8 +194,8 @@ less the candidate just requested. Each bid is the child id and the neighborhood
 **`register_child(id)`** — on the reply. Bind the pending pattern to its child id. Then every activation takes the
 cheapest of its held cover, its held cover with the newcomer appended, and its cover re-derived (R10), and the
 newcomer's counts are whatever those covers assign it. The machine, for its part, opens an activation for the
-child at the parent's coordinate at age 0 — accrual only: `process actions` reaches it, nothing else does
-(R17).
+child at the parent's coordinate at age 0 when its bid wins, and it is called with its level like any
+activation (R17).
 
 **`accrue(age, apex_action, reward)`** — the `process actions` call. If the activation is uncovered, increment
 the connection at `(apex action, age)` for each action dimension, creating it at strength 1. Fold each reward
@@ -222,7 +222,7 @@ change:
   declared order that has no connection at that distance, at strength 1 and reward 0
   (`upsert_connection` → `find_alternative_action`), which is R37.
 - `vote(age)` returns every connection with strength above zero — the whole distribution, no majority. That is
-  R7's "connections are never collapsed", read at one offset where R36 reads every offset beyond the age.
+  D27's "connections are never collapsed", read at one offset where R36 reads every offset beyond the age.
 - Ages that activated a child pattern are suppressed and do not vote (`get_suppressed_ages`), which is D10's
   silencing of speech.
 - `aggregate_votes` normalizes each voter to one vote per `(dimension, distance)` split by strength;
@@ -270,7 +270,7 @@ change:
    `allocate_temporal_pattern_neuron` backfills the frames between the parent's activation and the miss with the
    actuals that followed and their rewards, at strength 1. The design mints at the bill, at age 0, on
    justification (R14, R15), so a child is born with nothing behind it to backfill. It is born empty, is given
-   an activation at the parent's coordinate in the mint frame, connects from the next frame on, and keeps
+   an activation at the parent's coordinate in the mint frame when its bid wins, connects from that frame on, and keeps
    connecting after the parent's own activation has closed, since children outlive their parents (R17, R18).
 9. **The default is not wired at birth.** `Column::create_neurons` gives every neuron a connection to each
    channel's default action at every voting distance, strength 1 and reward 0. That goes: a dimension no
@@ -345,8 +345,8 @@ forward-side deltas are the numbered list in the section above and land in Stage
    `elect_spatial_bids` entirely.
 8. **Move minting to the bill, as a request and a reply.** The bill runs before the offer, inside the same
    call; the request leaves with the bids; the thalamus batch-allocates and dispatches `register_child` back;
-   the parent binds the pending pattern to the returned id. The newborn is **not** activated: it is offered
-   first on the next activation (R17).
+   the parent binds the pending pattern to the returned id. The newborn's pattern is offered in the call that
+   built it, and the newborn is activated if its bid wins (R17).
 9. **Delete the birth special cases** — the newborn's insertion into `new_error_pattern_ids` for the level
    above, the no-subsume-on-birth-frame rule, and the fires-but-does-not-record state.
 10. **Record unconditionally.** Every active neuron folds its activation, as covered: bought or not, covered or
@@ -414,12 +414,12 @@ dimension is silent in them (D5).
 
 ### What follows from that
 
-**Base event processing is spatial.** The backward slot at `−1` lands on the previous example's reward frame,
+**Base event processing is spatial.** The backward neighbor at `−1` lands on the previous example's reward frame,
 which is silent. So every neighbor a base event neuron names
-sits at temporal offset `0`. The temporal slots are voted out for want of a majority (R7) and cost
+sits at temporal offset `0`. The temporal neighbors are voted out for want of a majority (D27) and cost
 nothing in `|p|`.
 
-**No action patterns form.** An action neuron's own backward slots land on frames carrying no actions, so the action hierarchy stays flat. R32's apex active action is therefore always the base action,
+**No action patterns form.** An action neuron's own backward neighbors land on frames carrying no actions, so the action hierarchy stays flat. R32's apex active action is therefore always the base action,
 which R32 states explicitly holds before any action pattern exists.
 
 **Connections are written per frame, never at the bill.** R31 writes one at every age a neuron is open at,
