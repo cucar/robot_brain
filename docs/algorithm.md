@@ -359,7 +359,7 @@ Part III covers the `process actions` call, where a neuron learns what action fo
 
 > **D15 — The pattern.** A set of past and present neighbors that a neuron **names**: one line of its table,
 > spanning the same box a neighborhood does (D5), and shaped exactly like one (D7). It is the collapse of the
-> neighborhoods it covers (D27), moves as they move (R8), and promotes a child (R16). Its `id` is its creation
+> neighborhoods it covers (D27), moves as they move (D29), and promotes a child (R16). Its `id` is its creation
 > order, a handle that survives re-centering and the tie-break D28 and R24 reach for.
 >
 > **A pattern is not a neighborhood.** A neighborhood is what one activation saw where it fired, saved once and
@@ -469,7 +469,7 @@ machine, over a frame's bids. It is stated here and cited from both.
 
 The collapse is the only operation that decides what a pattern names. It runs in two places:
 
-- **Re-centering** (§11, R8) collapses the neighborhoods of the activations an existing pattern covers, at every
+- **Re-centering** (§11, D29) collapses the neighborhoods of the activations an existing pattern covers, at every
   call.
 - **Creating a pattern** (§15, R14) collapses the neighborhoods whose residual holds the candidate's seed, once
   per call. The candidate is in no cover, so every owned neighbor is skipped and it is built on the residual
@@ -485,25 +485,10 @@ smoothing or probability estimate enters.
 
 # 11. Re-centering
 
-> **R8 — Re-centering.** A pattern **re-centers** by running the collapse (D27) over the activations it now covers,
-> and the activations it covers then re-derive their covers with it (R10).
->
-> **A pattern re-centers whenever the neighborhoods it covers change** — no test and no gate. Three things move it, all in
-> `process frame` (R20): an activation it covers is saved, one is evicted, or an activation's cover changes so
-> that the pattern joins it, leaves it, or is credited differently within it. A cover changes when the table
-> changes under it — a pattern added, retired, or re-centered so that D28 reads the activation differently — and
-> only when the new cover is cheaper (R10). Every move disturbs a whole activation's worth, so a re-center is
-> always over all offsets and never per activation.
->
-> **A neighbor at the boundary can flip.** The neighborhoods behind it move two ways: the ring turns over, an activation
-> entering and one leaving at every call, and the decision feeds back, since naming a neuron raises the pattern's
-> price wherever the neuron is absent, which can cost the pattern a cover and re-decide every neighbor on the smaller
-> set. Each step is the right response to the evidence, and what it adds up to on stationary input is
-> flicker around a fixed point, confined to neighbors at the boundary — an amount that is measured, not proved.
->
-> **A call re-centers once**, after the activation is saved and before the tests (R20). What the tests then move
-> — a candidate joining covers, a retired pattern leaving them — is re-centered at the next call, so the center
-> never turns on the order two moves happened to run in.
+> **D29 — Re-centering.** The operation that re-decides the neighbors a pattern names (D15) once the activations
+> it covers have changed: the oldest evicted when the history is full (D18), or a new one admitted and covered
+> with it (D28). It runs the collapse (D27) over the activations the pattern now covers (residual included),
+> and updates the owners (D19) to what the pattern now names.
 
 # 12. Recognition
 
@@ -524,13 +509,13 @@ Recognition is the procedure that chooses a cover (D17).
 > residual it names, and the cover re-derived from scratch — and the activation takes the cheapest. The appended
 > cover is what R15 priced, so what adding the pattern realizes is never less than what the test counted.
 >
-> **Owners move with the table.** When a pattern of the cover re-centers (R8) or retires (R18), a neighbor it
+> **Owners move with the table.** When a pattern of the cover re-centers (D29) or retires (R18), a neighbor it
 > stops naming falls to another pattern of the cover that names it — the older id, when two do — and to the
 > residual when none does; a neighbor it starts naming it takes from the residual only, never from a pattern
 > that owns it (D27). When the cover itself is replaced, D28 rewrites the owners with it (D19).
 
 > **R11 — A price is a measurement, not a record.** What an activation costs is read off its cover as that cover now
-> stands (D22), and the cover can change: re-centering (R8) moves a pattern, which moves what it covers in every
+> stands (D22), and the cover can change: re-centering (D29) moves a pattern, which moves what it covers in every
 > activation, and those are what the activations then cost. **An activation is fixed but its cost is not**, and it
 > stops moving when its cover stops moving.
 
@@ -727,28 +712,24 @@ One call per level per frame: everything structural for the activations that fir
 > has run (§20) and never here. The right-hand column says which steps are per activation and which per neuron.
 > ```
 >                                                                                        over
->  1  evict      a full ring drops its oldest activation, and every pattern of that       each new
->                activation's cover loses it                                      D18     activation
+>  1  evict      a full ring drops its oldest activation; every pattern of that           each new
+>                activation's cover loses it and re-centers                     D18, D29   activation
 >  2  retire     read every margin in the table; retire the worst if it is strictly          the
 >                negative, and any pattern naming nothing. It leaves the table at           neuron
->                once, and the activations it covered re-derive without it     R18, R10
->  3  admit      the new activation joins the ring, whole (D7). No pattern has taken      each new
->                anything yet, so the whole of `O` is residual                    D21     activation
->  4  cover      run D28 over the table against `O`. What it takes is the **cover**      each new
->                and what it credits is each neighbor's **owner**       D28, D17, D19      activation
->  5  re-center  every pattern whose covered activations changed — one joined it,            the
->                left it, or is credited differently — re-centers, once; every             neuron
->                activation whose table moved under it re-derives its cover and
->                keeps the cheaper                                             R8, R10
->  6  build      seed, neighborhoods, collapse (R14), then price it (R15). A                the
+>                once, and the neighbors it owned fall to the residual         R18, D21
+>  3  cover      the new activation joins the ring, whole (D7), and recognition runs      each new
+>                over the history: what it takes is the **cover** and what it            activation
+>                credits is each neighbor's **owner**; every pattern whose covered
+>                activations changed re-centers                    R10, D28, D17, D19, D29
+>  4  build      seed, neighborhoods, collapse (R14), then price it (R15). A                the
 >                candidate that pays joins the table, and this activation's cover           neuron
 >                may take it                                                       R10
->  7  offer      a bid for every pattern of the table more than half of whose           each new
+>  5  offer      a bid for every pattern of the table more than half of whose           each new
 >                neighbors are present — `2 · |p ∩ O| > |p|` — whether or not the        activation
 >                cover took it, this call's candidate included. A bid is the child's
 >                id and the pattern; for the candidate, the request stands in for
 >                the id until the machine allocates one                       R21, R17
->  8  return     the bids, and one request carrying the candidate that passed and             the
+>  6  return     the bids, and one request carrying the candidate that passed and             the
 >                the pattern that retired                                    R16, R21       neuron
 > ```
 

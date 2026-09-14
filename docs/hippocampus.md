@@ -81,7 +81,7 @@ Two rules say what reaches a moment and what fires it, and they are different.
 **Any neighbor reaches.** A single active neuron the moment names makes it addressable by the executor: it can
 be recalled from a partial cue, replayed and thought from.
 **A majority fires.** The moment fires, and the current apex enters its history, only when more than half of
-what it names is present — the cortex's own test for whether a pattern applies (R20 step 7), run by the moment
+what it names is present — the cortex's own test for whether a pattern applies (R20 step 5), run by the moment
 on itself since no table runs it for it.
 Reaching writes an imagined activation carrying the moment's own reconstructed instant; when the moment fires,
 it writes the real one. Both narrow the moment; only the second lets the present overwrite it, and only when the present
@@ -245,7 +245,7 @@ If a Robot Brain with a fully populated cortex loses its hippocampus, that is th
 
 Context overlap is not a global semantic similarity operation, and it is not a tolerance.
 What a moment names is a majority statement over its history, and an instant matches it when it agrees with the
-majority of that statement: more than half of what it names present (H2, R20 step 7).
+majority of that statement: more than half of what it names present (H2, R20 step 5).
 That is one comparison per moment against the current apex, made where the moment lives, with no global search.
 A moment that has narrowed to a few core neighbors is matched by any instant carrying those few; a fresh moment
 is matched only by an instant much like its own.
@@ -458,7 +458,7 @@ not drive behavior on its own, is addressed where imagined scenarios are constru
 ### Moments age into classes (mechanism)
 
 After minting, the moment's history fills from two sources, and what it names is re-collapsed after each (D27,
-R8):
+D29):
 
 - **Real activations.** An instant in which more than half of what the moment names is present fires the
   moment (H2), and the apex of that instant enters the history. Neighbors shared with the original survive the
@@ -689,7 +689,7 @@ The as-original baseline is the reference for whether thinking changed the *reco
 
 Writeback walks the winning trajectory **backward** from its end. Walking back is what gives each step its **return-to-go** — that step's own reward plus everything downstream — rather than the trajectory's flat total. This matters: a moment ten steps before the payoff and one right before it must record *different* values, or the offset structure is corrupted. Return-to-go is computed naturally by the backward walk (each step = its immediate reward + the running downstream sum), and it lands at the offset the step's distance from the moment rounds to (D6) — the offset a real reward for that action would have reached.
 
-**Replay writes activations, not estimates.** For every moment in each step, the step is re-presented to that moment as an activation: an entry in its history carrying what the step reconstructs at negative offsets, the action the trajectory took at the offset it ran, and this step's return-to-go beside that action as the reward. The activation is tagged as imagined, and otherwise it is an activation like any other — it enters the history, evicts the oldest, and the moment's connections are re-read from the history ([algorithm.md](algorithm.md), R8, R31). No scalar on any connection is written directly. What the vote then sees follows from the history:
+**Replay writes activations, not estimates.** For every moment in each step, the step is re-presented to that moment as an activation: an entry in its history carrying what the step reconstructs at negative offsets, the action the trajectory took at the offset it ran, and this step's return-to-go beside that action as the reward. The activation is tagged as imagined, and otherwise it is an activation like any other — it enters the history, evicts the oldest, and the moment's connections are re-read from the history ([algorithm.md](algorithm.md), D29, R31). No scalar on any connection is written directly. What the vote then sees follows from the history:
 
 - The connection's **strength** is the number of activations in the history, real or imagined, in which that action followed at that offset. It grows with every exposure and falls only when an exposure is evicted; nothing lowers it for an action not being chosen.
 - The connection's **estimate** is the plain mean of the rewards those activations carry. Every exposure counts equally, real and imagined alike, so the estimate converges on the action's expected return and moves in **either** direction. This is what lets the hippocampus learn *not* to do something: a tempting action whose rollouts end badly gathers imagined activations with bad returns, and its estimate falls until the moment stops voting for it. The hippocampus is a value-estimate *corrector*, not a positive-reward seeker — finding a bad outcome and correcting an estimate down is the same machinery as finding a good one, run symmetrically.
@@ -727,7 +727,7 @@ no decay rate, no boost and no eviction threshold; the history's `H` is the only
 
 **2. A moment dies when it names nothing.** Moments are not in the file, so the one test cannot price them
 (R12), and no clock touches them: nothing anywhere is measured in frames (D18). A moment's evidence adapts the
-way a pattern's does — its history slides, what it names is re-collapsed (D27, R8) — and a moment whose history
+way a pattern's does — its history slides, what it names is re-collapsed (D27, D29) — and a moment whose history
 gives no neighbor a majority names nothing, can never be fired or reached, and is dead by that fact.
 
 > **H5 — Moment death.** A moment that names nothing goes on the death ledger, and the ledger takes it on its

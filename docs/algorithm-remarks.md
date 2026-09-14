@@ -472,7 +472,7 @@ O = { a b c d e f }
 cost anyway; `x` was named and did not fire, so `P` pays for it. Only the second is charged to a pattern (D22).
 
 **Why the cover has to be exclusive.** Two patterns credited one neuron would each re-center as though they had
-earned it (D27, R8), so ownership is what keeps the collapse honest (D27).
+earned it (D27, D29), so ownership is what keeps the collapse honest (D27).
 
 # 10. The collapse
 
@@ -530,20 +530,21 @@ holds one symbol or nothing.
 
 # 11. Re-centering
 
-**On R8 — three consequences, and they are the point of the design.**
+**On D29 — three consequences, and they are the point of the design.**
 
 - **Patterns track their demand.** A pattern created on thin evidence is pulled toward its cluster.
 - **Coincidence is voted out.** A neighbor present once loses its majority to silence and drops out.
 - **Reach emerges.** Offsets where nothing recurs fall away. How far a pattern reaches is discovered, not
   declared. The reach bounds it; it does not set it.
 
-**On R8 — why once per bill and not twice.** An earlier draft re-centered after the activation was saved and again
-after the tests that add and retire, because the cover was a partition D28 made fresh every time, and a pattern
-joining or leaving moved every other pattern's share. R10 holds covers, so a pattern added this bill joins an
-activation's cover only where that is cheaper, and a retired pattern's activations re-derive once. What those
-moves do to other patterns' counts is real, and it is re-centered at the next bill. Re-centering it now would
-decide the center on the order the two moves happened to run in, which nothing else in the design is allowed
-to read.
+**On D29 — why re-centering rides evict and cover and has no step of its own.** An earlier draft re-centered
+once per call, after the cover and before the tests, and deferred what the tests moved to the next call, so that
+the center would never depend on the order two moves happened to run in. The order is not free: R20 fixes it, and
+a pattern's covered activations change at exactly two of its steps — evict, which takes one away, and cover, where
+recognition over the history gives or re-credits them — so each of those re-centers the patterns it moved, once.
+Retirement re-centers nothing: the retired pattern's neighbors drop into the residual, and the recognition that
+follows in the same call is what re-covers them with the patterns that remain. A re-center is one round because
+what it does to covers is a cover question, and recognition is the only place covers are decided.
 
 # 12. Recognition
 
@@ -702,7 +703,7 @@ has to be able to do it alone, and it can.
 # 15. Add — creating a child
 
 **On §15 and §14 — the two moves.** A neuron can do exactly two things to its table: **add** a pattern and
-**retire** one. Re-centering is neither — it is what moving counts means (R8). So the whole of restructuring is two
+**retire** one. Re-centering is neither — it is what moving counts means (D29). So the whole of restructuring is two
 tests, asked in that order, at a call and nowhere else, **and each is asked once per call: one candidate built and
 priced, one pattern retired at most** (R20). **Both are R12 over different sets** — one margin, read over the
 neurons a candidate would take out of the residual and over the neurons a pattern holds — and there is no second
@@ -808,7 +809,7 @@ an order on activations that are simultaneous — the pixel at one position did 
 another — and the structure that came out would depend on it, which is the defect R24 removes one level up.
 
 > **T8 — Nothing between activations is read.** Counts move when an activation is saved, when one is evicted, or
-> when a cover changes (R8), and all three happen in the frame the neuron fires. Between activations the forward
+> when a cover changes (D29), and all three happen in the frame the neuron fires. Between activations the forward
 > call does write — the action that runs next, and the reward with it, strengthen the neuron's connections (D9) — but **nothing prices
 > them, ever**: no pattern, cost or cover reads a connection, and nothing is recomputed in between. The
 > connections are read between activations, by the apex, and reading them moves nothing.
@@ -831,16 +832,14 @@ activation's costs.
 
 ## What pins the order of the call
 
-**On R20 — the order is derived, not chosen.** Seven constraints fix it; nothing else in the list is forced.
+**On R20 — the order is derived, not chosen.** Six constraints fix it; nothing else in the list is forced.
 ```
-2 after 1   the retire test reads the history as it stands, and the evicted activation is no longer in it R18
+2 after 1   the retire test reads the history as it stands, re-centered without the evicted activation    R18
 3 after 2   the new neighborhood is recognized against a table the retired pattern has already left       R18
-4 after 3   a cover is measured on a residual, and the residual is all of `O` until a round takes from it
-5 after 4   re-centering reads what the cover credited, and nothing moves that once the cover is chosen   R8
-6 after 4   a candidate is built out of the residual, which the cover has just set                       R14
-7 after 5   the bid carries the pattern, so it must carry the re-centered one                            R21
-7 after 6   the candidate is offered like any pattern, so it must exist before the offer                 R17
-8 last      one request carries both moves, so sending it is what settles what they are                  R16
+4 after 3   a candidate is built out of the residual, which the cover has just set                       R14
+5 after 3   the bid carries the pattern, so it must carry the re-centered one                            R21
+5 after 4   the candidate is offered like any pattern, so it must exist before the offer                 R17
+6 last      one request carries both moves, so sending it is what settles what they are                  R16
 ```
 
 **On R20 — why the call learns nothing.** What an open activation learns of what followed names the apex
@@ -934,11 +933,10 @@ The order §2 states, drawn. Every node names where it is specified.
 ```mermaid
 flowchart TD
     A["THE MACHINE holds every open activation, one per<br/>(neuron, age, position), and calls each neuron once<br/>in the frame it fires — §16"]
-    A --> B["THE BILL — age 0<br/>evict, admit, cover, count, re-center once — R20 steps 1–5"]
-    B --> DEL["RETIRE ONE<br/>the worst margin, if strictly negative — R20 step 5"]
-    DEL --> P["OFFER<br/>a bid for every pattern that applies — R20 step 6"]
-    P --> M["BUILD ONE candidate, and return one request<br/>seed, population, collapse, price — R20 steps 8–9"]
-    M -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R24"]
+    A --> B["THE BILL — age 0<br/>evict, retire, cover; evict and cover re-center the patterns they moved — R20 steps 1–3"]
+    B --> M["BUILD ONE candidate<br/>seed, neighborhoods, collapse, price — R20 step 4"]
+    M --> P["OFFER, and return one request<br/>a bid for every pattern that applies — R20 steps 5–6"]
+    P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R24"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §18"]
     O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §14"]
     Z --> W["PROCESS ACTIONS, every open activation at its own age<br/>the apex action and rewards in; from the apex, inferences out — §20"]
@@ -1168,7 +1166,7 @@ every activation dimension of every channel at every level, with the level enter
 puts there. **The distinction is between a boundary and a formula.** A boundary has to be placed, and nothing
 places this one; a formula is evaluated wherever it is read.
 
-**Which makes the distinction emergent, which is the point.** Reach already emerges from the vote (R8) —
+**Which makes the distinction emergent, which is the point.** Reach already emerges from the vote (D29) —
 offsets where nothing recurs lose their neighbors. Under one stack a pattern *discovers* whether it is spatial,
 temporal or mixed, rather than being whichever the phase that minted it allowed. A level-1 pattern naming one
 neighbor in its own frame and one two frames back is an ordinary pattern, and there is no stage at which it
@@ -1433,13 +1431,13 @@ The claim the specification can make, and the one it cannot, stated once.
 Each structural move is a non-increase on the file it is measured against, evaluated over the population it is
 measured on at the moment it is made. Strict where marked.
 
-- **Add (R15).** Strict. The candidate joins iff its summed saving exceeds `1 + |C|`, and R20 step 3 lets every
+- **Add (R15).** Strict. The candidate joins iff its summed saving exceeds `1 + |C|`, and R10 lets every
   activation do at least as well as the test counted, so the ring's file shrinks by at least the margin the test
   found.
 - **Retire (R18).** Strict. A pattern's margin *is* the change in the ring's file on its removal: the body
   term rises by `Σ (coverage − price)` and the dictionary term falls by `1 + |p|`, which is the margin with the
   sign reversed. Negative margin, shorter file.
-- **Re-centering (R8).** Non-increase. Naming a neighbor changes the ring's file by `(s − 2 · count + 1)` over the
+- **Re-centering (D29).** Non-increase. Naming a neighbor changes the ring's file by `(s − 2 · count + 1)` over the
   pattern's population at that neighbor, dropping one by the negative of that, and D27 names only when the sign
   is right. This depends on D27's population at a neighbor holding the activations where the
   neighbor was residual: counted over the owned share alone, the count that decides entry is missing and the

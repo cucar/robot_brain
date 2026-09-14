@@ -65,12 +65,12 @@ present(n)   the covered activations in which n fired and no other pattern of th
 held(n)      the covered activations in which another pattern of the cover holds n
 ```
 For neighbor `n` the collapse's population is `s − held(n)` and its count is `present(n)`. A pattern therefore tallies
-neighbors it does not name, because whether it should name them is the question re-centering asks (R8), and a
+neighbors it does not name, because whether it should name them is the question re-centering asks (D29), and a
 neighbor only the residual has ever held is how a pattern grows. A neighbor another pattern of the same cover holds is
 that pattern's evidence, not this one's, and is counted here only as an abstention; a neighbor in the residual is
 nobody's yet, and is evidence for every pattern of the cover.
 
-**What moves them.** The three events R8 names, and every one of them moves a whole activation's worth:
+**What moves them.** The three events D29 names, and every one of them moves a whole activation's worth:
 ```
 an activation is saved          every pattern of its cover adds the activation's contribution — one to `n`,
                                 `present` for each neighbor it holds or the residual holds, `held` for
@@ -108,7 +108,7 @@ tests scan distinct backward contexts and read pre-summed counts.
 owned by it. That is enough to decide whether to *keep* a named neighbor and never enough to decide whether to
 *enter* one: a neighbor the pattern does not name is never owned by it, so its count was identically zero
 and D27 could never take it. D27's abstention paragraph says a pattern grows into the residual, and the state as
-defined could not support that sentence; R8's claim that re-centering needs no pass of its own was not true of
+defined could not support that sentence; D29's claim that re-centering needs no pass of its own was not true of
 the one count that growth depends on.
 
 The fix is the smallest that makes D27 exact. For each neighbor D27 wants two numbers: how many covered activations had
@@ -141,7 +141,7 @@ There are two calls and no others:
 ```
 process frame   — made at age 0 only, once per neuron per frame, with every activation that fired
                 in:  each activation's backward half
-                out: per activation, a bid for every pattern that applies (D28 step 3)
+                out: per activation, a bid for every pattern that applies (R20 step 5)
                      plus one request: the candidate that paid, and the pattern that retired (R20)
 
 process actions — made once per frame after every level has run, with every open activation the machine holds
@@ -373,7 +373,7 @@ forward-side deltas are the numbered list in the section above and land in Stage
 
 16. **Price named-and-absent in bids.** Carry `1 + |p \ O⁻|` on the bid as its price and change the survival
     test in `spatial_survivors` from a flat `≥ 2` to R24's `covered > price`.
-17. **Offer every pattern that applies.** Today a neuron bids its routed entry only. D28 step 3 sends a bid for
+17. **Offer every pattern that applies.** Today a neuron bids its routed entry only. R20 step 5 sends a bid for
     every pattern with more than half its neighbors present, so the election sees the catalog.
 18. **Replace the above-base adjacency heuristics with the reach.** The eight-sector nearest rule
     (`directional_neighbors`) and the reuse-the-last-declared-set fallback both go: adjacency is D4's box at
