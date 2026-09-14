@@ -70,13 +70,13 @@ to be bounded by the cover. **Diagnostic:** bids per activation against cover si
 of bought bids that the cover would not have offered — which is the wide offer's whole benefit, and if it is
 near zero the offer can be narrowed back at no loss.
 
-**Holding covers can hold a stale one.** R10 keeps an activation's cover unless the re-derived one is strictly
-cheaper, which is what makes the bill a descent (T7). It also means an activation saved under an old table keeps
-an old cover for as long as nothing beats it strictly, and two activations with one neighborhood can be covered
-two ways. The counts a pattern re-centers on are then partly the table's past. **Diagnostic:** the share of
-activations whose held cover differs from the cover D28 would derive fresh, and the cost difference. If the share
-is large and the difference is zero, the hold is doing nothing but hysteresis and the tie rule could be
-loosened.
+**A cover is never re-derived, so it can go stale.** Recognition only covers the residual (§12), which is what
+makes the call a descent (T7). It also means an activation saved under an old table keeps the patterns it was
+given for as long as they own something there, and two activations with one neighborhood can be covered two
+ways. The counts a pattern re-centers on are then partly the table's past. **Diagnostic:** the share of
+activations whose cover differs from the cover D28 would derive fresh over the whole neighborhood, and the cost
+difference. If the share is large and the difference is small, staleness is harmless; if the difference is
+large, a periodic fresh derivation is the fix to weigh.
 
 **The base votes its marginal.** A base neuron on the apex infers from its own connections, which is the
 average over every situation it has ever fired in (D25, R35). Early in a run that is every voter there is, so

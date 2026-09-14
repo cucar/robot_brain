@@ -270,18 +270,19 @@ collapse's evidence. D27 votes per neighbor over the same `H` activations, so ev
 outermost alike, is decided on the same count, and a reach wider than the data supports finds no majority in
 its outer neighbors and they drop.
 
-**On D18 and R10 — what a neuron holds outright.** Two things are held because nothing else the neuron holds
+**On D18 and D17 — what a neuron holds outright.** Two things are held because nothing else the neuron holds
 could rebuild them: the history, which is the evidence itself, and the table of patterns, which is what the
-neuron has decided over that evidence. The cover and owners an activation carries are what D28 chose over
-those two when it was saved, and they are held rather than recomputed because a re-derivation need not
-reproduce them (R10).
+neuron has decided over that evidence. The cover and owners an activation carries are what recognition chose
+over those two, call by call, and they are held rather than recomputed because nothing ever re-derives a cover
+(§12).
 
 # 7. The cover
 
 **On D17 — why there are no bins.** An earlier design grouped activations by identical neighborhood and gave the
 group one cover, on the grounds that D28 reads the neighborhood and nothing else, so equal inputs get equal
-covers. R10 breaks that: an activation keeps the cover it has unless a re-derived one is strictly cheaper, so two
-activations with one neighborhood can hold different covers depending on what the table was when each was saved.
+covers. §12 breaks that: a cover is never re-derived, only grown by recognition and shed by re-centering and
+retirement, so two activations with one neighborhood can hold different covers depending on what the table was
+when each was saved.
 The group could no longer share, so the group is gone. Nothing was lost but a cache — every sum the tests need
 is a sum over activations either way (T2).
 
@@ -298,9 +299,9 @@ it in the residual is free; the only thing a pattern is ever charged for is a ne
 fire (D22). The design pays for false claims, not for unclaimed facts, and a pattern that names less is never
 penalized for it beyond the coverage it forgoes.
 
-**On D19 — why handover is arithmetic.** What an activation holds against each pattern is the index R10 says nothing
-has to be added to — a pattern that moved recomputes what it covers in each of them, and every activation reaching
-for it is current again. An activation's share moves whole, so a pattern joining or leaving a cover transfers its
+**On D19 — why handover is arithmetic.** What an activation holds against each pattern is the index, and nothing
+has to be added to it — a pattern that moved updates its owners in each activation it covers (D29), and every
+activation reaching for it is current again. An activation's share moves whole, so a pattern joining or leaving a cover transfers its
 share in `O(offsets)`. The offset grid grows with the level, since D4's reach does, while the number of
 neighbors in it stays fixed by construction — that is the invariant the reach is chosen to hold.
 
@@ -548,18 +549,23 @@ what it does to covers is a cover question, and recognition is the only place co
 
 # 12. Recognition
 
-**On R10 — why covers are held.** D28 is greedy, and a greedy cover re-derived after a pattern moved can cost
-more than the one that stood. In Lloyd's algorithm the assignment step is exact, so re-assigning after the
-centers move can only help. Here it cannot be exact — an exact cover is set cover — so the design keeps the
-old cover unless the new one is strictly better. That is one comparison over numbers the neuron already
-holds, and it is the difference between a bill that descends `L` and one that can raise it (T7).
+**On §12 — why a cover is never re-derived.** D28 is greedy, and a greedy cover re-derived after a pattern moved
+can cost more than the one that stood. In Lloyd's algorithm the assignment step is exact, so re-assigning after
+the centers move can only help. Here it cannot be exact — an exact cover is set cover — so the design never
+re-derives: recognition runs over the residual alone, and every pattern it takes pays strictly against what
+stood, which is the difference between a call that descends `L` and one that can raise it (T7).
 
-**On R10 — why nothing is indexed the other way.** What each activation holds against each pattern is already the
+**On §12 — a pattern owning nothing in an activation is not in its cover.** It follows from the definitions:
+a pattern is in a cover to explain neighbors (D17), and re-centering can leave it naming none the activation has,
+so its owners there are empty (D29). It is then charged nothing there and credited nothing, and recognition can
+take it again only if it pays (D28).
+
+**On D19 — why nothing is indexed the other way.** What each activation holds against each pattern is already the
 index (D19), so a reverse map from pattern to the activations it covers would be a second copy of the same fact.
 
-**On R11 — prices and structure move at the same moment and are still different kinds of thing.** Both move
-when a neuron fires, because that is where counts move and where both tests run (R1). But a price is
-re-derived from whatever the table currently says, while a structural move — adding, retiring (R15, R18) — is a
+**On §12 — prices and structure move at the same moment and are still different kinds of thing.** Both move
+when a neuron fires, because that is where counts move and where both tests run (R1). But a price is read off
+the cover as it now stands (D22) and never stored, while a structural move — adding, retiring (R15, R18) — is a
 decision that stands until something reverses it.
 
 # 13. The one test
@@ -611,24 +617,18 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 > - **Retire.** Removing `p` changes `L_N` by exactly R18's margin, with the sign reversed: its neighbors that
 >   no other pattern of the cover names return to the residual, its lines and charges leave, its dictionary
 >   line leaves. `p` is retired only when that is strictly negative, so `L_N` falls by at least one.
-> - **Re-center, covers held.** Hold every activation's cover and owners where they are and move the
->   pattern. `L_N` is then a sum over neighbors of independent terms, because an activation's residual at neighbor `s`
->   depends on nothing but neighbor `n`. Naming `n` changes `L_N` by exactly `−(2 · count(n) − s − 1)` over the
->   population the abstention leaves (T5). Dropping `n` changes it by at most the negative of that, and only
->   "at most" because an activation where another pattern of the cover also names `n` hands `n` to that pattern
->   for nothing instead of returning it to the residual, so the realized saving can only exceed the priced one.
->   D27 takes a neighbor exactly when its term falls, so a re-center is non-increasing and strictly decreasing
->   whenever a neighbor enters. **It is a sum over the population**: an individual activation
->   can get dearer under the moved pattern while the total falls.
-> - **Re-derive covers, pattern moved.** R10 now re-derives each activation's cover against the moved pattern and
->   replaces the held one only when the new is strictly cheaper, which is the cost of that activation in `L_N`
->   falling. **This step starts from exactly the state the last one ended on** — held covers against the moved
->   pattern — so the comparison it makes is against the right baseline, and the file before the move is never
->   needed: the first step carries it to the moved pattern under the old covers, the second carries the old covers
->   to the new ones under the moved pattern. Nothing else moves.
+> - **Re-center.** The covers stand and the pattern moves, its owners following it (D29). `L_N` is then a sum
+>   over neighbors of independent terms, because an activation's residual at neighbor `n` depends on nothing but
+>   neighbor `n`. Naming `n` takes it from the residual and changes `L_N` by exactly `−(2 · count(n) − s − 1)`
+>   over the population the abstention leaves (T5); dropping `n` returns it to the residual and changes it by
+>   exactly the negative of that. D27 takes a neighbor exactly when its term falls, so a re-center is
+>   non-increasing and strictly decreasing whenever a neighbor enters. **It is a sum over the population**: an
+>   individual activation can get dearer under the moved pattern while the total falls.
+> - **Recognize.** D28 over the residual takes a pattern only when its coverage strictly exceeds its price
+>   there, so each pattern taken lowers `L_N` by at least one, and nothing standing is disturbed (§12).
 >
 > `L_N` is a non-negative integer, so the strict moves are finite, and the process reaches a state where no
-> candidate pays, no pattern is negative, no neighbor moves and no cover is cheaper. That is a local optimum with
+> candidate pays, no pattern is negative, no neighbor moves and nothing in the residual can be covered. That is a local optimum with
 > respect to exactly the moves the neuron has. On a sliding history it tracks one, which is all that can be
 > asked.
 >
@@ -637,12 +637,9 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 > step. Without it a pattern's own fit and the file disagree wherever two patterns name one neuron — a
 > candidate born on unmet ground can re-center onto ground another pattern holds, look better and better to
 > itself, be worth less and less to the file, be retired, and be rebuilt from the same residual by the same
-> seed. On a frozen history that cycles forever. And the hold on covers (R10): without it the greedy cover can
-> cost more after a re-center than before, and `L_N` can rise. One more detail sits inside the hold: when a
-> candidate is installed, an activation must be offered its held cover with the newcomer appended, not only the held
-> cover and a fresh re-derivation, because the appended cover is what R15 priced and a fresh re-derivation can
-> land between the two — cheaper than what stood, dearer than what was counted, with the dictionary line
-> charged in full. With all three, the descent is monotone.
+> seed. On a frozen history that cycles forever. And never re-deriving a cover (§12): a greedy cover derived
+> fresh after a re-center can cost more than the one that stood, and `L_N` would rise with it, whereas
+> recognition over the residual can only add a pattern that pays. With both, the descent is monotone.
 >
 > **What it does not say.** Not that the optimum is global — choosing the pattern set is set cover, and the
 > concrete local optimum is a history where `a, b, c, d` always fire together held by `{a, b}` and `{c, d}`,
@@ -739,7 +736,7 @@ population is the activations where it is failing; the collapse over that popula
 once by exactly the majority the loop was computing. The seed chooses the population and the population
 decides every neighbor. Nothing in either place grows anything.
 
-**On R14 — what "the same history" means.** Covers are held rather than derived (R10), so two neurons with
+**On R14 — what "the same history" means.** Covers are grown, never derived (§12), so two neurons with
 identical rings can carry different covers if their tables moved under them in a different order, and the
 residual — and so the seed — is a function of the ring and its covers together. The build is deterministic in
 that pair, which is what a fixed-pass construction can promise; it is not a function of the ring alone, and
@@ -821,8 +818,8 @@ another — and the structure that came out would depend on it, which is the def
 to the minimizer over its assigned points: Lloyd 1957, better known as k-means. This is its variant over sets
 with the file as the distance, the collapse as the minimizer (T5), and `k` moving as build and retire change
 the pattern count — which is why those moves exist alongside it, since Lloyd only optimizes assignment for a
-given set of centers. Where it departs from Lloyd is that the assignment step is not exact and so is held
-rather than redone (R10), and that is what T7 turns on.
+given set of centers. Where it departs from Lloyd is that the assignment step is not exact and so is never
+redone — recognition only assigns what is still unassigned (§12) — and that is what T7 turns on.
 
 **What the design does not do is alternate to stability.** A bill absorbs its evidence, makes at most one
 structural decision of each kind and re-centers once: one improvement step, not a fixed point. Iterating would
@@ -1431,9 +1428,8 @@ The claim the specification can make, and the one it cannot, stated once.
 Each structural move is a non-increase on the file it is measured against, evaluated over the population it is
 measured on at the moment it is made. Strict where marked.
 
-- **Add (R15).** Strict. The candidate joins iff its summed saving exceeds `1 + |C|`, and R10 lets every
-  activation do at least as well as the test counted, so the ring's file shrinks by at least the margin the test
-  found.
+- **Add (R15).** Strict. The candidate joins iff its summed saving exceeds `1 + |C|`, and it takes exactly the
+  residual the test priced, so the ring's file shrinks by at least the margin the test found.
 - **Retire (R18).** Strict. A pattern's margin *is* the change in the ring's file on its removal: the body
   term rises by `Σ (coverage − price)` and the dictionary term falls by `1 + |p|`, which is the margin with the
   sign reversed. Negative margin, shorter file.
@@ -1442,8 +1438,6 @@ measured on at the moment it is made. Strict where marked.
   is right. This depends on D27's population at a neighbor holding the activations where the
   neighbor was residual: counted over the owned share alone, the count that decides entry is missing and the
   claim does not hold.
-- **Re-derivation (R10).** Non-increase, by construction: a re-derived cover replaces the held one only when
-  strictly cheaper.
 - **Cover (D28) and election (R24).** Each accepted pattern or bid names strictly more than it costs, so a
   covered activation or frame is strictly shorter than the same activation or frame stated flat, by at least one line
   per acceptance.

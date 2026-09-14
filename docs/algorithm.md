@@ -451,7 +451,7 @@ machine, over a frame's bids. It is stated here and cited from both.
 
 | caller                     | claimants | to cover                      | ties                                               |
 |----------------------------|---|-------------------------------|----------------------------------------------------|
-| neuron - recognition (R10) | patterns | the history (D18) | the older `pattern id`                             |
+| neuron - recognition (§12) | patterns | the history (D18) | the older `pattern id`                             |
 | machine - election (R24)  | bids | the board (§17.2) | the older `neuron id`, then the earlier coordinate |
 
 # 10. The collapse
@@ -492,32 +492,8 @@ smoothing or probability estimate enters.
 
 # 12. Recognition
 
-Recognition is the procedure that chooses a cover (D17).
-
-> **R10 — Covers are held, not patched.** A moved pattern changes what it covers. What is maintained is
-> **one pattern's `coverage`-and-price against every activation**: a pattern that re-centers recomputes those, and
-> nothing else is repaired. An activation whose table changed under it — a pattern re-centered, added or retired —
-> re-derives its cover by D28 over its neighborhood, **and the re-derived cover replaces the one it holds only
-> when it is strictly cheaper**, a cover costing the prices of its patterns plus a line for each residual
-> neuron (D22):
-> ```
-> cost(O)  =  Σ over the patterns of the cover ( price(p, O) )  +  |residual(O)|
-> ``` D28 is greedy, so re-deriving can cost more than what stands; holding
-> the cheaper is what makes every move a descent (R12). A retired pattern leaves every cover it was in at once,
-> and the cover without it is the one the re-derivation has to beat. **A pattern that was just added gives an
-> activation three options, not two**: the cover it holds, that cover with the newcomer appended and taking the
-> residual it names, and the cover re-derived from scratch — and the activation takes the cheapest. The appended
-> cover is what R15 priced, so what adding the pattern realizes is never less than what the test counted.
->
-> **Owners move with the table.** When a pattern of the cover re-centers (D29) or retires (R18), a neighbor it
-> stops naming falls to another pattern of the cover that names it — the older id, when two do — and to the
-> residual when none does; a neighbor it starts naming it takes from the residual only, never from a pattern
-> that owns it (D27). When the cover itself is replaced, D28 rewrites the owners with it (D19).
-
-> **R11 — A price is a measurement, not a record.** What an activation costs is read off its cover as that cover now
-> stands (D22), and the cover can change: re-centering (D29) moves a pattern, which moves what it covers in every
-> activation, and those are what the activations then cost. **An activation is fixed but its cost is not**, and it
-> stops moving when its cover stops moving.
+Recognition is the procedure that chooses a cover for a new activation/neighborhood (D17): the greedy cover
+(D28) over the residual of the history (D21).
 
 **Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
 empty table covers nothing and bids nothing.
@@ -574,8 +550,8 @@ empty table covers nothing and bids nothing.
 > would take out of the residual, retiring one asks what one that is there is still keeping out of it.
 >
 > **Retiring is a deletion in the parent.** The pattern leaves the table that instant. It stops competing for a
-> place in any cover, so no further activation can bid it, and the neurons it held fall to whatever D19 gives
-> them next (R10). Having nothing to cover it has no margin and nothing to re-center — **the neighbors it
+> place in any cover, so no further activation can bid it, and the neurons it held fall to the residual
+> (D21). Having nothing to cover it has no margin and nothing to re-center — **the neighbors it
 > held stop moving** — and it is not a candidate for anything again. What leaves the table rides the call's
 > return to the machine (R20), as a request to delete it. **The neuron keeps no retired state and re-checks
 > nothing.**
@@ -638,7 +614,7 @@ never charged for what came after — only for what it names that did not fire b
 > is the child's own connections, formed by the child's own activations once it exists (D25). Nothing about it is
 > decided here and nothing about it is priced.
 >
-> **The same history under the same covers yields the same `C`.** Covers are held rather than derived (R10),
+> **The same history under the same covers yields the same `C`.** Covers are carried by the activations (D17),
 > so the residual, and with it the seed, is a function of the ring and the covers it carries together.
 >
 > **What `C` is worth.** Against an activation, `C` takes neurons out of the residual and names some that did not
@@ -720,10 +696,9 @@ One call per level per frame: everything structural for the activations that fir
 >  3  cover      the new activation joins the ring, whole (D7), and recognition runs      each new
 >                over the history: what it takes is the **cover** and what it            activation
 >                credits is each neighbor's **owner**; every pattern whose covered
->                activations changed re-centers                    R10, D28, D17, D19, D29
+>                activations changed re-centers                         D28, D17, D19, D29
 >  4  build      seed, neighborhoods, collapse (R14), then price it (R15). A                the
->                candidate that pays joins the table, and this activation's cover           neuron
->                may take it                                                       R10
+>                candidate that pays joins the table                                        neuron
 >  5  offer      a bid for every pattern of the table more than half of whose           each new
 >                neighbors are present — `2 · |p ∩ O| > |p|` — whether or not the        activation
 >                cover took it, this call's candidate included. A bid is the child's

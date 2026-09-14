@@ -24,7 +24,7 @@ patterns:     Map<pattern_id, {
 history:
   ring:       FIFO<activation>                  // capacity H; arrival order = eviction order
   activation:     { backward:  set of (neuron, offset ≤ 0),
-                cover:     the patterns covering it, held (R10),
+                cover:     the patterns covering it (D17),
                 owners:    which pattern of the cover owns each present backward neighbor }
 
 // the connections — lifetime totals; in no line of the file, and not recomputable from anything
@@ -37,15 +37,15 @@ incrementally maintained state:
 - Every pattern's `counts` equal a from-scratch recount over the activations whose held cover holds it — `present`
   and `held` per neighbor as defined under Pattern counts below. Its `neighborhood` is D27's collapse over those counts,
   with the line charged.
-- Every activation's `cover` is one D28 could have produced against some past table, and no re-derivation against
-  the current table is strictly cheaper than it (R10).
+- Every activation's `cover` was grown by recognition over the residual, call by call, and is never re-derived
+  (§12).
 - `actions` only ever grows: no strength falls, and a connection leaves only with the death of either of its
   ends (R31). Its estimate is the mean of the shares it has received, over its strength.
 - Every pass of the bill leaves the neuron's file (T7's `L_N`) no longer than it found it.
 
 **Not yet designed.** How the residual per activation and the seed tally per bill are kept so R14 is one pass
 rather than a rescan; whether `cover` is stored as pattern ids or as an index the way the old histogram stored
-servers; and what the three-way comparison in R10 costs when a candidate is installed against a full ring. The
+servers. The
 old histogram, `normal`, `fallback` and running-benefit structures are retired: the spec has no default
 pattern (D21) and no per-activation server, and the benefit is R12's margin read off `counts`.
 
@@ -54,7 +54,9 @@ pattern (D21) and no per-activation server, and the benefit is R12's margin read
 The collapse (D27) reads two numbers per pattern per neighbor: how many activations are in the population there, and how
 many of them name the neuron there. Both are sums over the activations the pattern covers, and the code keeps them
 as running tallies so that re-centering never re-reads the ring. Nothing in this section is design: every tally
-equals a from-scratch recount, and the invariant above checks that it does.
+equals a from-scratch recount, and the invariant above checks that it does. Prices are not tallied: what an
+activation costs is read off its cover as that cover now stands (D22), and re-centering moves what a pattern
+covers in every activation at once, so a stored price would be stale the moment any pattern of the cover moved.
 
 **What a pattern keeps.** Over exactly the activations it covers, two sparse tallies per `(neuron, offset)` —
 indexed by the neighbors actually seen, not by everything the box admits — and `n`, the number of activations it
@@ -88,7 +90,7 @@ re-centering costs nothing to trigger: the counts it reads are current by the ti
 
 **In dependency order**, so the list also says what to recompute when something moves:
 ```
-activation.cover          =  the patterns covering its neighborhood, chosen by D28 and held by R10
+activation.cover          =  the patterns covering its neighborhood, grown by recognition (§12)
 activation.owner[n]       =  the pattern of the cover credited with present neighbor n — none, when
                              n is in the residual
 pattern.counts            =  Σ over the activations it covers: its share and the residual as
@@ -122,8 +124,8 @@ pattern's `present` to `held`, or back.
 **Worked case.** `p = {b@0, c@0}` covers ten activations and `d@0` begins to appear. `d` is residual in every
 activation that has it, so `present_p(d)` climbs by one per such activation while `held_p(d)` stays zero. At
 `2 · present_p(d) > 11` — six of ten — re-centering enters `d` and `p` becomes `{b, c, d}`. The four activations
-without `d` now price `p` at 2, which is what they were paying before (line plus one residual), so R10 lets them
-keep it, and they evict in turn. **No candidate could have done this**: a candidate is built on the residual alone (R14), `b` and
+without `d` now price `p` at 2, which is what they were paying before (line plus one residual), nothing
+re-derives a cover (§12), so they keep it and evict in turn. **No candidate could have done this**: a candidate is built on the residual alone (R14), `b` and
 `c` are held by `p` in those activations, and `{d}` alone saves nothing (R15).
 
 ## The machine–neuron interface
@@ -176,7 +178,7 @@ and subtract its contribution from its cover's counts (Pattern counts). The conn
 contribution to its cover's counts.
 
 **`recenter()`** — pass 2. Every pattern whose counts moved re-collapses per neighbor with the line charged and
-(D27). Every activation whose table moved under it re-derives its cover and keeps the cheaper (R10).
+(D27), and its owners follow it (D29).
 
 **`build_one() → Option<Request>`** — pass 3. R14: tally the residual per neighbor over the ring, seed on the
 largest (ties to declaration order then the nearer offset), take the activations whose residual holds the seed as
@@ -185,15 +187,14 @@ would join, on residual neighbors only, against `1 + |C|`. If it pays, return th
 `C` carries at the end of the bill.
 
 **`retire_one() → Option<pattern_id>`** — pass 4. Read every margin (R12), this bill's candidate included;
-retire the smallest if strictly negative (R18). It leaves the table now; the activations it covered re-derive
-(R10); its child goes on the request as a delete.
+retire the smallest if strictly negative (R18). It leaves the table now; the neighbors it owned fall to the
+residual (D21); its child goes on the request as a delete.
 
 **`offer(O) → bids`** — pass 5. A bid for every pattern with more than half its neighbors present in `O⁻`,
 less the candidate just requested. Each bid is the child id and the neighborhood.
 
-**`register_child(id)`** — on the reply. Bind the pending pattern to its child id. Then every activation takes the
-cheapest of its held cover, its held cover with the newcomer appended, and its cover re-derived (R10), and the
-newcomer's counts are whatever those covers assign it. The machine, for its part, opens an activation for the
+**`register_child(id)`** — on the reply. Bind the pending pattern to its child id. The newcomer's counts are
+what it owns, the residual it was priced on (R15, D19). The machine, for its part, opens an activation for the
 child at the parent's coordinate at age 0 when its bid wins, and it is called with its level like any
 activation (R17).
 
@@ -327,8 +328,8 @@ forward-side deltas are the numbered list in the section above and land in Stage
    its held cover and its owners. The per-config `frames: Vec<FrameNumber>`
    and the absolute-frame `age_spatial_history` cutoff both go: capacity is `H` in the neuron's own activations,
    and eviction is one-out-one-in off the ring. `SpatialHistory::rebase` goes with the frame numbers. The
-   histogram keyed on identical contexts goes: covers are held per activation, so identical backward halves no
-   longer share one (R10).
+   histogram keyed on identical contexts goes: covers are per activation, so identical backward halves no
+   longer share one (§12).
 3. **Replace the server with the cover.** Routing chooses one closest entry today; it becomes D28's greedy
    cover by ratio with first-namer owners, and both are written into the activation.
 4. **Delete the normal.** `spatial_normal_config`, `refresh_normal_config`, `served`, `spatial_target_channels`
