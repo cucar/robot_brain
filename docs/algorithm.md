@@ -154,12 +154,14 @@ what the dictionary writes is a pattern.
 
 ## 3.2 Space
 
-> **D4 — Reach.** How far a neuron sees, either way, in every activation dimension of every channel (D1). It
-> is **1** at the base and **doubles every level**:
+> **D4 — Reach.** The farthest a neuron sees, either way, in every activation dimension of every channel (D1).
+> It is **1** at the base and **doubles every level**:
 > ```
 > reach(k)   =   2^k          every activation dimension
 > ```
-> `reach_t` is this reach in the time dimension, at the neuron's own level — its window.
+> It is a bound, not a distance: a neuron sees every distance up to it, bucketed by powers of two (D6), so a
+> level-5 neuron names its neighbors at 1, 2, 4, 8, 16 and 32. `reach_t` is this reach in the time dimension,
+> at the neuron's own level — its window.
 
 > **D6 — Offsets.** The offset between two activations is the difference of their coordinates, one component per
 > activation dimension they share (D1, D2), each with its magnitude **rounded down to a power of two**:
@@ -169,8 +171,8 @@ what the dictionary writes is a pattern.
 > ```
 > So 5 and 7 become 4, and −13 becomes −8. The reachable offsets are
 > `0, ±1, ±2, ±4, ±8, ±16, …`; `G` groups give `2 + G` offsets per direction across a reach of `2^G`, and
-> `reach(k) = 2^k`, so `G = k`. **The reach and the granularity are therefore the same power of two**: a level
-> reaching `2^k` names its outermost offsets in groups of `2^k`.
+> `reach(k) = 2^k`, so `G = k`: a level reaching `2^k` names offset 0 and every power of two up to `2^k`, in
+> both directions.
 
 > **D5 — Adjacency.** Two activations are adjacent when they are **at the same level, of the same kind, within
 > reach in every activation dimension they share** (D4), **and the second is not later than the first**. The
