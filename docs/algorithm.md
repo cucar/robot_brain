@@ -191,9 +191,9 @@ what the dictionary writes is a pattern.
 > same way and needs no rule of its own.
 >
 > **A neuron can be its own neighbor.** Two activations of one type at different positions each name the other
-> at a nonzero spatial offset. At the base, offset zero in every component is the activation itself, and that
-> is the center; above the base several children promoted at one coordinate (D8) are each other's neighbors at
-> offset zero.
+> at a nonzero spatial offset. Offset zero in every component is where the activation itself sits, the center
+> of the box, and an activation is not its own neighbor there. Above the base several children promoted at one
+> coordinate (D8) are each other's neighbors at offset zero.
 
 > **D7 — Neighborhood.** The set of neighbors (D26) one activation observes is its **neighborhood**, written `O`
 > for what it observed:
@@ -205,7 +205,8 @@ what the dictionary writes is a pattern.
 > neighbor and `p a r` are out of reach.
 >
 > **A neighborhood is the frame around the fired neuron**, since adjacency admits nothing later (D5), and every
-> structural decision is made on it.
+> structural decision is made on it. The activation itself is not in it: its own instance is what a pattern
+> covering it replaces, and is counted there (D22).
 
 A neighborhood is a set of neighbors, each at its own offset. Drawn with a row per dimension and a column per
 offset, with one activation dimension and a reach of 1:
@@ -398,9 +399,10 @@ residual. Every price in the design (D13) is counted off them.
 > neighbors, `(neuron, offset)`: it has the shape of the neighborhood, what fired, and beside each entry which
 > pattern is paid for it (the owner).
 
-> **D20 — The coverage.** What one pattern of the cover is credited with: the neighbors it owns (D19).
+> **D20 — The coverage.** What one pattern of the cover is credited with: the activation itself, and the
+> neighbors it owns (D19).
 > ```
-> coverage(p, O)   =   the neighbors of O owned by p
+> coverage(p, O)   =   the activation, and the neighbors of O owned by p
 > ```
 
 > **D21 — The residual.** What no pattern of the cover is credited with: the neighbors with no owner (D19).
@@ -413,22 +415,14 @@ residual. Every price in the design (D13) is counted off them.
 > **D22 — Margin.** What one pattern is worth over one activation: what it is credited with (D20), less what
 > it costs — its own line, and the neurons it names that did not fire (D13).
 > ```
-> coverage(p, O)  =  | the neighbors of O owned by p |       how many it is credited with
-> price(p, O)    =  1 + | p \ O |   its own line, and the neurons it names that did not
+> coverage(p, O)  =  1 + | the neighbors of O owned by p |   the activation itself, and what it owns
+> price(p, O)    =  1 + | p \ O |                            its own line, and the neurons it names that did not
 > margin(p, O)   =  coverage(p, O)  −  price(p, O)
 > ```
-> A neuron `p` does not name is on neither side of this: it costs one symbol whether or not `p` exists.
->
-> **The cost of an activation** is what its cover costs plus what nothing covers:
-> ```
-> cost(O)  =  Σ over the patterns covering O ( price(p, O) )  +  |residual(O)|
-> ```
-> and an activation nothing covers costs `1 + |O|`, the whole chunk stated flat.
->
-> **Distance is a reading of the same three sets.** Where one pattern is measured against the whole of an
-> activation, `d(O, p) = |O △ p|` and `margin = |O| − d`; that is the identical number, written against a flat
-> baseline instead of a subset one. **The design uses the subset form everywhere**, because an activation's
-> cover is a set and only the subset form adds up over one.
+> A child on the apex stands in for the activation it covers and for the neighbors its pattern owns there;
+> that is what it saves, and that is the coverage. What it costs is its own line, plus a turn-off for every
+> neuron the pattern names that did not fire. A neuron the pattern does not name is not in the account at all:
+> it costs its own line whether the pattern exists or not.
 >
 > **This is the only valuation in the design**, and it is read over two different sets — the neuron's own
 > activations (R12, R9) and the machine's board (R22, R24) — so the two numbers differ, and are meant to.
@@ -443,7 +437,7 @@ machine, over a frame's bids. It is stated here and cited from both.
 >
 > 1. **Measure** every claimant not yet taken against the neurons still uncovered:
 >    ```
->    coverage =  | the still-uncovered neurons it names |
+>    coverage =  1 + | the still-uncovered neurons it names |     the activation itself, and what it names
 >    price    =  1 + | the neurons it names that did not fire |            D22
 >    ```
 > 2. **Take** the one with the highest `coverage / price`, **iff `coverage > price`**. The neurons it was measured
@@ -521,7 +515,11 @@ Recognition is the procedure that chooses a cover (D17).
 > **one pattern's `coverage`-and-price against every activation**: a pattern that re-centers recomputes those, and
 > nothing else is repaired. An activation whose table changed under it — a pattern re-centered, added or retired —
 > re-derives its cover by R9 over its neighborhood, **and the re-derived cover replaces the one it holds only
-> when it is strictly cheaper** (D22). R9 is greedy, so re-deriving can cost more than what stands; holding
+> when it is strictly cheaper**, a cover costing the prices of its patterns plus a line for each residual
+> neuron (D22):
+> ```
+> cost(O)  =  Σ over the patterns of the cover ( price(p, O) )  +  |residual(O)|
+> ``` R9 is greedy, so re-deriving can cost more than what stands; holding
 > the cheaper is what makes every move a descent (R12). A retired pattern leaves every cover it was in at once,
 > and the cover without it is the one the re-derivation has to beat. **A pattern that was just added gives an
 > activation three options, not two**: the cover it holds, that cover with the newcomer appended and taking the
@@ -797,8 +795,8 @@ against this frame, saved it, re-centered on it, and built from it.
 > The machine holds the frame, so it reads that one object against what fired and derives both numbers.
 > ```
 > the bid   the pattern, and the child's id                                        (R21)
-> covered   the neurons it names that fired and no earlier bid covers — the slots it asks to subsume,
->           the bidder among them
+> covered   the bidder, and the neurons it names that fired and no earlier bid covers — the slots it
+>           asks to subsume
 > price     1 + |p \ O|   its own line in the body, and the neurons it names in those
 >                          same frames that did not fire
 > ```

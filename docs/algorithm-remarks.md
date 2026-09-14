@@ -312,6 +312,11 @@ what a pattern is charged. A neuron that fired and nothing named costs one line 
 pattern exists, so it is charged to nobody — which is why the residual is a term of the activation and not of
 any pattern.
 
+**On D22 — the margin is a distance, read against a subset baseline.** Where one pattern is measured against
+the whole of an activation, `d(O, p) = |O △ p|` and `margin = |O| − d`: the identical number, written against
+a flat baseline instead of a subset one. The design uses the subset form everywhere, because an activation's
+cover is a set of patterns and only the subset form adds up over one.
+
 **On D22 — why `coverage` counts what turned up rather than what the pattern names.** Take a neuron `x` whose
 pattern names `{a, b, c}` backward, in a frame where `a` and `b` fired, `c` did not, and an unnamed `m` did.
 
@@ -322,7 +327,8 @@ with the child     1 for the child, which expands to x, a, b, c
                                                               true saving      1
 ```
 
-`|O| − d = 3 − 2 = 1`, which is the saving. Now let only `a` fire, so `O = {a}` and `d = 2`: the file states
+`|O| − d = 3 − 2 = 1`, which is the saving, and the subset form agrees: coverage is `1 + 2`, the activation
+itself and `a`, `b`, against a price of `1 + 1`. Now let only `a` fire, so `O = {a}` and `d = 2`: the file states
 `x, a` for 2 symbols without the child and pays `1 + 2` with it, a saving of `−1`, and `|O| − d = 1 − 2` gives
 exactly that. **Counting what the pattern names would give `|p| − d = 3 − 2 = +1` and report a saving where the
 file got longer** — `b` and `c` would be credited as delivered *and* charged as absent, netting nothing, so a
@@ -430,10 +436,8 @@ the best ratio, re-measure what is left, and stop when the best remaining does n
 the same in both** — what a pattern covers against what it costs to state (D22) — and the price is
 the same expression on both sides, `1 + |p \ O|`.
 
-**Two things differ, and neither is the procedure.** The populations, so the numbers do (D22) — and in
-particular the activation's own neuron is not in `O`, so the cover can never take it, while the bidding
-activation *is* a slot of the board and is the first thing a bought bid subsumes (R22). And what each side
-may do about a poor result: the neuron may mint a pattern and retire one (R14, R18), the machine may only
+**Two things differ, and neither is the procedure.** What is covered, so the numbers do (D22); every bid
+covers the activation itself on both sides (R22). And what each side may do about a poor result: the neuron may mint a pattern and retire one (R14, R18), the machine may only
 take what it is offered. **Recognition is one algorithm; only the neuron writes the dictionary.**
 
 **A neuron with an empty table covers nothing**, offers nothing, and the whole of its activation is residual (D21).
@@ -447,14 +451,14 @@ patterns name that did not fire, and each is a symbol its pattern pays for.
 ```
 O = { a b c d e f }
 
-              names            of the residual   price          ratio
-   P          a b c x                3           1 + |x|  = 2    1.50
-   Q          d e                    2           1 + 0    = 1    2.00
-   R          f y z                  1           1 + |yz| = 3    0.33
+              names            itself + of the residual   price          ratio
+   P          a b c x                1 + 3                1 + |x|  = 2    2.00
+   Q          d e                    1 + 2                1 + 0    = 1    3.00
+   R          f y z                  1 + 1                1 + |yz| = 3    0.67
 
-   round 1    Q leads on ratio, and 2 > 1, so Q is taken     residual  a b c f
-   round 2    P leads on ratio, and 3 > 2, so P is taken     residual  f
-   round 3    R covers 1 and costs 3, so nothing pays        stop
+   round 1    Q leads on ratio, and 3 > 1, so Q is taken     residual  a b c f
+   round 2    P covers 1 + 3 now, and 4 > 2, so P is taken   residual  f
+   round 3    R covers 1 + 1 and costs 3, so nothing pays    stop
 
    cover        { Q, P }              the patterns — this is what the activation holds
    owners       d,e → Q   a,b,c → P   which round took which; f has no owner
@@ -868,19 +872,18 @@ the neuron's connections so far:  one action connection, (u,+1), at estimate 0
 **Frame 10 — the neuron fires, and everything is decided.** Its neighborhood is `{(a,−2), (b,−1), (g,−1),
 (z,0)}` — whole, because backward is what an activation already has. The bill runs first.
 
-The cover pass runs over the residual, which starts as all four neighbors. The neuron's own activation is not in
-`O` and so is not a slot the cover can take — that is the one place the neuron's population differs from the
-board's, where the bidding activation is the first slot a bought bid subsumes (R22).
+The cover pass runs over the residual, which starts as all four neighbors, and every pattern covers the
+activation itself as well, as every bid does on the board (R22).
 
 ```
-K = {a,b}   covers 2 of the residual                     price 1 + |{}|  = 1     ratio 2
-M = {g,h}   covers g;  h did not fire                    price 1 + |{h}| = 2     ratio 0.5
+K = {a,b}   covers the activation and 2 of the residual      price 1 + |{}|  = 1     ratio 3
+M = {g,h}   covers the activation and g;  h did not fire     price 1 + |{h}| = 2     ratio 1
 ```
 
-`K` goes first and takes `a` and `b`. On the second round `M` is re-measured against what is left: it still
-covers only `g`, at a price of 2, so it does not pay and is not taken. **The cover is `{K}`**, `g` and `z` are
-the residual, and `g` and `z`, being residual, are in `K`'s population at their offsets — evidence for naming them
-(D27).
+`K` goes first and takes `a` and `b`. On the second round `M` is re-measured against what is left: it covers
+the activation and `g`, 2 against a price of 2, so it does not pay and is not taken. **The cover is `{K}`**, `g` and
+`z` are the residual, and `g` and `z`, being residual, are in `K`'s neighborhoods at their offsets — evidence
+for naming them (D27).
 
 Then the rest of the bill: the activation joins the ring and the oldest leaves; `K` re-centers; a candidate is
 seeded on the neighbor most often in the residual — `g` and `z` are in it this time — and priced; the worst
