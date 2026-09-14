@@ -410,14 +410,14 @@ residual. Every price in the design (D13) is counted off them.
 > residual(O)   =   the neighbors of O with no owner
 > ```
 
-# 8. The margin
+# 8. The saving
 
-> **D22 — Margin.** What one pattern is worth over one activation: what it is credited with (D20), less what
-> it costs — its own line, and the neurons it names that did not fire (D13).
+> **D22 — Saving.** What one pattern saves over one activation: what it is credited with (D20), less what it
+> costs — its own line, and the neurons it names that did not fire (D13).
 > ```
 > coverage(p, O)  =  1 + | the neighbors of O owned by p |   the activation itself, and what it owns
 > price(p, O)    =  1 + | p \ O |                            its own line, and the neurons it names that did not
-> margin(p, O)   =  coverage(p, O)  −  price(p, O)
+> saving(p, O)   =  coverage(p, O)  −  price(p, O)
 > ```
 > A child on the apex stands in for the activation it covers and for the neighbors its pattern owns there;
 > that is what it saves, and that is the coverage. What it costs is its own line, plus a turn-off for every
@@ -498,12 +498,12 @@ Recognition is the procedure that chooses a cover for a new activation/neighborh
 **Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
 empty table covers nothing and bids nothing.
 
-# 13. The margin of a pattern
+# 13. The margin
 
-> **D30 — The margin of a pattern.** What a pattern is worth over the history: its margin over each activation
-> it covers (D22), summed, less its dictionary line (D13).
+> **D30 — Margin.** What a pattern is worth over the history: its saving over each activation it covers (D22),
+> summed, less its dictionary line (D13).
 > ```
-> benefit(p)  =  Σ over the activations p covers:  coverage(p, O) − price(p, O)     D22
+> benefit(p)  =  Σ over the activations p covers:  saving(p, O)                     D22
 > cost(p)     =  1 + |p|                                                            D13
 > margin(p)   =  benefit(p) − cost(p)
 > ```
@@ -610,9 +610,8 @@ never charged for what came after — only for what it names that did not fire b
 > **What `C` is worth.** Against an activation, `C` takes neurons out of the residual and names some that did not
 > fire:
 > ```
-> reach(o)   =  |residual(o) ∩ C|  −  |C \ o|          coverage − price there (D22): what C takes from
->                                                        the residual, less what it names that did not fire
-> saving(o)  =  max( 0,  reach(o) )                        C joins the cover only where it pays (D28)
+> saving(o)  =  |residual(o) ∩ C|  −  |C \ o|         D22, with C credited the residual only
+>               and 0 where that is negative           C joins a cover only where it pays (D28)
 > ```
 > **A candidate is only ever credited the residual.** A neuron a pattern already covers is not `C`'s to take —
 > a candidate that fits a chunk beautifully earns nothing for it if something already accounts for it.

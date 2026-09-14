@@ -12,7 +12,7 @@ sections are identical, and only the exchange from symbols to length differs.
 ## Forgetting is not a separate mechanism
 
 A neuron keeps a [history](algorithm.md#the-history) one horizon wide and deletes a child the moment it stops
-covering its own storage. Forgetting is the retire half of the [margin](algorithm.md#13-the-margin-of-a-pattern) and needs no
+covering its own storage. Forgetting is the retire half of the [margin](algorithm.md#13-the-margin) and needs no
 machinery of its own, so what remains here is one question about how the file is priced.
 
 ## What changes if symbols are priced by occurrence

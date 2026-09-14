@@ -305,7 +305,7 @@ activation reaching for it is current again. An activation's share moves whole, 
 share in `O(offsets)`. The offset grid grows with the level, since D4's reach does, while the number of
 neighbors in it stays fixed by construction — that is the invariant the reach is chosen to hold.
 
-# 8. The margin
+# 8. The saving
 
 **On D22 — the price is not a notion invented for matching.** It is literally the symbols that would follow
 the activation in the file: a neuron named and absent has to be turned off, and that turn-off is the whole of
@@ -313,8 +313,8 @@ what a pattern is charged. A neuron that fired and nothing named costs one line 
 pattern exists, so it is charged to nobody — which is why the residual is a term of the activation and not of
 any pattern.
 
-**On D22 — the margin is a distance, read against a subset baseline.** Where one pattern is measured against
-the whole of an activation, `d(O, p) = |O △ p|` and `margin = |O| − d`: the identical number, written against
+**On D22 — the saving is a distance, read against a subset baseline.** Where one pattern is measured against
+the whole of an activation, `d(O, p) = |O △ p|` and `saving = |O| − d`: the identical number, written against
 a flat baseline instead of a subset one. The design uses the subset form everywhere, because an activation's
 cover is a set of patterns and only the subset form adds up over one.
 
@@ -568,7 +568,7 @@ when a neuron fires, because that is where counts move and where both tests run 
 the cover as it now stands (D22) and never stored, while a structural move — adding, retiring (R15, R18) — is a
 decision that stands until something reverses it.
 
-# 13. The margin of a pattern
+# 13. The margin
 
 **On D30 — `coverage` is what nothing else would have covered.** A pattern is worth what it saves over what
 would account for those neurons if it were gone: the residual, where each stands as its own line (D21). A saving
@@ -728,13 +728,13 @@ population  o₁ … o₄, the activations whose residual holds a       n = 4,  
 collapse    a: 4 → 8 > 5  named      b: 4 → named      c: 2 → 4 > 5?  no
             d: 1  no      e: 1  no
 
-C = {a,b}      reach   2, 2, 2, 2  over o₁…o₄;  o₅ names nothing C holds, so D28 would not take it
-                saving  1, 1, 1, 1, 0        benefit 4  >  line 1 + 2 = 3     requested
+C = {a,b}      saving  2, 2, 2, 2  over o₁…o₄;  o₅ names nothing C holds, so D28 would not take it: 0
+                                             benefit 8  >  line 1 + 2 = 3     requested
 ```
 
-By hand. `o₁` used to pay three lines. With `C` in its cover it pays `1` for `C`, which names both `a` and `b`
-and gets neither wrong, plus one line for `c` in the residual — two symbols instead of three. So do `o₂`, `o₃`
-and `o₄`. `o₅` shares nothing with `C`: taking it would cost `1 + |{a,b}| = 3` against two neurons it does not
+By hand. `o₁` used to pay four lines: itself, `a`, `b` and `c`. With `C` in its cover it pays `1` for `C`,
+which stands for it and names both `a` and `b` and gets neither wrong, plus one line for `c` in the residual —
+two symbols instead of four. So do `o₂`, `o₃` and `o₄`. `o₅` shares nothing with `C`: taking it would cost `1 + |{a,b}| = 3` against two neurons it does not
 even name, so D28 never puts `C` in that cover and `o₅` pays its two lines exactly as before.
 
 **On R14 — what the loop was doing, and why a seed does it in one step.** The earlier build grew `C` a
