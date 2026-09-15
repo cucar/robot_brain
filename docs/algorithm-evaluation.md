@@ -70,7 +70,7 @@ to be bounded by the cover. **Diagnostic:** bids per activation against cover si
 of bought bids that the cover would not have offered — which is the wide offer's whole benefit, and if it is
 near zero the offer can be narrowed back at no loss.
 
-**A cover is never re-derived, so it can go stale.** Recognition only covers the residual (§6), which is what
+**A cover is never re-derived, so it can go stale.** Recognition only covers the residual (§8), which is what
 makes the call a descent (T7). It also means an activation saved under an old table keeps the patterns it was
 given for as long as they own something there, and two activations with one neighborhood can be covered two
 ways. The counts a pattern re-centers on are then partly the table's past. **Diagnostic:** the share of

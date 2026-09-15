@@ -409,7 +409,7 @@ machine, over a frame's bids. It is stated here and cited from both.
 
 | caller                     | claimants | to cover                      | ties                                               |
 |----------------------------|---|-------------------------------|----------------------------------------------------|
-| neuron - recognition (§6) | each pattern, against each activation | the residual of the history (D21) | the older `pattern id`                             |
+| neuron - recognition (§8) | each pattern, against each activation | the residual of the history (D21) | the older `pattern id`                             |
 | machine - election (R24)  | bids | the board (§10.2) | the older `neuron id`, then the earlier coordinate |
 
 # 5. The neuron
@@ -428,7 +428,7 @@ it is used.
 create neuron            the machine creates it when the call requesting it returns, one level above
                          its parent, holding nothing                                            R16
 process frame            in its level's turn: everything structural for the activations that
-                         fired this frame                                                  §9, R20
+                         fired this frame                                                  §6, R20
 wire child to pattern    once the last level has run, the machine points the pattern at the child it
                          created for it                                                    R16, R17
 delete pattern neighbor  the machine removes a neuron that no longer exists from every pattern
@@ -484,7 +484,7 @@ The collapse is the only operation that decides what a pattern names. It runs in
 
 - **Re-centering** (§5.4, D29) collapses the neighborhoods of the activations an existing pattern covers, at every
   call.
-- **Creating a pattern** (§8, R14) collapses the neighborhoods whose residual holds the candidate's seed, once
+- **Creating a pattern** (§9, R14) collapses the neighborhoods whose residual holds the candidate's seed, once
   per call. The candidate is in no cover, so every owned neighbor is skipped and it is built on the residual
   alone.
 
@@ -519,15 +519,60 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 
 # Part II — The past and present: a neuron
 
-# 6. Recognition
+# 6. The process frame call
 
-Recognition is the procedure that chooses a cover for a new activation/neighborhood (D17): the greedy cover
-(D28) over the residual of the history (D21).
+One call per level per frame: everything structural for the activations that fired this frame.
 
-**Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
-empty table covers nothing and bids nothing.
+> **R20 — The call, in order.** Once per level per frame, the machine asks one neuron for everything it owes
+> that frame. **One set of activations answers**: the ones that fired *this* frame, at age 0 (R1). What an open
+> activation learns of what followed names the apex, which no level knows, so it is written after every level
+> has run (§13) and never here. The right-hand column says which steps are per activation and which per neuron.
+> ```
+>                                                                                        over
+>  1  delete patterns     a full ring evicts its oldest activation; every pattern of     each new
+>                         that activation's cover loses it and re-centers; every         activation
+>                         pattern whose margin is now strictly negative retires, and
+>                         the neighbors it owned fall to the residual    §7, D18, D29, R18, D21
+>  2  recognize patterns  the new activation joins the ring, whole (D7), and             each new
+>                         recognition runs over the residual of the history: what it    activation
+>                         takes is the **cover** and what it credits is each neighbor's
+>                         **owner**; every pattern whose covered activations changed
+>                         re-centers                                 §8, D28, D17, D19, D29
+>  3  create a pattern    seed, neighborhoods, collapse (R14), then price it (R15). A       the
+>                         candidate that pays joins the table, and the covers it was      neuron
+>                         priced on, owning the residual it names there      §9, R15, D19
+>  4  return              a bid for every pattern of the table more than half of         each new
+>                         whose neighbors are present — `2 · |p ∩ O| > |p|` — whether    activation
+>                         or not the cover took it, this call's candidate included.
+>                         With the bids, one request carrying the candidate that            the
+>                         passed and the patterns that retired            R21, R17, R16    neuron
+> ```
 
-# 7. Deleting a pattern
+**The call returns two things**: the bids, and one request. For the candidate, the request stands in for the
+child's id until the machine allocates one (R17).
+
+> **R21 — A bid is a pattern and a name.** A bid carries two things and no others:
+> ```
+> the pattern   its neighbors — the dictionary line (D12)
+> the child     the id of the child this pattern would promote
+> ```
+> The pattern travels because it *is* the line for the symbol being proposed, and the bidder is implied,
+> because a child *is* its parent in that pattern. **No connection travels**: nothing at
+> `Δt > 0` has fired, and the file has no line for what follows (D12).
+>
+> **One activation may send several**, one per pattern that applies (R20), and they are independent bids: each
+> answers for what the election leaves it, and the machine has no reason to know they came from one neuron. A
+> neuron covering nothing sends nothing.
+>
+> **Nothing else is sent, because nothing else is the neuron's to know.** Which of the named neighbors actually
+> fired, what this bid is worth against them, and what another bid has already taken are facts about the frame
+> — and the machine is holding the frame. It reads the pattern against its own board and derives the rest
+> (R22).
+
+**The call runs before the election**, and the election is over bids from a table that has already retired,
+saved this frame, re-centered on it, and built from it.
+
+# 7. Deleting patterns
 
 > **R18 — Retire, then delete.** After eviction and the re-centering it causes, and before this call's
 > activation is admitted (R20), retire every pattern whose margin (D30) is strictly negative:
@@ -576,7 +621,15 @@ any level.
 **Nothing is retired for what followed it.** What followed is measured, not claimed (D25), so a pattern is
 never charged for what came after — only for what it names that did not fire beside it.
 
-# 8. Creating a pattern
+# 8. Recognizing patterns
+
+Recognition is the procedure that chooses a cover for a new activation/neighborhood (D17): the greedy cover
+(D28) over the residual of the history (D21).
+
+**Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
+empty table covers nothing and bids nothing.
+
+# 9. Creating a pattern
 
 > **R14 — Where a candidate comes from.** Three fixed steps. Nothing seeds it from outside, nothing grows it a
 > neighbor at a time, and nothing repeats until a condition holds.
@@ -667,39 +720,6 @@ never charged for what came after — only for what it names that did not fire b
 > **It is born holding nothing.** No patterns, no history and no connections (R16). Everything it comes to
 > hold is over the situations its parent's pattern actually took (D25), from its first activation on.
 
-# 9. The process frame call
-
-One call per level per frame: everything structural for the activations that fired this frame.
-
-> **R20 — The call, in order.** Once per level per frame, the machine asks one neuron for everything it owes
-> that frame. **One set of activations answers**: the ones that fired *this* frame, at age 0 (R1). What an open
-> activation learns of what followed names the apex, which no level knows, so it is written after every level
-> has run (§13) and never here. The right-hand column says which steps are per activation and which per neuron.
-> ```
->                                                                                        over
->  1  delete     a full ring evicts its oldest activation; every pattern of that          each new
->                activation's cover loses it and re-centers; every pattern whose            activation
->                margin is now strictly negative retires, and the neighbors it
->                owned fall to the residual                       D18, D29, R18, D21
->  2  update     the new activation joins the ring, whole (D7), and recognition runs      each new
->                over the residual of the history: what it takes is the **cover** and     activation
->                what it credits is each neighbor's **owner**; every pattern whose
->                covered activations changed re-centers                 D28, D17, D19, D29
->  3  add        seed, neighborhoods, collapse (R14), then price it (R15). A                the
->                candidate that pays joins the table, and the covers it was priced          neuron
->                on, owning the residual it names there                        R15, D19
->  4  return     a bid for every pattern of the table more than half of whose           each new
->                neighbors are present — `2 · |p ∩ O| > |p|` — whether or not the        activation
->                cover took it, this call's candidate included. A bid is the child's
->                id and the pattern; for the candidate, the request stands in for
->                the id until the machine allocates one. With the bids, one request        the
->                carrying the candidate that passed and the patterns that retired          neuron
->                                                                        R21, R17, R16
-> ```
-
-**The call runs before the election**, and the election is over bids from a table that has already retired,
-saved this frame, re-centered on it, and built from it.
-
 # Part III — The past and present: the machine
 
 # 10. Contraction
@@ -715,24 +735,6 @@ saved this frame, re-centered on it, and built from it.
 > spacetime. Spatial contraction is the case where every offset is zero.
 
 ## 10.1 Bids
-
-> **R21 — A bid is a pattern and a name.** A bid carries two things and no others:
-> ```
-> the pattern   its neighbors — the dictionary line (D12)
-> the child     the id of the child this pattern would promote
-> ```
-> The pattern travels because it *is* the line for the symbol being proposed, and the bidder is implied,
-> because a child *is* its parent in that pattern. **No connection travels**: nothing at
-> `Δt > 0` has fired, and the file has no line for what follows (D12).
->
-> **One activation may send several**, one per pattern that applies (R20), and they are independent bids: each
-> answers for what the election leaves it, and the machine has no reason to know they came from one neuron. A
-> neuron covering nothing sends nothing.
->
-> **Nothing else is sent, because nothing else is the neuron's to know.** Which of the named neighbors actually
-> fired, what this bid is worth against them, and what another bid has already taken are facts about the frame
-> — and the machine is holding the frame. It reads the pattern against its own board and derives the rest
-> (R22).
 
 > **R22 — What a bid covers, and what it costs.** The neuron sends the pattern (R21) and nothing else.
 > The machine holds the frame, so it reads that one object against what fired and derives both numbers.

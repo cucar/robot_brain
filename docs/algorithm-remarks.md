@@ -202,7 +202,7 @@ neighborhood ever was.
 
 **On D17 — why there are no bins.** An earlier design grouped activations by identical neighborhood and gave the
 group one cover, on the grounds that D28 reads the neighborhood and nothing else, so equal inputs get equal
-covers. §6 breaks that: a cover is never re-derived, only grown by recognition and shed by re-centering and
+covers. §8 breaks that: a cover is never re-derived, only grown by recognition and shed by re-centering and
 retirement, so two activations with one neighborhood can hold different covers depending on what the table was
 when each was saved.
 The group could no longer share, so the group is gone. Nothing was lost but a cache — every sum the tests need
@@ -477,7 +477,7 @@ its outer neighbors and they drop.
 could rebuild them: the history, which is the evidence itself, and the table of patterns, which is what the
 neuron has decided over that evidence. The cover and owners an activation carries are what recognition chose
 over those two, call by call, and they are held rather than recomputed because nothing ever re-derives a cover
-(§6).
+(§8).
 
 ## 5.3 The collapse
 
@@ -618,7 +618,7 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 >   non-increasing and strictly decreasing whenever a neighbor enters. **It is a sum over the population**: an
 >   individual activation can get dearer under the moved pattern while the total falls.
 > - **Recognize.** D28 over the residual takes a pattern only when its coverage strictly exceeds its price
->   there, so each pattern taken lowers `L_N` by at least one, and nothing standing is disturbed (§6).
+>   there, so each pattern taken lowers `L_N` by at least one, and nothing standing is disturbed (§8).
 >
 > `L_N` is a non-negative integer, so the strict moves are finite, and the process reaches a state where no
 > candidate pays, no pattern is negative, no neighbor moves and nothing in the residual can be covered. That is a local optimum with
@@ -630,7 +630,7 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 > step. Without it a pattern's own fit and the file disagree wherever two patterns name one neuron — a
 > candidate born on unmet ground can re-center onto ground another pattern holds, look better and better to
 > itself, be worth less and less to the file, be retired, and be rebuilt from the same residual by the same
-> seed. On a frozen history that cycles forever. And never re-deriving a cover (§6): a greedy cover derived
+> seed. On a frozen history that cycles forever. And never re-deriving a cover (§8): a greedy cover derived
 > fresh after a re-center can cost more than the one that stood, and `L_N` would rise with it, whereas
 > recognition over the residual can only add a pattern that pays. With both, the descent is monotone.
 >
@@ -648,177 +648,15 @@ answers that used to sit between the two ages.
 
 ---
 
-# 6. Recognition
+# 6. The process frame call
 
-**On §6 — why a cover is never re-derived.** D28 is greedy, and a greedy cover re-derived after a pattern moved
-can cost more than the one that stood. In Lloyd's algorithm the assignment step is exact, so re-assigning after
-the centers move can only help. Here it cannot be exact — an exact cover is set cover — so the design never
-re-derives: recognition runs over the residual alone, and every pattern it takes pays strictly against what
-stood, which is the difference between a call that descends `L` and one that can raise it (T7).
-
-**On §6 — a pattern owning nothing in an activation is not in its cover.** It follows from the definitions:
-a pattern is in a cover to explain neighbors (D17), and re-centering can leave it naming none the activation has,
-so its owners there are empty (D29). It is then charged nothing there and credited nothing, and recognition can
-take it again only if it pays (D28).
-
-**On D19 — why nothing is indexed the other way.** What each activation holds against each pattern is already the
-index (D19), so a reverse map from pattern to the activations it covers would be a second copy of the same fact.
-
-**On §6 — prices and structure move at the same moment and are still different kinds of thing.** Both move
-when a neuron fires, because that is where counts move and where both tests run (R1). But a price is read off
-the cover as it now stands (D22) and never stored, while a structural move — adding, retiring (R15, R18) — is a
-decision that stands until something reverses it.
-
-# 7. Retire — pruning the table
-
-**On R18 — why every negative margin, and why at eviction.** An earlier rule retired one pattern per call, the
-worst, on the argument that two patterns straddling one cluster are each worth nothing while the other stands,
-so retiring both would return the cluster to the residual. That was true when both were credited the same
-neighbors. With exclusive owners (D19) it is not: the older owns the neighbors and has a positive margin, the
-younger owns nothing and has a margin of minus one. Each margin is read off what the pattern owns, retiring one
-frees only its own neighbors, and no other margin moves, so the margins are independent and retiring every
-negative one at once shortens the file by exactly the sum. And a margin can only fall at eviction: recognition
-adds a pattern to a cover only where its saving is positive, re-centering is the minimizer over the pattern's
-own population (T5), and no other pattern's move touches what this one owns. So only the patterns of the
-evicted activation's cover can have gone negative, and they are read right after they lose it.
-
-**On R18 — a candidate cannot be retired by the pass that follows it.** After a candidate is added, what R15 priced
-and what R18 reads are the same set counted the same way — the residual `C` took, measured against
-the same table. The margin R18 reads is the one R15 just found strictly positive, and one
-retirement can only hand `C` more neurons or remove a competitor. A pattern only ever falls below its line by
-having its activations evicted.
-
-**On R18 — what two sequential tests cannot reach.** A candidate that would pay *only* if some incumbent's line
-were refunded fails R15 and is never put to R18 — two patterns straddling one cluster, each carrying its
-weight while the other stands, neither individually deletable. Pricing that case would need a third move with
-a formula of its own, joint over adding one pattern and retiring another. It is not worth one. Re-centering
-pulls an off-center pattern to its cluster without being asked, and a straddling pair survives only until drift
-or eviction starves one of them. **The miss is in the safe direction**: what a greedy build-then-retire gives
-up is a compression not taken, where a candidate priced against the flat file gives up a file made longer.
-
-**On R18 — why the subtree needs no cascade.** A retired pattern's child cannot fire again, so by the death
-frame it has no open activations; if it has not fired, none of its children has fired either, so none of them
-has open activations, and so on to the bottom. **Children outlive their parents** — reach grows with the
-level, so an activation above is still open when the one that fed it has closed — and the death frame waits on
-the child's last activation for exactly that reason.
-
-**On R18 — nothing irreplaceable dies.** A pattern retired while its evidence is still in the ring is rebuilt by
-R14 the moment that evidence pays again.
-
-**On R18 — why the death ledger needs no back-pointers.** A back-pointer from a child to whatever is naming it
-would be structure the file does not hold, and the machine already holds the open activations that answer the
-question.
-
-**On R19 — duplicates die in the table, not the market.** Two patterns with the same neighbors are taken into a
-cover older first, so the younger holds nothing anywhere and retires. The market would kill the younger too —
-the election ties to the older symbol (R24) — but the neuron never hears the election's verdict, so the table
-has to be able to do it alone, and it can.
-
-# 8. Add — creating a child
-
-**On §8 and §7 — the two moves.** A neuron can do exactly two things to its table: **add** a pattern and
-**retire** one. Re-centering is neither — it is what moving counts means (D29). So the whole of restructuring is two
-tests, asked in that order, at a call and nowhere else, **and each is asked once per call: every negative
-margin retired, one candidate built and priced** (R20). **Both are D30 over different sets** — one margin, read over the
-neurons a candidate would take out of the residual and over the neurons a pattern holds — and there is no second
-currency anywhere in the design.
-
-**On R14 — building a candidate, worked through.** Five activations in the ring, an empty table, so every
-neuron of every activation is in the residual.
-
-```
-o₁ = {a,b,c}   o₂ = {a,b,d}   o₃ = {a,b,c}   o₄ = {a,b,e}   o₅ = {x,y}
-
-seed        a and b are each in four residuals; a is earlier in declaration order, so a
-population  o₁ … o₄, the activations whose residual holds a       n = 4,  2·count > 5 to name
-
-collapse    a: 4 → 8 > 5  named      b: 4 → named      c: 2 → 4 > 5?  no
-            d: 1  no      e: 1  no
-
-C = {a,b}      saving  2, 2, 2, 2  over o₁…o₄;  o₅ names nothing C holds, so D28 would not take it: 0
-                                             benefit 8  >  line 1 + 2 = 3     requested
-```
-
-By hand. `o₁` used to pay four lines: itself, `a`, `b` and `c`. With `C` in its cover it pays `1` for `C`,
-which stands for it and names both `a` and `b` and gets neither wrong, plus one line for `c` in the residual —
-two symbols instead of four. So do `o₂`, `o₃` and `o₄`. `o₅` shares nothing with `C`: taking it would cost `1 + |{a,b}| = 3` against two neurons it does not
-even name, so D28 never puts `C` in that cover and `o₅` pays its two lines exactly as before.
-
-**On R14 — what the loop was doing, and why a seed does it in one step.** The earlier build grew `C` a
-neighbor at a time, taking the largest net gain each round and stopping when none paid. Every round was a
-majority in disguise — the neighbors in the residual against the neighbors absent, over the whole ring — but
-over a population that changed as `C` grew, which is the only reason it took a round to add one neighbor.
-Fixing the population first removes the rounds. The seed is the neighbor the table is failing on most; the
-population is the activations where it is failing; the collapse over that population settles every other neighbor at
-once by exactly the majority the loop was computing. The seed chooses the population and the population
-decides every neighbor. Nothing in either place grows anything.
-
-**On R14 — what "the same history" means.** Covers are grown, never derived (§6), so two neurons with
-identical rings can carry different covers if their tables moved under them in a different order, and the
-residual — and so the seed — is a function of the ring and its covers together. The build is deterministic in
-that pair, which is what a fixed-pass construction can promise; it is not a function of the ring alone, and
-an earlier draft said it was.
-
-**On R14 — why the candidate is not one of the activations.** A neighbor enters `C` only while more of the
-population hold it than not, so what a single activation carried alone never gets in — and over a span
-`reach_t + 1` frames wide a single activation carries every coincidence in the window. Minting one raw would charge
-a line for those coincidences and then re-center them away at the next bill.
-
-**On R14 — why nothing stands in front of building a candidate.** A gate would have to be a threshold on how badly
-something was being covered, and the design settles nothing on a count of mismatched neurons. It is also
-unnecessary: where the table already describes its activations well, the residual is thin, the seed's population
-is small, the collapse over it names little, and the price refuses it (R15). **The signal goes quiet by
-itself** once every pattern's neighbors sit near `0` or near `n`, which is exactly when there is no work left.
-
-**On R14 — what a candidate costs to build.** One tally over the ring for the seed — how many residuals hold
-each neighbor — and one collapse over the seed's population, per neighbor. Both are the walk a re-center makes.
-The whole construction is `O(H · w̄)` with `w̄` the neighbors an activation holds, and it is the reach that sets
-`w̄` (D4).
-
-**This is facility location.** Activations are customers, patterns are facilities, opening one costs `1 + |p|`,
-serving costs what the pattern names wrongly, and the cover pass is the assignment. The opening cost is
-the only thing standing between the design and memorizing every frame: if opening were free you would put a
-warehouse on every customer. The local search is usually given four moves; here **split**, **merge** and
-**swap** need no machinery of their own. Split is what R14 does — a candidate takes the part of a pattern's
-demand that shares a seed — merge is what retiring does to redundant patterns, and swap is a candidate built
-at one bill and a pattern retired at the next — the child takes the activations, and the pattern it stranded fails
-R18 at the next one.
-
-**On R15 — the test asks the question D28 will answer.** It prices `C` on the residual of the activations in the
-ring, and D28 will take `C` into a cover on the residual of an activation — the same quantity, over the same
-evidence. **There is no bet left for R18 to collect on**, and nothing can hand `C` less than the
-test counted except the history moving on, which is R18's ordinary business.
-
-**On R15 — a candidate rejected today is not lost.** Every later bill builds one again, over a residual the
-saving and the eviction have moved, so what does not pay for its line today is minted as soon as the activations
-behind it recur enough to pay for it. Re-centering then means a child that does get minted improves with
-exposure rather than freezing at the shape it was cut to.
-
-**On R15 — one per bill is not a limit on how much structure a neuron can build.** A neuron fires once per
-frame per position, and every activation is a bill. What one bill leaves unmet is the next bill's seed. A neuron
-that needs three patterns builds them over three of its own activations, which is the same rhythm the machine
-keeps: one election per frame, and the level above built from what it bought.
-
-**On R16 — what makes release safe** is R18's condition rather than any wait: a pattern is deleted only when
-its child has nothing open, so the neuron released has no open activations, and by the same argument neither
-does anything beneath it.
-
-**On R17 — why the child is offered in the frame that built it.** An earlier draft withheld the child for one
-frame so that structure would pay off only on recurrence. R15 already prices the candidate on recurrence,
-over the whole history, so the withholding protected nothing; what it did was activate the child by fiat,
-beside the election's winners and outside the election, at the cost of one lost exposure and a page of
-special cases. Offering the pattern through the election puts the child through the same test as every
-other child, and its life begins at its first activation, bought or not.
-
-# 9. The process frame call
-
-**On §9 — why the bill runs before the offer.** The bill used to follow the election, because it read what
+**On §6 — why the bill runs before the offer.** The bill used to follow the election, because it read what
 the election had credited. With nothing to read, the only reason to split the call is gone, and the natural
 order is the one that lets this frame's activation count before this frame's offer is made: save, restructure,
 offer. The candidate built in the call is offered in it (R17), which is the point: this frame's activation
 counts before this frame's offer is made.
 
-**On §9 — why the bill's decisions are once, not once per activation.** Deciding per activation would impose
+**On §6 — why the bill's decisions are once, not once per activation.** Deciding per activation would impose
 an order on activations that are simultaneous — the pixel at one position did not happen before the pixel at
 another — and the structure that came out would depend on it, which is the defect R24 removes one level up.
 
@@ -836,13 +674,18 @@ to the minimizer over its assigned points: Lloyd 1957, better known as k-means. 
 with the file as the distance, the collapse as the minimizer (T5), and `k` moving as build and retire change
 the pattern count — which is why those moves exist alongside it, since Lloyd only optimizes assignment for a
 given set of centers. Where it departs from Lloyd is that the assignment step is not exact and so is never
-redone — recognition only assigns what is still unassigned (§6) — and that is what T7 turns on.
+redone — recognition only assigns what is still unassigned (§8) — and that is what T7 turns on.
 
 **What the design does not do is alternate to stability.** A bill absorbs its evidence, makes at most one
 structural decision of each kind and re-centers once: one improvement step, not a fixed point. Iterating would
 settle the table against counts the next bill moves anyway, and every bill moves them. The table is never
 optimal over the ring and does not need to be. It needs to be current for the next cover, and that is one
 activation's costs.
+
+**On R21 — why the bid carries nothing forward.** Nothing at `Δt > 0` has fired, so the machine could settle
+nothing against it; the file holds no line for it, so nothing would be priced on it; and it would make the bid
+a claim about a frame nobody has seen, which is what the assertion was (D12). A bid is
+a dictionary line and a name, and a dictionary line is backward.
 
 ## What pins the order of the call
 
@@ -981,9 +824,9 @@ The order §2 states, drawn. Every node names where it is specified.
 
 ```mermaid
 flowchart TD
-    A["THE MACHINE holds every open activation, one per<br/>(neuron, age, position), and calls each neuron once<br/>in the frame it fires — §9"]
-    A --> B["DELETE, then UPDATE — age 0<br/>evict, re-center, retire; admit, cover, re-center — R20 steps 1–2"]
-    B --> M["ADD one candidate<br/>seed, neighborhoods, collapse, price — R20 step 3"]
+    A["THE MACHINE holds every open activation, one per<br/>(neuron, age, position), and calls each neuron once<br/>in the frame it fires — §6"]
+    A --> B["DELETE PATTERNS, then RECOGNIZE PATTERNS — age 0<br/>evict, re-center, retire; admit, cover, re-center — R20 steps 1–2"]
+    B --> M["CREATE A PATTERN<br/>seed, neighborhoods, collapse, price — R20 step 3"]
     M --> P["RETURN<br/>a bid for every pattern that applies, and one request — R20 step 4"]
     P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R24"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §11"]
@@ -991,6 +834,168 @@ flowchart TD
     Z --> W["PROCESS ACTIONS, every open activation at its own age<br/>the apex action and rewards in; from the apex, inferences out — §13"]
     W --> S["SELECT — expand the inferences to base actions,<br/>one winner per action dimension by estimate; it executes at f+1 — §16"]
 ```
+
+# 7. Retire — pruning the table
+
+**On R18 — why every negative margin, and why at eviction.** An earlier rule retired one pattern per call, the
+worst, on the argument that two patterns straddling one cluster are each worth nothing while the other stands,
+so retiring both would return the cluster to the residual. That was true when both were credited the same
+neighbors. With exclusive owners (D19) it is not: the older owns the neighbors and has a positive margin, the
+younger owns nothing and has a margin of minus one. Each margin is read off what the pattern owns, retiring one
+frees only its own neighbors, and no other margin moves, so the margins are independent and retiring every
+negative one at once shortens the file by exactly the sum. And a margin can only fall at eviction: recognition
+adds a pattern to a cover only where its saving is positive, re-centering is the minimizer over the pattern's
+own population (T5), and no other pattern's move touches what this one owns. So only the patterns of the
+evicted activation's cover can have gone negative, and they are read right after they lose it.
+
+**On R18 — a candidate cannot be retired by the pass that follows it.** After a candidate is added, what R15 priced
+and what R18 reads are the same set counted the same way — the residual `C` took, measured against
+the same table. The margin R18 reads is the one R15 just found strictly positive, and one
+retirement can only hand `C` more neurons or remove a competitor. A pattern only ever falls below its line by
+having its activations evicted.
+
+**On R18 — what two sequential tests cannot reach.** A candidate that would pay *only* if some incumbent's line
+were refunded fails R15 and is never put to R18 — two patterns straddling one cluster, each carrying its
+weight while the other stands, neither individually deletable. Pricing that case would need a third move with
+a formula of its own, joint over adding one pattern and retiring another. It is not worth one. Re-centering
+pulls an off-center pattern to its cluster without being asked, and a straddling pair survives only until drift
+or eviction starves one of them. **The miss is in the safe direction**: what a greedy build-then-retire gives
+up is a compression not taken, where a candidate priced against the flat file gives up a file made longer.
+
+**On R18 — why the subtree needs no cascade.** A retired pattern's child cannot fire again, so by the death
+frame it has no open activations; if it has not fired, none of its children has fired either, so none of them
+has open activations, and so on to the bottom. **Children outlive their parents** — reach grows with the
+level, so an activation above is still open when the one that fed it has closed — and the death frame waits on
+the child's last activation for exactly that reason.
+
+**On R18 — nothing irreplaceable dies.** A pattern retired while its evidence is still in the ring is rebuilt by
+R14 the moment that evidence pays again.
+
+**On R18 — why the death ledger needs no back-pointers.** A back-pointer from a child to whatever is naming it
+would be structure the file does not hold, and the machine already holds the open activations that answer the
+question.
+
+**On R19 — duplicates die in the table, not the market.** Two patterns with the same neighbors are taken into a
+cover older first, so the younger holds nothing anywhere and retires. The market would kill the younger too —
+the election ties to the older symbol (R24) — but the neuron never hears the election's verdict, so the table
+has to be able to do it alone, and it can.
+
+# 8. Recognition
+
+**On §8 — why a cover is never re-derived.** D28 is greedy, and a greedy cover re-derived after a pattern moved
+can cost more than the one that stood. In Lloyd's algorithm the assignment step is exact, so re-assigning after
+the centers move can only help. Here it cannot be exact — an exact cover is set cover — so the design never
+re-derives: recognition runs over the residual alone, and every pattern it takes pays strictly against what
+stood, which is the difference between a call that descends `L` and one that can raise it (T7).
+
+**On §8 — a pattern owning nothing in an activation is not in its cover.** It follows from the definitions:
+a pattern is in a cover to explain neighbors (D17), and re-centering can leave it naming none the activation has,
+so its owners there are empty (D29). It is then charged nothing there and credited nothing, and recognition can
+take it again only if it pays (D28).
+
+**On D19 — why nothing is indexed the other way.** What each activation holds against each pattern is already the
+index (D19), so a reverse map from pattern to the activations it covers would be a second copy of the same fact.
+
+**On §8 — prices and structure move at the same moment and are still different kinds of thing.** Both move
+when a neuron fires, because that is where counts move and where both tests run (R1). But a price is read off
+the cover as it now stands (D22) and never stored, while a structural move — adding, retiring (R15, R18) — is a
+decision that stands until something reverses it.
+
+# 9. Add — creating a child
+
+**On §9 and §7 — the two moves.** A neuron can do exactly two things to its table: **add** a pattern and
+**retire** one. Re-centering is neither — it is what moving counts means (D29). So the whole of restructuring is two
+tests, asked in that order, at a call and nowhere else, **and each is asked once per call: every negative
+margin retired, one candidate built and priced** (R20). **Both are D30 over different sets** — one margin, read over the
+neurons a candidate would take out of the residual and over the neurons a pattern holds — and there is no second
+currency anywhere in the design.
+
+**On R14 — building a candidate, worked through.** Five activations in the ring, an empty table, so every
+neuron of every activation is in the residual.
+
+```
+o₁ = {a,b,c}   o₂ = {a,b,d}   o₃ = {a,b,c}   o₄ = {a,b,e}   o₅ = {x,y}
+
+seed        a and b are each in four residuals; a is earlier in declaration order, so a
+population  o₁ … o₄, the activations whose residual holds a       n = 4,  2·count > 5 to name
+
+collapse    a: 4 → 8 > 5  named      b: 4 → named      c: 2 → 4 > 5?  no
+            d: 1  no      e: 1  no
+
+C = {a,b}      saving  2, 2, 2, 2  over o₁…o₄;  o₅ names nothing C holds, so D28 would not take it: 0
+                                             benefit 8  >  line 1 + 2 = 3     requested
+```
+
+By hand. `o₁` used to pay four lines: itself, `a`, `b` and `c`. With `C` in its cover it pays `1` for `C`,
+which stands for it and names both `a` and `b` and gets neither wrong, plus one line for `c` in the residual —
+two symbols instead of four. So do `o₂`, `o₃` and `o₄`. `o₅` shares nothing with `C`: taking it would cost `1 + |{a,b}| = 3` against two neurons it does not
+even name, so D28 never puts `C` in that cover and `o₅` pays its two lines exactly as before.
+
+**On R14 — what the loop was doing, and why a seed does it in one step.** The earlier build grew `C` a
+neighbor at a time, taking the largest net gain each round and stopping when none paid. Every round was a
+majority in disguise — the neighbors in the residual against the neighbors absent, over the whole ring — but
+over a population that changed as `C` grew, which is the only reason it took a round to add one neighbor.
+Fixing the population first removes the rounds. The seed is the neighbor the table is failing on most; the
+population is the activations where it is failing; the collapse over that population settles every other neighbor at
+once by exactly the majority the loop was computing. The seed chooses the population and the population
+decides every neighbor. Nothing in either place grows anything.
+
+**On R14 — what "the same history" means.** Covers are grown, never derived (§8), so two neurons with
+identical rings can carry different covers if their tables moved under them in a different order, and the
+residual — and so the seed — is a function of the ring and its covers together. The build is deterministic in
+that pair, which is what a fixed-pass construction can promise; it is not a function of the ring alone, and
+an earlier draft said it was.
+
+**On R14 — why the candidate is not one of the activations.** A neighbor enters `C` only while more of the
+population hold it than not, so what a single activation carried alone never gets in — and over a span
+`reach_t + 1` frames wide a single activation carries every coincidence in the window. Minting one raw would charge
+a line for those coincidences and then re-center them away at the next bill.
+
+**On R14 — why nothing stands in front of building a candidate.** A gate would have to be a threshold on how badly
+something was being covered, and the design settles nothing on a count of mismatched neurons. It is also
+unnecessary: where the table already describes its activations well, the residual is thin, the seed's population
+is small, the collapse over it names little, and the price refuses it (R15). **The signal goes quiet by
+itself** once every pattern's neighbors sit near `0` or near `n`, which is exactly when there is no work left.
+
+**On R14 — what a candidate costs to build.** One tally over the ring for the seed — how many residuals hold
+each neighbor — and one collapse over the seed's population, per neighbor. Both are the walk a re-center makes.
+The whole construction is `O(H · w̄)` with `w̄` the neighbors an activation holds, and it is the reach that sets
+`w̄` (D4).
+
+**This is facility location.** Activations are customers, patterns are facilities, opening one costs `1 + |p|`,
+serving costs what the pattern names wrongly, and the cover pass is the assignment. The opening cost is
+the only thing standing between the design and memorizing every frame: if opening were free you would put a
+warehouse on every customer. The local search is usually given four moves; here **split**, **merge** and
+**swap** need no machinery of their own. Split is what R14 does — a candidate takes the part of a pattern's
+demand that shares a seed — merge is what retiring does to redundant patterns, and swap is a candidate built
+at one bill and a pattern retired at the next — the child takes the activations, and the pattern it stranded fails
+R18 at the next one.
+
+**On R15 — the test asks the question D28 will answer.** It prices `C` on the residual of the activations in the
+ring, and D28 will take `C` into a cover on the residual of an activation — the same quantity, over the same
+evidence. **There is no bet left for R18 to collect on**, and nothing can hand `C` less than the
+test counted except the history moving on, which is R18's ordinary business.
+
+**On R15 — a candidate rejected today is not lost.** Every later bill builds one again, over a residual the
+saving and the eviction have moved, so what does not pay for its line today is minted as soon as the activations
+behind it recur enough to pay for it. Re-centering then means a child that does get minted improves with
+exposure rather than freezing at the shape it was cut to.
+
+**On R15 — one per bill is not a limit on how much structure a neuron can build.** A neuron fires once per
+frame per position, and every activation is a bill. What one bill leaves unmet is the next bill's seed. A neuron
+that needs three patterns builds them over three of its own activations, which is the same rhythm the machine
+keeps: one election per frame, and the level above built from what it bought.
+
+**On R16 — what makes release safe** is R18's condition rather than any wait: a pattern is deleted only when
+its child has nothing open, so the neuron released has no open activations, and by the same argument neither
+does anything beneath it.
+
+**On R17 — why the child is offered in the frame that built it.** An earlier draft withheld the child for one
+frame so that structure would pay off only on recurrence. R15 already prices the candidate on recurrence,
+over the whole history, so the withholding protected nothing; what it did was activate the child by fiat,
+beside the election's winners and outside the election, at the cost of one lost exposure and a page of
+special cases. Offering the pattern through the election puts the child through the same test as every
+other child, and its life begins at its first activation, bought or not.
 
 # 10. Contraction
 
@@ -1002,11 +1007,6 @@ interesting if you are choosing a search. Nothing searches. R24 takes the bid wi
 free set, credits it what it names there, and asks the question again over what is left. **What the objective
 describes is the outcome of that procedure, not an instruction to anyone**, which is why it belongs here and
 not in the spec.
-
-**On R21 — why the bid carries nothing forward.** Nothing at `Δt > 0` has fired, so the machine could settle
-nothing against it; the file holds no line for it, so nothing would be priced on it; and it would make the bid
-a claim about a frame nobody has seen, which is what the assertion was (D12). A bid is
-a dictionary line and a name, and a dictionary line is backward.
 
 **On R22 — why a named neuron another neuron covers is free in both directions.** It fired, so it is not among
 the neurons named and absent, and no owner can put it there. It is already paid for, so it is not among
