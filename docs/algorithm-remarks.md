@@ -667,6 +667,11 @@ settle the table against counts the next bill moves anyway, and every bill moves
 optimal over the ring and does not need to be. It needs to be current for the next cover, and that is one
 activation's costs.
 
+**On R21 — why nothing else is sent.** Nothing else is the neuron's to know. Which of the named neighbors
+actually fired, what this bid is worth against them, and what another bid has already taken are facts about the
+frame — and the machine is holding the frame. It reads the pattern against its own board and derives the rest
+(R22).
+
 **On R21 — why the bid carries nothing forward.** Nothing at `Δt > 0` has fired, so the machine could settle
 nothing against it; the file holds no line for it, so nothing would be priced on it; and it would make the bid
 a claim about a frame nobody has seen, which is what the assertion was (D12). A bid is

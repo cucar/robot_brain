@@ -552,23 +552,11 @@ One call per level per frame: everything structural for the activations that fir
 > |                    | add request    | The pattern added this call, if one was.                                                                                          | R16           |
 > |                    | delete request | The patterns retired this call.                                                                                                   | R16, R18      |
 
-**The call returns three things**: the bids, the add request and the delete request. For the added pattern,
+The call runs before the election (R24) and returns three things: the bids, the add request and the delete request. For the added pattern,
 the add request stands in for the child's id until the machine allocates one (R17).
 
-> **R21 — One bid per pattern of the cover.** An activation sends one bid (D31) per pattern of its cover, and
-> they are independent: each answers for what the election leaves it, and the machine has no reason to know
-> they came from one neuron. A neuron covering nothing sends nothing.
->
-> The pattern travels because it *is* the line for the symbol being proposed, and the bidder is implied,
-> because a child *is* its parent in that pattern.
->
-> **Nothing else is sent, because nothing else is the neuron's to know.** Which of the named neighbors actually
-> fired, what this bid is worth against them, and what another bid has already taken are facts about the frame
-> — and the machine is holding the frame. It reads the pattern against its own board and derives the rest
-> (R22).
-
-**The call runs before the election**, and the election is over bids from a table that has already retired,
-saved this frame, re-centered on it, and built from it.
+> **R21 — One bid per pattern of the cover.** An activation sends one bid (D31) per pattern of its cover. A
+> neuron covering nothing sends nothing.
 
 # 7. Deleting patterns
 
