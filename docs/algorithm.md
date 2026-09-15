@@ -444,10 +444,10 @@ with its bids (R24).
 Part II covers `process frame`: what a neuron does in the frame it fires.
 Part IV covers the `process actions` call, where a neuron learns what action followed and infers the next.
 
-> **R1 — One decision point: the frame it fires.** A neuron is called once per activation, at age 0, and
-> everything structural happens in that call: it evicts and retires, covers its neighborhood and saves it,
-> builds and prices one candidate, and returns a bid for every pattern that applies together with its request
-> (R20).
+> **R1 — One decision point: the frame it fires.** A neuron is called once per frame it fires in, for every
+> activation of that frame together, at age 0, and everything structural happens in that call: it evicts and
+> retires, saves and covers the frame's neighborhoods, builds and prices one candidate, and returns a bid for
+> every pattern that applies together with its request (R20).
 
 ## 5.2 The history
 
@@ -524,29 +524,15 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 One call per level per frame: everything structural for the activations that fired this frame.
 
 > **R20 — The call, in order.** Once per level per frame, the machine asks one neuron for everything it owes
-> that frame. **One set of activations answers**: the ones that fired *this* frame, at age 0 (R1). What an open
-> activation learns of what followed names the apex, which no level knows, so it is written after every level
-> has run (§13) and never here. The right-hand column says which steps are per activation and which per neuron.
-> ```
->                                                                                        over
->  1  delete patterns     a full ring evicts its oldest activation; every pattern of     each new
->                         that activation's cover loses it and re-centers; every         activation
->                         pattern whose margin is now strictly negative retires, and
->                         the neighbors it owned fall to the residual    §7, D18, D29, R18, D21
->  2  recognize patterns  the new activation joins the ring, whole (D7), and             each new
->                         recognition runs over the residual of the history: what it    activation
->                         takes is the **cover** and what it credits is each neighbor's
->                         **owner**; every pattern whose covered activations changed
->                         re-centers                                 §8, D28, D17, D19, D29
->  3  create a pattern    seed, neighborhoods, collapse (R14), then price it (R15). A       the
->                         candidate that pays joins the table, and the covers it was      neuron
->                         priced on, owning the residual it names there      §9, R15, D19
->  4  return              a bid for every pattern of the table more than half of         each new
->                         whose neighbors are present — `2 · |p ∩ O| > |p|` — whether    activation
->                         or not the cover took it, this call's candidate included.
->                         With the bids, one request carrying the candidate that            the
->                         passed and the patterns that retired            R21, R17, R16    neuron
-> ```
+> that frame, handing it **every activation of it that fired this frame**, each with its neighborhood, at age
+> 0 (R1). They are processed together.
+>
+> | # | step | what happens | keys |
+> |---|---|---|---|
+> | 1 | delete patterns | A full ring evicts as many of its oldest activations as it must to admit the frame's. Every pattern of an evicted cover loses it and re-centers. Every pattern whose margin is now strictly negative retires, and the neighbors it owned fall to the residual. | §7, D18, D29, R18, D21 |
+> | 2 | recognize patterns | The frame's activations join the ring, whole (D7) and wholly residual. The greedy cover runs over the residual of the history: what it takes is each cover and what it credits is each neighbor's owner. Every pattern whose covered activations changed re-centers. | §8, D28, D17, D19, D29 |
+> | 3 | create a pattern | Seed, neighborhoods, collapse (R14), then price it (R15), once. A candidate that pays joins the table, and the covers it was priced on, owning the residual it names there. | §9, R15, D19 |
+> | 4 | return | For each of the frame's activations, a bid for every pattern of the table more than half of whose neighbors are present there, whether or not the cover took it, this call's candidate included. And one request carrying the candidate that passed and the patterns that retired. | R21, R17, R16 |
 
 **The call returns two things**: the bids, and one request. For the candidate, the request stands in for the
 child's id until the machine allocates one (R17).

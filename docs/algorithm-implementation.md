@@ -291,7 +291,7 @@ task accuracy (train and held-out), neuron counts per level, and wall-clock per 
 
 **Phase 1 — substrate, evidence, and the table.** Sparse activation (a dimension with nothing happening
 supplies no symbol); the history of activations with held covers and owners; the greedy cover; the five-pass bill
-with one build and one retirement per activation; the request-and-reply mint. The invariants above become
+with one build per call and every negative margin retired; the request-and-reply mint. The invariants above become
 `debug_assertions` that recompute from the ring on every mutation. Gate on the exposure curves: dictionary
 size sublinear in exposures, apex per frame falling, churn decaying. Also measure history memory and per-frame
 wall-clock. Cap at one level so the recursion is not a variable yet.

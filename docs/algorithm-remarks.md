@@ -656,9 +656,12 @@ order is the one that lets this frame's activation count before this frame's off
 offer. The candidate built in the call is offered in it (R17), which is the point: this frame's activation
 counts before this frame's offer is made.
 
-**On §6 — why the bill's decisions are once, not once per activation.** Deciding per activation would impose
+**On §6 — why the call's decisions are once, not once per activation.** Deciding per activation would impose
 an order on activations that are simultaneous — the pixel at one position did not happen before the pixel at
 another — and the structure that came out would depend on it, which is the defect R24 removes one level up.
+It is also what lets a shape repeated within one frame become a pattern in that frame: two activations with one
+neighborhood are two neighborhoods in the residual with one seed, and the collapse over them names what they
+share, where one at a time would build on a single occurrence and name nothing (R14).
 
 > **T8 — Nothing between activations is read.** Counts move when an activation is saved, when one is evicted, or
 > when a cover changes (D29), and all three happen in the frame the neuron fires. Between activations the forward
@@ -747,8 +750,10 @@ avoid with tallies it already keeps.
 neighborhood holding it, and the price reads the same set again, so step 3 is `O(s · N)` once per call. It
 does not repeat: one candidate per call (R14).
 
-**Nothing is per frame.** Every term above is per activation of this neuron at age 0, in terms of that neuron's
-own `H`, `P` and `N`. A neuron that fires rarely costs rarely.
+**Everything is per call.** Every term above is per call, one per frame the neuron fires in, in terms of that
+neuron's own `H`, `P` and `N`. The frame's `A` activations enter only as the size of the dirty set in recognition
+and of the offer; recognition, the build and the retirements run once however many arrived. A neuron that fires
+rarely costs rarely.
 
 ## One activation, across its frames
 
