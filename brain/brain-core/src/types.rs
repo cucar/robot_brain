@@ -156,3 +156,17 @@ pub enum GroupMode {
     /// mean - 1 standard deviation (more corrections).
     Aggressive,
 }
+
+/// Jaccard-union error between an inferred set and an observed set: `(missing + novel) / union`, where
+/// missing = inferred ∖ observed and novel = observed ∖ inferred. This is `1 − match` under the union
+/// denominator — the SAME grouping comparison recognition uses, here over predicted-vs-actual sets.
+/// Shared by the spatial (neuron-side) and temporal (thalamus-side) prediction-error evaluations;
+/// both pass sets already restricted to the comparable kind (events). Returns None when the union is
+/// empty (nothing to compare).
+pub fn get_union_error(inferred: &rustc_hash::FxHashSet<NeuronId>, observed: &rustc_hash::FxHashSet<NeuronId>) -> Option<f64> {
+    let union_size = inferred.union(observed).count();
+    if union_size == 0 { return None; }
+    let missing = inferred.difference(observed).count();
+    let novel = observed.difference(inferred).count();
+    Some((missing + novel) as f64 / union_size as f64)
+}
