@@ -63,12 +63,12 @@ is a rate, not a cap. **Diagnostic:** the fraction of bills whose candidate paid
 long stretch means the neuron is building as fast as it is allowed and has a backlog; near zero means the rate
 is not binding.
 
-**The offer is wider than the cover, and the election pays for it.** Every pattern that applies is sent (D28),
-not only the cover, so the slot resolution sees more bids per activation than it did, and bids from one
-neuron now contend with each other on the board. Cost is `O(bids · |p|)` per level per frame where bids used
-to be bounded by the cover. **Diagnostic:** bids per activation against cover size, per level, and the share
-of bought bids that the cover would not have offered — which is the wide offer's whole benefit, and if it is
-near zero the offer can be narrowed back at no loss.
+**The offer is the cover, and the board is not the history.** A neuron bids the patterns its cover took over
+its own residual (R21); the machine covers the board, where earlier frames' children already hold slots, so a
+pattern the cover passed over can be the board's best purchase and is never shown to it. This is accepted as the
+design: the neuron optimizes its history and the machine its window. **Diagnostic:** per level, the slots the
+election left uncovered that some pattern in a bidder's table names. That share is the cost of the split, and
+nothing is done about it; it is measured so the cost is known.
 
 **A cover is never re-derived, so it can go stale.** Recognition only covers the residual (§8), which is what
 makes the call a descent (T7). It also means an activation saved under an old table keeps the patterns it was

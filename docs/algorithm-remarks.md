@@ -305,28 +305,15 @@ closest but which buys the most residual per line. **That is not merely the same
 up; it is the same procedure**, run by the neuron over its table and by the machine over a frame's bids. What
 differs is the population and the fact that only the neuron may mint or retire a symbol.
 
-**On D28 — why the offer is wider than the cover.** The cover is the neuron's own partition, chosen on the
-neuron's residual. Take an activation `a, b, c, d, e` with patterns `E1` naming `a, b, c, d` and `E2` naming
-`c, d, e`. The cover takes `E1` first and leaves `E2` with `e` alone, one neuron against a price of one, so
-`E2` is not in the cover. Now let the machine already hold `a` and `b` from a past frame's child. `E1` is worth
-`c, d` less its line, one; `E2` is worth `c, d, e` less its line, two; and `E2` was the better purchase. An
-offer restricted to the cover never shows it to the machine. The offer is therefore every pattern that
-applies, and the machine ranks.
-
-**On D28 — why the apply test is a majority and not a price.** The offer needs a filter that drops nothing
-the machine could buy and sends nothing it could not. A pattern whose present neighbors do not outnumber its
-absent ones has `covers ≤ price − 1` on any board, since the board can only take present neighbors away, so it
-can never clear R24 and there is no reason to send it. A pattern whose present neighbors do outnumber its
-absent ones might clear, depending on what the board has already paid for, and the neuron cannot know. So the
-loosest safe filter is exactly the majority, and it is the collapse read backwards: a pattern is a majority
-statement over the activations it covers, and an activation is one the pattern describes when it agrees with the
-majority of the statement. The price belongs to the buyer.
-
-**On D28 — why the cover keeps its own test.** The cover is not an offer; it is where the neuron's counts come
-from. Taking a pattern into a cover on a bare majority would credit it neighbors it does not pay for on the
-neuron's own books, and T7 needs the neuron's books to be the file's. So the cover keeps `coverage > price` and
-the offer takes the majority, and the two sets differ exactly where the neuron's residual and the machine's
-would.
+**On D28 — why the offer is the cover.** An earlier design offered every pattern more than half of whose
+neighbors were present, not only the cover, on the argument that the machine covers a different residual — the
+board, where earlier frames' children already hold slots — so a pattern the cover passed over could be the
+board's best purchase. Take `a, b, c, d, e` with `E1` naming `a, b, c, d` and `E2` naming `c, d, e`: the cover
+takes `E1` and leaves `E2` with `e` alone, but if the board already holds `a` and `b`, `E2` was worth more there.
+That is true and it is accepted. The neuron optimizes its history and the machine its window, and the two are
+not made to agree by widening the offer: a bid is never a fit for the board in any case, and the machine takes
+what it can from what it is shown. The cover is what the neuron decided the activation is, and that is what it
+says.
 
 **On D28 — why nothing comes back.** The neuron has already decided everything, on a whole neighborhood, and
 the election settles who the machine paid. An earlier design reported the election back as a fact per
@@ -344,14 +331,9 @@ stays as long as it describes the neuron's own activations.
 
 ### The offer, and the one procedure
 
-**The offer is not the cover.** The cover is one partition, chosen on the neuron's residual; the offer is
-every pattern the machine could conceivably buy, because the machine's residual is not the neuron's (R23) and
-a pattern the cover passed over may be the machine's best purchase. A pattern that does not apply cannot be
-bought on any board: its present neighbors do not outnumber its absent ones, so `coverage − price ≤ −1` however
-the board stands (R22). **The offer is the loosest set that drops nothing the machine could buy, and it is
-the collapse read backwards**: a pattern is a majority statement over the activations it covers, and an activation
-agrees with it when it agrees with the majority of it. The offer is not exclusive because the machine
-chooses; two bids from one neuron can both be bought.
+**The offer is the cover.** A cover is a set of patterns, so one activation may send several bids, and the
+machine chooses among them against its own residual, the board (R23), which is not the neuron's; two bids from
+one activation can both be bought.
 
 **The cover and R24 are one procedure over two populations.** The neuron runs it over its table against one
 activation's residual; the machine runs it over a frame's bids against the free slots of the board. Both take
@@ -569,7 +551,7 @@ elections fill in the middle. Every row is stated by the rule it cites; this is 
 ```
 build     would what C takes out of the residual sum past 1 + |C|?      the line, prospectively   (R15)
 cover     does this PATTERN take more of the residual than it costs?    one activation, no line       (D28)
-offer     does more than half of this PATTERN fire?                     one activation, no price      (D28)
+offer     is this PATTERN in the activation's cover?                    one activation                (D17)
 elect     does this BID cover more than it costs, once slots are split? one bid, no line          (R24)
 retire    does what p still keeps out of the residual pass 1 + |p|?     the line, retrospectively (R18)
 ```
@@ -785,9 +767,8 @@ Then the rest of the bill: the activation joins the ring and the oldest leaves; 
 seeded on the neighbor most often in the residual — `g` and `z` are in it this time — and priced; the worst
 margin is read and retired if negative.
 
-Then the offer. `K` applies: both of its neighbors are present. `M` applies too: one of its two neighbors is
-present, and `2 · 1 > 2` fails — so `M` does not apply, and the neuron returns **one bid**, `K`'s neighbors
-and `K`'s child. Had `M` named `g` alone, it would have applied and been offered beside `K`, cover or no cover.
+Then the offer: the cover. `K` is in it, so the neuron returns **one bid**, `K`'s neighbors and `K`'s child.
+`M` is not, and is not offered.
 
 **The election runs.** Say a neighbor's accepted bid takes `a`, and `K`'s bid is bought on `b` and the bidder.
 The neuron is told none of this. `K`'s child is promoted at frame 10 and expands to `a` and `b` both.
@@ -816,7 +797,7 @@ is policy emerging** — and it arrives as evidence for the next inference, neve
    fire — the neighborhood is whole         u runs at +1, then +2, +3
    cover, save, evict, re-center             the apex child connects to it
    build one, retire one                     the reward for u lands beside it
-   offer every pattern that applies
+   offer the cover
    ── the level elects, and says nothing ──  the apex child infers
                                              THIS NEURON WRITES NOTHING
    ────────────────────────────────────────  ───────────────────────────────
@@ -832,7 +813,7 @@ flowchart TD
     A["THE MACHINE holds every open activation, one per<br/>(neuron, age, position), and calls each neuron once<br/>in the frame it fires — §6"]
     A --> B["DELETE PATTERNS, then RECOGNIZE PATTERNS — age 0<br/>evict, re-center, retire; admit, cover, re-center — R20 steps 1–2"]
     B --> M["CREATE A PATTERN<br/>seed, neighborhoods, collapse, price — R20 step 3"]
-    M --> P["RETURN<br/>a bid for every pattern that applies, and one request — R20 step 4"]
+    M --> P["RETURN<br/>a bid for every pattern of each cover, and one request — R20"]
     P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R24"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §11"]
     O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §7"]
