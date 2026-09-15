@@ -15,6 +15,8 @@ questions live in [algorithm-evaluation.md](algorithm-evaluation.md).
 
 ---
 
+# Part I — The structure
+
 # 1. The objectives
 
 There are two objectives: **compress what is observed**, and **act on the best reward estimate**. 
@@ -72,7 +74,7 @@ per level, in this order and no other
   the machine calls every neuron that fired at that level. each evicts and retires, covers the new
   neighborhood with its table, builds one candidate, and returns its bids and its request.
 
-  creation (R16, R17)
+  neuron creation (R16, R17)
   the machine creates every child requested at this level: id, parent, level, inherited coordinate, empty
   table. its pattern's bid is on the board like any other.
 
@@ -82,15 +84,15 @@ per level, in this order and no other
   child one level up; the level's uncovered neurons stand as themselves.
 
   the level above is built out of what the election accepted, and it happens again; a level that produced
-  nothing has no level above it this frame (§18)
+  nothing has no level above it this frame (§11)
 
 then, once the last level has run
 
   ledger (R16, R18)    the machine wires every child created this frame to its pattern, and deletes every
                        retired pattern now due
-  learn (§20, R33)     every uncovered event activation connects to the apex action that ran, and a
+  learn (§13, R33)     every uncovered event activation connects to the apex action that ran, and a
                        reward moves the estimate of the connection at its distance
-  infer (§23)          the apex reads its connections — only events infer — and every inference
+  infer (§16)          the apex reads its connections — only events infer — and every inference
                        expands down to base actions
   consensus (R28, R36) one winner per action dimension, at the base, for the frame ahead, by the estimate
                        it carries
@@ -267,7 +269,7 @@ carries the action executing in that same frame (if there is one).
 > **An open activation carries no commitment beyond that one number.** It holds its neighborhood, the age it
 > was covered at, and nothing else, because everything else it was going to decide was decided at age 0 (R1).
 > What it does for the rest of its life is connect to what ran and speak from its connections while it is on
-> the apex, and that is Part III.
+> the apex, and that is Part IV.
 
 > **D10 — Inhibition.** A neuron an accepted bid covers does not stand in the file, does not infer actions,
 > and does not connect to the action that runs. **A neuron is covered only after it has fired** (R27), so
@@ -292,7 +294,7 @@ assumes for anything the file does not state.
 > (error correction), and each bare neuron standing as itself.
 >
 > **Both types are in it.** An action the machine executed is a neuron that fired (D8), and it stands in the
-> file exactly as an observed event does, compressed by the same hierarchy (§21).
+> file exactly as an observed event does, compressed by the same hierarchy (§14).
 >
 > **It holds nothing about the future.** A neuron's connections — what actions followed its activations, and what
 > they earned — are in no
@@ -322,42 +324,11 @@ assumes for anything the file does not state.
 
 ---
 
-# Part I — The past and present: a neuron
+# 4. The pattern and the cover
 
-# 4. The interface
+What this section defines is shared: a neuron reads it over its own history and the machine over a frame.
 
-A neuron is a symbol, and a type (D2). It holds a table of patterns, a history of past and present observations,
-and its connections (D25). What it holds is defined in §5 through §7, and what it does with it in the
-sections after.
-
-**The machine reaches a neuron through five calls, and nothing else writes into one.** Each is specified where
-it is used.
-```
-create neuron            the machine creates it when the call requesting it returns, one level above
-                         its parent, holding nothing                                            R16
-process frame            in its level's turn: everything structural for the activations that
-                         fired this frame                                                  §16, R20
-wire child to pattern    once the last level has run, the machine points the pattern at the child it
-                         created for it                                                    R16, R17
-delete pattern neighbor  the machine removes a neuron that no longer exists from every pattern
-                         and saved activation that names it                                     R18
-process actions          after every level has finished, reaching every open activation at
-                         whatever age it stands at: it delivers the apex action to those still
-                         uncovered and any reward, and collects what the apex speaks            §20
-```
-
-Every test the neuron runs is its own arithmetic over its own evidence, and it is never told what the board did
-with its bids (R24).
-
-Part I covers `process frame`: what a neuron holds, and what it does in the frame it fires. 
-Part III covers the `process actions` call, where a neuron learns what action followed and infers the next.
-
-> **R1 — One decision point: the frame it fires.** A neuron is called once per activation, at age 0, and
-> everything structural happens in that call: it evicts and retires, covers its neighborhood and saves it,
-> builds and prices one candidate, and returns a bid for every pattern that applies together with its request
-> (R20).
-
-# 5. The pattern
+## 4.1 The pattern
 
 > **D15 — The pattern.** A set of past and present neighbors that a neuron **names**: one line of its table,
 > spanning the same box a neighborhood does (D5), and shaped exactly like one (D7). It is the collapse of the
@@ -369,25 +340,7 @@ Part III covers the `process actions` call, where a neuron learns what action fo
 > Neither is a frame: a frame is one column, either of these the whole window. What action followed is in
 > neither, and is held as the neuron's connections (D25).
 
-# 6. The history
-
-> **D18 — The history.** A neuron's record of its own activations: the last `H` of them, oldest first, each
-> holding the neighborhood it observed in the frame it fired (D7). It is the evidence every structural decision
-> the neuron makes is read over, and it holds nothing else: the neuron's connections are not in the history and
-> `H` does not bound them (R31).
->
-> **`H` is declared once for the machine and is the same for every neuron.** It counts that neuron's **own
-> activations**, not a stretch of run, so a neuron that fires constantly and one that fires rarely weigh their
-> patterns against the same amount of evidence. **The ring is exactly `H` deep once filled**, and how much run
-> it spans is whatever that neuron's rate makes it. Nothing else anywhere is measured in frames.
->
-> **Every activation is recorded, covered or not.** An arriving activation evicts the oldest, and only then.
-
-> **R4 — `H` is the only free parameter.** The alphabet (D1) states the problem and is not a knob. The reach
-> (D4), adjacency (D5) and the offsets (D6) are derived, not declared. **No rule introduces a constant, a
-> threshold, a window or a cap of its own.**
-
-# 7. The cover
+## 4.2 The cover
 
 A neuron explains each activation's neighborhood with patterns from its table. This section defines that
 explanation: the cover, the owner of each neighbor, and the two readings of that, the coverage and the
@@ -412,7 +365,7 @@ residual. Every price in the design (D13) is counted off them.
 > residual(O)   =   the neighbors of O with no owner
 > ```
 
-# 8. The saving
+## 4.3 The saving
 
 > **D22 — Saving.** What one pattern saves over one activation: what it is credited with (D20), less what it
 > costs — its own line, and the neurons it names that did not fire (D13).
@@ -429,7 +382,7 @@ residual. Every price in the design (D13) is counted off them.
 > **This is the only valuation in the design**, and it is read over two different sets — the neuron's own
 > activations (D30, D28) and the machine's board (R22, R24) — so the two numbers differ, and are meant to.
 
-# 9. The greedy cover
+## 4.4 The greedy cover
 
 One procedure appears twice in the design — once inside a neuron, over its own table, and once inside the
 machine, over a frame's bids. It is stated here and cited from both.
@@ -456,10 +409,65 @@ machine, over a frame's bids. It is stated here and cited from both.
 
 | caller                     | claimants | to cover                      | ties                                               |
 |----------------------------|---|-------------------------------|----------------------------------------------------|
-| neuron - recognition (§12) | each pattern, against each activation | the residual of the history (D21) | the older `pattern id`                             |
-| machine - election (R24)  | bids | the board (§17.2) | the older `neuron id`, then the earlier coordinate |
+| neuron - recognition (§6) | each pattern, against each activation | the residual of the history (D21) | the older `pattern id`                             |
+| machine - election (R24)  | bids | the board (§10.2) | the older `neuron id`, then the earlier coordinate |
 
-# 10. The collapse
+# 5. The neuron
+
+What this section defines belongs to one neuron and is read nowhere else.
+
+## 5.1 The interface
+
+A neuron is a symbol, and a type (D2). It holds a table of patterns, a history of past and present observations,
+and its connections (D25). What it holds is defined in §4 and §5.2, and what it does with it in the
+sections after.
+
+**The machine reaches a neuron through five calls, and nothing else writes into one.** Each is specified where
+it is used.
+```
+create neuron            the machine creates it when the call requesting it returns, one level above
+                         its parent, holding nothing                                            R16
+process frame            in its level's turn: everything structural for the activations that
+                         fired this frame                                                  §9, R20
+wire child to pattern    once the last level has run, the machine points the pattern at the child it
+                         created for it                                                    R16, R17
+delete pattern neighbor  the machine removes a neuron that no longer exists from every pattern
+                         and saved activation that names it                                     R18
+process actions          after every level has finished, reaching every open activation at
+                         whatever age it stands at: it delivers the apex action to those still
+                         uncovered and any reward, and collects what the apex speaks            §13
+```
+
+Every test the neuron runs is its own arithmetic over its own evidence, and it is never told what the board did
+with its bids (R24).
+
+Part II covers `process frame`: what a neuron does in the frame it fires.
+Part IV covers the `process actions` call, where a neuron learns what action followed and infers the next.
+
+> **R1 — One decision point: the frame it fires.** A neuron is called once per activation, at age 0, and
+> everything structural happens in that call: it evicts and retires, covers its neighborhood and saves it,
+> builds and prices one candidate, and returns a bid for every pattern that applies together with its request
+> (R20).
+
+## 5.2 The history
+
+> **D18 — The history.** A neuron's record of its own activations: the last `H` of them, oldest first, each
+> holding the neighborhood it observed in the frame it fired (D7). It is the evidence every structural decision
+> the neuron makes is read over, and it holds nothing else: the neuron's connections are not in the history and
+> `H` does not bound them (R31).
+>
+> **`H` is declared once for the machine and is the same for every neuron.** It counts that neuron's **own
+> activations**, not a stretch of run, so a neuron that fires constantly and one that fires rarely weigh their
+> patterns against the same amount of evidence. **The ring is exactly `H` deep once filled**, and how much run
+> it spans is whatever that neuron's rate makes it. Nothing else anywhere is measured in frames.
+>
+> **Every activation is recorded, covered or not.** An arriving activation evicts the oldest, and only then.
+
+> **R4 — `H` is the only free parameter.** The alphabet (D1) states the problem and is not a knob. The reach
+> (D4), adjacency (D5) and the offsets (D6) are derived, not declared. **No rule introduces a constant, a
+> threshold, a window or a cap of its own.**
+
+## 5.3 The collapse
 
 > **D27 — The collapse.** The operation that collapses a set of neighborhoods into a pattern, returning the
 > set of neighbors the pattern names. Every neighbor is decided independently, from the input alone, so the
@@ -474,9 +482,9 @@ machine, over a frame's bids. It is stated here and cited from both.
 
 The collapse is the only operation that decides what a pattern names. It runs in two places:
 
-- **Re-centering** (§11, D29) collapses the neighborhoods of the activations an existing pattern covers, at every
+- **Re-centering** (§5.4, D29) collapses the neighborhoods of the activations an existing pattern covers, at every
   call.
-- **Creating a pattern** (§15, R14) collapses the neighborhoods whose residual holds the candidate's seed, once
+- **Creating a pattern** (§8, R14) collapses the neighborhoods whose residual holds the candidate's seed, once
   per call. The candidate is in no cover, so every owned neighbor is skipped and it is built on the residual
   alone.
 
@@ -488,22 +496,14 @@ or a silence, so the outermost offset is decided over the same `s` as offset 0, 
 skipped there. Each pattern's collapse has its own `s`; nothing is pooled across patterns, and no threshold,
 smoothing or probability estimate enters.
 
-# 11. Re-centering
+## 5.4 Re-centering
 
 > **D29 — Re-centering.** The operation that re-decides the neighbors a pattern names (D15) once the activations
 > it covers have changed: the oldest evicted when the history is full (D18), or a new one admitted and covered
 > with it (D28). It runs the collapse (D27) over the activations the pattern now covers (residual included),
 > and updates the owners (D19) to what the pattern now names.
 
-# 12. Recognition
-
-Recognition is the procedure that chooses a cover for a new activation/neighborhood (D17): the greedy cover
-(D28) over the residual of the history (D21).
-
-**Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
-empty table covers nothing and bids nothing.
-
-# 13. The margin
+## 5.5 The margin
 
 > **D30 — Margin.** What a pattern is worth over the history: its saving over each activation it covers (D22),
 > summed, less its dictionary line (D13).
@@ -517,7 +517,17 @@ empty table covers nothing and bids nothing.
 
 A pattern is added only when its margin is strictly positive (R15) and retired only when strictly negative (R18).
 
-# 14. Deleting a pattern
+# Part II — The past and present: a neuron
+
+# 6. Recognition
+
+Recognition is the procedure that chooses a cover for a new activation/neighborhood (D17): the greedy cover
+(D28) over the residual of the history (D21).
+
+**Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
+empty table covers nothing and bids nothing.
+
+# 7. Deleting a pattern
 
 > **R18 — Retire, then delete.** After eviction and the re-centering it causes, and before this call's
 > activation is admitted (R20), retire every pattern whose margin (D30) is strictly negative:
@@ -556,7 +566,6 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 > above it still cover it and the apex may still expand it, so the definition has to stay readable after the
 > table stops covering with it.
 
-
 > **R19 — The table needs no rule against duplicates.** Two patterns with equal neighbors present D28 with
 > identical input. It takes the older first, so the older covers everything the younger would, the younger
 > owns nothing anywhere, and a pattern covering nothing fails R18. The tests remove them.
@@ -567,7 +576,7 @@ any level.
 **Nothing is retired for what followed it.** What followed is measured, not claimed (D25), so a pattern is
 never charged for what came after — only for what it names that did not fire beside it.
 
-# 15. Creating a pattern
+# 8. Creating a pattern
 
 > **R14 — Where a candidate comes from.** Three fixed steps. Nothing seeds it from outside, nothing grows it a
 > neighbor at a time, and nothing repeats until a condition holds.
@@ -658,14 +667,14 @@ never charged for what came after — only for what it names that did not fire b
 > **It is born holding nothing.** No patterns, no history and no connections (R16). Everything it comes to
 > hold is over the situations its parent's pattern actually took (D25), from its first activation on.
 
-# 16. The process frame call
+# 9. The process frame call
 
 One call per level per frame: everything structural for the activations that fired this frame.
 
 > **R20 — The call, in order.** Once per level per frame, the machine asks one neuron for everything it owes
 > that frame. **One set of activations answers**: the ones that fired *this* frame, at age 0 (R1). What an open
 > activation learns of what followed names the apex, which no level knows, so it is written after every level
-> has run (§20) and never here. The right-hand column says which steps are per activation and which per neuron.
+> has run (§13) and never here. The right-hand column says which steps are per activation and which per neuron.
 > ```
 >                                                                                        over
 >  1  delete     a full ring evicts its oldest activation; every pattern of that          each new
@@ -691,9 +700,9 @@ One call per level per frame: everything structural for the activations that fir
 **The call runs before the election**, and the election is over bids from a table that has already retired,
 saved this frame, re-centered on it, and built from it.
 
-# Part II — The past and present: the machine
+# Part III — The past and present: the machine
 
-# 17. Contraction
+# 10. Contraction
 
 > **D23 — Contraction.** The machine covers the level below with neurons from the level above, each taken when
 > it covers more neurons than its bid costs to state — `1 + |p \ O|`, never the dictionary line (R22, R24).
@@ -705,7 +714,7 @@ saved this frame, re-centered on it, and built from it.
 > It is **axis-general** — a pattern names neighbors at offsets, so a promoted neuron replaces a chunk of
 > spacetime. Spatial contraction is the case where every offset is zero.
 
-## 17.1 Bids
+## 10.1 Bids
 
 > **R21 — A bid is a pattern and a name.** A bid carries two things and no others:
 > ```
@@ -739,7 +748,7 @@ saved this frame, re-centered on it, and built from it.
 > **A neuron that fired and the bid does not name belongs to neither side.** It stands in the file as its own
 > line if nothing covers it (D23) and costs a turn-on if this child is promoted — one symbol either way, so it
 > cancels before the test begins, and charging it here would count it twice against the uncovered term of the
-> same sum (§17.4).
+> same sum (§10.4).
 >
 > **Coverage changes the credit and never the price.** A neuron the bid names that fired and another bid
 > already covers is credited to no one and charged nothing: it fired, so it was never among the neurons named
@@ -759,7 +768,7 @@ saved this frame, re-centered on it, and built from it.
 accepts or declines one — it never edits a bid, merges two, or invents a third. What it does do is *measure*
 one: a bid arrives as a definition, and everything it is worth this frame the machine works out itself (R22).
 
-## 17.2 The board
+## 10.2 The board
 
 > **D24 — The coverage set.** Per level, the machine keeps which accepted bid was credited each covered
 > activation:
@@ -785,7 +794,7 @@ one: a bid arrives as a definition, and everything it is worth this frame the ma
 > name it, because the earlier election settled it and nothing re-elects the past. That is the price of never
 > revisiting a frame, and the design pays it.
 
-## 17.3 The election
+## 10.3 The election
 
 **The file over one frame is the neurons promoted plus what they got wrong**: `Σ over the accepted (1 + |p \ O|)
 + the neurons no bid covered`, the body half of `L` (D14) over the frames the election can see. **The two
@@ -826,7 +835,7 @@ bid**, which is what stops a chunk being paid for twice.
 > and stops. No neuron is told which of its bids were bought, what they were credited, or what they lost; a
 > neuron's history is what it saw, and the board is the machine's.
 
-## 17.4 When a slot is settled
+## 10.4 When a slot is settled
 
 Settlement is a property of one slot at one full coordinate. **Nothing here delays anything the machine does**
 — no pass blocks on it and no decision is deferred by it. **The only consumer is measurement**: when `L` or
@@ -844,7 +853,7 @@ apex-neurons-per-frame is read, the settled frames are the ones whose numbers ar
 > **`D` is reached, not known.** The walk stops where a level accepts no bids and therefore produces none above
 > it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay.
 
-# 18. The order of a frame
+# 11. The order of a frame
 
 > **R26 — One stack, at the derived reach.** Base neurons run `process frame` and offer; the election settles which bids
 > are bought. The survivors are level 1 — the fewest that cover the active base neurons — and it happens
@@ -861,7 +870,7 @@ apex-neurons-per-frame is read, the settled frames are the ones whose numbers ar
 >
 > **The frame ends with the machine's own passes.** Once the last level has run, the machine wires every child
 > created this frame to its pattern and deletes everything the death ledger has due (R16, R18), calls every open activation
-> (§20), then expands what the apex infers (§23) and resolves one winner per action dimension at the base
+> (§13), then expands what the apex infers (§16) and resolves one winner per action dimension at the base
 > (R28, R36).
 >
 > Every level runs the same rule at the reach one expression gives it (D4). **Compression is spatio-temporal
@@ -871,7 +880,7 @@ apex-neurons-per-frame is read, the settled frames are the ones whose numbers ar
 > **R27 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** — the
 > uncovered set, at every level at once — so a base neuron nothing found worth chunking stands in it beside a
 > level-4 pattern. This is the frontier the file's body writes, **the one that learns what ran** (D25), and
-> **the one that votes** (§23): the uncovered set does all three, and coverage silences a neuron in every one of
+> **the one that votes** (§16): the uncovered set does all three, and coverage silences a neuron in every one of
 > them at once (D10). A reward for a frame already written reaches its connection regardless (R33). Everything
 > underneath the current frontier is recovered by expanding it.
 >
@@ -901,9 +910,9 @@ it is recorded in the `process actions` pass instead (R31).
 
 ---
 
-# Part III — The future: action and reward
+# Part IV — The future: action and reward
 
-# 19. Connections
+# 12. Connections
 
 Everything before this point read the past and the present: what an activation observed, and what the file
 pays to state it. What follows an activation is never in the file (D12) and enters no test. One thing about it
@@ -929,7 +938,7 @@ the apex, and it is the whole of what the machine does.
 >
 > **They are measured, never chosen.** A connection is not in the bid (R21), not in any dictionary line (D13),
 > and it enters no test. Connections are read in one place — **when the activation stands on the apex** (R27) —
-> and what it reads there are the inferences that choose the next action (§23). A child neuron fires only when
+> and what it reads there are the inferences that choose the next action (§16). A child neuron fires only when
 > its parent's pattern was bought, so a child's connections are the future of that situation and nothing else,
 > forming from the frame after its mint on (R17); a base neuron's are the marginal over every situation it fires
 > in, and speak only where nothing more specific covers it (D10).
@@ -942,9 +951,9 @@ the apex, and it is the whole of what the machine does.
 >
 > **An action neuron holds no connections.** What actions follow an action is a chunk, and the action hierarchy
 > writes it as a pattern (D5); nothing the machine executes is chosen from an action neuron (R35). An action
-> neuron is a symbol that fires when its program runs, and it is chunked like any other (§21).
+> neuron is a symbol that fires when its program runs, and it is chunked like any other (§14).
 
-# 20. The process actions call
+# 13. The process actions call
 
 **The machine calls every open activation once more**, at whatever age it stands at, with two things:
 
@@ -966,7 +975,7 @@ it.
 **If the activation is uncovered, the call returns what it speaks.** It reads its own neuron's connections at
 every offset beyond its age, out to its reach — a connection at offset `b` read at age `a` is a claim about an action
 completing `b − a` frames ahead (R28) — and returns each with its strength and estimate. Those are its
-**inferences** (§23), each naming an action neuron at whatever level that neuron stands (D25), and only what
+**inferences** (§16), each naming an action neuron at whatever level that neuron stands (D25), and only what
 reaches the frame ahead is resolved. A base neuron on the apex speaks from its own connections like any other;
 what it infers is the marginal over every situation it fires in, and it speaks only because nothing more
 specific covers it.
@@ -974,7 +983,7 @@ specific covers it.
 **An activation closes at age `reach_t`** (D9), once that frame's exposure is taken. Closing does nothing but
 stop the writing — there is no second call and nothing is saved twice.
 
-# 21. Actions
+# 14. Actions
 
 An action dimension carries what the machine executes, and it is compressed by the same hierarchy its events
 are (D1, D8).
@@ -1030,12 +1039,12 @@ are (D1, D8).
 > **Execution activates what it expands.** The base actions fire the frames they run (D8), and every action
 > pattern the expansion passed through fires when its expansion completes, at the coordinate the expansion
 > placed it — the last frame of its chunk, which is the coordinate recognition would have given it. An executed
-> pattern is therefore on its level's frame like a bought one: it runs `process frame`, is chunked upward (§18),
+> pattern is therefore on its level's frame like a bought one: it runs `process frame`, is chunked upward (§11),
 > and every uncovered event activation open at that frame connects to it (D25). While its program runs, the apex
 > action at each frame is the base action, or a lower pattern as it completes; the whole is the apex action only
 > in the frame it completes, and what the program earned reaches it through the span a reward names (R33).
 
-# 22. Reward
+# 15. Reward
 
 A reward is an input, not a symbol: alongside what it reports observed, a frame may carry rewards for actions
 already executed. They reach the machine through one object and one only — the **action connection**, which no
@@ -1044,7 +1053,7 @@ structural test can see (R34).
 > **R31 — An action connection carries an estimate.** What executes at `f + 1` is not known at `f`:
 > it is settled only once every level has run and the inferences resolve (R36). So the action that ran fires in
 > its dimension at `f + 1` (D8), with its reward beside it (R29), and **every uncovered event activation open at
-> that frame connects to the apex action at its own age** (D25, §20) — the highest action pattern that fired in
+> that frame connects to the apex action at its own age** (D25, §13) — the highest action pattern that fired in
 > that dimension that frame, the base action when none did. That connection binds what the neuron stands for to
 > what the machine did — formed against what actually ran, so **a neuron that inferred a different action, or
 > none, learns from the one that ran.**
@@ -1119,7 +1128,7 @@ structural test can see (R34).
 > **Nothing is being divided up.** Every distance in the span is paid, and the shares are not a partition of
 > the reward — a reward is not in short supply, and the point of spreading it is not to conserve it but to say
 > how likely each frame is to have earned it. What is genuinely responsible recurs and accumulates; what is not
-> is sampled once and averaged away. Each share is delivered, in the `process actions` call (§20), to every open
+> is sampled once and averaged away. Each share is delivered, in the `process actions` call (§13), to every open
 > activation that wrote an exposure at the frame that distance names — one uncovered at that frame (D25) — into
 > the connection it wrote to then, whether or not coverage has arrived since: at distance `0` the connection this call
 > strengthens, further back one strengthened `d` frames ago (R31).
@@ -1148,7 +1157,7 @@ structural test can see (R34).
 > how recent its exposures are — a child's connections are over the one situation its parent's pattern names (R35),
 > and a changed situation is answered by a new child, never by forgetting.
 
-# 23. Selection
+# 16. Selection
 
 Five steps, and the last is the only one that compares anything:
 
