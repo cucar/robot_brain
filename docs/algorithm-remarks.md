@@ -392,7 +392,7 @@ delivers one frame. Contraction loses its cross-frame contention, since every bi
 document with the temporal parts struck out and it is the spatial algorithm, unchanged — the whole machine, not
 a stage of it, which is what makes a reach a configuration rather than an architecture.
 
-## 5.2 The history
+## 5.3 The history
 
 **On D18 — one count, so one denominator.** What D30 needs is not a shared clock but a shared divisor: a
 pattern's benefit is a sum over the activations it covers, and for two neurons' tests to mean the same thing that
@@ -461,7 +461,7 @@ neuron has decided over that evidence. The cover and owners an activation carrie
 over those two, call by call, and they are held rather than recomputed because nothing ever re-derives a cover
 (§8).
 
-## 5.3 The collapse
+## 5.4 The collapse
 
 > **T5 — The collapse is the per-neighbor minimizer of the pattern's margin over its population.** Over the
 > activations a pattern covers, naming a neighbor moves the summed margin by `+1` wherever that neighbor was in the
@@ -512,10 +512,10 @@ the base several neurons may fire at one coordinate, so several can clear it and
 — which is D6's coarse-offset case arriving for a second reason. `|p|` counts them, and nothing else in the
 design had to change for it.
 
-**On §5.3 — why a set and not a distribution.** Covering needs a set. So does the file: every offset it states
+**On §5.4 — why a set and not a distribution.** Covering needs a set. So does the file: every offset it states
 holds one symbol or nothing.
 
-## 5.4 Re-centering
+## 5.5 Re-centering
 
 **On D29 — three consequences, and they are the point of the design.**
 
@@ -533,7 +533,7 @@ Retirement re-centers nothing: the retired pattern's neighbors drop into the res
 follows in the same call is what re-covers them with the patterns that remain. A re-center is one round because
 what it does to covers is a cover question, and recognition is the only place covers are decided.
 
-## 5.5 The margin
+## 5.6 The margin
 
 **On D30 — `coverage` is what nothing else would have covered.** A pattern is worth what it saves over what
 would account for those neurons if it were gone: the residual, where each stands as its own line (D21). A saving

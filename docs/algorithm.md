@@ -330,8 +330,8 @@ What this section defines is shared: a neuron reads it over its own history and 
 
 ## 4.1 The pattern
 
-> **D15 — The pattern.** A set of past and present neighbors that a neuron **names**: one line of its table,
-> spanning the same box a neighborhood does (D5), and shaped exactly like one (D7). It is the collapse of the
+> **D15 — The pattern.** A set of past and present neighbors that a neuron **names**, spanning the same box a
+> neighborhood does (D5), and shaped exactly like one (D7). It is the collapse of the
 > neighborhoods it covers (D27), moves as they move (D29), and promotes a child (R16). Its `id` is its creation
 > order, a handle that survives re-centering and the tie-break D28 and R24 reach for.
 >
@@ -429,7 +429,7 @@ What this section defines belongs to one neuron and is read nowhere else.
 ## 5.1 The interface
 
 A neuron is a symbol, and a type (D2). It holds a table of patterns, a history of past and present observations,
-and its connections (D25). What it holds is defined in §4 and §5.2, and what it does with it in the
+and its connections (D25). What it holds is defined in §4, §5.2 and §5.3, and what it does with it in the
 sections after.
 
 **The machine reaches a neuron through five calls, and nothing else writes into one.** Each is specified where
@@ -459,7 +459,12 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 > retires, saves and covers the frame's neighborhoods, builds and prices one candidate, and returns a bid for
 > every pattern of each cover together with its request (R20).
 
-## 5.2 The history
+## 5.2 The patterns table
+
+> **D32 — The patterns table.** The set of patterns (D15) a neuron holds, one line per pattern; **the table**
+> for short. It is what recognition reads (D28) and what adding and retiring write (R15, R18).
+
+## 5.3 The history
 
 > **D18 — The history.** A neuron's record of its own activations: the last `H` of them, oldest first, each
 > holding the neighborhood it observed in the frame it fired (D7). It is the evidence every structural decision
@@ -477,7 +482,7 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 > (D4), adjacency (D5) and the offsets (D6) are derived, not declared. **No rule introduces a constant, a
 > threshold, a window or a cap of its own.**
 
-## 5.3 The collapse
+## 5.4 The collapse
 
 > **D27 — The collapse.** The operation that collapses a set of neighborhoods into a pattern, returning the
 > set of neighbors the pattern names. Every neighbor is decided independently, from the input alone, so the
@@ -492,7 +497,7 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 
 The collapse is the only operation that decides what a pattern names. It runs in two places:
 
-- **Re-centering** (§5.4, D29) collapses the neighborhoods of the activations an existing pattern covers, at every
+- **Re-centering** (§5.5, D29) collapses the neighborhoods of the activations an existing pattern covers, at every
   call.
 - **Creating a pattern** (§9, R14) collapses the neighborhoods whose residual holds the candidate's seed, once
   per call. The candidate is in no cover, so every owned neighbor is skipped and it is built on the residual
@@ -506,14 +511,14 @@ or a silence, so the outermost offset is decided over the same `s` as offset 0, 
 skipped there. Each pattern's collapse has its own `s`; nothing is pooled across patterns, and no threshold,
 smoothing or probability estimate enters.
 
-## 5.4 Re-centering
+## 5.5 Re-centering
 
 > **D29 — Re-centering.** The operation that re-decides the neighbors a pattern names (D15) once the activations
 > it covers have changed: the oldest evicted when the history is full (D18), or a new one admitted and covered
 > with it (D28). It runs the collapse (D27) over the activations the pattern now covers (residual included),
 > and updates the owners (D19) to what the pattern now names.
 
-## 5.5 The margin
+## 5.6 The margin
 
 > **D30 — Margin.** What a pattern is worth over the history: its saving over each activation it covers (D22),
 > summed, less its dictionary line (D13).
