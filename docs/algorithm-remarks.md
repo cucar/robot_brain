@@ -866,6 +866,43 @@ Retiring first means the new neighborhood is recognized against a table that has
 so no cover is derived only to be re-derived a step later. A pattern one activation's margin would have kept
 is gone, and if it was worth having it is rebuilt as a candidate on the evidence that says so.
 
+## The cost of a call
+
+**On R20 — what a call costs, and what a pass over the table buys.** Write `H` for the history, `P` for the
+table, `N` for the neighbors an activation carries, and take a pattern to name about `N` neighbors. Every step
+is a scan of patterns against neighborhoods, and the question is how many.
+
+```
+1  delete   evict                                  O(1)
+            re-center the evicted cover's patterns  O(N) each with tallies (implementation), O(H·N) each without
+            retire                                  O(1) each off the same tallies
+2  update   admit                                  O(N)
+            recognition, naive                      O(P · H · N) per round, rounds ≤ patterns taken
+            recognition, incremental                O(P · N · (dirty + taken))
+            re-center the patterns that gained     O(N) each with tallies
+3  add      seed                                    O(1) off a residual tally kept per neighbor, O(H·N) without
+            collapse and price                      O(s · N), s ≤ H the neighborhoods holding the seed
+4  return   offer                                   O(P · N), or O(N) per activation off an index from neighbor
+                                                    to the patterns naming it
+```
+
+**Recognition is the term that matters, and it is nearly all redundant.** A pattern that did not pay against an
+activation's residual last call still does not pay unless one of two things moved: the residual grew, or the
+pattern re-centered. So the pairs worth measuring are every pattern against the **dirty** activations — the
+new one, and any whose residual grew when a pattern retired or dropped a neighbor — plus every re-centered
+pattern against every activation with a residual. In steady state the dirty set is the new activation and
+little else, and within a round only the activation just taken from needs re-measuring, so the whole of
+recognition is one pass of the table over the dirty residuals and one short pass per pattern taken. That is
+the one-to-two passes the design should cost, and everything above it is a scan the implementation can
+avoid with tallies it already keeps.
+
+**The build is one scan and cannot be less.** The seed comes off a tally, but the collapse has to read every
+neighborhood holding it, and the price reads the same set again, so step 3 is `O(s · N)` once per call. It
+does not repeat: one candidate per call (R14).
+
+**Nothing is per frame.** Every term above is per activation of this neuron at age 0, in terms of that neuron's
+own `H`, `P` and `N`. A neuron that fires rarely costs rarely.
+
 ## One activation, across its frames
 
 Take `R_t = 3` and a neuron whose table holds two patterns, `K` and `M`:

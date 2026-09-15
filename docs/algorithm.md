@@ -434,26 +434,29 @@ residual. Every price in the design (D13) is counted off them.
 One procedure appears twice in the design — once inside a neuron, over its own table, and once inside the
 machine, over a frame's bids. It is stated here and cited from both.
 
-> **D28 — The greedy cover.** The operation that chooses, from a set of **claimants** each naming some neurons,
-> the ones that cover a set of neurons, and credits each covered neuron to exactly one of them. It repeats:
+> **D28 — The greedy cover.** The operation that covers a set of activations with **claimants**, each a set of
+> named neurons read against one of those activations, and credits each covered neuron to exactly one claimant.
+> It repeats:
 >
-> 1. **Measure** every claimant not yet taken against the neurons still uncovered:
+> 1. **Measure** every claimant not yet taken against the still-uncovered neurons of its activation:
 >    ```
->    coverage =  1 + | the still-uncovered neurons it names |     the activation itself, and what it names
->    price    =  1 + | the neurons it names that did not fire |            D22
+>    coverage =  1 + | the still-uncovered neurons of its activation it names |   the activation, and what it names
+>    price    =  1 + | the neurons it names that did not fire there |                                      D22
 >    ```
-> 2. **Take** the one with the highest `coverage / price` if `coverage > price`, and **stop** otherwise. It becomes
->    the owner (D19) of the neurons it was measured on, which leave the uncovered set, and the round repeats from 1.
+> 2. **Take** the one with the highest `coverage / price` if `coverage > price`, and **stop** otherwise. It joins
+>    its activation's cover (D17) and becomes the owner (D19) of the neurons it was measured on, which leave the
+>    uncovered set; the round repeats from 1.
 >
-> **What it returns is the cover and the owners.** The cover is the claimants taken (D17); the owner of a
-> covered neuron is the claimant of the round that took it (D19), so each is credited once; what no round took
-> is the residual (D21). `price` is fixed by what fired and cannot change between rounds; `coverage` only falls.
+> **What it returns is the covers and the owners.** A cover is the claimants taken for that activation (D17);
+> the owner of a covered neuron is the claimant of the round that took it (D19), so each is credited once; what
+> no round took is the residual (D21). `price` is fixed by what fired and cannot change between rounds;
+> `coverage` only falls.
 
 **The two callers differ in what they cover and in tie-break, in nothing else.**
 
 | caller                     | claimants | to cover                      | ties                                               |
 |----------------------------|---|-------------------------------|----------------------------------------------------|
-| neuron - recognition (§12) | patterns | the history (D18) | the older `pattern id`                             |
+| neuron - recognition (§12) | each pattern, against each activation | the residual of the history (D21) | the older `pattern id`                             |
 | machine - election (R24)  | bids | the board (§17.2) | the older `neuron id`, then the earlier coordinate |
 
 # 10. The collapse
@@ -613,6 +616,9 @@ never charged for what came after — only for what it names that did not fire b
 > benefit  =  Σ over the history:  saving(o)                                          R14
 > commit iff  benefit > 1 + |C|
 > ```
+> **An accepted candidate joins the cover of every activation where its saving is positive**, as the owner of
+> the residual it names there (D19), so its margin at birth is what the test counted.
+>
 > **An accepted add shortens the file**, against the table it was priced on.
 >
 > **The test is offline and complete.** Every activation in the ring has a whole neighborhood, so the question is
@@ -671,7 +677,8 @@ One call per level per frame: everything structural for the activations that fir
 >                what it credits is each neighbor's **owner**; every pattern whose
 >                covered activations changed re-centers                 D28, D17, D19, D29
 >  3  add        seed, neighborhoods, collapse (R14), then price it (R15). A                the
->                candidate that pays joins the table                                        neuron
+>                candidate that pays joins the table, and the covers it was priced          neuron
+>                on, owning the residual it names there                        R15, D19
 >  4  return     a bid for every pattern of the table more than half of whose           each new
 >                neighbors are present — `2 · |p ∩ O| > |p|` — whether or not the        activation
 >                cover took it, this call's candidate included. A bid is the child's
