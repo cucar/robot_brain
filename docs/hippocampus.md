@@ -81,7 +81,7 @@ Two rules say what reaches a moment and what fires it, and they are different.
 **Any neighbor reaches.** A single active neuron the moment names makes it addressable by the executor: it can
 be recalled from a partial cue, replayed and thought from.
 **A majority fires.** The moment fires, and the current apex enters its history, only when more than half of
-what it names is present — the cortex's own test for whether a pattern applies (R20 step 5), run by the moment
+what it names is present — the cortex's own test for whether a pattern applies (R20 step 4), run by the moment
 on itself since no table runs it for it.
 Reaching writes an imagined activation carrying the moment's own reconstructed instant; when the moment fires,
 it writes the real one. Both narrow the moment; only the second lets the present overwrite it, and only when the present
@@ -245,7 +245,7 @@ If a Robot Brain with a fully populated cortex loses its hippocampus, that is th
 
 Context overlap is not a global semantic similarity operation, and it is not a tolerance.
 What a moment names is a majority statement over its history, and an instant matches it when it agrees with the
-majority of that statement: more than half of what it names present (H2, R20 step 5).
+majority of that statement: more than half of what it names present (H2, R20 step 4).
 That is one comparison per moment against the current apex, made where the moment lives, with no global search.
 A moment that has narrowed to a few core neighbors is matched by any instant carrying those few; a fresh moment
 is matched only by an instant much like its own.

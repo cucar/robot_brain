@@ -667,19 +667,22 @@ answers that used to sit between the two ages.
 
 # 14. Retire — pruning the table
 
-**On R18 — why one and not every negative margin.** Two patterns straddling one cluster are each worth nothing
-while the other stands: whichever is removed, the other picks up its neighbors for free, so each margin reads
-as if the other were doing the work. A pass that retired both on one reading would return the whole cluster to
-the residual with nothing left to cover it, and the next bill would rebuild one of them. Retiring the worst
-alone lets the survivor's margin, read next bill, carry the whole cluster. The earlier design did the same
-thing inside one bill by re-checking after each retirement; doing it across bills is the same sequence with no
-loop.
+**On R18 — why every negative margin, and why at eviction.** An earlier rule retired one pattern per call, the
+worst, on the argument that two patterns straddling one cluster are each worth nothing while the other stands,
+so retiring both would return the cluster to the residual. That was true when both were credited the same
+neighbors. With exclusive owners (D19) it is not: the older owns the neighbors and has a positive margin, the
+younger owns nothing and has a margin of minus one. Each margin is read off what the pattern owns, retiring one
+frees only its own neighbors, and no other margin moves, so the margins are independent and retiring every
+negative one at once shortens the file by exactly the sum. And a margin can only fall at eviction: recognition
+adds a pattern to a cover only where its saving is positive, re-centering is the minimizer over the pattern's
+own population (T5), and no other pattern's move touches what this one owns. So only the patterns of the
+evicted activation's cover can have gone negative, and they are read right after they lose it.
 
 **On R18 — a candidate cannot be retired by the pass that follows it.** After a candidate is added, what R15 priced
 and what R18 reads are the same set counted the same way — the residual `C` took, measured against
 the same table. The margin R18 reads is the one R15 just found strictly positive, and one
 retirement can only hand `C` more neurons or remove a competitor. A pattern only ever falls below its line by
-losing neurons to another pattern of its cover or by having its activations evicted.
+having its activations evicted.
 
 **On R18 — what two sequential tests cannot reach.** A candidate that would pay *only* if some incumbent's line
 were refunded fails R15 and is never put to R18 — two patterns straddling one cluster, each carrying its
@@ -711,8 +714,8 @@ has to be able to do it alone, and it can.
 
 **On §15 and §14 — the two moves.** A neuron can do exactly two things to its table: **add** a pattern and
 **retire** one. Re-centering is neither — it is what moving counts means (D29). So the whole of restructuring is two
-tests, asked in that order, at a call and nowhere else, **and each is asked once per call: one candidate built and
-priced, one pattern retired at most** (R20). **Both are D30 over different sets** — one margin, read over the
+tests, asked in that order, at a call and nowhere else, **and each is asked once per call: every negative
+margin retired, one candidate built and priced** (R20). **Both are D30 over different sets** — one margin, read over the
 neurons a candidate would take out of the residual and over the neurons a pattern holds — and there is no second
 currency anywhere in the design.
 
@@ -839,25 +842,23 @@ activation's costs.
 
 ## What pins the order of the call
 
-**On R20 — the order is derived, not chosen.** Six constraints fix it; nothing else in the list is forced.
+**On R20 — the order is derived, not chosen.** Four constraints fix it; nothing else in the list is forced.
 ```
-2 after 1   the retire test reads the history as it stands, re-centered without the evicted activation    R18
-3 after 2   the new neighborhood is recognized against a table the retired pattern has already left       R18
-4 after 3   a candidate is built out of the residual, which the cover has just set                       R14
-5 after 3   the bid carries the pattern, so it must carry the re-centered one                            R21
-5 after 4   the candidate is offered like any pattern, so it must exist before the offer                 R17
-6 last      one request carries both moves, so sending it is what settles what they are                  R16
+2 after 1   the new neighborhood is recognized against a table the retired patterns have already left     R18
+3 after 2   a candidate is built out of the residual, which the cover has just set                       R14
+4 after 2   the bid carries the pattern, so it must carry the re-centered one                            R21
+4 after 3   the candidate is offered like any pattern, so it must exist before the return               R17
 ```
+Inside step 1, retirement reads margins after the eviction's re-centering, since that is what moved them (R18).
 
 **On R20 — why the call learns nothing.** What an open activation learns of what followed names the apex
 action, a frontier over the whole stack (R27), and no level knows it, so it is written after every level has
 run (§20). Nothing in the call reads a connection either (R1, D25), so the call is structural from end to end,
 and a new activation, at age 0, has nothing forward to learn in any case — a connection lives at `offset > 0`.
 
-**On R20 — why the build precedes the offer.** A candidate is offered in the call that built it (R17), so the
-offer waits for the build. The build reads the residual the cover has just set, and that residual already
-reflects the retirement two steps earlier, so the hole a dying pattern leaves is the hole the seed is drawn
-from.
+**On R20 — why the build precedes the return.** A candidate is offered in the call that built it (R17), so the
+return waits for the build. The build reads the residual the cover has just set, and that residual already
+reflects the retirements of step 1, so the hole a dying pattern leaves is the hole the seed is drawn from.
 
 **On R20 — why retirement runs before the new activation is admitted.** A pattern is judged on the history as
 it stands, so the new activation neither rescues it nor condemns it this call; it is evidence at the next.
@@ -940,9 +941,9 @@ The order §2 states, drawn. Every node names where it is specified.
 ```mermaid
 flowchart TD
     A["THE MACHINE holds every open activation, one per<br/>(neuron, age, position), and calls each neuron once<br/>in the frame it fires — §16"]
-    A --> B["THE BILL — age 0<br/>evict, retire, cover; evict and cover re-center the patterns they moved — R20 steps 1–3"]
-    B --> M["BUILD ONE candidate<br/>seed, neighborhoods, collapse, price — R20 step 4"]
-    M --> P["OFFER, and return one request<br/>a bid for every pattern that applies — R20 steps 5–6"]
+    A --> B["DELETE, then UPDATE — age 0<br/>evict, re-center, retire; admit, cover, re-center — R20 steps 1–2"]
+    B --> M["ADD one candidate<br/>seed, neighborhoods, collapse, price — R20 step 3"]
+    M --> P["RETURN<br/>a bid for every pattern that applies, and one request — R20 step 4"]
     P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R24"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §18"]
     O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §14"]

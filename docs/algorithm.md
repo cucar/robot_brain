@@ -68,9 +68,9 @@ rewards for actions already run (R33). The machine works **up one stack, a level
 ```
 per level, in this order and no other
 
-  calls (R20)
-  the machine calls every neuron that fired at that level. each retires its worst pattern, explains the
-  new neighborhood with its table, re-centers, builds one candidate, and returns its bids and its requests.
+  process frame calls (R20)
+  the machine calls every neuron that fired at that level. each evicts and retires, covers the new
+  neighborhood with its table, builds one candidate, and returns its bids and its request.
 
   creation (R16, R17)
   the machine creates every child requested at this level: id, parent, level, inherited coordinate, empty
@@ -353,9 +353,9 @@ Part I covers `process frame`: what a neuron holds, and what it does in the fram
 Part III covers the `process actions` call, where a neuron learns what action followed and infers the next.
 
 > **R1 — One decision point: the frame it fires.** A neuron is called once per activation, at age 0, and
-> everything structural happens in that call: it covers its neighborhood and saves it, re-centers, builds and
-> prices one candidate, retires at most one pattern, and returns a bid for every pattern that applies together
-> with its requests (R20).
+> everything structural happens in that call: it evicts and retires, covers its neighborhood and saves it,
+> builds and prices one candidate, and returns a bid for every pattern that applies together with its request
+> (R20).
 
 # 5. The pattern
 
@@ -516,24 +516,11 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 
 # 14. Deleting a pattern
 
-> **R18 — Retire one, then delete.** Read every margin in the table (D30) — the table as the last call left
-> it, less the activation just evicted, and before this call's activation is admitted (R20):
+> **R18 — Retire, then delete.** After eviction and the re-centering it causes, and before this call's
+> activation is admitted (R20), retire every pattern whose margin (D30) is strictly negative:
 > ```
-> benefit  =  Σ over the activations it covers:  |neighbors only this pattern names|  −  ( 1 + |p \ o| )
-> retire the pattern with the smallest margin, iff  benefit < 1 + |p|
+> retire p  iff  margin(p) < 0
 > ```
-> **A pattern that names no neighbor retires at once**, whatever else the call retires: the collapse can drop
-> every neighbor a pattern had, and a pattern naming nothing covers nothing and has nothing to earn its line.
->
-> **One per call, and no other.** Two patterns naming the same neurons are each worth nothing while the other
-> stands, so retiring both on one reading would return their neighbors to the residual with nothing left to
-> cover them. Retiring the worst lets the survivor take full credit at the next call, and the next call reads
-> every margin again.
->
-> **Without the pattern its neighbors fall where D19 puts them** — to another pattern of the same cover that
-> names them, at no extra cost to that pattern, or into the residual at one line each. It is the same
-> difference R15 reads with the roles swapped: adding a pattern asks what one that is not there
-> would take out of the residual, retiring one asks what one that is there is still keeping out of it.
 >
 > **Retiring is a deletion in the parent.** The pattern leaves the table that instant. It stops competing for a
 > place in any cover, so no further activation can bid it, and the neurons it held fall to the residual
@@ -644,9 +631,9 @@ never charged for what came after — only for what it names that did not fire b
 > part of an activation its pattern owns, and several of them may be promoted at one coordinate (D8). What
 > they share is a parent and a coordinate, not a slot.
 >
-> **Release is the same shape reversed**: the parent retires, the machine reclaims. A retired pattern goes back
-> on the same request that carries the candidate (R20), so a call touches the alphabet once — in one direction,
-> both, or neither.
+> **Release is the same shape reversed**: the parent retires, the machine reclaims. The retired patterns go
+> back on the same request that carries the candidate (R20), so a call touches the alphabet once — in one
+> direction, both, or neither.
 >
 > **Creating and wiring are separate, and only wiring waits.** The machine creates the child when the call
 > returns, before the election — an id, its parent, its level, the coordinate it inherits (D2) and an empty
@@ -675,28 +662,27 @@ One call per level per frame: everything structural for the activations that fir
 > has run (§20) and never here. The right-hand column says which steps are per activation and which per neuron.
 > ```
 >                                                                                        over
->  1  evict      a full ring drops its oldest activation; every pattern of that           each new
->                activation's cover loses it and re-centers                     D18, D29   activation
->  2  retire     read every margin in the table; retire the worst if it is strictly          the
->                negative, and any pattern naming nothing. It leaves the table at           neuron
->                once, and the neighbors it owned fall to the residual         R18, D21
->  3  cover      the new activation joins the ring, whole (D7), and recognition runs      each new
->                over the history: what it takes is the **cover** and what it            activation
->                credits is each neighbor's **owner**; every pattern whose covered
->                activations changed re-centers                         D28, D17, D19, D29
->  4  build      seed, neighborhoods, collapse (R14), then price it (R15). A                the
+>  1  delete     a full ring evicts its oldest activation; every pattern of that          each new
+>                activation's cover loses it and re-centers; every pattern whose            activation
+>                margin is now strictly negative retires, and the neighbors it
+>                owned fall to the residual                       D18, D29, R18, D21
+>  2  update     the new activation joins the ring, whole (D7), and recognition runs      each new
+>                over the residual of the history: what it takes is the **cover** and     activation
+>                what it credits is each neighbor's **owner**; every pattern whose
+>                covered activations changed re-centers                 D28, D17, D19, D29
+>  3  add        seed, neighborhoods, collapse (R14), then price it (R15). A                the
 >                candidate that pays joins the table                                        neuron
->  5  offer      a bid for every pattern of the table more than half of whose           each new
+>  4  return     a bid for every pattern of the table more than half of whose           each new
 >                neighbors are present — `2 · |p ∩ O| > |p|` — whether or not the        activation
 >                cover took it, this call's candidate included. A bid is the child's
 >                id and the pattern; for the candidate, the request stands in for
->                the id until the machine allocates one                       R21, R17
->  6  return     the bids, and one request carrying the candidate that passed and             the
->                the pattern that retired                                    R16, R21       neuron
+>                the id until the machine allocates one. With the bids, one request        the
+>                carrying the candidate that passed and the patterns that retired          neuron
+>                                                                        R21, R17, R16
 > ```
 
-**The call runs before the election**, and the election is over bids from a table that has already retired
-against this frame, saved it, re-centered on it, and built from it.
+**The call runs before the election**, and the election is over bids from a table that has already retired,
+saved this frame, re-centered on it, and built from it.
 
 # Part II — The past and present: the machine
 
