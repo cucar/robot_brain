@@ -38,7 +38,7 @@ incrementally maintained state:
   and `held` per neighbor as defined under Pattern counts below. Its `neighborhood` is D27's collapse over those counts,
   with the line charged.
 - Every activation's `cover` was grown by recognition over the residual, call by call, and is never re-derived
-  (§7).
+  (§6.2).
 - `actions` only ever grows: no strength falls, and a connection leaves only with the death of either of its
   ends (R31). Its estimate is the mean of the shares it has received, over its strength.
 - Every pass of the bill leaves the neuron's file (T7's `L_N`) no longer than it found it.
@@ -90,7 +90,7 @@ re-centering costs nothing to trigger: the counts it reads are current by the ti
 
 **In dependency order**, so the list also says what to recompute when something moves:
 ```
-activation.cover          =  the patterns covering its neighborhood, grown by recognition (§7)
+activation.cover          =  the patterns covering its neighborhood, grown by recognition (§6.2)
 activation.owner[n]       =  the pattern of the cover credited with present neighbor n — none, when
                              n is in the residual
 pattern.counts            =  Σ over the activations it covers: its share and the residual as
@@ -125,7 +125,7 @@ pattern's `present` to `held`, or back.
 activation that has it, so `present_p(d)` climbs by one per such activation while `held_p(d)` stays zero. At
 `2 · present_p(d) > 11` — six of ten — re-centering enters `d` and `p` becomes `{b, c, d}`. The four activations
 without `d` now price `p` at 2, which is what they were paying before (line plus one residual), nothing
-re-derives a cover (§7), so they keep it and evict in turn. **No candidate could have done this**: a candidate is built on the residual alone (R14), `b` and
+re-derives a cover (§6.2), so they keep it and evict in turn. **No candidate could have done this**: a candidate is built on the residual alone (R14), `b` and
 `c` are held by `p` in those activations, and `{d}` alone saves nothing (R15).
 
 ## The machine–neuron interface
@@ -144,7 +144,7 @@ There are two calls and no others:
 process frame   — made at age 0 only, once per neuron per frame, with every activation that fired
                 in:  each activation's backward half
                 out: per activation, a bid for every pattern of its cover (R20)
-                     plus one request: the candidate that paid, and the pattern that retired (R20)
+                     plus the patterns added and the patterns retired (R20)
 
 process actions — made once per frame after every level has run, with every open activation the machine holds
                 in:  per activation still uncovered, the apex action that ran this frame in each action
@@ -329,7 +329,7 @@ forward-side deltas are the numbered list in the section above and land in Stage
    and the absolute-frame `age_spatial_history` cutoff both go: capacity is `H` in the neuron's own activations,
    and eviction is one-out-one-in off the ring. `SpatialHistory::rebase` goes with the frame numbers. The
    histogram keyed on identical contexts goes: covers are per activation, so identical backward halves no
-   longer share one (§7).
+   longer share one (§6.2).
 3. **Replace the server with the cover.** Routing chooses one closest entry today; it becomes D28's greedy
    cover by ratio with first-namer owners, and both are written into the activation.
 4. **Delete the normal.** `spatial_normal_config`, `refresh_normal_config`, `served`, `spatial_target_channels`
@@ -404,7 +404,7 @@ f + 1     the action only      the digit call executes and its neuron fires; eve
                                silent. Process actions runs and every uncovered event activation
                                open here increments its neuron's connection to the action at
                                its own age (R31)
-f + 2     the reward only      the label arrives as input, not as a symbol (§15), and is
+f + 2     the reward only      the label arrives as input, not as a symbol (§12), and is
                                folded into that connection's estimate in every neuron that
                                wrote it (R31, R33). Nothing fires.
 f + 3     next example         = the next example's f
