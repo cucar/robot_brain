@@ -202,7 +202,7 @@ neighborhood ever was.
 
 **On D17 — why there are no bins.** An earlier design grouped activations by identical neighborhood and gave the
 group one cover, on the grounds that D28 reads the neighborhood and nothing else, so equal inputs get equal
-covers. §8 breaks that: a cover is never re-derived, only grown by recognition and shed by re-centering and
+covers. §7 breaks that: a cover is never re-derived, only grown by recognition and shed by re-centering and
 retirement, so two activations with one neighborhood can hold different covers depending on what the table was
 when each was saved.
 The group could no longer share, so the group is gone. Nothing was lost but a cache — every sum the tests need
@@ -459,7 +459,7 @@ its outer neighbors and they drop.
 could rebuild them: the history, which is the evidence itself, and the table of patterns, which is what the
 neuron has decided over that evidence. The cover and owners an activation carries are what recognition chose
 over those two, call by call, and they are held rather than recomputed because nothing ever re-derives a cover
-(§8).
+(§7).
 
 ## 5.4 The collapse
 
@@ -529,8 +529,8 @@ once per call, after the cover and before the tests, and deferred what the tests
 the center would never depend on the order two moves happened to run in. The order is not free: R20 fixes it, and
 a pattern's covered activations change at exactly two of its steps — evict, which takes one away, and cover, where
 recognition over the history gives or re-credits them — so each of those re-centers the patterns it moved, once.
-Retirement re-centers nothing: the retired pattern's neighbors drop into the residual, and the recognition that
-follows in the same call is what re-covers them with the patterns that remain. A re-center is one round because
+Retirement re-centers nothing: the retired pattern's neighbors drop into the residual, and the next call's
+recognition is what re-covers them with the patterns that remain. A re-center is one round because
 what it does to covers is a cover question, and recognition is the only place covers are decided.
 
 ## 5.6 The margin
@@ -600,7 +600,7 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 >   non-increasing and strictly decreasing whenever a neighbor enters. **It is a sum over the population**: an
 >   individual activation can get dearer under the moved pattern while the total falls.
 > - **Recognize.** D28 over the residual takes a pattern only when its coverage strictly exceeds its price
->   there, so each pattern taken lowers `L_N` by at least one, and nothing standing is disturbed (§8).
+>   there, so each pattern taken lowers `L_N` by at least one, and nothing standing is disturbed (§7).
 >
 > `L_N` is a non-negative integer, so the strict moves are finite, and the process reaches a state where no
 > candidate pays, no pattern is negative, no neighbor moves and nothing in the residual can be covered. That is a local optimum with
@@ -612,7 +612,7 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 > step. Without it a pattern's own fit and the file disagree wherever two patterns name one neuron — a
 > candidate born on unmet ground can re-center onto ground another pattern holds, look better and better to
 > itself, be worth less and less to the file, be retired, and be rebuilt from the same residual by the same
-> seed. On a frozen history that cycles forever. And never re-deriving a cover (§8): a greedy cover derived
+> seed. On a frozen history that cycles forever. And never re-deriving a cover (§7): a greedy cover derived
 > fresh after a re-center can cost more than the one that stood, and `L_N` would rise with it, whereas
 > recognition over the residual can only add a pattern that pays. With both, the descent is monotone.
 >
@@ -638,6 +638,11 @@ order is the one that lets this frame's activation count before this frame's off
 offer. The candidate built in the call is offered in it (R17), which is the point: this frame's activation
 counts before this frame's offer is made.
 
+**On R20 — why an activation with no neighbors is not processed.** It has nothing to recognize and no pattern
+can be built on it, and admitting it would evict a real neighborhood from a history that exists to hold
+evidence. It is not silenced: it fires, it is open, it stands on the apex, it connects to the action that ran
+and it infers. It is only kept out of the history.
+
 **On §6 — why the call's decisions are once, not once per activation.** Deciding per activation would impose
 an order on activations that are simultaneous — the pixel at one position did not happen before the pixel at
 another — and the structure that came out would depend on it, which is the defect R24 removes one level up.
@@ -659,7 +664,7 @@ to the minimizer over its assigned points: Lloyd 1957, better known as k-means. 
 with the file as the distance, the collapse as the minimizer (T5), and `k` moving as build and retire change
 the pattern count — which is why those moves exist alongside it, since Lloyd only optimizes assignment for a
 given set of centers. Where it departs from Lloyd is that the assignment step is not exact and so is never
-redone — recognition only assigns what is still unassigned (§8) — and that is what T7 turns on.
+redone — recognition only assigns what is still unassigned (§7) — and that is what T7 turns on.
 
 **What the design does not do is alternate to stability.** A bill absorbs its evidence, makes at most one
 structural decision of each kind and re-centers once: one improvement step, not a fixed point. Iterating would
@@ -679,14 +684,17 @@ a dictionary line and a name, and a dictionary line is backward.
 
 ## What pins the order of the call
 
-**On R20 — the order is derived, not chosen.** Four constraints fix it; nothing else in the list is forced.
+**On R20 — the order is derived, not chosen.** Five constraints fix it; nothing else in the list is forced.
 ```
-2 after 1   the new neighborhood is recognized against a table the retired patterns have already left     R18
-3 after 2   a candidate is built out of the residual, which the cover has just set                       R14
-4 after 2   the bid carries the pattern, so it must carry the re-centered one                            R21
-4 after 3   the candidate is offered like any pattern, so it must exist before the return               R17
+recognize after refresh   the frame's neighborhoods are covered from the history, so they must be in it,
+                          and the evicted must be out of it                                          D28
+delete after recognize    a margin is read after the frame's activations have been recognized and the
+                          patterns re-centered, so an activation that rescues a pattern counts       R18
+create after delete       a candidate is built out of the residual, which recognition has set and
+                          retirement has enlarged                                                    R14
+return after recognize    the bid carries the pattern, so it must carry the re-centered one          R21
+return after create       the candidate is offered like any pattern, so it must exist before the return R17
 ```
-Inside step 1, retirement reads margins after the eviction's re-centering, since that is what moved them (R18).
 
 **On R20 — why the call learns nothing.** What an open activation learns of what followed names the apex
 action, a frontier over the whole stack (R27), and no level knows it, so it is written after every level has
@@ -695,13 +703,15 @@ and a new activation, at age 0, has nothing forward to learn in any case — a c
 
 **On R20 — why the build precedes the return.** A candidate is offered in the call that built it (R17), so the
 return waits for the build. The build reads the residual the cover has just set, and that residual already
-reflects the retirements of step 1, so the hole a dying pattern leaves is the hole the seed is drawn from.
+reflects the retirements just made, so the hole a dying pattern leaves is the hole the seed is drawn from.
 
-**On R20 — why retirement runs before the new activation is admitted.** A pattern is judged on the history as
-it stands, so the new activation neither rescues it nor condemns it this call; it is evidence at the next.
-Retiring first means the new neighborhood is recognized against a table that has already lost the pattern,
-so no cover is derived only to be re-derived a step later. A pattern one activation's margin would have kept
-is gone, and if it was worth having it is rebuilt as a candidate on the evidence that says so.
+**On R20 — why retirement runs after recognition.** An earlier order retired right after eviction, before the
+frame's activations were admitted. A pattern that recurs about every `H` activations then lost its last
+covered activation at eviction, read negative, and was retired in the same call in which the activation that
+would have rescued it was sitting in the batch, unrecognized; its child died with it, and the next call rebuilt
+the same pattern with a new child that had to relearn every connection. Reading margins after recognition gives
+the frame's activations their say first: a pattern one of them covers is kept, and one none of them rescues is
+retired on evidence that has heard the whole frame.
 
 ## The cost of a call
 
@@ -710,17 +720,15 @@ table, `N` for the neighbors an activation carries, and take a pattern to name a
 is a scan of patterns against neighborhoods, and the question is how many.
 
 ```
-1  delete   evict                                  O(1)
-            re-center the evicted cover's patterns  O(N) each with tallies (implementation), O(H·N) each without
-            retire                                  O(1) each off the same tallies
-2  update   admit                                  O(N)
-            recognition, naive                      O(P · H · N) per round, rounds ≤ patterns taken
+refresh     evict                                   O(1) per activation evicted
+            admit                                   O(N) per activation admitted
+recognize   recognition, naive                      O(P · H · N) per round, rounds ≤ patterns taken
             recognition, incremental                O(P · N · (dirty + taken))
-            re-center the patterns that gained     O(N) each with tallies
-3  add      seed                                    O(1) off a residual tally kept per neighbor, O(H·N) without
+            re-center the patterns that lost or gained  O(N) each with tallies (implementation), O(H·N) each without
+delete      retire                                  O(1) each off the same tallies
+create      seed                                    O(1) off a residual tally kept per neighbor, O(H·N) without
             collapse and price                      O(s · N), s ≤ H the neighborhoods holding the seed
-4  return   offer                                   O(P · N), or O(N) per activation off an index from neighbor
-                                                    to the patterns naming it
+return      bids                                    O(|cover|) per activation
 ```
 
 **Recognition is the term that matters, and it is nearly all redundant.** A pattern that did not pay against an
@@ -816,17 +824,38 @@ The order §2 states, drawn. Every node names where it is specified.
 ```mermaid
 flowchart TD
     A["THE MACHINE holds every open activation, one per<br/>(neuron, age, position), and calls each neuron once<br/>in the frame it fires — §6"]
-    A --> B["DELETE PATTERNS, then RECOGNIZE PATTERNS — age 0<br/>evict, re-center, retire; admit, cover, re-center — R20 steps 1–2"]
+    A --> B["REFRESH, RECOGNIZE, DELETE — age 0<br/>evict, admit; cover, re-center; retire — R20"]
     B --> M["CREATE A PATTERN<br/>seed, neighborhoods, collapse, price — R20 step 3"]
     M --> P["RETURN<br/>a bid for every pattern of each cover, and one request — R20"]
     P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R24"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §11"]
-    O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §7"]
+    O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §8"]
     Z --> W["PROCESS ACTIONS, every open activation at its own age<br/>the apex action and rewards in; from the apex, inferences out — §13"]
     W --> S["SELECT — expand the inferences to base actions,<br/>one winner per action dimension by estimate; it executes at f+1 — §16"]
 ```
 
-# 7. Retire — pruning the table
+# 7. Recognition
+
+**On §7 — why a cover is never re-derived.** D28 is greedy, and a greedy cover re-derived after a pattern moved
+can cost more than the one that stood. In Lloyd's algorithm the assignment step is exact, so re-assigning after
+the centers move can only help. Here it cannot be exact — an exact cover is set cover — so the design never
+re-derives: recognition runs over the residual alone, and every pattern it takes pays strictly against what
+stood, which is the difference between a call that descends `L` and one that can raise it (T7).
+
+**On §7 — a pattern owning nothing in an activation is not in its cover.** It follows from the definitions:
+a pattern is in a cover to explain neighbors (D17), and re-centering can leave it naming none the activation has,
+so its owners there are empty (D29). It is then charged nothing there and credited nothing, and recognition can
+take it again only if it pays (D28).
+
+**On D19 — why nothing is indexed the other way.** What each activation holds against each pattern is already the
+index (D19), so a reverse map from pattern to the activations it covers would be a second copy of the same fact.
+
+**On §7 — prices and structure move at the same moment and are still different kinds of thing.** Both move
+when a neuron fires, because that is where counts move and where both tests run (R1). But a price is read off
+the cover as it now stands (D22) and never stored, while a structural move — adding, retiring (R15, R18) — is a
+decision that stands until something reverses it.
+
+# 8. Retire — pruning the table
 
 **On R18 — why every negative margin, and why at eviction.** An earlier rule retired one pattern per call, the
 worst, on the argument that two patterns straddling one cluster are each worth nothing while the other stands,
@@ -836,8 +865,9 @@ younger owns nothing and has a margin of minus one. Each margin is read off what
 frees only its own neighbors, and no other margin moves, so the margins are independent and retiring every
 negative one at once shortens the file by exactly the sum. And a margin can only fall at eviction: recognition
 adds a pattern to a cover only where its saving is positive, re-centering is the minimizer over the pattern's
-own population (T5), and no other pattern's move touches what this one owns. So only the patterns of the
-evicted activation's cover can have gone negative, and they are read right after they lose it.
+own population (T5), and no other pattern's move touches what this one owns. So only the patterns of an
+evicted activation's cover can have gone negative, and they are read after the frame's activations have been
+recognized, so that one of those can rescue a pattern before it is judged.
 
 **On R18 — a candidate cannot be retired by the pass that follows it.** After a candidate is added, what R15 priced
 and what R18 reads are the same set counted the same way — the residual `C` took, measured against
@@ -871,30 +901,9 @@ cover older first, so the younger holds nothing anywhere and retires. The market
 the election ties to the older symbol (R24) — but the neuron never hears the election's verdict, so the table
 has to be able to do it alone, and it can.
 
-# 8. Recognition
-
-**On §8 — why a cover is never re-derived.** D28 is greedy, and a greedy cover re-derived after a pattern moved
-can cost more than the one that stood. In Lloyd's algorithm the assignment step is exact, so re-assigning after
-the centers move can only help. Here it cannot be exact — an exact cover is set cover — so the design never
-re-derives: recognition runs over the residual alone, and every pattern it takes pays strictly against what
-stood, which is the difference between a call that descends `L` and one that can raise it (T7).
-
-**On §8 — a pattern owning nothing in an activation is not in its cover.** It follows from the definitions:
-a pattern is in a cover to explain neighbors (D17), and re-centering can leave it naming none the activation has,
-so its owners there are empty (D29). It is then charged nothing there and credited nothing, and recognition can
-take it again only if it pays (D28).
-
-**On D19 — why nothing is indexed the other way.** What each activation holds against each pattern is already the
-index (D19), so a reverse map from pattern to the activations it covers would be a second copy of the same fact.
-
-**On §8 — prices and structure move at the same moment and are still different kinds of thing.** Both move
-when a neuron fires, because that is where counts move and where both tests run (R1). But a price is read off
-the cover as it now stands (D22) and never stored, while a structural move — adding, retiring (R15, R18) — is a
-decision that stands until something reverses it.
-
 # 9. Add — creating a child
 
-**On §9 and §7 — the two moves.** A neuron can do exactly two things to its table: **add** a pattern and
+**On §9 and §8 — the two moves.** A neuron can do exactly two things to its table: **add** a pattern and
 **retire** one. Re-centering is neither — it is what moving counts means (D29). So the whole of restructuring is two
 tests, asked in that order, at a call and nowhere else, **and each is asked once per call: every negative
 margin retired, one candidate built and priced** (R20). **Both are D30 over different sets** — one margin, read over the
@@ -931,7 +940,7 @@ population is the activations where it is failing; the collapse over that popula
 once by exactly the majority the loop was computing. The seed chooses the population and the population
 decides every neighbor. Nothing in either place grows anything.
 
-**On R14 — what "the same history" means.** Covers are grown, never derived (§8), so two neurons with
+**On R14 — what "the same history" means.** Covers are grown, never derived (§7), so two neurons with
 identical rings can carry different covers if their tables moved under them in a different order, and the
 residual — and so the seed — is a function of the ring and its covers together. The build is deterministic in
 that pair, which is what a fixed-pass construction can promise; it is not a function of the ring alone, and

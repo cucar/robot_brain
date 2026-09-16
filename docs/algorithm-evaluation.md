@@ -70,7 +70,7 @@ design: the neuron optimizes its history and the machine its window. **Diagnosti
 election left uncovered that some pattern in a bidder's table names. That share is the cost of the split, and
 nothing is done about it; it is measured so the cost is known.
 
-**A cover is never re-derived, so it can go stale.** Recognition only covers the residual (§8), which is what
+**A cover is never re-derived, so it can go stale.** Recognition only covers the residual (§7), which is what
 makes the call a descent (T7). It also means an activation saved under an old table keeps the patterns it was
 given for as long as they own something there, and two activations with one neighborhood can be covered two
 ways. The counts a pattern re-centers on are then partly the table's past. **Diagnostic:** the share of

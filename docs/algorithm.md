@@ -71,8 +71,9 @@ rewards for actions already run (R33). The machine works **up one stack, a level
 per level, in this order and no other
 
   process frame calls (R20)
-  the machine calls every neuron that fired at that level. each evicts and retires, covers the new
-  neighborhood with its table, builds one candidate, and returns its bids and its request.
+  the machine calls every neuron that fired at that level. each refreshes its history, recognizes the
+  frame's neighborhoods with its table, retires what no longer pays, builds one candidate, and returns its
+  bids and its requests.
 
   neuron creation (R16, R17)
   the machine creates every child requested at this level: id, parent, level, inherited coordinate, empty
@@ -258,9 +259,7 @@ carries the action executing in that same frame (if there is one).
 > ```
 >
 > **Age is per activation, and a neuron can carry several ages at once.** An activation's age is the frames
-> elapsed since it fired, `0` through `reach_t`; a new activation is the one at age 0. **Age is read, not just
-> counted** — rounded as every offset is (D6), it is the offset at which the activation strengthens connections,
-> and every offset beyond it is read against it for what comes next (R31, R36).
+> elapsed since it fired, `0` through `reach_t`; a new activation is the one at age 0.
 >
 > **Covered at** is the age at which an accepted bid first covered the activation, none until one does.
 > Coverage is acquired late and never revoked (R27), so this one number says for every frame of the window
@@ -409,7 +408,7 @@ machine, over a frame's bids. It is stated here and cited from both.
 
 | caller                     | claimants | to cover                      | ties                                               |
 |----------------------------|---|-------------------------------|----------------------------------------------------|
-| neuron - recognition (§8) | each pattern, against each activation | the residual of the history (D21) | the older `pattern id`                             |
+| neuron - recognition (§7) | each pattern, against each activation | the residual of the history (D21) | the older `pattern id`                             |
 | machine - election (R24)  | bids | the board (§10.2) | the older `neuron id`, then the earlier coordinate |
 
 ## 4.5 The bid
@@ -455,9 +454,9 @@ Part II covers `process frame`: what a neuron does in the frame it fires.
 Part IV covers the `process actions` call, where a neuron learns what action followed and infers the next.
 
 > **R1 — One decision point: the frame it fires.** A neuron is called once per frame it fires in, for every
-> activation of that frame together, at age 0, and everything structural happens in that call: it evicts and
-> retires, saves and covers the frame's neighborhoods, builds and prices one candidate, and returns a bid for
-> every pattern of each cover together with its request (R20).
+> activation of that frame together, at age 0, and everything structural happens in that call: it refreshes
+> its history, recognizes the frame's neighborhoods, retires what no longer pays, builds and prices one
+> candidate, and returns a bid for every pattern of each cover together with its requests (R20).
 
 ## 5.2 The patterns table
 
@@ -539,17 +538,18 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 One call per level per frame: everything structural for the activations that fired this frame.
 
 > **R20 — The call, in order.** Once per level per frame, the machine asks one neuron for everything it owes
-> that frame, handing it **every activation of it that fired this frame**, each with its neighborhood, at age
-> 0 (R1). They are processed together.
+> that frame, handing it **every activation of it that fired this frame with a neighborhood that is not empty**,
+> each with its neighborhood, at age 0 (R1). They are processed together. A neuron none of whose activations
+> has a neighbor is not called; such an activation is still open (D9) and on the apex (R27) like any uncovered
+> activation.
 >
 > | Stage              | Operation      | Description                                                                                                                       | References    |
 > |--------------------|----------------|-----------------------------------------------------------------------------------------------------------------------------------|---------------|
-> | delete patterns    | evict          | A full ring evicts as many of its oldest activations as it must to admit the frame's.                                             | §7, D18       |
-> |                    | re-center      | Every pattern of an evicted cover loses it and re-centers.                                                                        | D29           |
-> |                    | retire         | Every pattern whose margin is now strictly negative retires, and the neighbors it owned fall to the residual.                     | R18, D21      |
-> | recognize patterns | admit          | The frame's activations join the ring, whole and wholly residual.                                                                 | §8, D7, D21   |
-> |                    | cover          | The greedy cover runs over the residual of the history: what it takes is each cover and what it credits is each neighbor's owner. | D28, D17, D19 |
-> |                    | re-center      | Every pattern whose covered activations changed re-centers.                                                                       | D29           |
+> | refresh history    | evict          | A full ring evicts as many of its oldest activations as it must to admit the frame's. Every pattern of an evicted cover loses it. | D18           |
+> |                    | admit          | The frame's activations join the ring, whole and wholly residual.                                                                 | D7, D21       |
+> | recognize patterns | cover          | The greedy cover runs over the residual of the history: what it takes is each cover and what it credits is each neighbor's owner. | §7, D28, D17, D19 |
+> |                    | re-center      | Every pattern whose covered activations changed, by eviction or by cover, re-centers.                                             | D29           |
+> | delete patterns    | retire         | Every pattern whose margin is now strictly negative retires, and the neighbors it owned fall to the residual.                     | §8, R18, D21  |
 > | create a pattern   | seed           | The neighbor in the most residuals, and the neighborhoods whose residual holds it.                                                | §9, R14       |
 > |                    | collapse       | The candidate: the collapse over those neighborhoods.                                                                             | R14, D27      |
 > |                    | price          | A candidate that pays joins the table, and the covers it was priced on, owning the residual it names there.                       | R15, D19      |
@@ -563,17 +563,25 @@ the add request stands in for the child's id until the machine allocates one (R1
 > **R21 — One bid per pattern of the cover.** An activation sends one bid (D31) per pattern of its cover. A
 > neuron covering nothing sends nothing.
 
-# 7. Deleting patterns
+# 7. Recognizing patterns
 
-> **R18 — Retire, then delete.** After eviction and the re-centering it causes, and before this call's
-> activation is admitted (R20), retire every pattern whose margin (D30) is strictly negative:
+Recognition is the procedure that chooses a cover for a new activation/neighborhood (D17): the greedy cover
+(D28) over the residual of the history (D21).
+
+**Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
+empty table covers nothing and bids nothing.
+
+# 8. Deleting patterns
+
+> **R18 — Retire, then delete.** After the frame's activations are recognized and the patterns re-centered
+> (R20), retire every pattern whose margin (D30) is strictly negative:
 > ```
 > retire p  iff  margin(p) < 0
 > ```
 >
 > **Retiring is a deletion in the parent.** The pattern leaves the table that instant. It stops competing for a
 > place in any cover, so no further activation can bid it, and the neurons it held fall to the residual
-> (D21). Having nothing to cover it has no margin and nothing to re-center — **the neighbors it
+> (D21), where the next call's recognition may re-cover them (R20). Having nothing to cover it has no margin and nothing to re-center — **the neighbors it
 > held stop moving** — and it is not a candidate for anything again. What leaves the table rides the call's
 > return to the machine (R20), as a request to delete it. **The neuron keeps no retired state and re-checks
 > nothing.**
@@ -611,14 +619,6 @@ any level.
 
 **Nothing is retired for what followed it.** What followed is measured, not claimed (D25), so a pattern is
 never charged for what came after — only for what it names that did not fire beside it.
-
-# 8. Recognizing patterns
-
-Recognition is the procedure that chooses a cover for a new activation/neighborhood (D17): the greedy cover
-(D28) over the residual of the history (D21).
-
-**Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
-empty table covers nothing and bids nothing.
 
 # 9. Creating a pattern
 
