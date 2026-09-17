@@ -647,29 +647,56 @@ and retirement prunes what the sliding history stops supporting.
 
 ## 5.8 Connections
 
-**On D25 — why a target is a relation and never a coordinate.** An action has no position (D37); what it acts
-on is bound to an argument, and the connection records that binding as a neighbor of the activation that
-connected, "the red thing to my right", never as where the red thing was. So the lesson pools by D11 wherever
-the activation fires, the machine resolves the relation against the frame it holds when it acts, and the
-environment is handed the absolute coordinate it needs without the machine ever learning one. A click, a
-saccade and a reach for a cup are one mechanism, an action bound to a thing; a rotation by thirty degrees is a
-magnitude, a bucket; and the machine learns to move toward what it sees by seeing itself, the hand and the cup in
-one pattern. Nothing learned holds an absolute coordinate; coordinates are the machine's, for the frame in hand.
+**On §3.5 — why a base action takes no arguments.** An earlier draft declared a shape for every action, an
+ordered list of arguments typed as things, functions or magnitudes, and bound a thing as a relation from the
+voter. It worked on paper and it brought four problems with it: a search over arguments that no walk could
+enumerate, contention among calls with different targets, a reward that could not tell two calls in one frame
+apart, and the resolution of every binding against the frame at call time. All four come from one decision, that
+a base action says where it acts, and all four go when it does not. Where a base action acts is a focus the
+environment holds and the machine sees, which is the head of the Turing machine the design already is, and a
+fovea. Acting at a distance then takes frames, move then act, and that is what the action hierarchy is for.
+Nothing is declared about an action but its place in the alphabet, as nothing is about an event.
 
-**On D36–D38 — actions are functions, and the design already has the language.** A function is an action
+**On D37 and D38 — actions are functions, and the design already has the language.** A function is an action
 neuron; a call is its activation; a learned function is a chunk of calls at fixed offsets, executed by expansion
-(R30); its parameters are the bindings the collapse could not fix (D27, D38). What a procedural language adds,
-the design keeps outside the body on purpose. Branching is dispatch: "if there is a carry, write 1" is two
-situations with two patterns, and the one that fires is the one that matches. Looping is the frame: a situation
-that recurs is re-dispatched each time, and a fixed count is an unrolled chunk. Memory is the environment, or
-the hippocampus: a value is a cell written by one call and read by another as a result, so the machine has no
-working memory and still computes. The shape is a Turing machine's, the environment the tape, the situation the
-state, dispatch the transition, and a function is never more than a fixed sequence of calls with holes in it.
+(R30); its parameters are the members the collapse could not fix (D27, D38). The hole is the use: a parameter is
+not taken and then used, it is the slot in the sequence where whatever it was given runs, and one parameter
+filling two slots is two holes that always agree. An argument is always a neuron, never declared by anyone: it
+is a filled hole, remembered by the connection of whatever stood on the apex when the function ran. What a
+procedural language adds, the design keeps outside the body on purpose. Branching is dispatch: "if there is a
+carry, write 1" is two situations with two patterns, and the one that fires is the one that matches. Looping is
+the frame: a situation that recurs is dispatched again, and a fixed count is an unrolled chunk. A learned
+function is a compression first and a callable unit second: it shortens the action stream whatever its length,
+but only a situation whose window holds its whole length can call it (R36), and below that height the same
+behavior is a chain of one-step lessons, each returned by the situation the last step created. Memory is the
+environment, or the hippocampus: a value is something one call wrote and a later situation includes. The shape
+is a Turing machine's, the environment the tape, the situation the state, dispatch the transition.
 
-**On D36 — where calls come from.** A call the environment executes appears in the frame as an activation of
-that action with its bindings (D37), and sits in the action neuron's history as a pixel sits in an event
-neuron's. So a teacher's demonstration is a population of calls, the action hierarchy chunks them, the collapse
-abstracts what varied into parameters, and the event patterns that stood on the apex connect to what followed.
+**On D38 — when a hole pays, and why perception drops what action keeps.** A hole costs one symbol in the
+dictionary line and one per activation, the filler; leaving that member out costs one per activation in the
+residual. So a single hole is free. For an event it is also useless, which is why the collapse drops a neighbor
+that varies; for a call it is necessary, because a program with a gap cannot run, so the collapse keeps it. A
+hole pays, for either kind, the moment one parameter fills two slots, since the unknown is then stated once
+instead of twice. That is the programmer's rule, pull out a parameter when the variation repeats, derived from
+the file rather than asserted. Holes in event patterns, which would give perception sameness, "the same thing
+on both sides, whatever it is", are an open question ([algorithm-evaluation.md](algorithm-evaluation.md)).
+
+**On R37 — the machine satisfices, on purpose.** A new action is wired only when an estimate turns negative, so
+a machine whose situation is good enough does not explore, and one that explores does so in the declared order
+of the alphabet, never by chance. That is the design, not a limitation of it: the machine is deterministic, and
+it looks for something better when what it has hurts, which is what people do whatever they say they do. An
+environment that wants a behavior discovered rather than taught has to make its absence cost something.
+
+**On §3.5 — the two functions of the loop.** A situation is a function the machine owns: it fires, and what it
+returns is an action, looked up in its connections and chosen by estimate. An action is a function the world
+owns: it is called, and what it returns is the next events. The run is the two composed over and over, and a
+program is a stretch of that alternation that recurs. The machine learns the first and only observes the
+second; it holds no model of what an action returns.
+
+**On D37 — where calls come from.** A call the environment executes appears in the frame as an activation of
+that action (D37), and sits in the action neuron's history as a pixel sits in an event neuron's. So a
+demonstration is a population of calls, the action hierarchy chunks them, the collapse abstracts what varied
+into parameters, and the event patterns that stood on the apex connect to what followed, arguments included.
 Nothing is searched for that was shown; the walk (R37) is for what was not.
 
 **On D25 — connections are measured, never chosen.** A connection is not in the bid (D31), not in any dictionary

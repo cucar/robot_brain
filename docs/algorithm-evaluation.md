@@ -244,30 +244,33 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 
 # 3. Open questions
 
-**Actions as functions (D36–D38) — what is not yet designed.** The function model was set on 2026-09-16 and
-these are its open ends, in the order they bite.
+**Actions as functions (D37, D38) — what is not yet designed.** Base actions take no arguments and act at a
+focus the environment holds; arguments exist only on learned actions, as holes the collapse kept. That removed
+the search over arguments, contention by target, reward per target and binding resolution that a declared shape
+had brought. What is still open, in the order it bites:
 
-- **Exploration needs a negative to start.** R37 wires a new action only when an estimate turns negative. A
-  learner whose default earns nothing negative never explores. Either the environment penalizes what the default
-  does, or a frame in which no voter proposes anything is itself a trigger; the design does not yet say which.
-- **The search over arguments.** The walk picks the action; it does not pick bindings. For magnitudes with a
-  known range the search is an ordered walk over the buckets from zero and is trivial. For things and functions
-  there is no order to walk, and random search does not know what to try. The intended source is observation:
-  calls the environment executes carry their bindings (D37), the collapse over a population of calls abstracts
-  the bindings that vary into parameters (D27, D38), and the candidates for a binding are the voter's own
-  neighbors, a finite set. What is missing is the rule for the case with no demonstration, and the rule that
-  says when a thing seen beside a call should become an argument of a new function rather than a relation
-  inside it. Both are the collapse's to decide and neither is written.
-- **Contention with several targets.** One winner per dimension per thing-binding is settled for one target.
-  For two, whether calls that share one target contend is not decided, and it matters for "merge A and B"
-  against "merge B and C".
-- **Reward with several calls in one frame.** D35 scopes reward by channel and span only, so two calls of one
-  dimension in one frame take the same share whether one or both paid. Either the environment pays per target
-  or D35 gains a target scope.
-- **Abstraction is an outline.** D27's clause over bindings and D38 say what a parameter is; they do not yet say
-  how a call's bindings are compared across the population, how a parameter is bound by the voter's connection
-  at call time, or whether the members of an action pattern may refer to each other's arguments beyond a
-  result. That is the one genuinely new mechanism in the model.
+- **Abstraction is an outline.** D27 and D38 say what a hole and a parameter are. They do not yet give the
+  count that decides a hole, how two holes are found to agree, or how a pattern with holes is priced by R15,
+  beyond the observation that a single hole is free and a repeated one pays.
+- **A function is callable only from a situation whose window holds it.** A voter can start a program only
+  from an offset at least as far out as the program is long (R36), and an activation is open for `reach_t`
+  frames (D9). Below that height the same behavior is dispatched a step at a time, each step returned by the
+  situation the last one created, with the recent past in the pattern carrying what the step needs to know
+  ([algorithm-addition.md](algorithm-addition.md)). That works only when every decision's facts are within
+  reach of the situation that makes it, and nothing says how a machine finds a path with that property.
+- **A situation that recurs unchanged runs again.** If a step leaves what its situation sees exactly as it was,
+  the same situation fires and the same step runs, forever. Only a negative reward and the walk break it.
+- **Families of actions.** "Write the digit I see" relates an event neuron to an action neuron, `1` to
+  `write-1`. With two digits that is two lessons and needs nothing; with ten, or a thousand, it is a mapping the
+  design has no object for.
+- **Holes in event patterns.** The same arithmetic that keeps a hole in a body would let an event pattern name
+  "the same thing at both offsets, whatever it is", and an activation of such a pattern would carry its fillers
+  as a call does. It would unify the two hierarchies: dropping a neighbor that varies is the case of a hole used
+  once and not needed. A further thought, unexamined: a hole in an event pattern that spans frames could be the
+  call that ran between them, which would be the machine's first model of what an action returns. Nothing is
+  designed.
+- **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
+  base actions that move it. What a good focus is, one per channel or one for the machine, is not settled.
 - **No working memory.** A result lives in the environment or in the hippocampus, never in the machine. Column
   addition works because the sheet holds the carry ([algorithm-addition.md](algorithm-addition.md)); the same
   sum asked with nowhere to write has nowhere to keep it.

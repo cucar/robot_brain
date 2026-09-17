@@ -1,6 +1,6 @@
 # Addition, as the machine would do it
 
-A worked case for the function model of [algorithm.md](algorithm.md) (D36–D38): binary column addition on a
+A worked case for the function model of [algorithm.md](algorithm.md) (D37, D38): binary column addition on a
 sheet, first as a machine that could be built by hand, then as one that learns it. Nothing here is normative;
 it is the smallest problem that exercises every part of the model, and it is written so that anything the
 model cannot express shows up as a gap.
@@ -9,125 +9,152 @@ model cannot express shows up as a gap.
 
 # 1. The setup
 
-One event channel, **the sheet**: a grid laid out over rows and columns, whose event dimension has three
+**The sheet** is an event channel: a grid laid out over rows and columns, whose event dimension has three
 buckets, `0`, `1` and blank. Every cell reports every frame, so a blank cell is an activation of the blank
-bucket, not silence.
+bucket, not silence. Four rows: a carry row, the two numbers `a` and `b`, and an answer row.
 
-One action dimension with one function, **write**, of shape `(magnitude: digit, thing: cell)` (D36): put this
-digit in that cell. Its default is to write nothing.
+**The focus** is an event channel on the same layout with one bucket, `here`, and one activation: the cell the
+machine's actions apply to. The environment holds it; the machine only sees it.
 
-The environment presents two rows of digits, right-aligned, with an empty answer row below and an empty carry
-row above. It rewards a correct digit written in the answer row, and it does nothing else. No `add` exists
-anywhere; addition is what the machine does with `write`.
+**The actions** are one action dimension of six base actions, none with an argument (D37): `up`, `down`,
+`left`, `right`, `write-0`, `write-1`. The first four move the focus; the last two write into the cell it is on.
 
-```
-carry     ·   ·   1   ·
-row 1     ·   1   0   1
-row 2     ·   1   1   1
-answer    ·   ·   ·   0        ← after the first column
-```
-
-# 2. The facts are patterns
-
-A single-column situation is a level-1 event pattern: a digit with a digit at the offset one row below it, and
-either a blank or a `1` at the offset one row above. There are eight of them:
-
-| above | row 1 | row 2 | answer bit | carry |
-|-------|-------|-------|------------|-------|
-| ·     | 0     | 0     | 0          | ·     |
-| ·     | 0     | 1     | 1          | ·     |
-| ·     | 1     | 0     | 1          | ·     |
-| ·     | 1     | 1     | 0          | 1     |
-| 1     | 0     | 0     | 1          | ·     |
-| 1     | 0     | 1     | 0          | 1     |
-| 1     | 1     | 0     | 0          | 1     |
-| 1     | 1     | 1     | 1          | 1     |
-
-Each is minted the second time its arrangement occurs, anywhere on the sheet, because a pattern names neighbors
-at offsets and D11 makes the column irrelevant. Its child fires wherever that column stands.
-
-# 3. The lessons are connections
-
-Each pattern's child, standing on the apex when the column is resolved, connects to what ran (R31): one call of
-`write`, bound as a relation from itself (D25).
+The environment presents two numbers, right-aligned, with the focus on the rightmost digit of `a`. It rewards a
+correct digit written in the answer row, and it does nothing else. No `add` exists anywhere.
 
 ```
-(write, +1, digit = answer bit, cell = the cell below me)              every pattern
-(write, +1, digit = 1,          cell = the cell above-left of me)      the four that carry
+carry     ·   ·   ·   ·
+a         ·   1   0  [1]        [ ] the focus
+b         ·   1   1   1
+answer    ·   ·   ·   ·
 ```
 
-"The cell below me" is a neighbor relation, `(cell, offset (+1 row, 0))`, so the connection is learned once
-and applies in every column. Nothing in it is a coordinate.
+# 2. Every lesson is one step
 
-# 4. The carry is an event, so there is no program
+A situation's activation is open for as many frames as its level reaches (D9), two at level 1, and it connects
+only to what runs while it is open (R31). So a situation at the top of a column cannot hold "resolve this
+column", which takes six frames or eleven; it can hold "the next step from here". Addition is therefore a chain
+of one-step lessons, each returned by the situation the previous step created, and what carries a column's
+identity from the frame it was seen to the frame it is needed is not a connection but a pattern: neighborhoods
+include earlier frames (D5), so "the focus is on a blank answer cell, and two frames ago and two rows up the
+column was `1` over `1`" is an ordinary pattern, and its lesson is `write-0`.
 
-The four carrying patterns write two cells in one frame: the answer bit below, and a `1` above the next
-column. The written `1` is now an event. The next column's situation, "`0` over `1` with a `1` above", is a
-different pattern from "`0` over `1`", with its own connections, and it does not match until the carry has been
-written beside it. Order comes out of the sheet: a column is resolved when its situation matches, and a column
-with a carry pending cannot match until its right neighbor has run. The sheet is the working memory, and the
-frame loop is the loop.
+The path has to be laid so that every decision's facts are within reach of the situation that makes it. One
+that does, with every fact within two cells and two frames:
 
-Nothing else is needed. No action pattern, no register, no counter. The base case of the recursion is the
-frame in which no column matches anything, so nothing fires and it stops.
+```
+a column that does not carry     down, down, write-s, left, up, up
+a column that carries            up, left, write-1, right, down, down, down, write-s, left, up, up
+```
 
-# 5. The hand-built machine
+Both end with the focus on `a` of the next column. The carry is written first, because from `a` the next
+column's carry cell is one step up and one left, in view, and a situation that sees it already holds a `1`
+knows its carry is done.
 
-Everything above can be written down, which is the test that the representation is sufficient:
+# 3. The situations and what they return
 
-- eight level-1 event patterns, each a set of neighbors at row offsets;
-- one action, `write`, with its shape;
-- twelve connections, each a call bound by a relation, at a positive estimate.
+| The focus is on | and the situation also sees | returns |
+|---|---|---|
+| a digit of `a` | a column that carries, and a blank up-left | `up` |
+| a digit of `a` | a column that does not carry, or a `1` up-left | `down` |
+| the carry row | one frame ago, one row down, a carrying column | `left` |
+| a blank carry cell | one frame ago, the focus one cell right | `write-1` |
+| a carry cell holding `1` | it was written one frame ago | `right` |
+| the carry row | one frame ago, the focus one cell left | `down` |
+| a digit of `b` | one frame ago, the focus one row up | `down` |
+| a blank answer cell | two frames ago, two rows up, column situation `S` | `write-s`, the answer bit of `S` |
+| an answer cell just written | | `left` |
+| a blank answer cell | a written cell one to the right, written two frames ago | `up` |
+| a digit of `b` | one frame ago, the focus one row down | `up` |
 
-Present two rows and it adds them, right to left, one column per frame, with the carry travelling on the sheet.
+Eight column situations `S`, carry above or not, `a`, `b`, give eight rows of the eighth kind. The rest do not
+depend on the digits at all. Each is minted the second time its arrangement occurs, in any column, because a
+pattern names neighbors at offsets and D11 makes the column irrelevant.
 
-# 6. The learning machine
+# 4. The carry is an event, so there is no loop
 
-The same machine learned rather than built:
+A carrying column writes a `1` above the next column before it does anything else. That `1` is an event, so the
+next column's situation is one of the four with a carry above, a different pattern with a different answer bit.
+When a column is done the focus is on the next one, a situation fires, and its step runs. The loop is the frame,
+the counter is the focus, the carry register is the sheet, and the base case is the frame in which the focus is
+on blank over blank with nothing above, which matches nothing, so nothing runs and it stops.
 
-1. **A teacher works a few sums.** Every `write` the environment executes appears in the frame as a call with
-   its bindings (D37) and sits in the action neuron's history.
-2. **The event hierarchy mints the eight patterns** from the columns it sees, as it mints anything that recurs.
-3. **Each pattern, on the apex when its column was resolved, connects to the calls that followed**, writing the
-   bindings as relations from itself. The lesson pools across columns.
-4. **The action hierarchy chunks the carrying pairs.** "Write the answer bit below, write the carry above-left"
-   recurs at the same two cells, so the collapse over those calls names both members at offset zero and keeps
-   their bindings as relations to one parameter, the column: a level-1 action, *resolve column*, of shape
-   `(thing: cell)` (D38).
-5. **The teacher stops.** The patterns fire on a new sum, propose the calls they saw follow them, the writes
-   run, the reward confirms them, and re-centering settles the table.
+# 5. The functions are compression, and callable only from high enough
 
-Nothing was searched. What the walk (R37) would have had to find by trial, ten candidates per fact in decimal,
-two in binary, was shown.
+The action hierarchy sees the same stream the teacher produced and chunks it as it chunks anything (D38):
 
-# 7. Decimal is the same
+```
+column(X)         down, down,  X,  left, up, up
+carry             up, left, write-1, right, down
+```
 
-Ten digits and blank instead of two; two hundred facts instead of eight; a walk of up to ten per fact if
-learned by trial. The mechanism, the carry on the sheet and the absence of a program are unchanged.
+Over the columns that do not carry, every member agrees but the third, `write-0` in some and `write-1` in
+others: the collapse names the five that agree and keeps the third as a hole (D27). One hole, one parameter.
+These are in the file, where they shorten the action stream, and they stand on the apex of the action
+hierarchy. What they are not is something a level-1 situation calls: a voter can start a program only from an
+offset at least as far out as the program is long (R36). A situation whose window holds six frames, level 3 and
+up, can call `column(X)` whole, with its argument; below that, the same behavior is dispatched a step at a
+time. **A learned function is a compression first, and a callable unit only for a situation tall enough to see
+its whole length.**
+
+# 6. The hand-built machine
+
+Everything above can be written down, which is the test that the representation is sufficient: the event
+patterns of §3, and one connection from each to the base action it returns, at a positive estimate. Present two
+numbers and it adds them, right to left. Building it is also how the path of §2 gets checked: a step whose facts
+turn out to be out of reach of its situation shows up as a pattern that cannot be written.
+
+# 7. The learning machine
+
+1. **A teacher works a few sums.** Every base action the environment executes appears in the frame as a call
+   (D37) and sits in its action neuron's history.
+2. **The event hierarchy mints the situations of §3** from what it sees, the focus included, the recent past
+   included.
+3. **Each situation, on the apex when the next step ran, connects to it** at offset one. The lesson pools
+   across columns.
+4. **The action hierarchy chunks the teacher's stream** into `column(X)` and `carry`, with the hole where the
+   digit varied.
+5. **The teacher stops.** The situations fire on a new sum and return the steps they saw follow them, the
+   reward confirms the writes, and re-centering settles the table.
+
+Nothing was searched. What a walk would have had to find by trial was shown.
+
+# 8. Decimal is the same
+
+Ten digits and blank; two hundred column situations; ten `write` actions; the same path and the same one hole.
 Multiplication is the same with more rows: partial products, then a column addition.
 
-# 8. The recursion, turned inside out
+# 9. The recursion, turned inside out
 
 The same algorithm written as code, before this design existed, is recursive rather than looping, and each of
 its parts has a place here:
 
-| in the code                                  | in the machine                                      |
-|----------------------------------------------|-----------------------------------------------------|
-| `addDigits(d1, d2)`, a table of cases        | the eight patterns and their connections            |
-| `getDigit(num, pos)`, an adjacent index      | an offset (D6): "the cell at this position from me" |
-| the `carry` parameter                        | the written cell in the carry row                   |
-| recursion over `pos`                         | the frame loop: one column per frame, the next being whichever matches |
-| the base case: no digits, no carry           | the frame in which nothing matches, so nothing fires |
+| in the code                             | in the machine                                                   |
+|-----------------------------------------|------------------------------------------------------------------|
+| `addDigits(d1, d2)`, a table of cases   | the eight column situations and the bit each returns             |
+| `getDigit(num, pos)`, an adjacent index | an offset (D6), and the focus moving one cell                    |
+| the `carry` parameter                   | the `1` written in the carry row                                 |
+| recursion over `pos`                    | the frame loop: a column ends on the next, whose situation fires |
+| the base case: no digits, no carry      | the frame in which nothing matches, so nothing runs              |
 
 The stack the recursion needed is the sheet, which is why the machine needs no depth, no loop and no memory of
 its own.
 
-# 9. What this case does not exercise
+# 10. What this case shows is missing
 
-- **Exploration from nothing.** The hand-built and the taught machine never explore. A machine left alone with
-  a default that writes nothing and rewards that are only ever positive never starts (algorithm-evaluation.md).
-- **Two calls, one reward.** A carrying column writes two cells in one frame, and a reward scoped by channel
-  and span reaches both alike, so a wrong carry beside a right bit is not told apart from two right writes
-  unless the environment pays per cell.
+- **The path is part of the problem.** The steps work only because every decision's facts are within reach of
+  the situation that makes it, and the path was laid out by hand to make that so. A teacher who walks a
+  different path may teach steps the machine cannot represent at the level they occur. Nothing in the design
+  says how a machine finds a path with that property.
+- **A situation that recurs unchanged runs again.** If a step leaves what its situation sees exactly as it was,
+  the same situation fires and the same step runs, forever. Here the carry is written first so that the second
+  visit to `a` sees a `1` up-left; in general only a negative reward and the walk break such a loop.
+- **Families of actions.** "Write the bit this column gives" is eight lessons in binary. In decimal it is two
+  hundred, and in general it is a mapping from event neurons to action neurons that the design has no object
+  for; a situation with a hole, handing its filler to the action it returns, is where that would go.
+- **Exploration from nothing is not exercised.** The hand-built and the taught machine never explore. The
+  machine explores only when an estimate turns negative (R37), by design: it is deterministic and it does not
+  look further while things are good enough. An environment that wants addition discovered rather than taught
+  has to make not adding hurt.
 - **Arithmetic without a sheet.** Asked the same sum with nowhere to write, the machine has nowhere to keep the
   carry. That is the hippocampus's job or nothing.
