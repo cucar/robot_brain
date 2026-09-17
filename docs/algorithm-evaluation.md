@@ -208,7 +208,7 @@ partition is sticky and R14 is carrying more of the load than intended.
 
 **Election slack, bounded but unmeasured.** R24 is ratio-greedy weighted set cover, so its slack against the
 best cover buildable from the same bids is bounded by `H(n)` and no better
-([algorithm-remarks.md](algorithm-remarks.md) §14). The bound is worst-case and
+([algorithm-remarks.md](algorithm-remarks.md) §9). The bound is worst-case and
 says nothing about the slack on real frames, and since apex-neurons-per-frame is the headline metric, slack and
 real structure are conflated in it. **Diagnostic:** solve one small window exactly (ILP) and compare, which
 locates the realized slack inside the `H(n)` ceiling.
@@ -226,7 +226,52 @@ variant would pay first.
 
 ---
 
+**When a frame's numbers are final.** Settlement is a property of one slot at one full coordinate. **Nothing here delays anything the machine does**
+— no pass blocks on it and no decision is deferred by it. **The only consumer is measurement**: when `L` or
+apex-neurons-per-frame is read, the settled frames are the ones whose numbers are final.
+
+**Frontier membership settles one level, in `reach_t` frames.** Whether an activation at frame `h` is covered
+is decided by bids firing no later than `h + reach_t`, since a bid reaches `reach_t` back and no further.
+
+**A frame's encoding settles at the top of whatever stack reached it.** A neuron one level up, firing later,
+can name a lower neuron that names frame `g`. **Frame `g` is settled when no level holds an open activation that could
+still join or leave that set** — a closure over the levels, evaluated upward.
+
+**`D` is reached, not known.** The walk stops where a level accepts no bids and therefore produces none above
+it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay.
+
+---
+
 # 3. Open questions
+
+**Actions as functions (D36–D38) — what is not yet designed.** The function model was set on 2026-09-16 and
+these are its open ends, in the order they bite.
+
+- **Exploration needs a negative to start.** R37 wires a new action only when an estimate turns negative. A
+  learner whose default earns nothing negative never explores. Either the environment penalizes what the default
+  does, or a frame in which no voter proposes anything is itself a trigger; the design does not yet say which.
+- **The search over arguments.** The walk picks the action; it does not pick bindings. For magnitudes with a
+  known range the search is an ordered walk over the buckets from zero and is trivial. For things and functions
+  there is no order to walk, and random search does not know what to try. The intended source is observation:
+  calls the environment executes carry their bindings (D37), the collapse over a population of calls abstracts
+  the bindings that vary into parameters (D27, D38), and the candidates for a binding are the voter's own
+  neighbors, a finite set. What is missing is the rule for the case with no demonstration, and the rule that
+  says when a thing seen beside a call should become an argument of a new function rather than a relation
+  inside it. Both are the collapse's to decide and neither is written.
+- **Contention with several targets.** One winner per dimension per thing-binding is settled for one target.
+  For two, whether calls that share one target contend is not decided, and it matters for "merge A and B"
+  against "merge B and C".
+- **Reward with several calls in one frame.** D35 scopes reward by channel and span only, so two calls of one
+  dimension in one frame take the same share whether one or both paid. Either the environment pays per target
+  or D35 gains a target scope.
+- **Abstraction is an outline.** D27's clause over bindings and D38 say what a parameter is; they do not yet say
+  how a call's bindings are compared across the population, how a parameter is bound by the voter's connection
+  at call time, or whether the members of an action pattern may refer to each other's arguments beyond a
+  result. That is the one genuinely new mechanism in the model.
+- **No working memory.** A result lives in the environment or in the hippocampus, never in the machine. Column
+  addition works because the sheet holds the carry ([algorithm-addition.md](algorithm-addition.md)); the same
+  sum asked with nowhere to write has nowhere to keep it.
+
 
 **Neighborhood space at higher levels.** Above level 0 the neighbors are patterns, and the per-dimension alphabet
 grows as patterns are created, so the space expands with the structure. What no longer expands is `|O|`:
