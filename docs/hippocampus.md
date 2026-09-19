@@ -87,11 +87,11 @@ Reaching writes an imagined activation carrying the moment's own reconstructed i
 it writes the real one. Both narrow the moment; only the second lets the present overwrite it, and only when the present
 resembles it.
 
-> **H2 — A moment fires on its own majority.** Where a pattern's child fires only when the election accepts its
-> parent's bid (R24), a moment fires when more than half of what it names is active, with no bid and no
-> election. Having fired, it covers what it names, as an elected child covers what its pattern names (D10): the
-> neurons under it stop speaking and stop writing connections until their windows close. The moment stands on
-> the apex in their place, at a reach set by its level like any neuron's (D4).
+> **H2 — A moment is a class neuron.** It fires as any class neuron does (D41): where one of its members fires,
+> at that coordinate, carrying which member it was, with no bid and no election. It covers nothing: the neurons
+> it stands for keep standing as themselves, and what gets bought is what its table offers. With D27's clause
+> the collapse over its history keeps a place that is always filled by something different as a class neuron of
+> the moment's own, so an aged moment is a fixed core with roles.
 
 Moments are not stored as immutable records.
 A recalled moment is a reconstruction from the neurons its history still gives a majority to.
@@ -730,8 +730,8 @@ no decay rate, no boost and no eviction threshold; the history's `H` is the only
 way a pattern's does — its history slides, what it names is re-collapsed (D27, D29) — and a moment whose history
 gives no neighbor a majority names nothing, can never be fired or reached, and is dead by that fact.
 
-> **H5 — Moment death.** A moment that names nothing goes on the death ledger, and the ledger takes it on its
-> next pass, subtree and all, exactly as it takes a retired pattern's child (R18). Nothing else retires a moment.
+> **H5 — Moment death.** A moment dies as any class neuron does (R41): when the last pattern that names it
+> retires, it goes on the death ledger, and the ledger takes it on its next pass, subtree and all (R38).
 
 **3. Connections do not decay, and nothing weakens them.** A connection is a lifetime total: its strength is
 the number of exposures it has had and its estimate the mean of the reward shares they received, with no cap,

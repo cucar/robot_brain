@@ -150,7 +150,7 @@ the factor the coordinate gains.
 file scored: a child asserted what would follow, a wrong assertion was a correction, and the corrections were a
 term of `L`. Three things were wrong with it. Nothing priced the corrections — no test read them and nothing
 was ever retired for predicting badly — so the term sat in the objective and decided nothing. The bid had to
-carry a half it could not be scored on. And a slot two children both predicted needed an owner, which needed a
+carry a half it could not be scored on. And an activation two children both predicted needed an owner, which needed a
 resolution, which needed a second exclusivity beside coverage. Removing the claim removes all three. What is
 left is a dictionary coder over the backward window, and nothing the machine holds about what follows is a
 claim: the action that followed, and what it earned, is a connection, read for the next action and scored by
@@ -307,7 +307,7 @@ differs is the population and the fact that only the neuron may mint or retire a
 
 **On D28 — why the offer is the cover.** An earlier design offered every pattern more than half of whose
 neighbors were present, not only the cover, on the argument that the machine covers a different residual — the
-board, where earlier frames' children already hold slots — so a pattern the cover passed over could be the
+board, where earlier frames' children already hold activations — so a pattern the cover passed over could be the
 board's best purchase. Take `a, b, c, d, e` with `E1` naming `a, b, c, d` and `E2` naming `c, d, e`: the cover
 takes `E1` and leaves `E2` with `e` alone, but if the board already holds `a` and `b`, `E2` was worth more there.
 That is true and it is accepted. The neuron optimizes its history and the machine its window, and the two are
@@ -336,7 +336,7 @@ machine chooses among them against its own residual, the board (R23), which is n
 one activation can both be bought.
 
 **The cover and R24 are one procedure over two populations.** The neuron runs it over its table against one
-activation's residual; the machine runs it over a frame's bids against the free slots of the board. Both take
+activation's residual; the machine runs it over a frame's bids against the free activations of the board. Both take
 the best ratio, re-measure what is left, and stop when the best remaining does not pay. **The criterion is
 the same in both** — what a pattern covers against what it costs to state (D22) — and the price is
 the same expression on both sides, `1 + |p \ O|`.
@@ -552,7 +552,7 @@ elections fill in the middle. Every row is stated by the rule it cites; this is 
 build     would what C takes out of the residual sum past 1 + |C|?      the line, prospectively   (R15)
 cover     does this PATTERN take more of the residual than it costs?    one activation, no line       (D28)
 offer     is this PATTERN in the activation's cover?                    one activation                (D17)
-elect     does this BID cover more than it costs, once slots are split? one bid, no line          (R24)
+elect     does this BID cover more than it costs, once activations are split? one bid, no line          (R24)
 retire    does what p still keeps out of the residual pass 1 + |p|?     the line, retrospectively (R18)
 ```
 
@@ -648,38 +648,70 @@ and retirement prunes what the sliding history stops supporting.
 ## 5.8 Connections
 
 **On §3.5 — why a base action takes no arguments.** An earlier draft declared a shape for every action, an
-ordered list of arguments typed as things, functions or magnitudes, and bound a thing as a relation from the
-voter. It worked on paper and it brought four problems with it: a search over arguments that no walk could
-enumerate, contention among calls with different targets, a reward that could not tell two calls in one frame
-apart, and the resolution of every binding against the frame at call time. All four come from one decision, that
-a base action says where it acts, and all four go when it does not. Where a base action acts is a focus the
-environment holds and the machine sees, which is the head of the Turing machine the design already is, and a
-fovea. Acting at a distance then takes frames, move then act, and that is what the action hierarchy is for.
-Nothing is declared about an action but its place in the alphabet, as nothing is about an event.
+ordered list of arguments, and bound a thing as a relation from the voter. It brought four problems with it: a
+search over arguments that no walk could enumerate, contention among calls with different targets, a reward that
+could not tell two calls in one frame apart, and the resolution of every binding against the frame at call time.
+All four come from one decision, that a base action says where it acts, and all four go when it does not. Where
+a base action acts is a focus the environment holds and the machine sees, which is the head of the Turing
+machine the design already is, and a fovea. Nothing is declared about an action but its place in the alphabet.
 
-**On D37 and D38 — actions are functions, and the design already has the language.** A function is an action
-neuron; a call is its activation; a learned function is a chunk of calls at fixed offsets, executed by expansion
-(R30); its parameters are the members the collapse could not fix (D27, D38). The hole is the use: a parameter is
-not taken and then used, it is the slot in the sequence where whatever it was given runs, and one parameter
-filling two slots is two holes that always agree. An argument is always a neuron, never declared by anyone: it
-is a filled hole, remembered by the connection of whatever stood on the apex when the function ran. What a
-procedural language adds, the design keeps outside the body on purpose. Branching is dispatch: "if there is a
-carry, write 1" is two situations with two patterns, and the one that fires is the one that matches. Looping is
-the frame: a situation that recurs is dispatched again, and a fixed count is an unrolled chunk. A learned
-function is a compression first and a callable unit second: it shortens the action stream whatever its length,
-but only a situation whose window holds its whole length can call it (R36), and below that height the same
-behavior is a chain of one-step lessons, each returned by the situation the last step created. Memory is the
-environment, or the hippocampus: a value is something one call wrote and a later situation includes. The shape
-is a Turing machine's, the environment the tape, the situation the state, dispatch the transition.
+**On D41 — the second axis.** A child says "these things together are one bigger thing": part to whole, up a
+level, bought in an election, and once bought it replaces its parts. A class neuron says "this thing is one of a
+kind": instance to kind, at the same level, fired by nothing but a member firing, and replacing nothing. One
+firing causes another at the same coordinate in the same frame in both cases; the axis is what differs. The
+design had the first axis from the start. The second is what "whatever", "the same thing" and "one of these"
+all needed, and it is one object.
 
-**On D38 — when a hole pays, and why perception drops what action keeps.** A hole costs one symbol in the
-dictionary line and one per activation, the filler; leaving that member out costs one per activation in the
-residual. So a single hole is free. For an event it is also useless, which is why the collapse drops a neighbor
-that varies; for a call it is necessary, because a program with a gap cannot run, so the collapse keeps it. A
-hole pays, for either kind, the moment one parameter fills two slots, since the unknown is then stated once
-instead of twice. That is the programmer's rule, pull out a parameter when the variation repeats, derived from
-the file rather than asserted. Holes in event patterns, which would give perception sameness, "the same thing
-on both sides, whatever it is", are an open question ([algorithm-evaluation.md](algorithm-evaluation.md)).
+**On D41 — why it has a history of its own.** A pattern lives in the table of the neuron that fired, so
+`x, y, x, y` is evidence in `y`'s history, `a, b, a, b` in `b`'s and `m, n, m, n` in `n`'s, and no neuron ever
+sees the three side by side. A class neuron fires with each of its members, so its history pools theirs, and in
+that population no neuron has the majority anywhere while sameness has it everywhere. The ordinary collapse
+then finds the shape once. Generalizing over things needs a population shared by those things, and a neuron
+that fires with all of them is that population.
+
+**On D27 and D41 — the known mechanisms, and where each lands.** The collapse with its two extra questions is
+anti-unification (Plotkin, Reynolds, 1970): keep what the examples agree on, put a variable where they differ,
+and use one variable wherever the same things differ together, here by majority over a population rather than
+unanimity over a pair. Numbering by first appearance is the canonical renaming a programming language uses so
+that two functions differing only in their variable names are the same term. The binding is a pointer on the
+activation, the indirection answer to the binding problem, never learned, which D11 requires; synchrony and
+tensor products are answers for continuous networks and do not fit a machine of discrete symbols. And the
+design has an answer of its own that the literature mostly lacks: the role is the offset. "Whatever is one to
+my left" binds a thing to a role by location, with no pointer needed until the thing has to travel.
+
+**On D38 — what a class neuron saves.** It is priced as a neighbor, one in the line, and its binding costs one
+per activation, which is what the thing standing there would have cost beside the child. So a class neuron
+named once nets nothing: the symbol moves from beside the child to inside it. It pays the moment it is named
+twice, since the unknown is written once for two covered activations, and it pays against the real
+alternative, one pattern per variant, each with a line of its own and none at all for a variant seen once. A
+pattern whose whole body is one class neuron saves nothing and is retired (R18); a pattern has to name
+something.
+
+**On D38 — how branching works.** There is no branch inside a body, and there are two places a choice is made.
+The first is dispatch: two situations are two patterns, and which one fires is the whole of "if". "If there is
+a carry, write 1" is a carry pattern with a lesson and a no-carry pattern with another, and nothing inspects a
+condition, because recognition already did. The second is the class: a class neuron's members are the closed
+set of what can stand in its place, which is what an exclusive choice is in a process model. Loops are the same
+story one level up: a constant repeat is unrolled in the body, and a repeat that depends on the world is the
+situation recurring and being dispatched again until it stops recurring.
+
+**On D40 — weak and strong, and why nothing else tells them apart.** An event function returns actions (D25)
+and an action function returns events (D39); the run is the two composed, and the machine holds both halves.
+Strong is what crosses the boundary with the world and weak is what stays inside, on both sides: a returned
+event was never reported, and `carry-1` is never sent. A returned event is a variable, written by a call and
+read by recognition like anything else, and it is the same neuron as the one the world would report, so what a
+pattern learned on the seen thing holds for the returned one. What keeps it from being mistaken for the world
+is that it does not persist: a prediction is there for the frame it is about and then gone, while what the
+world reports stays open for its reach. The literature's oldest answer has the same shape: a motor command
+sends a copy of itself to a predictor, the prediction is compared with what comes back rather than mixed with
+it (von Holst and Mittelstaedt, Sperry, 1950; Wolpert, Ghahramani and Jordan, 1995), and losing the distinction
+is hallucination.
+
+**On D41 — a moment is a class neuron.** [hippocampus.md](hippocampus.md) mints a neuron at a salient instant
+that no table holds and no election fires, and lets the collapse over its history drop what its instants do not
+share. That is D41 minted at the top of the stack, and with D27's clause an aged moment keeps the places that
+are always filled by something different as class neurons of its own: a fixed core and roles, which is a
+schema. Minting is salience in both: the place the table keeps failing on, that no one neuron explains.
 
 **On R37 — the machine satisfices, on purpose.** A new action is wired only when an estimate turns negative, so
 a machine whose situation is good enough does not explore, and one that explores does so in the declared order
@@ -690,14 +722,14 @@ environment that wants a behavior discovered rather than taught has to make its 
 **On §3.5 — the two functions of the loop.** A situation is a function the machine owns: it fires, and what it
 returns is an action, looked up in its connections and chosen by estimate. An action is a function the world
 owns: it is called, and what it returns is the next events. The run is the two composed over and over, and a
-program is a stretch of that alternation that recurs. The machine learns the first and only observes the
-second; it holds no model of what an action returns.
+program is a stretch of that alternation that recurs. A learned function is a compression first and a callable
+unit second: only a situation whose window holds its whole length can call it (R36), and below that height the
+same behavior is a chain of one-step lessons, each returned by the situation the last step created.
 
 **On D37 — where calls come from.** A call the environment executes appears in the frame as an activation of
 that action (D37), and sits in the action neuron's history as a pixel sits in an event neuron's. So a
 demonstration is a population of calls, the action hierarchy chunks them, the collapse abstracts what varied
-into parameters, and the event patterns that stood on the apex connect to what followed, arguments included.
-Nothing is searched for that was shown; the walk (R37) is for what was not.
+into class neurons, and the event patterns that stood on the apex connect to what followed, bindings included.
 
 **On D25 — connections are measured, never chosen.** A connection is not in the bid (D31), not in any dictionary
 line (D13), and it enters no test. Connections are read in one place, when the activation stands on the apex
@@ -861,7 +893,7 @@ and a new activation, at age 0, has nothing forward to learn in any case — a c
 
 **On R20 — why the build precedes the return.** A candidate is offered in the call that built it (R17), so the
 return waits for the build. The build reads the residual the cover has just set, and that residual already
-reflects the retirements just made, so the hole a dying pattern leaves is the hole the seed is drawn from.
+reflects the retirements just made, so the slot a dying pattern leaves is the slot the seed is drawn from.
 
 **On R20 — why retirement runs after recognition.** An earlier order retired right after eviction, before the
 frame's activations were admitted. A pattern that recurs about every `H` activations then lost its last
@@ -987,7 +1019,7 @@ flowchart TD
     A --> B["REFRESH, RECOGNIZE, DELETE — age 0<br/>evict, admit; cover, re-center; retire — R20"]
     B --> M["CREATE A PATTERN<br/>seed, neighborhoods, collapse, price — R20 step 3"]
     M --> P["RETURN PATTERNS<br/>the bids, the patterns added, the patterns retired — R20"]
-    P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free slots<br/>they name, until the best left does not pay — R24"]
+    P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free activations<br/>they name, until the best left does not pay — R24"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §7.1"]
     O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §6.3"]
     Z --> W["PROCESS ACTIONS, every open activation at its own age<br/>the apex action and rewards in; from the apex, inferences out — §8.1"]
@@ -1178,7 +1210,7 @@ not in the spec.
 **On R22 — why a named neuron another neuron covers is free in both directions.** It fired, so it is not among
 the neurons named and absent, and no owner can put it there. It is already paid for, so it is not among
 the neurons this bid saves. Zero on both sides, and the two zeros are independent: coverage moves credit and
-nothing else. The one case that looks as if it should be different — this bid names the slot *wrongly* while
+nothing else. The one case that looks as if it should be different — this bid names the activation *wrongly* while
 the other neuron names it rightly — is not different, because a decoder expanding this neuron still turns on the
 wrong symbol and needs it turned off. Being right somewhere else does not make being wrong here free.
 
@@ -1257,13 +1289,13 @@ one thing twice.
 
 ## 7.3 The election
 
-**On R24 — why the election is D28, and what the earlier rule got wrong.** An earlier R24 resolved every slot
+**On R24 — why the election is D28, and what the earlier rule got wrong.** An earlier R24 resolved every activation
 once, on each bid's ratio over the whole free board, and then accepted each bid on what that resolution left
 it. That is not the same procedure as D28, though the specification said it was: D28 re-measures after every
-take and lets a bid that has fallen below its price take nothing, while the earlier R24 let a bid take slots on
-its original ratio, fail its own test, and keep those slots away from the bids that failed *because* of it.
+take and lets a bid that has fallen below its price take nothing, while the earlier R24 let a bid take activations on
+its original ratio, fail its own test, and keep those activations away from the bids that failed *because* of it.
 
-**Counterexample.** Three bids, every named slot fired:
+**Counterexample.** Three bids, every named activation fired:
 
 ```
 A  names s1 s2 s3 s4      price 1   ratio 4
@@ -1272,7 +1304,7 @@ E  names s9 s10           price 1   ratio 2
 ```
 
 Old R24: `s1, s2` to A; `s9` to D, since 3 > 2; `s10` to E. A holds 4 > 1 and is accepted. D holds 1, not > 1,
-rejected. E holds 1, rejected. The old step 3 moved slots only among accepted bids, so `s9` and `s10` stood as
+rejected. E holds 1, rejected. The old step 3 moved activations only among accepted bids, so `s9` and `s10` stood as
 residual: body term `1 + 2 = 3`. D28 over the board: take A; the free set is `{s9, s10}`; D covers 1 at price
 1 and E covers 2 at price 1, so take E. History term `1 + 1 = 2`.
 
@@ -1281,7 +1313,7 @@ whether D would pay was not known until after the claim had been honored. Re-mea
 questions in the right order.
 
 **Why the loop is not the variable loop the design avoids.** Every accepted bid subsumes at least two free
-slots (`covered > price ≥ 1`), so the rounds are bounded both by half the free set and by the number of bids.
+activations (`covered > price ≥ 1`), so the rounds are bounded both by half the free set and by the number of bids.
 And because `price` is fixed by the frame while `coverage` can only fall as the free set shrinks, a bid's ratio
 is monotone non-increasing through the election: the top bid can be re-measured alone, and if it still leads
 the others' stale ratios it is the true maximum. **The election is a heap pop with one re-measure per round,
@@ -1294,9 +1326,9 @@ the election delivers nothing to any neuron.
 **On R24 — why nothing has to be handed back.** A promoted neuron's pattern *is* its dictionary line (R21),
 so expanding it recovers every neighbor it names, credited or not: coverage is a fact about what the accepted
 neurons expand to, and ownership has no power over it. The old pass needed a third step to make the
-bookkeeping match that, because a slot held by a rejected bid would otherwise read as uncovered and stand as
+bookkeeping match that, because an activation held by a rejected bid would otherwise read as uncovered and stand as
 its own line beside a neuron that already delivers it. **The greedy never creates that state** — a bid that never
-reached the top holds nothing, so a slot it named is either credited to a bid that did pay or was never claimed
+reached the top holds nothing, so an activation it named is either credited to a bid that did pay or was never claimed
 by one at all.
 
 **On R24 — a ratio that ranks is not a price.** `cover / price` is a selection score over two counts: it
@@ -1321,12 +1353,12 @@ tiles, and the bid that loses that neuron simply counts one fewer. Accepted deli
 **contraction mints nothing that lasts**, so a marginal cover costs a bounded handful of lines and nothing
 structural.
 
-> **T10 — What settles is a slot, and the settled ones are not a prefix.** Each slot settles once and stays
+> **T10 — What settles is an activation, and the settled ones are not a prefix.** Each activation settles once and stays
 > settled: settlement is the absence of any open activation that could reach it, and activations only ever fall out of
-> reach. But the depth over one region is data, so a slot whose stack stayed shallow settles while a deeper
+> reach. But the depth over one region is data, so an activation whose stack stayed shallow settles while a deeper
 > predecessor is still open. **The edge is ragged and does not sweep.**
 >
-> **It is ragged in space as well as in time**, since reach is bounded in every activation dimension: a slot
+> **It is ragged in space as well as in time**, since reach is bounded in every activation dimension: an activation
 > far from anything active settles while one in a busy region, at the same frame, is still open.
 >
 > Nothing depends on the order, because nothing is streamed. The file is whatever current structure gives, so
@@ -1343,15 +1375,15 @@ settles what that costs to say.**
 furthest.** A bid accepted at `g + reach_t` can add a level after the fact, so `D` is not available at `g` — and
 nothing needs it in advance.
 
-> **T11 — Each level halves, over a span that widens by that level's reach.** An accepted bid holds more slots
+> **T11 — Each level halves, over a span that widens by that level's reach.** An accepted bid holds more activations
 > than it costs, and a price is at least 1, so it holds at least 2. **Ownership is a partition** (R24), so
-> no two accepted bids hold the same slot — disjointness is definitional here. One accepted bid promotes
+> no two accepted bids hold the same activation — disjointness is definitional here. One accepted bid promotes
 > exactly one neuron, firing at the bid's own coordinate. Writing `A_k[a, b]` for the level-`k` activations in
 > frames `[a, b]`, and `reach_t(k)` for D4's reach at that level:
 > ```
 > A_{k+1}[a, b]   ≤   ½ · A_k[a − reach_k, b]
 > ```
-> A bid holding only its own slot can never clear its price, which is what forces the halving. **This halving
+> A bid holding only its own activation can never clear its price, which is what forces the halving. **This halving
 > is what D4's schedule is derived from**, so the two are one statement read in opposite directions: the count
 > falls because bids must cover more than they cost, and the reach grows because the count fell.
 >
@@ -1365,7 +1397,7 @@ nothing needs it in advance.
 > ```
 > Level `D` is active at `f` only if `A_D[f, f] ≥ 1`, so **a frame reaches depth `D` only when the base fired
 > at least `2^D` times inside the span feeding it.** Since a frame holds at most one activation per
-> `(dimension, position)` (D8) the base rate is bounded by the declared **slot** count `B` — dimensions times
+> `(dimension, position)` (D8) the base rate is bounded by the declared count `B` of `(dimension, position)` pairs — dimensions times
 > the extent they are laid out over. **Nothing is declared or capped: the bound is read off the alphabet and
 > the reach, both already given.**
 >

@@ -51,7 +51,7 @@ adjustment the design used to run, and it closes the case without touching what 
 
 **Earlier bidders win shared past neurons.** A bid at `f` keeps a neuron at `f − 2` against a better bid at
 `f + 1` (R23). The bias is on boundary neurons between chunks and it is stated as a cost. **Diagnostic:** how
-often an accepted bid's tally lost exactly one slot to an earlier frame's credit, and how often that slot
+often an accepted bid's tally lost exactly one activation to an earlier frame's credit, and how often that activation
 would have flipped the acceptance. If the second number is not small, the alternative is re-electing the past
 within the coverage set's window, which is bounded and has been rejected so far for the ripple it sends up the
 stack.
@@ -64,9 +64,9 @@ long stretch means the neuron is building as fast as it is allowed and has a bac
 is not binding.
 
 **The offer is the cover, and the board is not the history.** A neuron bids the patterns its cover took over
-its own residual (R21); the machine covers the board, where earlier frames' children already hold slots, so a
+its own residual (R21); the machine covers the board, where earlier frames' children already hold activations, so a
 pattern the cover passed over can be the board's best purchase and is never shown to it. This is accepted as the
-design: the neuron optimizes its history and the machine its window. **Diagnostic:** per level, the slots the
+design: the neuron optimizes its history and the machine its window. **Diagnostic:** per level, the activations the
 election left uncovered that some pattern in a bidder's table names. That share is the cost of the split, and
 nothing is done about it; it is measured so the cost is known.
 
@@ -226,7 +226,7 @@ variant would pay first.
 
 ---
 
-**When a frame's numbers are final.** Settlement is a property of one slot at one full coordinate. **Nothing here delays anything the machine does**
+**When a frame's numbers are final.** Settlement is a property of one activation at one full coordinate. **Nothing here delays anything the machine does**
 — no pass blocks on it and no decision is deferred by it. **The only consumer is measurement**: when `L` or
 apex-neurons-per-frame is read, the settled frames are the ones whose numbers are final.
 
@@ -244,37 +244,45 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 
 # 3. Open questions
 
-**Actions as functions (D37, D38) — what is not yet designed.** Base actions take no arguments and act at a
-focus the environment holds; arguments exist only on learned actions, as holes the collapse kept. That removed
-the search over arguments, contention by target, reward per target and binding resolution that a declared shape
-had brought. What is still open, in the order it bites:
+**Patterns as functions and class neurons (D37–D41) — what stands between the model and an implementation.**
+Base actions take no arguments and act at a focus the environment holds; a slot is a class neuron named at an
+offset; an event function returns actions and an action function returns events, weakly. Three machines are
+built by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md), [hit](algorithm-hit.md)).
+What is still open, in the order it bites:
 
-- **Abstraction is an outline.** D27 and D38 say what a hole and a parameter are. They do not yet give the
-  count that decides a hole, how two holes are found to agree, or how a pattern with holes is priced by R15,
-  beyond the observation that a single hole is free and a repeated one pays.
+- **Minting is stated, not specified.** R41 mints a class neuron where the place most often in the residual is
+  explained by no one neuron. The count that decides "no one neuron", the tie between two such places, and the
+  first-appearance numbering when two neighbors are equally near, are words and not yet arithmetic.
+- **Membership.** R41 says a neuron standing in the class neuron's place in an activation the pattern otherwise
+  fits joins the members, and one no longer seen leaves. "Otherwise fits" and "no longer seen" need the same
+  majority the collapse uses, written down, and a class neuron shared by several patterns needs a rule for
+  which of their populations decides.
+- **Two readings of every activation.** A member's activation is also its class neuron's, so the level is
+  processed once per class neuron a member belongs to. The cost has not been estimated.
+- **A binding is a symbol in the file.** D13 prices it; D12 and D14 do not yet write it, and R28's expansion
+  needs it to recover the run.
 - **A function is callable only from a situation whose window holds it.** A voter can start a program only
   from an offset at least as far out as the program is long (R36), and an activation is open for `reach_t`
   frames (D9). Below that height the same behavior is dispatched a step at a time, each step returned by the
-  situation the last one created, with the recent past in the pattern carrying what the step needs to know
-  ([algorithm-addition.md](algorithm-addition.md)). That works only when every decision's facts are within
-  reach of the situation that makes it, and nothing says how a machine finds a path with that property.
+  situation the last one created, with the recent past in the pattern carrying what the step needs to know.
+  That works only when every decision's facts are within reach of the situation that makes it.
 - **A situation that recurs unchanged runs again.** If a step leaves what its situation sees exactly as it was,
   the same situation fires and the same step runs, forever. Only a negative reward and the walk break it.
-- **Families of actions.** "Write the digit I see" relates an event neuron to an action neuron, `1` to
-  `write-1`. With two digits that is two lessons and needs nothing; with ten, or a thousand, it is a mapping the
-  design has no object for.
-- **Holes in event patterns.** The same arithmetic that keeps a hole in a body would let an event pattern name
-  "the same thing at both offsets, whatever it is", and an activation of such a pattern would carry its fillers
-  as a call does. It would unify the two hierarchies: dropping a neighbor that varies is the case of a hole used
-  once and not needed. A further thought, unexamined: a hole in an event pattern that spans frames could be the
-  call that ran between them, which would be the machine's first model of what an action returns. Nothing is
-  designed.
+- **Loops have no member.** A constant repeat is unrolled, and nothing can say "down, three times". A run-length
+  neighbor would be decided like any other and would pay in the file; a repeat whose count depends on the world
+  stays with the frame.
+- **Returns fan out.** R39 connects a call to every uncovered event of every frame it is open through, which on
+  a dense layout is every cell. It has not been measured. A returned event that recreates the situation that
+  called the action is a loop with no world in it, and nothing breaks it but reward.
+- **Crossing kinds.** A binding carries an event as an event. "Write the digit you see" needs the action that
+  corresponds to a seen event, and a class of events and a class of actions have no correspondence between
+  their members. Copy (algorithm-copy.md) returns the event it was given and does not need one; writing it does.
+- **A call returned by several situations** fires at each of their coordinates (D37). That is taken to be right
+  and has not been worked through against "one call per dimension per frame".
+- **The hippocampus document predates D41.** Its moment has a firing rule and a death rule of its own (H2, H5);
+  under D41 it has neither. H1, H2 and H5 are restated; the rest of that document still reads the old way.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
-  base actions that move it. What a good focus is, one per channel or one for the machine, is not settled.
-- **No working memory.** A result lives in the environment or in the hippocampus, never in the machine. Column
-  addition works because the sheet holds the carry ([algorithm-addition.md](algorithm-addition.md)); the same
-  sum asked with nowhere to write has nowhere to keep it.
-
+  base actions that move it.
 
 **Neighborhood space at higher levels.** Above level 0 the neighbors are patterns, and the per-dimension alphabet
 grows as patterns are created, so the space expands with the structure. What no longer expands is `|O|`:
@@ -287,7 +295,7 @@ level, against the constant the invariant predicts.
 them slightly less independent, and D11 makes the neuron population smaller and each neuron busier — every
 position sharing a type folds into one table, so the parallelism available shifts from across-neuron toward
 across-activation, and re-centering becomes the contended point. The election is not sequential: R24 is two
-decisions and a settling, each over every slot or every bid at once, with nothing revisited. The only ordering
+decisions and a settling, each over every activation or every bid at once, with nothing revisited. The only ordering
 constraint is that a level's bills and offers must all be in before its election runs, and both fall inside
 one frame (T14). With nothing reported back, no bill waits on an election. On much larger inputs than MNIST all
 of this needs revisiting.
