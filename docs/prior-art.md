@@ -142,6 +142,29 @@ This sits in the gap between symbolic production systems (which don't learn onli
 
 ---
 
+## 7. Compression as code — neighbors of the function model
+
+The function model (algorithm.md D37–D41: patterns as functions, class neurons as slots, returned events as
+variables) has neighbors in six fields. None combines them; each has solved a piece. Citations gathered
+2026-09-17 and not yet read in full.
+
+| Field | Nearest work | What it has that the model uses | What it lacks |
+|---|---|---|---|
+| Library learning in program synthesis | DreamCoder (Ellis et al. 2021); Stitch (Bowers et al. POPL 2023); babble (Cao et al. POPL 2023); LILO (2023); Leroy (2024) | Extracting functions with parameters from a corpus under a compression objective; Stitch's utility is uses × size saved − definition cost, i.e. the margin | Offline, global, search-based; no online sliding history; babble's anti-unification modulo equations (order-insensitive bodies) is absent here |
+| Anti-unification | Plotkin 1970, Reynolds 1970 | The formal definition of "slots that co-vary are one parameter" | — |
+| Grammar-based compression | Sequitur (Nevill-Manning & Witten 1997); Re-Pair; TreeRePair / BPLEX (Lohrey, Maneth); run-length SLPs; iterated SLPs (Navarro 2024) | Rule hierarchies from repeats; nonterminals with parameters (tree grammars); a loop as a rule `A → B^k`; the finding that parameter count must be capped or priced | No objective beyond size; no actions |
+| Programming by demonstration | Lau et al., version-space algebra | Loops found as repeated subsequences of a trace; the finding that conditionals cannot be learned from traces because traces do not show the decision boundary — which is why branching lives in dispatch here | — |
+| Process mining | Inductive Miner (van der Aalst et al.) | Recovering sequence, exclusive choice, parallel and loop from event logs alone | No compression objective |
+| Cognitive architectures | Soar chunking (Laird, Rosenbloom, Newell); ACT-R production compilation | Rules compiled from sequences; no branch or loop inside a rule; a recognize–act cycle and a working memory outside it | No description-length objective; ACT-R specializes rather than abstracts |
+| Skills as compression in RL | SKILLS (Thrun & Schwartz 1994); ReuseRL (2026) | Skill discovery by description length; a PAC-Bayes bound on a dictionary's description of future behavior | — |
+| Inductive logic programming | Knorf (Dumančić et al.) | Predicate invention that shrinks a learned program | — |
+| Forward models and source tagging | Efference copy (von Holst & Mittelstaedt 1950; Sperry 1950); Wolpert, Ghahramani & Jordan 1995; Blakemore, Wolpert & Frith 1998; Frith's comparator; Johnson & Raye 1981; Dijkstra & Fleming 2023; predictive coding (Rao & Ballard 1999); Dyna (Sutton 1990) | A prediction travels on its own path and is compared with input, never mixed with it — a weak activation (D40) is that path | — |
+| Human abstraction learning | Prospective compression (2026) | Evidence that people choose abstractions for tasks they expect, not only for tasks they have had; the sliding history here is retrospective | — |
+
+What is not found combined: one majority-vote operator, online and greedy, per neuron over a sliding history,
+with a fixed-length file as the only objective, applied to perception and to action with opposite readings of
+disagreement (a varying neighbor is dropped, a varying call is a slot).
+
 ## Status & caveats
 
 This is a **technical positioning and background document**, assembled from the cited literature to inform architecture decisions, reviewer/investor narrative, and conversations with patent counsel. It is **not** a legal prior-art search, a patentability opinion, or a freedom-to-operate analysis — those require professional patent-search tools and a registered practitioner, and the structure-growing-SNN and neuromorphic-patent space (note the existing structural-plasticity SNN patents surfaced in the survey) is dense enough that a professional search is warranted before filing. Citations from 2023–2025 in particular should be read in full before they are relied on, as the field is moving quickly and the strongest current version of each result may have advanced.
