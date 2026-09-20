@@ -57,8 +57,8 @@ weakly, there for that frame and gone.
 | 2 | | `show`, `7`, and `Digit` bound to `7` | `shown`, `Digit = 7` | `hold`, carrying `Digit = 7` |
 | 3 | `hold`, weakly | `7`, weakly, returned by `hold` | `7` | |
 
-In frame 2 the machine adds the `Digit` activation beside the `7` when it assembles the level (§7.1), the
-pattern covers `ready`, `show` and the `7`, and its child stands on the apex. In frame 3 the world shows
+In frame 2 the `7` reports `Digit` in `process classes` and the machine adds the `Digit` activation beside it
+(§6.6, §7.1), the pattern covers `ready`, `show` and the `7`, and its child stands on the apex. In frame 3 the world shows
 nothing, and the `7` is there anyway.
 
 Show a `3` instead and nothing in the machine is different: the same pattern fits, the same two connections

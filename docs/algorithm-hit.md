@@ -36,14 +36,14 @@ and `4`.
 
 # 4. The situations, and what each returns
 
-Every pattern is in `me`'s table, so every offset is measured from the body. Each names `Thing` twice, which
+Every pattern is in `me`'s table, so every offset is measured from the body. Each names `Thing` twice with one role, `Thing¹`, which
 means the same member at both offsets (D38): one thing, nearer than it was a frame ago.
 
 | Child | names | returns |
 |---|---|---|
-| `incoming-ahead` | `(Thing, (0, +2), now)`, `(Thing, (0, +4), one frame ago)` | `hit` |
-| `incoming-left` | `(Thing, (−2, 0), now)`, `(Thing, (−4, 0), one frame ago)` | `turn-left` |
-| `incoming-right` | `(Thing, (+2, 0), now)`, `(Thing, (+4, 0), one frame ago)` | `turn-right` |
+| `incoming-ahead` | `(Thing¹, (0, +2), now)`, `(Thing¹, (0, +4), one frame ago)` | `hit` |
+| `incoming-left` | `(Thing¹, (−2, 0), now)`, `(Thing¹, (−4, 0), one frame ago)` | `turn-left` |
+| `incoming-right` | `(Thing¹, (+2, 0), now)`, `(Thing¹, (+4, 0), one frame ago)` | `turn-right` |
 
 Each pattern pays for its line because `Thing` is named twice and bound once: the body and two activations of
 the thing are written as the child and one binding.
@@ -54,7 +54,7 @@ The body is at `(10, 10)`. A ball is at `(10, 12)`, and a frame ago it was at `(
 
 1. **The machine subtracts.** Assembling the neighborhood of the `me` activation, it takes the difference of
    coordinates and buckets each component (D6): the ball now is at `(0, +2)`, the ball a frame ago at `(0, +4)`.
-   Beside each `ball` activation it has added a `Thing` activation bound to `ball` (§7.1).
+   Beside each `ball` activation stands a `Thing` activation bound to `ball`, which the `ball` reported (§6.6).
 2. **The pattern fits.** `incoming-ahead` names `Thing` at exactly those two offsets, and the same member stands
    at both. Its child fires at the body's coordinate, carrying `Thing = ball`.
 3. **The child speaks.** Its connection is `(hit, one frame on)` (D25). That is the entire record: no position is
@@ -86,5 +86,5 @@ and distances to a handful.
 | a feature at a location | a neighbor, `(neuron, offset)` |
 | the same object at any place in the world | one pattern, since no coordinate is part of a neuron (D11) |
 | any object at that location | a class neuron named at the offset (D41) |
-| the same object at two locations | the same class neuron named at two offsets |
+| the same object at two locations | the same class neuron and role named at two offsets |
 | what to do about it | the child's action connection, which names no location at all |

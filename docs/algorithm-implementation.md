@@ -85,7 +85,7 @@ an activation's cover changes   every pattern of the old cover subtracts the act
 A pattern that stays in a changed cover still subtracts and re-adds, because what the other patterns took or gave
 back moves its `present` and `held`. An activation whose cover has changed takes its counts with it, so the pattern
 that received an activation's share is always the pattern that gives it back, and a share moves whole, so a
-pattern joining or leaving a cover transfers it in `O(offsets)`. Counts move only in `process frame`, so
+pattern joining or leaving a cover transfers it in `O(offsets)`. Counts move only in `process functions`, so
 re-centering costs nothing to trigger: the counts it reads are current by the time the call reaches it.
 
 **In dependency order**, so the list also says what to recompute when something moves:
@@ -141,7 +141,7 @@ again (D7).
 There are two calls and no others:
 
 ```
-process frame   — made at age 0 only, once per neuron per frame, with every activation that fired
+process functions   — made at age 0 only, once per neuron per frame, with every activation that fired
                 in:  each activation's backward half
                 out: per activation, a bid for every pattern of its cover (R20)
                      plus the patterns added and the patterns retired (R20)
@@ -154,7 +154,7 @@ process actions — made once per frame after every level has run, with every op
                      age, each placed at its completion; covered activations return nothing
 ```
 
-**The bill runs inside `process frame`, before the offer** (R20). The neuron covers and folds the new activation,
+**The bill runs inside `process functions`, before the offer** (R20). The neuron covers and folds the new activation,
 retires one pattern, recognizes, re-centers once, builds one candidate, then offers. The election runs after the call
 returns and reports nothing back (R24). The machine returns the requested child's identity on the next call or
 before the election; the pattern is in the table in the call that built it (R17).
@@ -427,7 +427,7 @@ which R32 states explicitly holds before any action pattern exists.
 and the reward lands a frame later. Neither is gated on anything completing, so the reward path does not wait
 on the window and does not vary with level.
 
-**This is why `process actions` is a second call.** `process frame` reaches a neuron at age 0 only, so the
+**This is why `process actions` is a second call.** `process functions` reaches a neuron at age 0 only, so the
 forward half cannot ride on it — an activation at age 3 of a reach-8 span would never be reached. `process
 actions` walks every open activation the machine holds and hands each one what landed. It also runs after the
 stack has settled rather than during a level, because what ran is not known until then.

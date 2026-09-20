@@ -327,10 +327,11 @@ anything else, and the environment reports it to the machine as events like anyt
 **An action returns events, as an event returns actions.** What follows a call is held on the action neuron
 (D39), and when the call runs what it returns fires weakly (D40, §8.4).
 
-Three machines are built by hand on these definitions: [adding two binary numbers](algorithm-addition.md), where
+Four cases are worked by hand on these definitions: [adding two binary numbers](algorithm-addition.md), where
 a returned event is the carry; [copying what was seen](algorithm-copy.md), where a class neuron carries a value
-from an event through a call and back; and [hitting whatever comes at you](algorithm-hit.md), where offsets from
-the body are the reference frame.
+from an event through a call and back; [hitting whatever comes at you](algorithm-hit.md), where offsets from
+the body are the reference frame; and [an alternating pair](algorithm-xy.md), where three neurons that learned
+the same function become one class that holds it once.
 
 ## 3.6 Rewards
 
@@ -369,8 +370,11 @@ word: fixed content, and slots where content is supplied.
 > |------------|-------------------------------|----------------------------------------------------------------|
 > | a neighbor | `(neuron, offset, bindings)`  | That neuron, at that offset, standing for what the bindings say. |
 >
-> **A slot is a class neuron named at an offset** (D41): some member of the class stands there, and which one is
-> the activation's binding. The same class neuron named at two offsets is the same member at both. A neighbor
+> **A slot is a class neuron named at an offset, with a role** (D41), written `K¹`: some member of the class
+> stands there, and which one is the activation's binding for that role. The same class neuron named with the
+> same role at two offsets is the same member at both; with different roles, `K¹` and `K²`, the members are free
+> to differ. Roles are numbered by first appearance reading outward from the activation, and the owner is role
+> `0`. A neighbor
 > that is itself a pattern's child with class neurons of its own carries bindings, each a neuron or one of this
 > pattern's class neurons; for every other neighbor the bindings are empty. A class neuron named at an offset is
 > present when one of its members stands there, and the pattern owns that activation like any neighbor (D19).
@@ -472,13 +476,15 @@ A neuron is a symbol, and a type (D2). It holds a table of patterns, a history o
 and its connections (D25). What it holds is defined in §4, §5.2 and §5.3, and what it does with it in the
 sections after.
 
-**The machine reaches a neuron through five calls, and nothing else writes into one.** Each is specified where
+**The machine reaches a neuron through seven calls, and nothing else writes into one.** Each is specified where
 it is used.
 
 | Call                    | Description                                                                                                                                                       | References |
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------|
 | create neuron           | The machine creates it when the call requesting it returns, one level above its parent, holding nothing.                                                          | R16        |
-| process frame           | In its level's turn: everything structural for the activations that fired this frame.                                                                             | §6, R20    |
+| process classes         | In its level's turn, first: it refreshes its history and reports the classes it is a member of and the lines that changed.                                          | §6, R20    |
+| process functions       | In its level's turn, second: everything structural for the activations that fired this frame, with the classes bound.                                             | §6, R20    |
+| join or leave a class   | The machine tells a neuron it has become, or is no longer, a member of a class neuron.                                                                             | R41, R42   |
 | wire child to pattern   | Once the last level has run, the machine points the pattern at the child it created for it.                                                                        | R16, R17   |
 | delete pattern neighbor | The machine removes a neuron that no longer exists from every pattern and saved activation that names it.                                                          | R38        |
 | process actions         | After every level has finished, reaching every open activation at whatever age it stands at: it delivers what ran this frame, the apex action to an event activation and the frame's events to a call, and any reward, and collects what the apex speaks. | §8.1, §8.4 |
@@ -486,7 +492,7 @@ it is used.
 Every test the neuron runs is its own arithmetic over its own evidence, and it is never told what the board did
 with its bids (R24).
 
-Part II covers `process frame`: what a neuron does in the frame it fires.
+Part II covers `process functions`: what a neuron does in the frame it fires.
 Part IV covers the `process actions` call, where a neuron learns what action followed and infers the next.
 
 > **R1 — One decision point: the frame it fires.** A neuron is called once per frame it fires in, for every
@@ -530,11 +536,9 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 >
 > **`n` is taken exactly when `2 · count(n) > s + 1`.** Nothing is divided.
 >
-> **An offset that varies is kept as a class neuron.** An offset at which the majority of the population has
-> some neuron, `2 · present(o) > s + 1`, and no one neuron has the majority, is named with a class neuron (D41)
-> rather than dropped. Two such offsets are named with the same class neuron when they hold the same neuron in
-> the majority of the population, and which class neuron an offset gets is decided by numbering what stands in
-> the neighborhood in order of first appearance, reading outward from the activation. Variation is abstracted
+> **A class neuron is a neighbor like any other.** Its activation stands beside its member's (D41), so where a
+> place is filled by a different member each time, no member has the majority and the class neuron does, and
+> the collapse names it by the rule above. Nothing about the vote is special to it. Variation is abstracted
 > rather than discarded, and every neighbor is decided the same way whatever kind the pattern is.
 
 The collapse is the only operation that decides what a pattern names. It runs in two places:
@@ -627,9 +631,10 @@ an event neuron holds the actions that followed it, and an action neuron holds t
 ## 5.9 Class neurons
 
 > **D41 — The class neuron.** A neuron at some level of some dimension that is no pattern's child: no table line
-> holds it and no election fires it. It stands for its **members**, neurons of its own level and dimension. It
-> fires wherever a member fires, at that coordinate and in that level's turn, as strong or as weak as the
-> member (D40), and it carries a **binding**: which member it was. It covers nothing, so the member stands as
+> holds it and no election fires it. It stands for its **members**, neurons of its own level and dimension,
+> each of which has been told it belongs (§5.1) and reports it whenever it fires (§6.6). It fires wherever a
+> member fires, at that coordinate and in that level's turn, as strong or as weak as the member (D40), and it
+> carries a **binding**: which member it was. It covers nothing, so the member stands as
 > itself, in the file and on the apex. It holds a table, a history and connections exactly as any neuron does
 > (D32, D18, D25), and its history pools the neighborhoods of all its members, which no member's history does.
 >
@@ -638,25 +643,29 @@ an event neuron holds the actions that followed it, and an action neuron holds t
 
 # Part II — The past and present: a neuron
 
-# 6. The process frame call
+# 6. Process classes and process functions
 
-One call per level per frame: everything structural for the activations that fired this frame.
+Two calls per level per frame, in that order. The first refreshes the neuron's history and reports what the
+machine needs to group neurons into classes; the second does everything structural with the classes already
+bound. They are one piece of work cut in two, so that class neurons can be created and activated in between
+(§7.1).
 
-> **R20 — The call, in order.** Once per level per frame, the machine asks one neuron for everything it owes
+> **R20 — The two calls, in order.** Once per level per frame, the machine asks one neuron for everything it owes
 > that frame, handing it **every activation of it that fired this frame with a neighborhood that is not empty**,
 > each with its neighborhood, at age 0 (R1). They are processed together. A neuron none of whose activations
 > has a neighbor is not called; such an activation is still open (D9) and on the apex (R27) like any uncovered
 > activation.
 >
-> | Step               | Description                                                                                                       |
-> |--------------------|-------------------------------------------------------------------------------------------------------------------|
-> | refresh history    | Evict as many of the oldest activations as the frame's need, then admit the frame's.                              |
-> | recognize patterns | Cover the residual of the history with the table, and re-center every pattern whose covered activations changed. |
-> | delete patterns    | Retire every pattern whose margin is negative.                                                                    |
-> | create patterns    | Build new patterns out of the residual until one does not pay.                                                    |
-> | return patterns    | The bids, the patterns added and the patterns retired.                                                            |
+> | Call              | Step               | Description                                                                                                       |
+> |-------------------|--------------------|-------------------------------------------------------------------------------------------------------------------|
+> | process classes   | refresh history    | Evict as many of the oldest activations as the frame's need, then admit the frame's.                              |
+> |                   | report             | The class neurons each activation is a member of, and every line of the table changed since the last call.       |
+> | process functions | recognize patterns | Complete the admitted neighborhoods with the class activations, cover the residual of the history with the table, and re-center every pattern whose covered activations changed. |
+> |                   | delete patterns    | Retire every pattern whose margin is negative.                                                                    |
+> |                   | create patterns    | Build new patterns out of the residual until one does not pay.                                                    |
+> |                   | return patterns    | The bids, the patterns added and the patterns retired.                                                            |
 
-The call runs before the election (R24).
+Both calls run before the election (R24).
 
 ## 6.1 Refresh history
 
@@ -772,12 +781,14 @@ does not pay. Each that pays joins the table and the covers it was priced on.
 > **It is born holding nothing.** No patterns, no history and no connections (R16). Everything it comes to
 > hold is over the situations its parent's pattern actually took (D25), from its first activation on.
 
-> **R41 — The life of a class neuron.** **Minted** by the greedy pick (D33): where the place most often in the
-> residual is an offset that no one neuron explains, a class neuron is minted for it, its members the neurons
-> seen there, and the candidate names it (D27). **Widened and narrowed** by the collapse over its own history,
-> as any pattern is re-centered (D29): a neuron that stands in its place in an activation its pattern otherwise
-> fits joins the members, and a member no longer seen leaves them. **Dead** when the last pattern that names it
-> retires (R18): it goes on the death ledger and is deleted like any neuron nothing can fire again (R38).
+> **R41 — The life of a class neuron.** **Minted** by the machine when two lines of the dictionary are the same
+> up to renaming (R42): one class neuron per role whose names differ, its members the neurons found in that
+> role. **Widened** when another line of the same shape is reported, and **narrowed** when a line is retired and
+> no other line keeps its neurons in the role. **Dead** when it has fewer than two members or the last pattern
+> that names it retires: it goes on the death ledger and is deleted like any neuron nothing can fire again
+> (R38). The machine mints and tells; it never writes a pattern. What a class neuron's table holds, the class
+> neuron builds itself, from the pooled history its members give it, by the greedy pick and the collapse like
+> any neuron (D33, D27), priced by its own margin (D30).
 
 ## 6.5 Return patterns
 
@@ -790,6 +801,17 @@ when it is due (R18).
 
 > **R21 — One bid per pattern of the cover.** An activation sends one bid (D31) per pattern of its cover. A
 > neuron covering nothing sends nothing.
+
+## 6.6 Report
+
+In `process classes`, after refreshing its history, a neuron reports two things and decides nothing.
+
+**As a member**, for each of the frame's activations, the class neurons it has been told it belongs to (D41).
+The machine adds an activation of each, at that activation's coordinate, bound to the neuron.
+
+**As an owner**, every line of its table that was added, re-centered or retired since its last call. A line is
+the evidence a class is made from (R42): it is that neuron's history, collapsed, and only structure that paid
+for a line is ever reported.
 
 # Part III — The past and present: the machine
 
@@ -810,7 +832,10 @@ accepts no bid:
 
 | Step              | Description                                                                                                   |
 |-------------------|---------------------------------------------------------------------------------------------------------------|
-| process levels    | Call every neuron with an activation at this level, handing it the frame's activations of it (§6).           |
+| process classes   | Call every neuron with an activation at this level: it refreshes its history and reports its classes and its changed lines (§6.6). |
+| settle classes    | Group the reported lines by shape, mint, widen, narrow and delete class neurons, and tell their members (R42).        |
+| bind classes      | Add, beside every activation that reported a class neuron, an activation of that class neuron carrying its binding (D41). |
+| process functions | Call every neuron with an activation at this level, class neurons included, with the classes bound (§6).                |
 | create children   | Create every child the calls requested, before the election.                                                  |
 | elect bids        | Cover the level's uncovered activations with the bids, by the greedy cover over the board.                    |
 | activate children | Every accepted bid activates its child one level up; the uncovered stand on the apex.                         |
@@ -823,10 +848,24 @@ Then, once the last level has run:
 
 ## 7.1 Process levels
 
-When the machine assembles a level it adds, at the coordinate of every activation that is a member of a class
-neuron, an activation of that class neuron carrying its binding (D41), before any neuron of the level is called.
+**A level is processed in two stages, grouping and then separating.** `process classes` and the settlement
+group neurons into kinds; `process functions` and the election carve the level into pieces with the kinds
+already bound. A pattern that names a class neuron is fit by the class activation standing at that offset, the
+same class and role at two offsets is fit only by two activations with one binding, and the child the pattern
+promotes carries the bindings of what it matched (D38). A neuron told this frame that it has joined a class
+reports it from its next activation on.
 
-> **R26 — One stack, at the derived reach.** Base neurons run `process frame` and offer; the election settles which bids
+> **R42 — The machine settles classes.** For each line reported it computes the line's **shape**: the line with
+> every name taken out and the roles numbered by first appearance, the owner being role `0`, together with the
+> level and dimension of each role. Lines are kept in buckets by shape, and nothing is judged: two neurons
+> having learned the same function is a bucket receiving its second line. When a bucket holds two or more lines
+> the machine lines them up position by position. Where every line names the same neuron, the position keeps
+> its name; where they differ it is a role, and the role's members are the neurons found there. For each role
+> the machine gets or creates the class neuron whose members those are, same members same neuron, and tells
+> each member it has joined. A retired line leaves its bucket and takes its neurons out of the roles nothing
+> else keeps them in. The machine holds the dictionary's lines and nothing on the scale of the run.
+
+> **R26 — One stack, at the derived reach.** Base neurons run `process functions` and offer; the election settles which bids
 > are bought. The survivors are level 1 — the fewest that cover the active base neurons — and it happens
 > again. **When a level's active neurons promote no children, nothing propagates and there is no level above
 > it on this frame.** Nothing declares the depth and nothing caps it.
@@ -1208,7 +1247,7 @@ stop the writing — there is no second call and nothing is saved twice.
 > **Execution activates what it expands.** The base actions fire the frames they run (D8), and every action
 > pattern the expansion passed through fires when its expansion completes, at the coordinate the expansion
 > placed it — the last frame of its chunk, which is the coordinate recognition would have given it. An executed
-> pattern is therefore on its level's frame like a bought one: it runs `process frame`, is chunked upward (§7.1),
+> pattern is therefore on its level's frame like a bought one: it runs `process functions`, is chunked upward (§7.1),
 > and every uncovered event activation open at that frame connects to it (D25). While its program runs, the apex
 > action at each frame is the base action, or a lower pattern as it completes; the whole is the apex action only
 > in the frame it completes, and what the program earned reaches it through the span a reward names (R33).

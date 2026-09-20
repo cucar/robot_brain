@@ -246,17 +246,24 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 
 **Patterns as functions and class neurons (D37–D41) — what stands between the model and an implementation.**
 Base actions take no arguments and act at a focus the environment holds; a slot is a class neuron named at an
-offset; an event function returns actions and an action function returns events, weakly. Three machines are
-built by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md), [hit](algorithm-hit.md)).
+offset; an event function returns actions and an action function returns events, weakly. Four cases are
+worked by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md), [hit](algorithm-hit.md),
+[an alternating pair](algorithm-xy.md)).
 What is still open, in the order it bites:
 
-- **Minting is stated, not specified.** R41 mints a class neuron where the place most often in the residual is
-  explained by no one neuron. The count that decides "no one neuron", the tie between two such places, and the
-  first-appearance numbering when two neighbors are equally near, are words and not yet arithmetic.
-- **Membership.** R41 says a neuron standing in the class neuron's place in an activation the pattern otherwise
-  fits joins the members, and one no longer seen leaves. "Otherwise fits" and "no longer seen" need the same
-  majority the collapse uses, written down, and a class neuron shared by several patterns needs a rule for
-  which of their populations decides.
+- **Membership is only as wide as the lines.** A neuron joins a role by having a line of the shape (R42). A
+  brand-new pair `p, q, p, q` is covered by the general function only if `q` is already a member, and `q` earns
+  a line of its own only after the pair has recurred, by which time it needs the rule less. Membership has to
+  be able to come from somewhere wider, another shape `q` shares with the members, or the declared dimension as
+  a starting class. Until it does, the general function serves the forgotten and not the new.
+- **The general line is carried on credit.** It is priced on its class's own books and never against the
+  specific lines that beat it in the election, so the dictionary holds both. That is the accepted gap between a
+  neuron's books and the board, met again. **Diagnostic:** for each class neuron, the share of its pattern's
+  occurrences its child actually won.
+- **Shapes are exact.** Two lines share a bucket only if they are identical up to renaming. Two functions that
+  differ by one extra neighbor are different shapes and never meet. Whether a near match should count is open.
+- **The machine holds the dictionary.** R42 keeps every reported line in a bucket. That is state on the scale of
+  the dictionary, not of the run, but it is new state at the machine, and its cost has not been estimated.
 - **Two readings of every activation.** A member's activation is also its class neuron's, so the level is
   processed once per class neuron a member belongs to. The cost has not been estimated.
 - **A binding is a symbol in the file.** D13 prices it; D12 and D14 do not yet write it, and R28's expansion

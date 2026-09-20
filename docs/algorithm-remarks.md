@@ -669,10 +669,32 @@ that population no neuron has the majority anywhere while sameness has it everyw
 then finds the shape once. Generalizing over things needs a population shared by those things, and a neuron
 that fires with all of them is that population.
 
-**On D27 and D41 — the known mechanisms, and where each lands.** The collapse with its two extra questions is
-anti-unification (Plotkin, Reynolds, 1970): keep what the examples agree on, put a variable where they differ,
-and use one variable wherever the same things differ together, here by majority over a population rather than
-unanimity over a pair. Numbering by first appearance is the canonical renaming a programming language uses so
+**On R42 — classes are extracted from functions, not from activations.** A function is what one history keeps
+repeating, and the collapse finds it by looking for what is common. A kind is things that occur in the same
+place at different times, and no single history shows it: in `y`'s history the neighbor is always `x`, in `b`'s
+always `a`. The variation is between the functions. `y`, `b` and `n` have each learned the same line with
+different names in it, and that identity, up to renaming, is the evidence of a kind. So grouping does not vote
+over activations; it lines up dictionary lines and sees where they differ. It still rests on the histories, as
+it must, since a line is a history collapsed, and only structure that recurred enough to pay for a line is ever
+compared, so noise never becomes a class. Grouping and separating are the two forces, each feeding the other:
+separating produces the lines that grouping compares, and grouping produces the class neurons that separating
+then names.
+
+**On R42 — what the general function saves, and what it costs.** Every pattern is priced on its owner's own
+books, against the run written flat, and never against another neuron's pattern. On the class's books the
+general line writes four things as a child and two bindings, saves one per occurrence, and pays for its line
+after five. On `y`'s books the specific line writes the same four as one symbol, saves three, and pays after
+two. Neither knows of the other. They meet in the election, where the specific child covers the same ground for
+a price of one against three and wins, so while the specific line lives the general line's saving is not
+realized in the file: the dictionary holds both, and the general one is carried on its owner's optimistic
+books, the gap between a neuron's books and the board that every losing bidder already has. What the general
+line really saves is one symbol per occurrence on the cases no specific line wins, the rare and the forgotten.
+What it buys beyond the file is reach: its child is one neuron, so what is learned to follow `x, y, x, y` is
+learned for `a, b, a, b` as well. Frequent things get a symbol of their own and the rule handles the rest.
+
+**On D27 and D41 — the known mechanisms, and where each lands.** Lining up two lines and putting a variable
+where they differ is anti-unification in its original form (Plotkin, Reynolds, 1970): keep what the examples
+agree on, put a variable where they differ, and use one variable wherever the same things differ together. Numbering by first appearance is the canonical renaming a programming language uses so
 that two functions differing only in their variable names are the same term. The binding is a pointer on the
 activation, the indirection answer to the binding problem, never learned, which D11 requires; synchrony and
 tensor products are answers for continuous networks and do not fit a machine of discrete symbols. And the
@@ -820,7 +842,7 @@ activation instead of a flag: the age coverage arrived at, since coverage is nev
 does not stop is the reward: a share for a frame already written lands on its connection whether or not coverage
 has arrived since, because the exposure was written and its mean is wrong without the outcome (R33).
 
-# 6. The process frame call
+# 6. The process functions call
 
 **On §6 — why the bill runs before the offer.** The bill used to follow the election, because it read what
 the election had credited. With nothing to read, the only reason to split the call is gone, and the natural
