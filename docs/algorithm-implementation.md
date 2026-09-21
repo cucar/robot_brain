@@ -156,8 +156,9 @@ process actions — made once per frame after every level has run, with every op
 
 **The bill runs inside `process functions`, before the offer** (R20). The neuron covers and folds the new activation,
 retires one pattern, recognizes, re-centers once, builds one candidate, then offers. The election runs after the call
-returns and reports nothing back (R24). A pattern with no child is bid with none; the machine creates the child
-when such a bid is accepted and wires its identity to the pattern once the last level has run (R16); the pattern
+returns and reports nothing back (R24). A pattern with no child is bid with none; the machine gives it a child
+when such a bid is accepted, reused or new (R43), and wires its identity to the pattern once the last level has
+run (R16); the pattern
 is in the table in the call that built it (R17).
 
 **`process actions` is age-blind by construction.** It walks every open activation the machine holds and hands

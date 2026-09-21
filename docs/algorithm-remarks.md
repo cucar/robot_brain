@@ -1221,6 +1221,27 @@ alphabet, one level up, and a symbol the board never bought would never fire: it
 table and no connections, and nothing could name it. So the pattern is bid with no child, and the machine
 mints one the first time the board buys it. Lines stay with the neuron and neurons belong to the machine.
 
+**On R43 — why the candidates are the bids already on the board.** A line can be measured against the board
+only from its owner's activation, because the owner is part of the chunk. An owner on the board was called this
+frame and bid every line of its cover, and a line of its table left out of the cover was displaced by a better
+one from the same table, which was bid instead. So everything a search could find is already among the
+election's bids, measured in the same currency, and no index and no further call is needed.
+
+**On R43 — why reuse is a tie, and what that gives up.** The machine prices the window: what a bid covers on
+the board less what it costs there. In that currency an existing child's bid that did better would have won,
+and one that did worse describes the ground worse, so the only case left is the tie, which is exactly the
+duplicate: `a` holds "`b` is beside me", `b` holds "`a` is beside me", and both bid every time the chunk
+appears. What would favor reusing a near match is the dictionary line it saves, and that is on the neuron's
+books, over its history. Sending the existing line back for the neuron to price was considered and dropped: a
+line written over another neuron's history may not pay on this one's, and the design keeps the two apart, the
+neuron optimizing its history and the machine its window. The cost is that near-duplicates stay two symbols.
+
+**On R43 — a child with several parents.** Each pattern wired to a child is one neuron's view of the chunk,
+with offsets from that neuron, and the child fires at the coordinate of whichever of them bid. So the same
+chunk may stand one position over depending on who won, and the level above sees two nearby offsets for one
+thing. That is accepted. A child was never renamed when its one line re-centered (D29); several lines that
+drift apart are the same thing across parents.
+
 # 7. Contraction
 
 **On the objective — the machine executes it, it does not evaluate it.** The file over one frame is the neurons

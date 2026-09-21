@@ -220,8 +220,9 @@ what it would let a *different* neuron stop paying for. Distinct from election s
 election against a perfect election over the same bids; this measures propose-then-elect against optimizing
 dictionary and frames together. **Diagnostic:** over a short run on one small level, compare the file this
 design writes against the file a joint optimization over the same activations produces. That gap decides whether
-contraction should stay purely a buyer or start supplying candidates back into the tables it covered — the
-constituents of one chunk each build their own near-duplicate of it today, which is where a constructive
+contraction should stay purely a buyer or start supplying candidates back into the tables it covered. The
+constituents of one chunk each build their own line for it; where those lines tie on the board they now share
+one child (R43), and where they are only near each other they still do not, which is where a constructive
 variant would pay first.
 
 ---
@@ -258,9 +259,15 @@ What is still open, in the order it bites:
   as function calls, a function's result being a value of the same kind as its arguments, and the design is not
   done. Until it is, returns stand as D39, R39 and R40 have them, and [addition](algorithm-addition.md) runs on a
   `c` that only a call ever produces, which under D40 could never have written the connection it votes with.
-- **The same kind found by two patterns is two class neurons.** A class neuron stands for one role of one
-  pattern (D41), so `me`'s three patterns hold three, and a second neuron that sees the same things holds its
-  own. Nothing relates them but the level above, where they are neighbors like any others.
+- **A class neuron is shared only by roles bound together.** Two roles come to share a class neuron when their
+  bids bind the same activation in one election (R43). Patterns that cannot fire together never do, so `me`'s
+  three patterns, something coming from ahead, from the left and from the right, hold three class neurons for
+  one kind, and nothing relates them but the level above.
+- **Near-duplicates stay apart, and nothing merges.** A child is reused only on a tie over the same ground
+  (R43). A line that is one neighbor off and does worse on the board gets a child of its own, and two children
+  or two class neurons that turn out to stand for the same thing are never merged. The pull toward reusing a
+  near match is the dictionary line saved, which is on the neuron's books and not in the window the machine
+  prices. **Diagnostic:** pairs of children whose accepted bids cover mostly the same activations, per level.
 - **Whether a binding shared across one cover is paid once.** D13 charges a role to each pattern that binds it.
   Several patterns of one activation's cover bound to the same neuron could state it once.
 - **A class activation does not thin the level.** A child replaces what its pattern covers; a class neuron
@@ -289,7 +296,7 @@ What is still open, in the order it bites:
 - **A call returned by several situations** fires at each of their coordinates (D37). That is taken to be right
   and has not been worked through against "one call per dimension per frame".
 - **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
-  member fires (H2, H5). Under D41 a class neuron stands for one role of one pattern and fires only when an
+  member fires (H2, H5). Under D41 a class neuron stands for the roles of patterns and fires only when an
   accepted bid binds it, so the moment has to be restated.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
   base actions that move it.

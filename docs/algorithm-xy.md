@@ -65,8 +65,9 @@ have no line at all (R14).
 
 `p` adds the pattern to its table and joins it to the covers in its history where it pays, owning the letters
 at the slot places there (R15). The pattern has no child yet, and its roles no class neurons: `p` bids it as it
-is (R17). The first time such a bid is accepted the machine creates the pattern's child, `alternation`, and a
-class neuron for each role, `K` and `J`, one level above `p`, holding nothing (R16, R41).
+is (R17). The first time such a bid is accepted the machine gives the pattern a child and each role a class
+neuron. No other bid of that election covers the same ground or binds the same letters, so nothing can be
+reused (R43), and it creates `alternation`, `K` and `J`, one level above `p`, holding nothing (R16, R41).
 
 # 6. One occurrence
 

@@ -65,11 +65,11 @@ space control acts over.
 
 A frame arrives carrying what each event dimension observed, what each action dimension executed (D8), and any
 rewards for actions already run (D35). The machine works **up one stack, a level at a time**: at each level it
-calls every neuron that fired, elects over their bids, and creates the children and the class neurons the
-accepted bids need, and the level above is built out of what the election accepted (§7). Once the last level has run it wires and deletes
-children, delivers the action that ran and its reward to every open activation, and resolves one action per
-dimension for the frame ahead from what the apex infers (§8). The reward for that action arrives with the next
-frame (R29).
+calls every neuron that fired, elects over their bids, and gives the accepted bids the children and the class
+neurons they need, reused or new, and the level above is built out of what the election accepted (§7). Once the
+last level has run it wires and deletes children, delivers the action that ran and its reward to every open
+activation, and resolves one action per dimension for the frame ahead from what the apex infers (§8). The
+reward for that action arrives with the next frame (R29).
 
 ---
 
@@ -96,8 +96,9 @@ frame (R29).
 > | neuron     | `(dim_id, bucket_id)`                             | structural and defining                                             |
 > | activation | frame, and one position per activation dimension  | fleeting; two activations of one neuron differ in nothing else      |
 >
-> A neuron's channel is the channel owning its dimension. A neuron minted as a pattern inherits its parent's
-> channel and dimension and sits one level above it.
+> A neuron's channel is the channel owning its dimension. A neuron minted for a pattern inherits the channel
+> and dimension of the parent whose bid it was created for and sits one level above it. Other patterns may
+> come to share it (R43), so a child may have several parents.
 >
 > **A child's activation inherits the parent activation's coordinate** — the frame, and the position in every
 > activation dimension — and never an average over what it covers.
@@ -111,9 +112,10 @@ frame (R29).
 | activation | One occurrence of a neuron, at a frame and a position. Holds the neighborhood it observed, and the cover chosen for it.              | D7, D17       |
 
 **A pattern is a pointer to a child, and a child is a neuron.** The two are made apart. A neuron adds a
-**pattern**, a line in its own table that may enter a cover at once, and bids it with no child. The machine
-mints the **child**, a neuron one level up, the first time a bid of that pattern is accepted (R16), and wires it
-to the pattern.
+**pattern**, a line in its own table that may enter a cover at once, and bids it with no child. The first
+time a bid of that pattern is accepted the machine gives it a **child**, a neuron one level up: one it mints, or
+one another pattern already has for the same chunk (R16, R43). **Lines stay with the neuron, and neurons belong
+to the machine.**
 
 What fires is an activation; what a level elects is a bid for a pattern's child; 
 what the dictionary writes is a pattern.
@@ -483,9 +485,9 @@ it is used.
 
 | Call                    | Description                                                                                                                                                       | References |
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------|
-| create neuron           | The machine creates it when an accepted bid needs it, one level above the bidder, holding nothing: a child for a pattern, a class neuron for a role.              | R16, R41   |
+| create neuron           | The machine creates it when an accepted bid needs one and none can be reused, one level above the bidder, holding nothing: a child for a pattern, a class neuron for a role. | R16, R41, R43 |
 | process functions       | In its level's turn: everything structural for the activations that fired this frame.                                                                             | §6, R20    |
-| wire child to pattern   | Once the last level has run, the machine points the pattern at the child it created for it.                                                                        | R16, R17   |
+| wire child to pattern   | Once the last level has run, the machine points the pattern at the child it created or chose for it, and each of its roles at its class neuron.                                                                        | R16, R17   |
 | delete pattern neighbor | The machine removes a neuron that no longer exists from every pattern and saved activation that names it.                                                          | R38        |
 | process actions         | After every level has finished, reaching every open activation at whatever age it stands at: it delivers what ran this frame, the apex action to an event activation and the frame's events to a call, and any reward, and collects what the apex speaks. | §8.1, §8.4 |
 
@@ -638,11 +640,12 @@ an event neuron holds the actions that followed it, and an action neuron holds t
 
 ## 5.9 Class neurons
 
-> **D41 — The class neuron.** The neuron that stands for one role of one pattern (D38). A pattern's child says
+> **D41 — The class neuron.** The neuron that stands for a role (D38): at first one role of one pattern, and
+> every role that comes to share it (R43). A pattern's child says
 > "these happened together"; a class neuron says "one of these happened". It sits where the child sits, one
 > level above the pattern's owner, in the dimension of the role's place, and it is no pattern's child.
 >
-> It fires when an accepted bid of its pattern binds its role (§7.4): at the coordinate of the neuron bound to
+> It fires when an accepted bid binds a role it stands for (§7.4): at the coordinate of the neuron bound to
 > the role, as strong or as weak as that neuron (D40), carrying the **binding**, which neuron it was. It keeps
 > no list of what it has stood for. Whatever neuron stands at the slot's place is bound, seen before or not.
 >
@@ -765,41 +768,44 @@ does not pay. Each that pays joins the table and the covers it was priced on.
 
 > **R16 — What a child is at birth.** The neuron proposes, the election decides, and the machine creates. A
 > pattern is the neuron's own: it is added, used in covers and bid on the neuron's evidence alone. A pattern
-> with no child is bid as it is, and the bid asks for the child to be created if it is accepted (D31). **The
-> machine creates a child only for an accepted bid**, so no neuron exists for a pattern the board never bought.
-> The child inherits its parent's channel and dimension and is minted one level above it. It is created with
+> with no child is bid as it is, and the bid asks for a child if it is accepted (D31). **The machine gives a
+> child only to an accepted bid**, so no neuron exists for a pattern the board never bought, and it reuses a
+> child before it creates one (R43). A new child inherits its parent's channel and dimension and is minted one
+> level above it. It is created with
 > **an empty table**: its own patterns belong to its own level, which it has not observed yet. Its *existence*
 > is decided by the election, its *structure* by itself.
 >
-> **A neuron may hold many children, and they do not contend.** Each is one pattern's child, each covers the
-> part of an activation its pattern owns, and several of them may be promoted at one coordinate (D8). What
-> they share is a parent and a coordinate, not a place on the board.
+> **A neuron may hold many children, and they do not contend.** Each covers the part of an activation its
+> pattern owns, and several of them may be promoted at one coordinate (D8). What they share is a parent and a
+> coordinate, not a place on the board. **A child may have many parents**: every pattern wired to it promotes
+> it, each from its own neuron's position (R43).
 >
 > **Release is the reverse**: the parent retires, the machine reclaims. The retired patterns go on the return
-> (R20), and a retired pattern that never had a child leaves nothing to reclaim.
+> (R20). A retired pattern that never had a child leaves nothing to reclaim, and one whose child other patterns
+> still promote leaves the child alone (R38).
 >
-> **Creating and wiring are separate, and only wiring waits.** The machine creates the child the moment the
-> bid is accepted — an id, its parent, its level, the coordinate it inherits (D2) and an empty table — which
+> **Creating and wiring are separate, and only wiring waits.** The machine creates or chooses the child the
+> moment the bid is accepted — an id, its parent, its level, the coordinate it inherits (D2) and an empty table — which
 > is all the frame needs to activate it and call it (R17). Once the last level has run it points every pattern
-> at the child created for it and reclaims every retired pattern's child now due (R18), in one pass over its
+> at the child created or chosen for it and reclaims every retired pattern's child now due (R18), in one pass over its
 > own alphabet. Nothing in the frame reads that pointer except a later bid, so **the wait costs nothing**.
 
 > **R17 — A pattern added in a call is bid in it.** The candidate joins the parent's table and the covers
 > it was priced on in the call (R15), so every activation of the frame whose cover it joined bids it (R20), with
-> no child, and the bid competes like any other. If it wins, the machine creates the child, activates it one
-> level up and calls it with that level, where it records its first neighborhood and nothing more: its table is
-> empty, and a candidate needs two neighborhoods (R14). If it loses, there is no child; the pattern stays in the
+> no child, and the bid competes like any other. If it wins, the machine gives it a child, reused or new (R43),
+> activates it one level up and calls it with that level. A new child records its first neighborhood there and
+> nothing more: its table is empty, and a candidate needs two neighborhoods (R14). If it loses, there is no child; the pattern stays in the
 > table on its own margin (D30) and is bid again whenever it is in a cover.
 >
 > **It is born holding nothing.** No patterns, no history and no connections (R16). Everything it comes to
 > hold is over the situations its parent's pattern actually took (D25), from its first activation on.
 
-> **R41 — The life of a class neuron.** **Created** when an accepted bid first binds its role: a pattern added
+> **R41 — The life of a class neuron.** **Given** when an accepted bid first binds a role: a pattern added
 > with a slot, or re-centered into one (D29), bids the role with no class neuron, as it bids with no child, and
-> the machine creates the class neuron when the bid is accepted (R16). It is born holding nothing, as a child
-> is (R17). **Fired** by the election and by nothing else (§7.4). **Dead** when its role goes, by the pattern
-> retiring (R18) or by a re-centering that drops the role: it goes on the death ledger and is deleted like any
-> neuron nothing can fire again (R38). Nothing is priced for it: the pattern that names the role pays for the
+> when the bid is accepted the machine gives the role one, reused or new (R43). A new one is born holding
+> nothing, as a child is (R17). **Fired** by the election and by nothing else (§7.4). **Dead** when the last role
+> it stands for goes, by a pattern retiring (R18) or by a re-centering that drops the role: it goes on the death
+> ledger and is deleted like any neuron nothing can fire again (R38). Nothing is priced for it: the pattern that names the role pays for the
 > binding (D13), and the pattern is what is added and retired. What a class neuron's own table holds it builds
 > itself, from its pooled history, by the greedy pick and the collapse like any neuron (D33, D27), priced by
 > its own margin (D30).
@@ -809,8 +815,9 @@ does not pay. Each that pays joins the table and the covers it was priced on.
 The call returns two lists of patterns: **the bids**, one per pattern of each of the frame's activations'
 covers (D31, R21), and **the patterns retired** this call (R18). A bid is a line of the table, the pattern's
 id, its neighbors and its child (D32), with its bindings (D31). A pattern that has never won a bid has no child,
-and its bid says so: if it is accepted the machine creates the child (R16), and a class neuron for each role
-the pattern has (R41), and wires the child's id to the pattern by the wire call, naming the pattern's id (§5.1).
+and its bid says so: if it is accepted the machine gives it a child, and a class neuron for each role the
+pattern has, reused or new (R16, R41, R43), and wires them to the pattern by the wire call, naming the pattern's
+id (§5.1).
 A pattern retired is named by its id, and the machine deletes its child and its class neurons, if it has
 any, when they are due (R18).
 
@@ -838,7 +845,7 @@ accepts no bid:
 |-------------------|---------------------------------------------------------------------------------------------------------------|
 | process functions | Call every neuron with an activation at this level, class neurons included (§6).                              |
 | elect bids        | Cover the level's uncovered activations with the bids, by the greedy cover over the board.                    |
-| create children   | Create the child of every accepted bid that has none, and the class neuron of every role it bound that has none. |
+| create children   | Give every accepted bid that has no child one, and every role it bound that has no class neuron one: reused where another bid of the election tied it, created otherwise (R43). |
 | activate children | Every accepted bid activates its child one level up, and the class neuron of each role it bound; the uncovered stand on the apex. |
 
 Then, once the last level has run:
@@ -970,16 +977,39 @@ bid**, which is what stops a chunk being paid for twice.
 
 ## 7.3 Create children
 
-The machine creates the child of every accepted bid whose pattern has none: an id, its parent, its level, the
-coordinate it inherits (D2) and an empty table (R16). A bid that lost creates nothing. A class neuron is created
-the same way for every role the bid bound that has none, at the child's level, in the dimension of the role's
-place (R41). Once the last level has run, the machine points every pattern at the child created for it by the
-wire call (§5.1).
+Every accepted bid whose pattern has no child is given one, and every role it bound that has no class neuron
+is given one. A bid that lost is given nothing.
+
+> **R43 — Reuse or new.** The candidates for reuse are the bids already on the board. Every neuron the accepted
+> bid covered was called this frame and bid every line of its cover (R21), so a line that describes this ground
+> from another of its neurons is among this election's bids, measured on the same board at the same prices
+> (R22).
+>
+> **A child is reused on a tie.** If another bid of this election carries a child, and names, its bidder
+> included, exactly the activations the accepted bid was credited, at the same price, the two lines state one
+> chunk from two of its neurons, and the accepted bid's pattern is wired to that child. Between several such
+> bids the older child is taken. A bid that measured better than the accepted one would have been taken before
+> it (D28), so reuse is only ever a tie; a bid that does better than every bid carrying a child states a
+> different chunk, and gets a child of its own.
+>
+> **A class neuron is reused on the same argument.** If another bid of this election bound a role that has a
+> class neuron to the activation the accepted bid bound its role to, the role is wired to that class neuron.
+>
+> **Otherwise the machine creates one**: an id, its parent, its level, the coordinate it inherits (D2) and an
+> empty table (R16); a class neuron at the child's level, in the dimension of the role's place (R41).
+>
+> **Nothing is sent back.** The pattern stays the neuron's own line and keeps re-centering on its own history
+> (D29); only the pointer is shared. Lines wired to one child may drift apart, as one line drifts over time,
+> and the child stands for all of them. The neuron optimizes its history and the machine its window.
+
+Once the last level has run, the machine points every pattern at the child created or chosen for it, and every
+role at its class neuron, by the wire call (§5.1).
 
 ## 7.4 Activate children
 
 Every accepted bid activates its child one level up, at the bidder's coordinate (D2), carrying the bid's
-bindings. For each role the bid bound it also activates the role's class neuron (D41), at the same level as the
+bindings. The activation records the pattern whose bid fired it, since a child may have several (R43), and is
+expanded through that pattern (R28). For each role the bid bound it also activates the role's class neuron (D41), at the same level as the
 child, at the coordinate of the neuron bound to the role — the nearest one where the role is named at several
 offsets — carrying that binding. Every activation no accepted bid covers stands as itself.
 
@@ -1018,15 +1048,17 @@ it is recorded in the `process actions` pass instead (R31).
 
 ## 7.5 Delete children
 
-> **R38 — A child dies when its last open activation closes.** A pattern the neuron retired (R18) names a child
-> the machine still holds, unless no bid of it was ever accepted and there is nothing to delete (R16). The neuron says nothing about when it should go: it sees its own open activations and
-> not the children promoted off them, while the machine sees both.
+> **R38 — A child dies when its last parent has retired and its last open activation closes.** A pattern the
+> neuron retired (R18) names a child the machine still holds, unless no bid of it was ever accepted and there
+> is nothing to delete (R16). The machine wired every pattern that promotes the child (R43), so it knows when
+> the retired one was the last; while another remains the child lives and only the retired pattern goes. The
+> neuron says nothing about when the child should go: it sees its own open activations and not the children
+> promoted off them, while the machine sees both.
 > ```
 > death frame   =   when the child's last open activation closes
 >               =   this frame, when none is open
 > ```
-> That set only shrinks. A child has one parent (D2), so once that parent stops covering with it
-> nothing can fire it again, and no level built afterward can name it either, because a level is built out of
+> That set only shrinks. Once every pattern wired to the child has retired nothing can fire it again, and no level built afterward can name it either, because a level is built out of
 > what is firing (R26). Reach grows with the level (D4), so the last to close is the highest one and the wait
 > is at most `reach_t(D)` frames, `D` being the highest level the stack currently holds.
 >
@@ -1037,10 +1069,11 @@ it is recorded in the `process actions` pass instead (R31).
 > a frame longer. **Nothing traces who is naming what**: the machine settles the question off the board it
 > already keeps.
 >
-> **The ledger holds the pattern, not a handle to it.** A child is stated in one place, its parent's pattern
-> for it (D12), and the child is expanded through that pattern (R28). Until the death frame, neurons
-> above it still cover it and the apex may still expand it, so the definition has to stay readable after the
-> table stops covering with it.
+> **The ledger holds the pattern, not a handle to it.** A child is stated by the patterns wired to it (D12),
+> and each activation of it is expanded through the pattern whose bid fired it (R28, §7.4). Until the
+> activations a retired pattern fired have closed, neurons above them still cover them and the apex may still
+> expand them, so that pattern has to stay readable after the table stops covering with it, whether or not the
+> child lives on.
 
 # Part IV — The future: action and reward
 
@@ -1203,7 +1236,7 @@ stop the writing — there is no second call and nothing is saved twice.
 ## 8.2 Expansion
 
 > **R28 — Expansion.** A neuron above the base is not yet anything in the base alphabet. Expanding it recovers
-> the neighbors its pattern names one level down, at that neuron's offset plus theirs — offsets compose because
+> the neighbors named one level down by its pattern, the one whose bid fired the activation (§7.4), at that neuron's offset plus theirs — offsets compose because
 > each is a difference of activation coordinates (D2) — repeated to base symbols, one level fewer than the
 > neuron's height.
 > ```
