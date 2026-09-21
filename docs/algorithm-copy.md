@@ -3,8 +3,8 @@
 A worked case for [algorithm.md](algorithm.md): a machine that holds on to whatever digit it was just shown,
 `a => a`, written out neuron by neuron. Nothing here is normative, and the machine is shown running: its tables
 and connections are as listed, and its histories already hold moments like this one. It shows a value travelling
-the whole loop without anything being decided per value: a class neuron binds what was seen, the binding rides
-the call, and the call's return names the same class neuron, so what comes back is what went in.
+the whole loop without anything being decided per value: a slot binds what was seen, the binding rides
+the call, and the call's return names the slot's class neuron, so what comes back is what went in.
 
 ---
 
@@ -20,8 +20,8 @@ event fires the frame before, and a `show` event fires in the frame the digit do
 | Kind | Neurons |
 |---|---|
 | base events | `ready`, `show`, and the ten digits |
-| class neuron | `Digit`, in dimension `d`, whose members are the ten digits (D41) |
-| base action | `hold`, in an action dimension the environment does not have, so every call of it is weak (D40) |
+| class neuron | `Digit`, for the one role of the pattern below, in dimension `d` (D41) |
+| base action | `hold`, in an action dimension the environment does not have, so nothing outside the machine sees it run (D37) |
 | pattern | one, in the table of `show`, with its child `shown` |
 
 # 3. The situation
@@ -31,10 +31,10 @@ The pattern in `show`'s table names two neighbors:
 | names | offset |
 |---|---|
 | `ready` | one frame ago |
-| `Digit` | now |
+| `Digit¹`, a slot in dimension `d` | now |
 
-`Digit` is present when any digit stands beside `show`, and the activation of `shown` carries which one: its
-binding, `Digit = 7` (D38, D41). The pattern pays for its line because it names `ready`: three activations,
+The slot is present when any digit stands beside `show`, and the activation of `shown` carries which one: its
+binding, `Digit = 7` (D38). The pattern pays for its line because it names `ready`: three activations,
 `ready`, `show` and the digit, are written as the child and one binding.
 
 # 4. What the situation returns, and what that returns
@@ -46,7 +46,7 @@ binding, `Digit = 7` (D38, D41). The pattern pays for its line because it names 
 
 Neither connection names a digit. The call of `hold` fires at the coordinate of the `shown` activation that
 returned it and carries that activation's bindings (D37), so inside the call `Digit` still stands for `7`. When
-`hold` runs, its return names the class neuron, and what fires is the member it is bound to (R40): the digit `7`,
+`hold` runs, its return names the class neuron, and what fires is the neuron it is bound to (R40): the digit `7`,
 weakly, there for that frame and gone.
 
 # 5. One showing, frame by frame
@@ -54,11 +54,11 @@ weakly, there for that frame and gone.
 | Frame | runs | input | on the apex | chooses |
 |---|---|---|---|---|
 | 1 | | `ready` | `ready` | |
-| 2 | | `show`, `7`, and `Digit` bound to `7` | `shown`, `Digit = 7` | `hold`, carrying `Digit = 7` |
-| 3 | `hold`, weakly | `7`, weakly, returned by `hold` | `7` | |
+| 2 | | `show`, `7` | `shown`, `Digit = 7` | `hold`, carrying `Digit = 7` |
+| 3 | `hold` | `7`, weakly, returned by `hold` | `7` | |
 
-In frame 2 the `7` reports `Digit` in `process classes` and the machine adds the `Digit` activation beside it
-(§6.6, §7.1), the pattern covers `ready`, `show` and the `7`, and its child stands on the apex. In frame 3 the world shows
+In frame 2 the slot is bound to the `7` standing beside `show`, the pattern covers `ready`, `show` and the `7`,
+and its child stands on the apex with the binding (§7.4). In frame 3 the world shows
 nothing, and the `7` is there anyway.
 
 Show a `3` instead and nothing in the machine is different: the same pattern fits, the same two connections
@@ -69,7 +69,7 @@ ever says which digit it is.
 
 | in the code | in the machine |
 |---|---|
-| the parameter `a` | the class neuron `Digit`, named in the situation's body |
+| the parameter `a` | the role `Digit¹`, a slot in the situation's body |
 | the argument passed | the binding `Digit = 7`, carried by the activation and then by the call |
 | the function | `hold`, called by the situation's connection |
 | `return a` | `hold`'s event connection, which names `Digit` |

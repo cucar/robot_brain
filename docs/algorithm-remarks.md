@@ -655,85 +655,82 @@ All four come from one decision, that a base action says where it acts, and all 
 a base action acts is a focus the environment holds and the machine sees, which is the head of the Turing
 machine the design already is, and a fovea. Nothing is declared about an action but its place in the alphabet.
 
-**On D41 — the second axis.** A child says "these things together are one bigger thing": part to whole, up a
-level, bought in an election, and once bought it replaces its parts. A class neuron says "this thing is one of a
-kind": instance to kind, at the same level, fired by nothing but a member firing, and replacing nothing. One
-firing causes another at the same coordinate in the same frame in both cases; the axis is what differs. The
-design had the first axis from the start. The second is what "whatever", "the same thing" and "one of these"
-all needed, and it is one object.
+**On D41 — the second axis.** A child says "these things happened together": an AND, part to whole. A class
+neuron says "one of these happened": an OR, instance to kind. Both are bought in the same election, by the same
+bid, and both fire one level up: the child for the call and a class neuron for each argument. The design had
+the first axis from the start. The second is what "whatever", "the same thing" and "one of these" all needed,
+and it is one object.
 
-**On D41 — why it has a history of its own.** A pattern lives in the table of the neuron that fired, so
-`x, y, x, y` is evidence in `y`'s history, `a, b, a, b` in `b`'s and `m, n, m, n` in `n`'s, and no neuron ever
-sees the three side by side. A class neuron fires with each of its members, so its history pools theirs, and in
-that population no neuron has the majority anywhere while sameness has it everywhere. The ordinary collapse
-then finds the shape once. Generalizing over things needs a population shared by those things, and a neuron
-that fires with all of them is that population.
+**On D41 — why it keeps no list.** A person who thinks of a bridge does not run through every bridge they have
+seen, and that is the point of having the kind. What a class neuron has stood for is in its history and in its
+connections, pooled, and nowhere as a list. Membership is decided by the place and not by a record: whatever
+stands where the slot is, is bound. A list used as a filter would be only as wide as what had been seen, so the
+pattern would fail exactly where it is wanted, on the rare, the once-seen and the new.
 
-**On R42 — classes are extracted from functions, not from activations.** A function is what one history keeps
-repeating, and the collapse finds it by looking for what is common. A kind is things that occur in the same
-place at different times, and no single history shows it: in `y`'s history the neighbor is always `x`, in `b`'s
-always `a`. The variation is between the functions. `y`, `b` and `n` have each learned the same line with
-different names in it, and that identity, up to renaming, is the evidence of a kind. So grouping does not vote
-over activations; it lines up dictionary lines and sees where they differ. It still rests on the histories, as
-it must, since a line is a history collapsed, and only structure that recurred enough to pay for a line is ever
-compared, so noise never becomes a class. Grouping and separating are the two forces, each feeding the other:
-separating produces the lines that grouping compares, and grouping produces the class neurons that separating
-then names.
+**On D41 — why it has a history of its own.** A pattern lives in the table of the neuron that fired, so what
+surrounds a `ball` is evidence in `ball`'s history and what surrounds a `fist` in `fist`'s, and no neuron sees
+the two side by side. A class neuron fires for each of them in turn, so its history pools theirs. Generalizing
+over things needs a population shared by those things, and a neuron that fires for all of them is that
+population.
 
-**On R42 — what the general function saves, and what it costs.** Every pattern is priced on its owner's own
-books, against the run written flat, and never against another neuron's pattern. On the class's books the
-general line writes four things as a child and two bindings, saves one per occurrence, and pays for its line
-after five. On `y`'s books the specific line writes the same four as one symbol, saves three, and pays after
-two. Neither knows of the other. They meet in the election, where the specific child covers the same ground for
-a price of one against three and wins, so while the specific line lives the general line's saving is not
-realized in the file: the dictionary holds both, and the general one is carried on its owner's optimistic
-books, the gap between a neuron's books and the board that every losing bidder already has. What the general
-line really saves is one symbol per occurrence on the cases no specific line wins, the rare and the forgotten.
-What it buys beyond the file is reach: its child is one neuron, so what is learned to follow `x, y, x, y` is
-learned for `a, b, a, b` as well. Frequent things get a symbol of their own and the rule handles the rest.
+**On D27 — where a kind is found.** The things of a kind are alternatives, so they never appear together in a
+frame: a ball or a fist stands at that place, never both. Where they do appear together is a history, one
+neuron recording, across many of its activations, one place filled by a different neuron each time. So the
+evidence of a kind is in the same population the collapse already reads, and the collapse decides it with the
+same count: a place that keeps happening while what stands there keeps changing. Finding what is the same and
+finding what differs are one operation over one history.
 
-**On D27 and D41 — the known mechanisms, and where each lands.** Lining up two lines and putting a variable
+**On D27 and D33 — what a slot saves, and when it is written.** Nothing prices a class neuron; only patterns
+have prices. A slot adds one to its pattern's coverage wherever it is filled and one to its price per role, so a
+pattern with a role named twice saves one per activation where the specific pattern would save two. It wins on
+the margin (D30) by covering more of the history: three fillers at fifty, thirty and twenty activations are
+better served by three specific lines, and fifty fillers seen twice each by one line with a slot, and a filler
+seen once can have no line of its own at all (R14). The collapse sorts the two cases by itself, since a filler
+frequent enough to hold the majority is named and the rest are left to the next round's slot. Frequent things
+keep a symbol of their own and everything else goes through the class.
+
+**On R36 — a neuron bound to many roles votes many times.** Every class activation is a voter, so an event that
+several accepted bids bound produces several voters where an event nothing bound produces one, and a
+candidate's estimate is a mean over voters. This is accepted: a thing that takes part in more of what the
+machine has found worth writing down is more likely to matter.
+
+**On D27 and D38 — the known mechanisms, and where each lands.** Lining up examples and putting a variable
 where they differ is anti-unification in its original form (Plotkin, Reynolds, 1970): keep what the examples
-agree on, put a variable where they differ, and use one variable wherever the same things differ together. Numbering by first appearance is the canonical renaming a programming language uses so
-that two functions differing only in their variable names are the same term. The binding is a pointer on the
-activation, the indirection answer to the binding problem, never learned, which D11 requires; synchrony and
-tensor products are answers for continuous networks and do not fit a machine of discrete symbols. And the
-design has an answer of its own that the literature mostly lacks: the role is the offset. "Whatever is one to
-my left" binds a thing to a role by location, with no pointer needed until the thing has to travel.
+agree on, put a variable where they differ, and use one variable wherever the same things differ together. The
+collapse does it over the neighborhoods of one history. Numbering by first appearance is the canonical renaming
+a programming language uses so that two functions differing only in their variable names are the same term. The
+binding is a pointer on the activation, the indirection answer to the binding problem, never learned, which D11
+requires; synchrony and tensor products are answers for continuous networks and do not fit a machine of discrete
+symbols. And the design has an answer of its own that the literature mostly lacks: the role is the offset.
+"Whatever is one to my left" binds a thing to a role by location, with no pointer needed until the thing has to
+travel.
 
-**On D38 — what a class neuron saves.** It is priced as a neighbor, one in the line, and its binding costs one
-per activation, which is what the thing standing there would have cost beside the child. So a class neuron
-named once nets nothing: the symbol moves from beside the child to inside it. It pays the moment it is named
-twice, since the unknown is written once for two covered activations, and it pays against the real
-alternative, one pattern per variant, each with a line of its own and none at all for a variant seen once. A
-pattern whose whole body is one class neuron saves nothing and is retired (R18); a pattern has to name
-something.
+**On D38 — what a slot saves.** It is priced as a neighbor, one in the line, and its binding costs one per
+activation, which is what the thing standing there would have cost beside the child. So a role named at one
+offset nets nothing: the symbol moves from beside the child to inside it. It pays the moment it is named twice,
+since the unknown is written once for two covered activations, and it pays against the real alternative, one
+pattern per variant, each with a line of its own and none at all for a variant seen once. A pattern whose whole
+body is one slot saves nothing and is retired (R18); a pattern has to name something.
 
-**On D38 — how branching works.** There is no branch inside a body, and there are two places a choice is made.
-The first is dispatch: two situations are two patterns, and which one fires is the whole of "if". "If there is
-a carry, write 1" is a carry pattern with a lesson and a no-carry pattern with another, and nothing inspects a
-condition, because recognition already did. The second is the class: a class neuron's members are the closed
-set of what can stand in its place, which is what an exclusive choice is in a process model. Loops are the same
-story one level up: a constant repeat is unrolled in the body, and a repeat that depends on the world is the
-situation recurring and being dispatched again until it stops recurring.
+**On D38 — how branching works.** There is no branch inside a body. The choice is dispatch: two situations are
+two patterns, and which one fires is the whole of "if". "If there is a carry, write 1" is a carry pattern with a
+lesson and a no-carry pattern with another, and nothing inspects a condition, because recognition already did.
+Loops are the same story one level up: a constant repeat is unrolled in the body, and a repeat that depends on
+the world is the situation recurring and being dispatched again until it stops recurring.
 
-**On D40 — weak and strong, and why nothing else tells them apart.** An event function returns actions (D25)
+**On D40 — weak and strong, and why only events have the distinction.** An event function returns actions (D25)
 and an action function returns events (D39); the run is the two composed, and the machine holds both halves.
-Strong is what crosses the boundary with the world and weak is what stays inside, on both sides: a returned
-event was never reported, and `carry-1` is never sent. A returned event is a variable, written by a call and
-read by recognition like anything else, and it is the same neuron as the one the world would report, so what a
-pattern learned on the seen thing holds for the returned one. What keeps it from being mistaken for the world
-is that it does not persist: a prediction is there for the frame it is about and then gone, while what the
-world reports stays open for its reach. The literature's oldest answer has the same shape: a motor command
-sends a copy of itself to a predictor, the prediction is compared with what comes back rather than mixed with
-it (von Holst and Mittelstaedt, Sperry, 1950; Wolpert, Ghahramani and Jordan, 1995), and losing the distinction
-is hallucination.
-
-**On D41 — a moment is a class neuron.** [hippocampus.md](hippocampus.md) mints a neuron at a salient instant
-that no table holds and no election fires, and lets the collapse over its history drop what its instants do not
-share. That is D41 minted at the top of the stack, and with D27's clause an aged moment keeps the places that
-are always filled by something different as class neurons of its own: a fixed core and roles, which is a
-schema. Minting is salience in both: the place the table keeps failing on, that no one neuron explains.
+The boundary with the world is one-way for each kind: the machine can make the world perform an action and
+cannot make it show an event. So an event the machine put in the frame is a different thing from one the
+environment reported, and an action is the same thing whether or not anything outside executes it. A weak event
+is a variable, written by a call and read by recognition like anything else, and it is the same neuron as the
+one the world would report, so what a pattern learned on the seen thing holds for the returned one, and what
+the neuron learned to do while seen it votes for while returned. It learns nothing itself: a returned `7` that
+wrote exposures would mix what followed imagining a `7` into what followed seeing one. What keeps it from being
+mistaken for the world is that it does not persist, and that the world's report replaces it. The literature's
+oldest answer has the same shape: a motor command sends a copy of itself to a predictor, the prediction is
+compared with what comes back rather than mixed with it (von Holst and Mittelstaedt, Sperry, 1950; Wolpert,
+Ghahramani and Jordan, 1995), and losing the distinction is hallucination.
 
 **On R37 — the machine satisfices, on purpose.** A new action is wired only when an estimate turns negative, so
 a machine whose situation is good enough does not explore, and one that explores does so in the declared order
@@ -751,7 +748,7 @@ same behavior is a chain of one-step lessons, each returned by the situation the
 **On D37 — where calls come from.** A call the environment executes appears in the frame as an activation of
 that action (D37), and sits in the action neuron's history as a pixel sits in an event neuron's. So a
 demonstration is a population of calls, the action hierarchy chunks them, the collapse abstracts what varied
-into class neurons, and the event patterns that stood on the apex connect to what followed, bindings included.
+into slots, and the event patterns that stood on the apex connect to what followed, bindings included.
 
 **On D25 — connections are measured, never chosen.** A connection is not in the bid (D31), not in any dictionary
 line (D13), and it enters no test. Connections are read in one place, when the activation stands on the apex

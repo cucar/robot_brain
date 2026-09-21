@@ -245,27 +245,30 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 # 3. Open questions
 
 **Patterns as functions and class neurons (D37–D41) — what stands between the model and an implementation.**
-Base actions take no arguments and act at a focus the environment holds; a slot is a class neuron named at an
-offset; an event function returns actions and an action function returns events, weakly. Four cases are
+Every level is explained as a set of function calls with arguments: an accepted bid is a call, its child is the
+function and its bindings are the arguments, each standing one level up as a class neuron (§7.1). Base actions
+take no arguments and act at a focus the environment holds; a slot is a place with a role; an event function
+returns actions and an action function returns events, weakly. Four cases are
 worked by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md), [hit](algorithm-hit.md),
 [an alternating pair](algorithm-xy.md)).
 What is still open, in the order it bites:
 
-- **Membership is only as wide as the lines.** A neuron joins a role by having a line of the shape (R42). A
-  brand-new pair `p, q, p, q` is covered by the general function only if `q` is already a member, and `q` earns
-  a line of its own only after the pair has recurred, by which time it needs the rule less. Membership has to
-  be able to come from somewhere wider, another shape `q` shares with the members, or the declared dimension as
-  a starting class. Until it does, the general function serves the forgotten and not the new.
-- **The general line is carried on credit.** It is priced on its class's own books and never against the
-  specific lines that beat it in the election, so the dictionary holds both. That is the accepted gap between a
-  neuron's books and the board, met again. **Diagnostic:** for each class neuron, the share of its pattern's
-  occurrences its child actually won.
-- **Shapes are exact.** Two lines share a bucket only if they are identical up to renaming. Two functions that
-  differ by one extra neighbor are different shapes and never meet. Whether a near match should count is open.
-- **The machine holds the dictionary.** R42 keeps every reported line in a bucket. That is state on the scale of
-  the dictionary, not of the run, but it is new state at the machine, and its cost has not been estimated.
-- **Two readings of every activation.** A member's activation is also its class neuron's, so the level is
-  processed once per class neuron a member belongs to. The cost has not been estimated.
+- **How a computed value comes back as an input.** The result of recognizing a situation is its child, one level
+  up, and nothing that takes a digit can read it as a digit; the carry is the case. The direction is to build it
+  as function calls, a function's result being a value of the same kind as its arguments, and the design is not
+  done. Until it is, returns stand as D39, R39 and R40 have them, and [addition](algorithm-addition.md) runs on a
+  `c` that only a call ever produces, which under D40 could never have written the connection it votes with.
+- **The same kind found by two patterns is two class neurons.** A class neuron stands for one role of one
+  pattern (D41), so `me`'s three patterns hold three, and a second neuron that sees the same things holds its
+  own. Nothing relates them but the level above, where they are neighbors like any others.
+- **Whether a binding shared across one cover is paid once.** D13 charges a role to each pattern that binds it.
+  Several patterns of one activation's cover bound to the same neuron could state it once.
+- **A class activation does not thin the level.** A child replaces what its pattern covers; a class neuron
+  stands one for one with the neuron bound to it, so a level built from calls with many arguments is wider than
+  D4's doubling reach assumes. **Diagnostic:** class activations per accepted bid, per level.
+- **A slot takes anything of its dimension.** Nothing narrows a role to the kind of thing that has filled it, so
+  a pattern with slots fires for fillers its lessons were never learned on, and its estimates average them in. A
+  frequent filler is taken out by a line of its own (D27); a rare one is not.
 - **A binding is a symbol in the file.** D13 prices it; D12 and D14 do not yet write it, and R28's expansion
   needs it to recover the run.
 - **A function is callable only from a situation whose window holds it.** A voter can start a program only
@@ -282,12 +285,12 @@ What is still open, in the order it bites:
   a dense layout is every cell. It has not been measured. A returned event that recreates the situation that
   called the action is a loop with no world in it, and nothing breaks it but reward.
 - **Crossing kinds.** A binding carries an event as an event. "Write the digit you see" needs the action that
-  corresponds to a seen event, and a class of events and a class of actions have no correspondence between
-  their members. Copy (algorithm-copy.md) returns the event it was given and does not need one; writing it does.
+  corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. Copy (algorithm-copy.md) returns the event it was given and does not need one; writing it does.
 - **A call returned by several situations** fires at each of their coordinates (D37). That is taken to be right
   and has not been worked through against "one call per dimension per frame".
-- **The hippocampus document predates D41.** Its moment has a firing rule and a death rule of its own (H2, H5);
-  under D41 it has neither. H1, H2 and H5 are restated; the rest of that document still reads the old way.
+- **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
+  member fires (H2, H5). Under D41 a class neuron stands for one role of one pattern and fires only when an
+  accepted bid binds it, so the moment has to be restated.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
   base actions that move it.
 

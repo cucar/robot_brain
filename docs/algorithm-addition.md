@@ -22,7 +22,7 @@ The environment holds nothing else. There is no sheet, no position and no carry 
 # 2. The carry
 
 The carry is internal. A second action dimension, `carry`, has one base action, `carry-1`. The environment
-does not have that dimension, so `carry-1` is a weak action (D40): it runs and nothing outside sees it. It
+does not have that dimension, so `carry-1` runs and nothing outside the machine sees it (D37). It
 returns the event `c` (D39): in the frame `carry-1` runs, `c` fires weakly, beside that frame's pair of digits,
 there for that frame and gone. Writing the carry is running `carry-1`; reading it is recognizing `c`. That is
 the whole of the variable.
