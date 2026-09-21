@@ -64,9 +64,9 @@ have no line at all (R14).
 # 5. The return
 
 `p` adds the pattern to its table and joins it to the covers in its history where it pays, owning the letters
-at the slot places there (R15). On the same return it asks the machine for the pattern's child, `alternation`,
-and for a class neuron for each role, `K` and `J` (R41). The machine creates all three, one level above `p`,
-holding nothing.
+at the slot places there (R15). The pattern has no child yet, and its roles no class neurons: `p` bids it as it
+is (R17). The first time such a bid is accepted the machine creates the pattern's child, `alternation`, and a
+class neuron for each role, `K` and `J`, one level above `p`, holding nothing (R16, R41).
 
 # 6. One occurrence
 
@@ -75,7 +75,7 @@ holding nothing.
 | Stage | what happens |
 |---|---|
 | `process functions`, in `p` | The line fits: `b` stands one back and three back, `a` two back and four back. `p` bids `alternation`, carrying `K¹ = b`, `J¹ = a` (D31). |
-| the election | The bid covers `p` and the four letters for a price of three, and is accepted. |
+| the election | The bid covers `p` and the four letters for a price of three, and is accepted. Were this the pattern's first accepted bid, `alternation`, `K` and `J` would be created here. |
 | activate children | One level up, `alternation` fires at `p`'s coordinate with both bindings. `K` fires at the coordinate of the nearest `b`, bound to `b`, and `J` at the nearest `a`, bound to `a` (§7.4). |
 
 The level above reads `alternation(b, a)`: a call and its two arguments.

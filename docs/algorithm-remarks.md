@@ -260,7 +260,7 @@ costs a symbol and delivers nothing, while a neighbor left unnamed costs its own
 cost a line, so it is free either way.
 **On D22 — the two sums are what the two mechanisms work against, and that is the whole division of labor.**
 The election works on the body half over a given dictionary — it is priced in exactly that sum, for the
-frames it can see, though it does not minimize it (§7.3). The margin decides the dictionary half, pattern
+frames it can see, though it does not minimize it (§7.2). The margin decides the dictionary half, pattern
 by pattern (D30). Neither can do the other's job: the election cannot create or destroy a symbol, and a neuron
 cannot see what its symbol saved.
 
@@ -1213,7 +1213,13 @@ frame so that structure would pay off only on recurrence. R15 already prices the
 over the whole history, so the withholding protected nothing; what it did was activate the child by fiat,
 beside the election's winners and outside the election, at the cost of one lost exposure and a page of
 special cases. Offering the pattern through the election puts the child through the same test as every
-other child, and its life begins at its first activation, bought or not.
+other child, and its life begins at its first activation.
+
+**On R16 — why a child waits for an accepted bid.** A pattern is a neuron's claim about its own history, and the
+neuron is free to make it, keep it and bid it on its own evidence. A child is a symbol in the machine's
+alphabet, one level up, and a symbol the board never bought would never fire: it would hold no history, no
+table and no connections, and nothing could name it. So the pattern is bid with no child, and the machine
+mints one the first time the board buys it. Lines stay with the neuron and neurons belong to the machine.
 
 # 7. Contraction
 

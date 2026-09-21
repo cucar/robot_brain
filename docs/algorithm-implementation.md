@@ -156,8 +156,9 @@ process actions — made once per frame after every level has run, with every op
 
 **The bill runs inside `process functions`, before the offer** (R20). The neuron covers and folds the new activation,
 retires one pattern, recognizes, re-centers once, builds one candidate, then offers. The election runs after the call
-returns and reports nothing back (R24). The machine returns the requested child's identity on the next call or
-before the election; the pattern is in the table in the call that built it (R17).
+returns and reports nothing back (R24). A pattern with no child is bid with none; the machine creates the child
+when such a bid is accepted and wires its identity to the pattern once the last level has run (R16); the pattern
+is in the table in the call that built it (R17).
 
 **`process actions` is age-blind by construction.** It walks every open activation the machine holds and hands
 each what landed. A neuron with reach `r` is therefore reached `r + 1` times per activation on the forward
@@ -191,7 +192,7 @@ retire the smallest if strictly negative (R18). It leaves the table now; the nei
 residual (D21); its child goes on the request as a delete.
 
 **`offer(O) → bids`** — pass 5. A bid for every pattern with more than half its neighbors present in `O⁻`,
-less the candidate just requested. Each bid is the child id and the neighborhood.
+the candidate just built included. Each bid is the child id, or none, and the neighborhood.
 
 **`register_child(id)`** — on the reply. Bind the pending pattern to its child id. The newcomer's counts are
 what it owns, the residual it was priced on (R15, D19). The machine, for its part, opens an activation for the
