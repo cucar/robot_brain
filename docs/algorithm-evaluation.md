@@ -246,11 +246,12 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 # 3. Open questions
 
 **Patterns as functions and class neurons (D37–D42) — what stands between the model and an implementation.**
-Every level is explained as a set of function calls over global variables: an accepted bid is a call, its child
+There is one kind of pattern above the base, its body naming events and actions together (D5), and one kind of
+connection (D25). Every level is explained as a set of function calls over global variables: an accepted bid is a call, its child
 is the function, and each class neuron it reads is a variable of the level holding the neuron the slot was fit
 by (§7.1). Base actions take no arguments and act at a focus the environment holds; a slot is a class neuron
 named at an offset, tied to no dimension; variables come from merging patterns that differ at few offsets, priced
-over the whole history (D42); an event function returns actions and an action function returns events, weakly.
+over the whole history (D42); an inferred pattern runs its actions and expects its events, weakly (R30).
 Four cases are worked by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md),
 [hit](algorithm-hit.md), [an alternating pair](algorithm-xy.md)).
 What is still open, in the order it bites:
@@ -258,8 +259,9 @@ What is still open, in the order it bites:
 - **How a computed value comes back as an input.** The result of recognizing a situation is its child, one level
   up, and nothing that takes a digit can read it as a digit; the carry is the case. The direction is to build it
   as function calls, a function's result being a value of the same kind as its arguments, and the design is not
-  done. Until it is, returns stand as D39, R39 and R40 have them, and [addition](algorithm-addition.md) runs on a
-  `c` that only a call ever produces, which under D40 could never have written the connection it votes with.
+  done. What exists is expectation (R40): an inferred pattern's events fire weakly at the base, so a step's
+  expected outcome, the carry mark, is an input of the next frame once it was seen to follow. That covers the
+  carry as [addition](algorithm-addition.md) shows it, and not a conclusion nothing was ever seen to follow.
 - **A class is found only where one neuron saw the variants.** The merge reads one table (D42). Two neurons that
   each saw one variant never merge on their own; reuse (R43) joins their class neurons only when two bids read
   one activation in one election. `me`'s patterns for something ahead, to the left and to the right hold three
@@ -293,9 +295,14 @@ What is still open, in the order it bites:
 - **Loops have no member.** A constant repeat is unrolled, and nothing can say "down, three times". A run-length
   neighbor would be decided like any other and would pay in the file; a repeat whose count depends on the world
   stays with the frame.
-- **Returns fan out.** R39 connects a call to every uncovered event of every frame it is open through, which on
-  a dense layout is every cell. It has not been measured. A returned event that recreates the situation that
-  called the action is a loop with no world in it, and nothing breaks it but reward.
+- **Connections fan out over the apex.** R31 connects every uncovered activation to everything on the apex of
+  every frame it is open through, which on a dense layout with little compression is every cell. It has not been
+  measured. Limiting connections to the highest levels, or to apex activations above the base, is the fallback,
+  and it is not decided. An expected event that recreates the situation that inferred it is a loop with no
+  world in it, and nothing breaks it but reward.
+- **Whether an inferred action should be weak.** Events the machine puts in a frame are weak and actions are
+  not (D40). Making inferred actions weak too would remove the asymmetry; what it would mean for a child fit by
+  them, and for the habit vote, has not been worked out.
 - **Crossing kinds.** A variable holds an event as an event. "Write the digit you see" needs the action that
   corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. Copy (algorithm-copy.md) returns the event it was given and does not need one; writing it does.
 - **A call returned by several situations** fires at each of their coordinates (D37). That is taken to be right
@@ -365,8 +372,7 @@ the design does: a connection is a lifetime total on the neuron, strengthened on
 never collapsed, with the estimate the exact running mean and the walk wiring the next untried action on a
 negative mean (R31, R37); and the vote at the base normalizes each voter to one vote per dimension and takes
 actions by the share-weighted mean estimate, with no level in it (R36). What differs beyond the cut: the code
-wires the declared default at birth at strength 1, where R35 lets it run and be learned; action neurons vote for
-actions in the code, where R35 lets only events choose; the code connects to base actions instead of the apex
-action (D25), and so needs no expansion (R28, R30); covered activations keep learning in the code, where D10
+wires the declared default at birth at strength 1, where R35 lets it run and be learned; the code connects to
+base actions instead of the apex (D25), and so needs no expansion (R28, R30); covered activations keep learning in the code, where D10
 stops them; and it shapes no reward (above).
 [algorithm-implementation.md](algorithm-implementation.md) lists the changes.

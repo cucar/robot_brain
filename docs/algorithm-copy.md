@@ -3,8 +3,8 @@
 A worked case for [algorithm.md](algorithm.md): a machine that holds on to whatever digit it was just shown,
 `a => a`, written out neuron by neuron. Nothing here is normative, and the machine is shown running: its tables
 and connections are as listed, and its histories already hold moments like this one. It shows a value travelling
-the whole loop without anything being decided per value: a variable holds what was seen, the call and its
-return both name that variable, and the variable is still standing when the return reads it, so what comes
+the whole loop without anything being decided per value: a variable holds what was seen, the step that follows
+expects that variable's value, and the variable is still standing when the expectation reads it, so what comes
 back is what went in.
 
 ---
@@ -23,7 +23,7 @@ event fires the frame before, and a `show` event fires in the frame the digit do
 | base events | `ready`, `show`, and the ten digits |
 | class neuron | `Digit`, a variable that holds whichever digit was shown (D41) |
 | base action | `hold`, in an action dimension the environment does not have, so nothing outside the machine sees it run (D37) |
-| pattern | one, in the table of `show`, with its child `shown` |
+| patterns | one in the table of `show`, with its child `shown`; one in the table of `hold`, the step, with its child `held` |
 
 # 3. The situation
 
@@ -42,30 +42,35 @@ differed only at the digit generalized into this one.
 
 # 4. What the situation returns, and what that returns
 
+The step, in `hold`'s table, names `show` and `Digit` a frame before and `hold` beside it (D5); its child is
+`held`.
+
 | Holder | Connection | Reads as |
 |---|---|---|
-| `shown`, an event neuron | `(hold, one frame on)` (D25) | call `hold` next frame |
-| `hold`, an action neuron | `(Digit, the frame it runs)` (D39) | return whatever `Digit` stands for |
+| `shown` | `(held, one frame on)` (D25) | infer the step next frame: run `hold` |
+| `held` | `(Digit, one frame on)` (D25) | expect whatever `Digit` holds the frame after |
 
-Neither connection names a digit. The call of `hold` fires at the coordinate of the `shown` activation that
-returned it (D37), one frame after the `Digit` variable fired, and the variable is open for its window (D9), so
-it is still standing beside the call. When `hold` runs, its return names `Digit`, and what fires is the value
-of the variable standing there (R40): the digit `7`, weakly, there for that frame and gone.
+Neither connection names a digit. The step is inferred at the coordinate of the `shown` activation (D37), one
+frame after the `Digit` variable fired, and the variable is open for its window (D9), so it is still standing
+within reach. `held`'s connection was learned while the world kept showing the digit a second time; now the
+expectation stands in for it (R40): it names `Digit`, and what fires is the value of the variable standing
+there: the digit `7`, weakly, there for that frame and gone.
 
 # 5. One showing, frame by frame
 
-| Frame | runs | input | on the apex | chooses |
+| Frame | runs | input | on the apex | infers |
 |---|---|---|---|---|
 | 1 | | `ready` | `ready` | |
-| 2 | | `show`, `7` | `shown`, and `Digit` holding `7` | `hold` |
-| 3 | `hold` | `7`, weakly, returned by `hold` | `7` | |
+| 2 | | `show`, `7` | `shown`, and `Digit` holding `7` | the step `held` |
+| 3 | `hold` | | `held`, covering `show`, `7` and `hold` | `Digit`'s value, expected |
+| 4 | | `7`, weakly, expected | `7` | |
 
 In frame 2 the pattern covers `ready`, `show` and the `7`, and its child stands on the apex beside a `Digit`
-variable holding `7` (§7.4). In frame 3 the world shows
-nothing, and the `7` is there anyway.
+variable holding `7` (§7.4). In frame 3 `hold` runs and the
+step is matched. In frame 4 the world shows nothing, and the `7` is there anyway.
 
 Show a `3` instead and nothing in the machine is different: the same pattern fits, the same two connections
-speak, and a `3` comes back. One situation, one call and one return serve every digit, because none of them
+speak, and a `3` comes back. One situation, one step and one expectation serve every digit, because none of them
 ever says which digit it is.
 
 # 6. The same thing as code
@@ -74,6 +79,6 @@ ever says which digit it is.
 |---|---|
 | the variable `a` | the class neuron `Digit`, named in the situation's body |
 | the value `a` holds | the `Digit` variable on the level, holding `7` |
-| the function | `hold`, called by the situation's connection |
-| `return a` | `hold`'s event connection, which names `Digit` and reads the variable standing there |
-| the value returned | the digit `7`, fired weakly the frame `hold` runs |
+| the function | the step `held`, inferred by the situation's connection |
+| `return a` | `held`'s connection, which names `Digit` and reads the variable standing there |
+| the value returned | the digit `7`, fired weakly the frame after `hold` runs |

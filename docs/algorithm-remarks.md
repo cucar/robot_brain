@@ -731,9 +731,9 @@ lesson and a no-carry pattern with another, and nothing inspects a condition, be
 Loops are the same story one level up: a constant repeat is unrolled in the body, and a repeat that depends on
 the world is the situation recurring and being dispatched again until it stops recurring.
 
-**On D40 — weak and strong, and why only events have the distinction.** An event function returns actions (D25)
-and an action function returns events (D39); the run is the two composed, and the machine holds both halves.
-The boundary with the world is one-way for each kind: the machine can make the world perform an action and
+**On D40 — weak and strong, and why only events have the distinction.** An inferred pattern runs its actions
+and expects its events (R30); the run is what the world reports back, and the machine holds both halves. The
+boundary with the world is one-way for each kind: the machine can make the world perform an action and
 cannot make it show an event. So an event the machine put in the frame is a different thing from one the
 environment reported, and an action is the same thing whether or not anything outside executes it. A weak event
 is a variable, written by a call and read by recognition like anything else, and it is the same neuron as the
@@ -760,8 +760,8 @@ same behavior is a chain of one-step lessons, each returned by the situation the
 
 **On D37 — where calls come from.** A call the environment executes appears in the frame as an activation of
 that action (D37), and sits in the action neuron's history as a pixel sits in an event neuron's. So a
-demonstration is a population of calls, the action hierarchy chunks them, the merge abstracts what varied into
-variables, and the event patterns that stood on the apex connect to what followed.
+demonstration is a population of calls, the patterns chunk them with the events they ran beside, the merge
+abstracts what varied into variables, and what stood on the apex connects to what followed.
 
 **On D25 — connections are measured, never chosen.** A connection is not in the bid (D31), not in any dictionary
 line (D13), and it enters no test. Connections are read in one place, when the activation stands on the apex
@@ -772,9 +772,20 @@ in, and speak only where nothing more specific covers it (D10). Several children
 several neurons, so each holds its own connections from birth; while they are always bought together their
 connections agree, and they diverge the first time one is bought without the other.
 
-**On D25 — why an action neuron holds none.** What actions follow an action is a chunk, and the action hierarchy
-writes it as a pattern (D5); nothing the machine executes is chosen from an action neuron (R35). An action neuron
-is a symbol that fires when its program runs, and it is chunked like any other (§3.5).
+**On D25 — why there is one kind of connection, and every neuron holds them.** An earlier draft kept two: an
+event neuron held the actions that followed it, with an estimate, and an action neuron held the events that
+followed it, with none; only events voted, so that a neuron knowing only the last action would not vote a
+habit. Once a body may name both kinds (D5) the split has nothing to stand on: a pattern that names what was
+done beside what was seen is a situation and knows it, and a connection to a pattern whose expansion places
+actions is a plan while one to a pattern of events alone is a prediction, the same object read the same way. A
+chunk of actions alone still votes what followed it, which is a habit, and reward prices it as it prices
+everything; a habit that pays is a program.
+
+**On D25 — why the fan-out is the apex.** Every uncovered activation connects to everything that stood on the
+apex of the frames after it, event and action alike. That is more than the earlier draft's one apex action per
+dimension, and it is what a prediction needs: an expected event is returned only because it was once seen to
+follow. The bound is the apex itself, which compression is meant to keep to a handful per frame. Whether the
+lower apex, base symbols nothing chunked, should connect at all is open (algorithm-evaluation.md).
 
 **On D25 — why what follows is a different object.** An activation sees both directions; only one of them has
 arrived when the neuron must decide. What preceded it is a set, whole and priceable, so it can be named in a
@@ -1591,11 +1602,11 @@ whatever strength its few exposures gave it, with no aging law to argue with.
 the file records rather than choosing any, so nothing a reward says about an action changes what it costs to
 state one.
 
-**On R35 — recognition and execution run in opposite directions.** Events compose bottom-up; actions unfold
-top-down, and selecting a high-level action pattern is a commitment to perform it. The two hierarchies connect
-at every level, so an event neuron's connections can name an action pattern — a high-level situation joined to a
-high-level response by a single connection, which is how a complex action sequence is learned as the answer to a
-complex event sequence.
+**On R35 — recognition and execution run in opposite directions.** Recognition composes bottom-up, reverse
+engineering the call that ran from what stood; inference unfolds top-down, and selecting a high pattern is a
+commitment to perform its actions and to expect its events. Connections join every level, so an apex
+activation's connection can name a high pattern — a high-level situation joined to a high-level response by a
+single connection, which is how a complex sequence is learned as the answer to a complex situation.
 
 **On R35 — why the default runs rather than being wired.** An earlier draft wired the declared default on every
 neuron at birth, at strength 1 and neutral estimate, so that every apex activation had an inference from the first

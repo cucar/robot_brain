@@ -32,18 +32,21 @@ and `4`.
 | events at the level | `me`, `ball`, `fist`, and whatever else the field holds |
 | class neuron | `Thing`, a variable that holds whatever is coming (D41) |
 | base actions | `hit`, `turn-left`, `turn-right` |
-| patterns | three, in the table of `me`, each with a child |
+| patterns | three situations in the table of `me`, each with a child; three steps, one in the table of each base action, each naming the situation's neighbors a frame before and the action beside it |
 
 # 4. The situations, and what each returns
 
 Every pattern is in `me`'s table, so every offset is measured from the body. Each names `Thing` at two offsets,
 which means the same value at both, whatever it is (D38): one thing, nearer than it was a frame ago.
 
-| Child | names | returns |
+| Child | names | connects to, a frame on |
 |---|---|---|
-| `incoming-ahead` | `(Thing, (0, +2), now)`, `(Thing, (0, +4), one frame ago)` | `hit` |
-| `incoming-left` | `(Thing, (−2, 0), now)`, `(Thing, (−4, 0), one frame ago)` | `turn-left` |
-| `incoming-right` | `(Thing, (+2, 0), now)`, `(Thing, (+4, 0), one frame ago)` | `turn-right` |
+| `incoming-ahead` | `(Thing, (0, +2), now)`, `(Thing, (0, +4), one frame ago)` | the step `hit`, in `hit`'s table |
+| `incoming-left` | `(Thing, (−2, 0), now)`, `(Thing, (−4, 0), one frame ago)` | the step `turn-left` |
+| `incoming-right` | `(Thing, (+2, 0), now)`, `(Thing, (+4, 0), one frame ago)` | the step `turn-right` |
+
+A step is the same pattern seen from the action: in `hit`'s table, `me` and `Thing` at those offsets a frame
+before, and `hit` beside it (D5). Matched, it says the body hit something incoming; inferred, it hits (R30).
 
 Each pattern pays for its line because `Thing` is named at two offsets and stands once: the body and two
 activations of the thing are written as the child and one variable.
@@ -65,22 +68,22 @@ The body is at `(10, 10)`. A ball is at `(10, 12)`, and a frame ago it was at `(
    at both. `me` bids the child, with a class bid naming the ball it was fit by (D31). The bid is accepted, and
    one level up the child fires at the body's coordinate and a `Thing` variable fires at the ball's, holding
    `ball` (§7.4).
-3. **The child speaks.** Its connection is `(hit, one frame on)` (D25). That is the entire record: no position is
-   in it, and none is needed, because `hit` strikes what is ahead of the body and the situation only fires when
-   something is.
-4. **Next frame `hit` runs.**
+3. **The child speaks.** Its connection names the step, one frame on (D25). That is the entire record: no
+   position is in it, and none is needed, because `hit` strikes what is ahead of the body and the situation only
+   fires when something is.
+4. **Next frame the step is expanded and `hit` runs** (R30).
 
 # 6. Wherever the two of them are
 
 Put the body at `(50, 3)` and a fist at `(50, 5)` that was at `(50, 7)`. The subtraction gives the same two
 offsets, `Thing` holds `fist` instead, the same pattern fits, the same child fires, and the same
-connection returns `hit`. No coordinate ever reached the pattern (D11), so where they are costs nothing, and
+connection infers the step that hits. No coordinate ever reached the pattern (D11), so where they are costs nothing, and
 the slot means what they are costs nothing either: it takes whatever stands there, seen before or not.
 
 # 7. Wherever it is relative to the body
 
 That does cost something, and what it costs is a situation per direction. A ball coming from the left gives
-`(−2, 0)` and `(−4, 0)`, which is `incoming-left`, and its connection returns `turn-left`. After the turn the
+`(−2, 0)` and `(−4, 0)`, which is `incoming-left`, and its connection infers the step that turns left. After the turn the
 ball is ahead, `incoming-ahead` fires, and `hit` follows. The frame of reference is never transformed: the body
 turns, the field is reported again, and the machine subtracts again. D6's bucketing is what keeps the directions
 and distances to a handful.
@@ -95,4 +98,4 @@ and distances to a handful.
 | the same object at any place in the world | one pattern, since no coordinate is part of a neuron (D11) |
 | any object at that location | a class neuron named at the offset (D38) |
 | the same object at two locations | the same class neuron named at two offsets |
-| what to do about it | the child's action connection, which names no location at all |
+| what to do about it | the child's connection to a step, which names no location at all |
