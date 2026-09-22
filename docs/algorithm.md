@@ -92,18 +92,21 @@ reward for that action arrives with the next frame (R29).
 > channel whose actions do not move its events, a price and the decision to hold it, declares that they are not,
 > and its patterns name events alone; every other channel lets a body name both.
 
-> **D2 — Type and instance.** A **neuron is a type** and an **activation is an instance of it**, and each
-> carries the dimensions of its own kind.
+> **D2 — Type and instance.** A **neuron is a type** and an **activation is an instance of it**.
 >
 > | Coordinate | Components                                        | Nature                                                              |
 > |------------|---------------------------------------------------|---------------------------------------------------------------------|
-> | neuron     | `(dim_id, bucket_id)` at the base; an id above it | structural and defining                                             |
+> | base neuron | `(dim_id, bucket_id)`                            | structural and defining: the alphabet                               |
+> | higher neuron | a level and an id                              | a pattern's child or a class neuron; no dimension and no kind       |
 > | activation | frame, and one position per activation dimension  | fleeting; two activations of one neuron differ in nothing else      |
 >
-> **Only a base neuron has a neuron dimension.** A pattern's child and a class neuron have a level and a name:
-> a child sits one level above the parent whose bid it was created for, other patterns may come to share it
-> (R43), and its parents may be of either kind. Kind is a property of base neurons, event or action, and of
-> nothing above them.
+> **Neuron dimensions belong to the base alphabet and to nothing above it.** A base neuron is an event or an
+> action of one dimension of one channel. A higher neuron, whether a pattern's child or a class neuron, has a
+> level and a name and nothing else structural: it is not an event or an action, it belongs to no dimension and
+> no channel, and its body or its variables may hold either kind. A child sits one level above the parent whose
+> bid it was created for, other patterns may come to share it (R43), and its parents may be of either kind.
+> Only activation dimensions exist above the base, and an activation of a higher neuron has exactly the
+> coordinate it inherits.
 >
 > **A child's activation inherits the parent activation's coordinate** — the frame, and the position in every
 > activation dimension — and never an average over what it covers.
@@ -112,7 +115,7 @@ reward for that action arrives with the next frame (R29).
 
 | Object     | Description                                                                                                                          | References    |
 |------------|--------------------------------------------------------------------------------------------------------------------------------------|---------------|
-| neuron     | A symbol, and a type. Sits at one level, in one dimension of one channel. Holds a table of patterns, a history, and connections.     | D32, D18, D25 |
+| neuron     | A symbol, and a type. Sits at one level; a base neuron in one dimension of one channel, a higher one in none. Holds a table of patterns, a history, and connections. | D32, D18, D25 |
 | pattern    | A set of past and present neighbors, one line of one neuron's table, and the child neuron it promotes. Lives in its parent.          | D15           |
 | activation | One occurrence of a neuron, at a frame and a position. Holds the neighborhood it observed, and the cover chosen for it.              | D7, D17       |
 
@@ -254,8 +257,8 @@ carries the action executing in that same frame (if there is one).
 There is no rest value. A dimension where nothing happens supplies no symbol, and silence is what the decoder
 assumes for anything the file does not state.
 
-> **D11 — Identity.** A neuron's identity is fixed entirely by its neuron dimensions, so nothing
-> about where it occurred is part of it. **The same shape at two positions is two activations of one neuron**,
+> **D11 — Identity.** A neuron's identity is its type alone, a base symbol or a higher neuron's id (D2), so
+> nothing about where it occurred is part of it. **The same shape at two positions is two activations of one neuron**,
 > and they pool: both carry the same relative neighborhood, so the same patterns cover them and one pattern
 > serves both. A shape learned anywhere is learned everywhere, and the dictionary holds it once.
 
@@ -779,8 +782,8 @@ the class neurons it names, and the covers where it pays.
 > pattern is the neuron's own: it is added, used in covers and bid on the neuron's evidence alone. A pattern
 > with no child is bid as it is, and the bid asks for a child if it is accepted (D31). **The machine gives a
 > child only to an accepted bid**, so no neuron exists for a pattern the board never bought, and it reuses a
-> child before it creates one (R43). A new child inherits its parent's channel and dimension and is minted one
-> level above it. It is created with
+> child before it creates one (R43). A new child has a level and an id and no dimension (D2), and is minted one
+> level above its parent. It is created with
 > **an empty table**: its own patterns belong to its own level, which it has not observed yet. Its *existence*
 > is decided by the election, its *structure* by itself.
 >
