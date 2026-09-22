@@ -30,24 +30,30 @@ and `4`.
 | Kind | Neurons |
 |---|---|
 | events at the level | `me`, `ball`, `fist`, and whatever else the field holds |
-| class neurons | one per pattern, for its one role, each written `Thing` here (D41) |
+| class neuron | `Thing`, a variable that holds whatever is coming (D41) |
 | base actions | `hit`, `turn-left`, `turn-right` |
 | patterns | three, in the table of `me`, each with a child |
 
 # 4. The situations, and what each returns
 
-Every pattern is in `me`'s table, so every offset is measured from the body. Each has two slots with one role,
-`Thing¹`, which means the same neuron at both offsets, whatever it is (D38): one thing, nearer than it was a
-frame ago.
+Every pattern is in `me`'s table, so every offset is measured from the body. Each names `Thing` at two offsets,
+which means the same value at both, whatever it is (D38): one thing, nearer than it was a frame ago.
 
 | Child | names | returns |
 |---|---|---|
-| `incoming-ahead` | `(Thing¹, (0, +2), now)`, `(Thing¹, (0, +4), one frame ago)` | `hit` |
-| `incoming-left` | `(Thing¹, (−2, 0), now)`, `(Thing¹, (−4, 0), one frame ago)` | `turn-left` |
-| `incoming-right` | `(Thing¹, (+2, 0), now)`, `(Thing¹, (+4, 0), one frame ago)` | `turn-right` |
+| `incoming-ahead` | `(Thing, (0, +2), now)`, `(Thing, (0, +4), one frame ago)` | `hit` |
+| `incoming-left` | `(Thing, (−2, 0), now)`, `(Thing, (−4, 0), one frame ago)` | `turn-left` |
+| `incoming-right` | `(Thing, (+2, 0), now)`, `(Thing, (+4, 0), one frame ago)` | `turn-right` |
 
-Each pattern pays for its line because its role is named at two offsets and bound once: the body and two
-activations of the thing are written as the child and one binding.
+Each pattern pays for its line because `Thing` is named at two offsets and stands once: the body and two
+activations of the thing are written as the child and one variable.
+
+**How `Thing` came to be.** Before it, `me` held a pattern per thing that had come at it often: a ball ahead, a
+fist ahead. The merge (D42) paired the two, which differ at the same two offsets and hold one neuron at both in
+each, and generalized them into `incoming-ahead` with `Thing` at those offsets. The pair paid nothing on the
+balls and fists, which their own patterns already wrote as one symbol; it paid on everything else that had
+ever come at the body once or twice and been written flat. The specific patterns stay while balls and fists
+are frequent, and `incoming-ahead` serves the rest.
 
 # 5. One moment, worked
 
@@ -56,8 +62,9 @@ The body is at `(10, 10)`. A ball is at `(10, 12)`, and a frame ago it was at `(
 1. **The machine subtracts.** Assembling the neighborhood of the `me` activation, it takes the difference of
    coordinates and buckets each component (D6): the ball now is at `(0, +2)`, the ball a frame ago at `(0, +4)`.
 2. **The pattern fits.** `incoming-ahead` has its slots at exactly those two offsets, and the same neuron stands
-   at both. `me` bids the child with `Thing¹ = ball` (D31). The bid is accepted, and one level up the child fires
-   at the body's coordinate, carrying the binding, and `Thing` fires at the ball's, bound to `ball` (§7.4).
+   at both. `me` bids the child, with a class bid naming the ball it was fit by (D31). The bid is accepted, and
+   one level up the child fires at the body's coordinate and a `Thing` variable fires at the ball's, holding
+   `ball` (§7.4).
 3. **The child speaks.** Its connection is `(hit, one frame on)` (D25). That is the entire record: no position is
    in it, and none is needed, because `hit` strikes what is ahead of the body and the situation only fires when
    something is.
@@ -66,7 +73,7 @@ The body is at `(10, 10)`. A ball is at `(10, 12)`, and a frame ago it was at `(
 # 6. Wherever the two of them are
 
 Put the body at `(50, 3)` and a fist at `(50, 5)` that was at `(50, 7)`. The subtraction gives the same two
-offsets, `Thing¹` is bound to `fist` instead, the same pattern fits, the same child fires, and the same
+offsets, `Thing` holds `fist` instead, the same pattern fits, the same child fires, and the same
 connection returns `hit`. No coordinate ever reached the pattern (D11), so where they are costs nothing, and
 the slot means what they are costs nothing either: it takes whatever stands there, seen before or not.
 
@@ -86,6 +93,6 @@ and distances to a handful.
 | a location in the frame | an offset from that activation (D6) |
 | a feature at a location | a neighbor, `(neuron, offset)` |
 | the same object at any place in the world | one pattern, since no coordinate is part of a neuron (D11) |
-| any object at that location | a slot at the offset (D38) |
-| the same object at two locations | the same role named at two offsets |
+| any object at that location | a class neuron named at the offset (D38) |
+| the same object at two locations | the same class neuron named at two offsets |
 | what to do about it | the child's action connection, which names no location at all |

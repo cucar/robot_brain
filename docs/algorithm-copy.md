@@ -3,8 +3,9 @@
 A worked case for [algorithm.md](algorithm.md): a machine that holds on to whatever digit it was just shown,
 `a => a`, written out neuron by neuron. Nothing here is normative, and the machine is shown running: its tables
 and connections are as listed, and its histories already hold moments like this one. It shows a value travelling
-the whole loop without anything being decided per value: a slot binds what was seen, the binding rides
-the call, and the call's return names the slot's class neuron, so what comes back is what went in.
+the whole loop without anything being decided per value: a variable holds what was seen, the call and its
+return both name that variable, and the variable is still standing when the return reads it, so what comes
+back is what went in.
 
 ---
 
@@ -20,7 +21,7 @@ event fires the frame before, and a `show` event fires in the frame the digit do
 | Kind | Neurons |
 |---|---|
 | base events | `ready`, `show`, and the ten digits |
-| class neuron | `Digit`, for the one role of the pattern below, in dimension `d` (D41) |
+| class neuron | `Digit`, a variable that holds whichever digit was shown (D41) |
 | base action | `hold`, in an action dimension the environment does not have, so nothing outside the machine sees it run (D37) |
 | pattern | one, in the table of `show`, with its child `shown` |
 
@@ -31,11 +32,13 @@ The pattern in `show`'s table names two neighbors:
 | names | offset |
 |---|---|
 | `ready` | one frame ago |
-| `Digit¹`, a slot in dimension `d` | now |
+| `Digit` | now |
 
-The slot is present when any digit stands beside `show`, and the activation of `shown` carries which one: its
-binding, `Digit = 7` (D38). The pattern pays for its line because it names `ready`: three activations,
-`ready`, `show` and the digit, are written as the child and one binding.
+`Digit` is fit by any digit standing beside `show` (D38), and when the bid is accepted a `Digit` variable
+fires one level up at the digit's coordinate, holding `7` (§7.4). The pattern pays for its line because it
+names `ready`: three activations, `ready`, `show` and the digit, are written as the child and one variable.
+`Digit` itself came from the merge (D42): `show` once held a pattern per frequent digit, and the pairs that
+differed only at the digit generalized into this one.
 
 # 4. What the situation returns, and what that returns
 
@@ -45,20 +48,20 @@ binding, `Digit = 7` (D38). The pattern pays for its line because it names `read
 | `hold`, an action neuron | `(Digit, the frame it runs)` (D39) | return whatever `Digit` stands for |
 
 Neither connection names a digit. The call of `hold` fires at the coordinate of the `shown` activation that
-returned it and carries that activation's bindings (D37), so inside the call `Digit` still stands for `7`. When
-`hold` runs, its return names the class neuron, and what fires is the neuron it is bound to (R40): the digit `7`,
-weakly, there for that frame and gone.
+returned it (D37), one frame after the `Digit` variable fired, and the variable is open for its window (D9), so
+it is still standing beside the call. When `hold` runs, its return names `Digit`, and what fires is the value
+of the variable standing there (R40): the digit `7`, weakly, there for that frame and gone.
 
 # 5. One showing, frame by frame
 
 | Frame | runs | input | on the apex | chooses |
 |---|---|---|---|---|
 | 1 | | `ready` | `ready` | |
-| 2 | | `show`, `7` | `shown`, `Digit = 7` | `hold`, carrying `Digit = 7` |
+| 2 | | `show`, `7` | `shown`, and `Digit` holding `7` | `hold` |
 | 3 | `hold` | `7`, weakly, returned by `hold` | `7` | |
 
-In frame 2 the slot is bound to the `7` standing beside `show`, the pattern covers `ready`, `show` and the `7`,
-and its child stands on the apex with the binding (§7.4). In frame 3 the world shows
+In frame 2 the pattern covers `ready`, `show` and the `7`, and its child stands on the apex beside a `Digit`
+variable holding `7` (§7.4). In frame 3 the world shows
 nothing, and the `7` is there anyway.
 
 Show a `3` instead and nothing in the machine is different: the same pattern fits, the same two connections
@@ -69,8 +72,8 @@ ever says which digit it is.
 
 | in the code | in the machine |
 |---|---|
-| the parameter `a` | the role `Digit¹`, a slot in the situation's body |
-| the argument passed | the binding `Digit = 7`, carried by the activation and then by the call |
+| the variable `a` | the class neuron `Digit`, named in the situation's body |
+| the value `a` holds | the `Digit` variable on the level, holding `7` |
 | the function | `hold`, called by the situation's connection |
-| `return a` | `hold`'s event connection, which names `Digit` |
+| `return a` | `hold`'s event connection, which names `Digit` and reads the variable standing there |
 | the value returned | the digit `7`, fired weakly the frame `hold` runs |

@@ -245,13 +245,14 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 
 # 3. Open questions
 
-**Patterns as functions and class neurons (D37–D41) — what stands between the model and an implementation.**
-Every level is explained as a set of function calls with arguments: an accepted bid is a call, its child is the
-function and its bindings are the arguments, each standing one level up as a class neuron (§7.1). Base actions
-take no arguments and act at a focus the environment holds; a slot is a place with a role; an event function
-returns actions and an action function returns events, weakly. Four cases are
-worked by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md), [hit](algorithm-hit.md),
-[an alternating pair](algorithm-xy.md)).
+**Patterns as functions and class neurons (D37–D42) — what stands between the model and an implementation.**
+Every level is explained as a set of function calls over global variables: an accepted bid is a call, its child
+is the function, and each class neuron it reads is a variable of the level holding the neuron the slot was fit
+by (§7.1). Base actions take no arguments and act at a focus the environment holds; a slot is a class neuron
+named at an offset, tied to no dimension; variables come from merging patterns that differ at few offsets, priced
+over the whole history (D42); an event function returns actions and an action function returns events, weakly.
+Four cases are worked by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md),
+[hit](algorithm-hit.md), [an alternating pair](algorithm-xy.md)).
 What is still open, in the order it bites:
 
 - **How a computed value comes back as an input.** The result of recognizing a situation is its child, one level
@@ -259,24 +260,28 @@ What is still open, in the order it bites:
   as function calls, a function's result being a value of the same kind as its arguments, and the design is not
   done. Until it is, returns stand as D39, R39 and R40 have them, and [addition](algorithm-addition.md) runs on a
   `c` that only a call ever produces, which under D40 could never have written the connection it votes with.
-- **A class neuron is shared only by roles bound together.** Two roles come to share a class neuron when their
-  bids bind the same activation in one election (R43). Patterns that cannot fire together never do, so `me`'s
-  three patterns, something coming from ahead, from the left and from the right, hold three class neurons for
-  one kind, and nothing relates them but the level above.
-- **Near-duplicates stay apart, and nothing merges.** A child is reused only on a tie over the same ground
-  (R43). A line that is one neighbor off and does worse on the board gets a child of its own, and two children
-  or two class neurons that turn out to stand for the same thing are never merged. The pull toward reusing a
-  near match is the dictionary line saved, which is on the neuron's books and not in the window the machine
-  prices. **Diagnostic:** pairs of children whose accepted bids cover mostly the same activations, per level.
-- **Whether a binding shared across one cover is paid once.** D13 charges a role to each pattern that binds it.
-  Several patterns of one activation's cover bound to the same neuron could state it once.
-- **A class activation does not thin the level.** A child replaces what its pattern covers; a class neuron
-  stands one for one with the neuron bound to it, so a level built from calls with many arguments is wider than
-  D4's doubling reach assumes. **Diagnostic:** class activations per accepted bid, per level.
-- **A slot takes anything of its dimension.** Nothing narrows a role to the kind of thing that has filled it, so
-  a pattern with slots fires for fillers its lessons were never learned on, and its estimates average them in. A
-  frequent filler is taken out by a line of its own (D27); a rare one is not.
-- **A binding is a symbol in the file.** D13 prices it; D12 and D14 do not yet write it, and R28's expansion
+- **A class is found only where one neuron saw the variants.** The merge reads one table (D42). Two neurons that
+  each saw one variant never merge on their own; reuse (R43) joins their class neurons only when two bids read
+  one activation in one election. `me`'s patterns for something ahead, to the left and to the right hold three
+  class neurons for one kind.
+- **Near-duplicates stay apart, and nothing merges children.** A child is reused only on a tie over the same
+  ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
+  that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
+  bids cover mostly the same activations, per level.
+- **A merged pattern displaces nothing by itself.** The pair it came from stays on its own margin, so the table
+  holds the general pattern and the specific ones together, the specific ones winning the election while their
+  variant is frequent. The dictionary carries both. **Diagnostic:** per general pattern, the share of its
+  occurrences a specific pattern of the same table wrote instead.
+- **A variable does not thin the level.** A child replaces what its pattern covers; a variable stands one for
+  one with what it holds, so a level built from calls that read many variables is wider than D4's doubling reach
+  assumes. **Diagnostic:** variables per accepted bid, per level.
+- **A slot takes anything.** Nothing narrows a class neuron to the kind of thing its variables have held, so a
+  pattern with slots fires for things its lessons were never learned on, and its estimates average them in. A
+  frequent one is taken out by a pattern of its own (D33); a rare one is not.
+- **Reach bounds what a call can read.** A variable is read at the offset where it stands, within the reader's
+  reach (D4). A value a call needs from further back than its level reaches is out of sight, which is the same
+  bound the return path meets.
+- **A variable is a symbol in the file.** D13 prices it; D12 and D14 do not yet write it, and R28's expansion
   needs it to recover the run.
 - **A function is callable only from a situation whose window holds it.** A voter can start a program only
   from an offset at least as far out as the program is long (R36), and an activation is open for `reach_t`
@@ -291,13 +296,13 @@ What is still open, in the order it bites:
 - **Returns fan out.** R39 connects a call to every uncovered event of every frame it is open through, which on
   a dense layout is every cell. It has not been measured. A returned event that recreates the situation that
   called the action is a loop with no world in it, and nothing breaks it but reward.
-- **Crossing kinds.** A binding carries an event as an event. "Write the digit you see" needs the action that
+- **Crossing kinds.** A variable holds an event as an event. "Write the digit you see" needs the action that
   corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. Copy (algorithm-copy.md) returns the event it was given and does not need one; writing it does.
 - **A call returned by several situations** fires at each of their coordinates (D37). That is taken to be right
   and has not been worked through against "one call per dimension per frame".
 - **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
-  member fires (H2, H5). Under D41 a class neuron stands for the roles of patterns and fires only when an
-  accepted bid binds it, so the moment has to be restated.
+  member fires (H2, H5). Under D41 a class neuron is a variable that fires only when an accepted bid reads it,
+  so the moment has to be restated.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
   base actions that move it.
 

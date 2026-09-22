@@ -656,16 +656,26 @@ a base action acts is a focus the environment holds and the machine sees, which 
 machine the design already is, and a fovea. Nothing is declared about an action but its place in the alphabet.
 
 **On D41 — the second axis.** A child says "these things happened together": an AND, part to whole. A class
-neuron says "one of these happened": an OR, instance to kind. Both are bought in the same election, by the same
-bid, and both fire one level up: the child for the call and a class neuron for each argument. The design had
-the first axis from the start. The second is what "whatever", "the same thing" and "one of these" all needed,
-and it is one object.
+neuron says "one of these happened, and here is which": an OR, instance to kind, with its activation holding
+the instance. Both are bought in the same election and both fire one level up, the child for the call and a
+variable for each class neuron the pattern read. The design had the first axis from the start. The second is
+what "whatever", "the same thing" and "one of these" all needed, and it is one object.
+
+**On D41 — why a variable is global and a call owns nothing.** An earlier draft gave a call arguments: a
+binding per slot, found by the bidder, carried on the bid, copied to the child, carried by the call it returned
+and by what that returned. It was a local variable, and everything that goes wrong with local variables went
+wrong with it: the collapse could not count it, a connection had to key on it, and a neighbor's own bindings had
+to be written into a body. A variable of the level has none of that. It stands at a coordinate for its window,
+it holds its value, and whatever names its class neuron at the offset where it stands reads it: a pattern, a
+call, a return. Two calls within reach of one variable read the same value, which is what "the same thing" means.
+Nothing is carried, because the thing stays where it is.
 
 **On D41 — why it keeps no list.** A person who thinks of a bridge does not run through every bridge they have
-seen, and that is the point of having the kind. What a class neuron has stood for is in its history and in its
-connections, pooled, and nowhere as a list. Membership is decided by the place and not by a record: whatever
-stands where the slot is, is bound. A list used as a filter would be only as wide as what had been seen, so the
-pattern would fail exactly where it is wanted, on the rare, the once-seen and the new.
+seen, and that is the point of having the kind. What a class neuron has held is in its history and in its
+connections, pooled, and nowhere as a list. Membership is decided by the slot and not by a record: whatever
+stands where the slot is, the variable holds. A list used as a filter would be only as wide as what had been
+seen, so the pattern would fail exactly where it is wanted, on the rare, the once-seen and the new. It also
+makes the class cost one symbol, its name, however many things it comes to hold.
 
 **On D41 — why it has a history of its own.** A pattern lives in the table of the neuron that fired, so what
 surrounds a `ball` is evidence in `ball`'s history and what surrounds a `fist` in `fist`'s, and no neuron sees
@@ -673,44 +683,47 @@ the two side by side. A class neuron fires for each of them in turn, so its hist
 over things needs a population shared by those things, and a neuron that fires for all of them is that
 population.
 
-**On D27 — where a kind is found.** The things of a kind are alternatives, so they never appear together in a
-frame: a ball or a fist stands at that place, never both. Where they do appear together is a history, one
-neuron recording, across many of its activations, one place filled by a different neuron each time. So the
-evidence of a kind is in the same population the collapse already reads, and the collapse decides it with the
-same count: a place that keeps happening while what stands there keeps changing. Finding what is the same and
-finding what differs are one operation over one history.
+**On D42 — where a variable comes from.** The greedy pick builds a pattern per variant: a ball ahead, a fist
+ahead, each a function with no parameters, each returning the same thing every time. The evidence that they are
+one function is in the table, side by side: two patterns identical but for one offset. Putting a variable where
+two examples differ is anti-unification in its original form (Plotkin, Reynolds, 1970), and the merge does it
+over the table, two patterns at a time, as the greedy pick builds two neighborhoods at a time. Which offsets
+vary together is read within each pattern of the pair: one neuron at two offsets in each is one variable named
+twice. An earlier draft found slots in the collapse instead, as an offset filled in a majority by no majority
+neuron, which tied a slot to a dimension at an offset; a variable is tied to nothing but the offset it is named
+at.
 
-**On D27 and D33 — what a slot saves, and when it is written.** Nothing prices a class neuron; only patterns
-have prices. A slot adds one to its pattern's coverage wherever it is filled and one to its price per role, so a
-pattern with a role named twice saves one per activation where the specific pattern would save two. It wins on
-the margin (D30) by covering more of the history: three fillers at fifty, thirty and twenty activations are
-better served by three specific lines, and fifty fillers seen twice each by one line with a slot, and a filler
-seen once can have no line of its own at all (R14). The collapse sorts the two cases by itself, since a filler
-frequent enough to hold the majority is named and the rest are left to the next round's slot. Frequent things
-keep a symbol of their own and everything else goes through the class.
+**On D42 — why the merged pattern is priced over the whole history.** On the occurrences the pair already
+covers the general pattern can only lose: a specific pattern writes an occurrence as one symbol, the general
+one as the call and a value per variable. Priced there, no merge ever pays. Its benefit is on what the pair does
+not cover, the variants too rare to have earned a pattern of their own, which nothing wrote as anything but
+flat. The table supplies the shape and the residual supplies the benefit, and neither alone would do: the
+residual has no shape to read, since its occurrences share no neuron, and the table has no benefit to gain,
+since its occurrences are already covered. So a class is built where a pattern is long and its variants many,
+and it serves the long tail; a variant frequent enough to keep its own pattern keeps it, as the hot path stays
+inlined, and the general pattern takes the variant over when it becomes rare and its pattern retires. A lookup
+table whose cases each return something different, addition's pairs of digits, never merges, since nothing
+is left in the residual for a general pattern to gain on.
 
-**On R36 — a neuron bound to many roles votes many times.** Every class activation is a voter, so an event that
-several accepted bids bound produces several voters where an event nothing bound produces one, and a
-candidate's estimate is a mean over voters. This is accepted: a thing that takes part in more of what the
-machine has found worth writing down is more likely to matter.
+**On R36 — a neuron several variables hold votes several times.** Every variable is a voter, so an event that
+several accepted bids read produces several voters where an event nothing read produces one, and a candidate's
+estimate is a mean over voters. This is accepted: a thing that takes part in more of what the machine has found
+worth writing down is more likely to matter.
 
-**On D27 and D38 — the known mechanisms, and where each lands.** Lining up examples and putting a variable
-where they differ is anti-unification in its original form (Plotkin, Reynolds, 1970): keep what the examples
-agree on, put a variable where they differ, and use one variable wherever the same things differ together. The
-collapse does it over the neighborhoods of one history. Numbering by first appearance is the canonical renaming
-a programming language uses so that two functions differing only in their variable names are the same term. The
-binding is a pointer on the activation, the indirection answer to the binding problem, never learned, which D11
+**On D38 — the known mechanisms, and where each lands.** Numbering variables by first appearance is the
+canonical renaming a programming language uses so that two functions differing only in their variable names
+are the same term; here two class neurons are the same neuron when reuse finds them at one activation (R43).
+The value is read off the level, the indirection answer to the binding problem, never learned, which D11
 requires; synchrony and tensor products are answers for continuous networks and do not fit a machine of discrete
-symbols. And the design has an answer of its own that the literature mostly lacks: the role is the offset.
-"Whatever is one to my left" binds a thing to a role by location, with no pointer needed until the thing has to
-travel.
+symbols. And the design has an answer of its own that the literature mostly lacks: the variable is found by
+offset. "Whatever is one to my left" reads a thing by location, with no pointer anywhere.
 
-**On D38 — what a slot saves.** It is priced as a neighbor, one in the line, and its binding costs one per
-activation, which is what the thing standing there would have cost beside the child. So a role named at one
-offset nets nothing: the symbol moves from beside the child to inside it. It pays the moment it is named twice,
-since the unknown is written once for two covered activations, and it pays against the real alternative, one
-pattern per variant, each with a line of its own and none at all for a variant seen once. A pattern whose whole
-body is one slot saves nothing and is retired (R18); a pattern has to name something.
+**On D38 — what a slot saves.** It is priced as a neighbor, one in the line, and the variable it reads costs
+one per occurrence, which is what the thing standing there would have cost beside the child. So a class neuron
+named at one offset nets nothing: the symbol moves from beside the child to the variable. It pays the moment it
+is named twice, since the unknown is written once for two covered activations, and it pays against the real
+alternative, one pattern per variant, each with a line of its own and none at all for a variant seen once. A
+pattern whose whole body is one slot saves nothing and is retired (R18); a pattern has to name something.
 
 **On D38 — how branching works.** There is no branch inside a body. The choice is dispatch: two situations are
 two patterns, and which one fires is the whole of "if". "If there is a carry, write 1" is a carry pattern with a
@@ -747,8 +760,8 @@ same behavior is a chain of one-step lessons, each returned by the situation the
 
 **On D37 — where calls come from.** A call the environment executes appears in the frame as an activation of
 that action (D37), and sits in the action neuron's history as a pixel sits in an event neuron's. So a
-demonstration is a population of calls, the action hierarchy chunks them, the collapse abstracts what varied
-into slots, and the event patterns that stood on the apex connect to what followed, bindings included.
+demonstration is a population of calls, the action hierarchy chunks them, the merge abstracts what varied into
+variables, and the event patterns that stood on the apex connect to what followed.
 
 **On D25 — connections are measured, never chosen.** A connection is not in the bid (D31), not in any dictionary
 line (D13), and it enters no test. Connections are read in one place, when the activation stands on the apex
