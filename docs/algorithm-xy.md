@@ -2,7 +2,8 @@
 
 A worked case for [algorithm.md](algorithm.md): how `x, y, x, y`, `a, b, a, b` and `m, n, m, n` become one
 function held once, by a neuron that keeps seeing a different pair in the same places. Nothing here is
-normative. It follows one neuron's table through the greedy pick, the merge, the price and the election.
+normative. It follows one neuron's table through the greedy pick, the classes found in its residual, the price
+and the election.
 
 ---
 
@@ -30,64 +31,67 @@ whatever recurs, so each pair that came round twice gets one:
 Each writes its occurrence as one symbol where the letters cost four. The pairs seen once stay in the residual,
 written flat.
 
-# 3. The merge: three patterns become one with two variables
+# 3. Classes from the residual
 
-The merge (D42) pairs the two patterns of the table that differ at the fewest offsets. Any two of these differ
-at all four, and no pair does better, so it takes the older two.
+Beside the three recurring pairs, many pairs have gone by once: `s, t, s, t, p`, `u, v, u, v, p`, and so on.
+Nothing recurs by name, so the greedy pick built nothing for them and they stand in the residual, flat. Before
+the next pick runs, `p` groups that residual by offset (D42):
 
 | Question | Answer |
 |---|---|
-| Where do they differ? | At all four offsets. |
-| Which differing offsets hold one neuron in each pattern? | 1 back and 3 back (`y` in one, `b` in the other); 2 back and 4 back (`x` and `a`). |
-| So how many class neurons? | Two: `K` at 1 and 3 back, `J` at 2 and 4 back. |
+| Which places are filled in a majority of the residual with no one neuron in a majority? | All four. Each is a class. |
+| Which of those classes have the same members? | One back and three back hold the same letters, `t, v, …`; two back and four back hold `s, u, …`. Two kinds, `K` and `J`. |
+| Which places hold the same neuron in a majority of the neighborhoods? | One and three back; two and four back. So `K¹` at both of the first, `J¹` at both of the second. |
 
-The candidate:
+`p`'s class table now holds `K` with members `t, v, …` and `J` with members `s, u, …`, and a `K` or `J`
+activation stands beside each of those letters in every neighborhood of the history. The pick then runs over the
+residual and finds a place held by one neuron at last, `K¹` one back in every once-seen pair, and builds:
 
 ```
-(K, 1 back),  (J, 2 back),  (K, 3 back),  (J, 4 back)
+(K¹, 1 back),  (J¹, 2 back),  (K¹, 3 back),  (J¹, 4 back)
 ```
 
-`K` is whatever stood one back, and the same thing three back; `J` is whatever stood two back, and the same
-thing four back (D38). The pattern names no letter.
+`K¹` is whatever member of `K` stood one back, and the same one three back; `J¹` likewise (D38). The pattern
+names no letter.
 
 # 4. The price
 
-The candidate is priced over the whole history (D30), not only where the pair it came from fits.
-
 | written as | symbols |
 |---|---|
-| a pair, flat | 4 |
-| a pair its own pattern covers: `Q` | 1 |
-| a pair the candidate covers: `alternation`, `K`, `J` | 3 |
+| a once-seen pair, flat | 4 |
+| a recurring pair, by its own pattern: `Q` | 1 |
+| a once-seen pair, by the general pattern: `alternation`, `K¹`, `J¹` | 3 |
 
-On the recurring pairs it can only lose: three symbols where `P`, `Q` and `R` write one. On the pairs seen once,
-which nothing covered, it saves one each. Its dictionary line is five, and each class neuron one more (D13). So
-the candidate pays once seven or so once-seen pairs have gone by, and the pick takes it. `P`, `Q` and `R` keep
-their own margins: they stay while their pairs are frequent, and when one becomes rare its pattern retires (R18)
-and the general pattern writes it.
+The general pattern saves one on every once-seen pair and nothing on the recurring ones, which it does not
+cover; its line costs five and each class its name and its members (D13), so it pays once enough rare pairs
+have gone by. `P`, `Q` and `R` stand: they differ from the general pattern at places where no class stands
+beside their letters, since `y`, `b` and `n` were never in the residual, so D43 does not pair them with it. When
+x-y becomes rare and `P` retires, `y` and `x` fall to the residual, `p` finds them standing where `K` and `J`
+stand and widens the classes (D42), and the general pattern writes the pair from then on.
 
 # 5. The return and the election
 
-`p` bids the general pattern whenever it is in a cover, with a class bid for `K` and one for `J` naming the
-letters they were fit by (D31). Nothing has a neuron yet. The first time the bid is accepted the machine gives
+`p` bids the general pattern whenever it is in a cover, with a class bid for `K` and one for `J`, each carrying
+the class's members and naming the letter it was fit by (D31). Nothing has a neuron yet. The first time the bid is accepted the machine gives
 the pattern a child, `alternation`, and each class a class neuron; no other bid of that election covers the same
 ground or reads the same letters, so it creates all three, one level above `p`, holding nothing (R16, R41, R43).
 
 # 6. One occurrence
 
-`s, t, s, t, p` arrives, a pair never seen, and `p` fires.
+`s, t, s, t, p` arrives for the second time, `s` and `t` now members of `J` and `K`, and `p` fires.
 
 | Stage | what happens |
 |---|---|
-| `process functions`, in `p` | No specific pattern fits. The general one does: `t` stands one back and three back, `s` two back and four back. `p` bids `alternation`, with class bids for `K` at the nearest `t` and `J` at the nearest `s`. |
+| `process functions`, in `p` | `K` stands beside each `t` and `J` beside each `s`. No specific pattern fits. The general one does: the same member of `K` one back and three back, the same member of `J` two and four back. `p` bids `alternation`, with class bids for `K` at the nearest `t` and `J` at the nearest `s`. |
 | the election | The bid covers `p` and the four letters for a price of three, and is accepted. |
 | activate children | One level up, `alternation` fires at `p`'s coordinate; a `K` variable fires at the `t`, holding `t`; a `J` variable fires at the `s`, holding `s` (§7.4). |
 
-The level above reads `alternation` beside two variables, `K = t` and `J = s`. Nothing about `s` or `t` had to
-be learned first.
+The level above reads `alternation` beside two variables, `K = t` and `J = s`. The first time the pair came by
+it was written flat, and `p` found `s` and `t` standing where `J` and `K` stand and made them members; that is
+all that had to be learned.
 
-`s, t, u, t, p` does not fit: `K` is the same value at both its offsets, but `J` would have to hold `s` and `u`
-at once. Both of `J`'s offsets count as named and absent, and the bid is priced accordingly (D22).
+`s, t, u, t, p` does not fit: `K¹` is the same value at both its offsets, but `J¹` would have to hold `s` and
+`u` at once. Both of `J¹`'s offsets count as named and absent, and the bid is priced accordingly (D22).
 
 # 7. What the one child buys
 
@@ -101,8 +105,8 @@ held, and connections of its own, and uncovered it votes (D41).
 | in the code | in the machine |
 |---|---|
 | three copies of one block with different names in them | `P`, `Q` and `R` in `p`'s table |
-| noticing they are one block with two names that vary | the merge pairing two of them |
+| noticing they are one block with two names that vary | the residual grouped by offset into `K` and `J` |
 | the variables | the class neurons `K` and `J` |
 | the extracted function | the general pattern, held once in `p`'s table |
 | a call, with the variables it reads | `alternation` firing, with `K` and `J` standing beside it |
-| keeping the hot path inlined | `Q` staying in the table while `a, b` is frequent |
+| keeping the hot path inlined | `Q` staying in the table while `a, b` is frequent, and the pattern one level up that names the call with its variables |

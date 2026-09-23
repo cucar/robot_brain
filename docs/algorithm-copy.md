@@ -37,8 +37,8 @@ The pattern in `show`'s table names two neighbors:
 `Digit` is fit by any digit standing beside `show` (D38), and when the bid is accepted a `Digit` variable
 fires one level up at the digit's coordinate, holding `7` (§7.4). The pattern pays for its line because it
 names `ready`: three activations, `ready`, `show` and the digit, are written as the child and one variable.
-`Digit` itself came from the merge (D42): `show` once held a pattern per frequent digit, and the pairs that
-differed only at the digit generalized into this one.
+`Digit` itself came from `show`'s residual (D42): beside `show`, the place a frame after `ready` was filled
+every time by a different digit, so `show` grouped the digits it found there into one class.
 
 # 4. What the situation infers, and what that expects
 

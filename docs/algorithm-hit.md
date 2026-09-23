@@ -51,12 +51,12 @@ before, and `hit` beside it (D5). Matched, it says the body hit something incomi
 Each pattern pays for its line because `Thing` is named at two offsets and stands once: the body and two
 activations of the thing are written as the child and one variable.
 
-**How `Thing` came to be.** Before it, `me` held a pattern per thing that had come at it often: a ball ahead, a
-fist ahead. The merge (D42) paired the two, which differ at the same two offsets and hold one neuron at both in
-each, and generalized them into `incoming-ahead` with `Thing` at those offsets. The pair paid nothing on the
-balls and fists, which their own patterns already wrote as one symbol; it paid on everything else that had
-ever come at the body once or twice and been written flat. The specific patterns stay while balls and fists
-are frequent, and `incoming-ahead` serves the rest.
+**How `Thing` came to be.** Balls and fists came at the body often and got patterns of their own. Everything
+else that ever came at it, once or twice each, stood in `me`'s residual at `(0, +2)` and, a frame earlier, at
+`(0, +4)`: two places filled most of the time by no one neuron. `me` grouped them (D42): one class, since the
+two places hold the same neurons, and one index, since the same neuron stands at both in each neighborhood.
+That is `Thing`, its members the rarities, and the pick then built `incoming-ahead` over it. When balls become
+rare and their pattern retires, `ball` falls to the residual, `me` finds it where `Thing` stands, and it joins.
 
 # 5. One moment, worked
 

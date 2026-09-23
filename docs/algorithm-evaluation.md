@@ -245,13 +245,14 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 
 # 3. Open questions
 
-**Patterns as functions and class neurons (D37–D42) — what stands between the model and an implementation.**
+**Patterns as functions and class neurons (D37–D43) — what stands between the model and an implementation.**
 There is one kind of pattern above the base, its body naming events and actions together (D5), and one kind of
 connection (D25). Every level is explained as a set of function calls over global variables: an accepted bid is a call, its child
 is the function, and each class neuron it reads is a variable of the level holding the neuron the slot was fit
 by (§7.1). Base actions take no arguments and act at a focus the environment holds; a slot is a class neuron
-named at an offset, tied to no dimension; variables come from merging patterns that differ at few offsets, priced
-over the whole history (D42); an inferred pattern runs its actions and expects its events, weakly (R30).
+named at an offset, tied to no dimension; classes are found in the residual, grouped by offset, before patterns
+are built (D42), and a general pattern replaces the specifics it generalizes (D43); an inferred pattern runs
+its actions and expects its events, weakly (R30).
 Four cases are worked by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md),
 [hit](algorithm-hit.md), [an alternating pair](algorithm-xy.md)).
 What is still open, in the order it bites:
@@ -262,24 +263,31 @@ What is still open, in the order it bites:
   done. What exists is expectation (R40): an inferred pattern's events fire weakly at the base, so a step's
   expected outcome, the carry mark, is an input of the next frame once it was seen to follow. That covers the
   carry as [addition](algorithm-addition.md) shows it, and not a conclusion nothing was ever seen to follow.
-- **A class is found only where one neuron saw the variants.** The merge reads one table (D42). Two neurons that
-  each saw one variant never merge on their own; reuse (R43) joins their class neurons only when two bids read
-  one activation in one election. `me`'s patterns for something ahead, to the left and to the right hold three
-  class neurons for one kind.
+- **Replacing the specifics is not yet priced right.** D43 retires the pair a general pattern replaces, and on
+  frequent variants that loses: three patterns for pairs seen ten times each cost fifteen in the dictionary
+  and one per occurrence, the general one costs its line and its classes and three per occurrence, and no
+  count of occurrences makes the second shorter. The intended answer is the level above, where a pattern
+  naming the call and the variable's value together restores one symbol per occurrence; but a variable there
+  is named by its class, not its value, so that pattern cannot yet be written (the earlier "bindings not
+  counted" problem), and the arithmetic has not been redone with it. Until it is, D43 as stated generalizes
+  only where the specifics were not worth keeping.
+- **A class is found only where one neuron saw the variants.** The residual grouping reads one table (D42).
+  Two neurons that each saw one variant never share a class on their own; reuse (R43) joins their class neurons
+  only when two class bids carry the same members.
 - **Near-duplicates stay apart, and nothing merges children.** A child is reused only on a tie over the same
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
   that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
   bids cover mostly the same activations, per level.
-- **A merged pattern displaces nothing by itself.** The pair it came from stays on its own margin, so the table
-  holds the general pattern and the specific ones together, the specific ones winning the election while their
-  variant is frequent. The dictionary carries both. **Diagnostic:** per general pattern, the share of its
-  occurrences a specific pattern of the same table wrote instead.
+- **Membership lags by one occurrence.** A slot is fit only by a member (D38), and a neuron joins a class when
+  the observer finds it in the residual where the class stands (D42). So a pair never seen is written flat the
+  first time and fits the general pattern the second. **Diagnostic:** occurrences of a general pattern's shape
+  left uncovered because a neighbor was not yet a member.
 - **A variable does not thin the level.** A child replaces what its pattern covers; a variable stands one for
   one with what it holds, so a level built from calls that read many variables is wider than D4's doubling reach
   assumes. **Diagnostic:** variables per accepted bid, per level.
-- **A slot takes anything.** Nothing narrows a class neuron to the kind of thing its variables have held, so a
-  pattern with slots fires for things its lessons were never learned on, and its estimates average them in. A
-  frequent one is taken out by a pattern of its own (D33); a rare one is not.
+- **A class's lesson is one lesson.** A general pattern's child has one set of connections over every member,
+  so what it learned after a ball it applies to a human in the same slot, and a bad outcome on one lowers the
+  estimate for all. The specific lesson lives, if anywhere, one level up (D43).
 - **Reach bounds what a call can read.** A variable is read at the offset where it stands, within the reader's
   reach (D4). A value a call needs from further back than its level reaches is out of sight, which is the same
   bound the return path meets.
