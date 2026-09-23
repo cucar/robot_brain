@@ -34,7 +34,7 @@ and `4`.
 | base actions | `hit`, `turn-left`, `turn-right` |
 | patterns | three situations in the table of `me`, each with a child; three steps, one in the table of each base action, each naming the situation's neighbors a frame before and the action beside it |
 
-# 4. The situations, and what each returns
+# 4. The situations, and what each infers
 
 Every pattern is in `me`'s table, so every offset is measured from the body. Each names `Thing` at two offsets,
 which means the same value at both, whatever it is (D38): one thing, nearer than it was a frame ago.

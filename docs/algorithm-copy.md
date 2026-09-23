@@ -40,7 +40,7 @@ names `ready`: three activations, `ready`, `show` and the digit, are written as 
 `Digit` itself came from the merge (D42): `show` once held a pattern per frequent digit, and the pairs that
 differed only at the digit generalized into this one.
 
-# 4. What the situation returns, and what that returns
+# 4. What the situation infers, and what that expects
 
 The step, in `hold`'s table, names `show` and `Digit` a frame before and `hold` beside it (D5); its child is
 `held`.
@@ -81,4 +81,4 @@ ever says which digit it is.
 | the value `a` holds | the `Digit` variable on the level, holding `7` |
 | the function | the step `held`, inferred by the situation's connection |
 | `return a` | `held`'s connection, which names `Digit` and reads the variable standing there |
-| the value returned | the digit `7`, fired weakly the frame after `hold` runs |
+| the value | the digit `7`, expected and fired weakly the frame after `hold` runs |

@@ -36,8 +36,9 @@ This substitution is the whole mechanism for compression.
 |-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
 | placement | An offset is kept to one significant digit in base 2, so a far neighbor is placed only to within the power of two it rounds to.                   | D6        |
 | evidence  | A neuron decides its structure over its last `H` activations and the history slides, so the structure that would restate a frame long past is neither held nor recoverable. | D18       |
+| kind      | A pattern that reads a variable knows that one of a kind stood there and not which, so what it learned to do after "some gender was royal" is one lesson for every member; which member it was is kept only while that case is frequent enough to keep a pattern of its own. | D41, D42  |
 
-Both losses are why the file is a yardstick and not an artifact (D12). Imagine the run written out under the
+All three losses are why the file is a yardstick and not an artifact (D12). Imagine the run written out under the
 structure as it now stands, and read the objective as: make that shorter.
 
 ## 1.2 Execution: the best estimate for the situation
@@ -329,8 +330,8 @@ in the alphabet (D1). Where it acts is state the environment holds, a **focus**:
 anything else, and the environment reports it to the machine as events like anything else.
 
 > **D37 — The call.** An activation of an action (D8). It fires in the frame it runs, at the coordinate of the
-> activation that returned it. Where the action's body or its returns name a class neuron, the call reads the
-> variable standing at that offset from it (D41), so a call carries nothing of its own. **An
+> activation that inferred it. Where the action's body names a class neuron, expanding the call reads the
+> variable standing at that offset from it (D41, R28), so a call carries nothing of its own. **An
 > action dimension is a set of functions that contend with each other**: one call per dimension runs in a
 > frame. The environment may execute a call as well as the machine, and it appears in the frame either way. A
 > call of a dimension the environment does not have runs like any other, and nothing outside the machine sees
@@ -659,8 +660,8 @@ what stood on the apex in the frames after it, event and action alike.
 > neuron as its value, as strong or as weak as that activation (D40): the variable's activation parent is its
 > value. It belongs to no dimension and no kind, so a variable may hold an event or an action, and the same
 > class neuron may be read by patterns of either kind. It is a global of its level: any pattern
-> of any neuron within reach reads it by naming it at the offset where it stands, and a call or a return that
-> names it reads it the same way (D37, D25). It holds a table, a history and connections exactly as any neuron
+> of any neuron within reach reads it by naming it at the offset where it stands, and an expansion or an
+> inference that names it reads it the same way (R28, D25). It holds a table, a history and connections exactly as any neuron
 > does (D32, D18, D25): it is handed its neighborhoods, it bids, it is covered by bids of its own level that name
 > it, and uncovered it stands on the apex and votes. Its history pools the neighborhoods around everything it
 > has held, which no one of those neurons' histories does.
@@ -1277,11 +1278,19 @@ stop the writing — there is no second call and nothing is saved twice.
 > what the connection carried**: every base symbol an inference's expansion places carries the strength and the
 > estimate of the connection it came from, and nothing is re-weighted on the way down.
 >
+> **Expansion substitutes the variables.** A body is written one level below the neuron whose pattern it is, and
+> the variables it reads stand one level above that, beside the neuron, each at the coordinate of its value
+> (§7.4). Where the body names a class neuron `K` at an offset, the machine finds the `K` variable standing at
+> that offset one level up and places its value at the offset in the body's level: the function is run with the
+> global substituted in. A neighbor that is itself a higher neuron is expanded the same way from where it is
+> placed. Recognition is this substitution run backward: the body is fit by `man` standing at the offset, and
+> the level above records a `K` variable holding `man` (D41). **Two words, never one.** A pattern is
+> **expanded**, downward, into the level below; a connection is **inferred**, forward, into the frames ahead
+> (D25); what a call does and what follows it are different directions.
+>
 > **A connection is placed the way a neighbor is.** A connection at offset `b`, read by an activation at age `a`,
 > puts the neuron it names `b − a` frames ahead — that is where it completes — and its expansion hangs
-> from there, its base symbols at the frames back from it. **Expanding a call reads the variables** (D37, D41):
-> where the body names a class neuron, the value of the variable standing at that offset from the call runs,
-> and a neighbor that is itself a learned action is expanded the same way from where it is placed. **A coarse
+> from there, its base symbols at the frames back from it. **A coarse
 > offset is not a window.** Its action completes at
 > `b`, not somewhere in the group `b` stands for, exactly as a neighbor named at `−b` is placed at `−b` and nowhere
 > else. So the steps of a long program reach the frame ahead one at a time, in order, each at exactly one age,

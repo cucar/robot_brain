@@ -667,7 +667,7 @@ and by what that returned. It was a local variable, and everything that goes wro
 wrong with it: the collapse could not count it, a connection had to key on it, and a neighbor's own bindings had
 to be written into a body. A variable of the level has none of that. It stands at a coordinate for its window,
 it holds its value, and whatever names its class neuron at the offset where it stands reads it: a pattern, a
-call, a return. Two calls within reach of one variable read the same value, which is what "the same thing" means.
+call, an inference. Two calls within reach of one variable read the same value, which is what "the same thing" means.
 Nothing is carried, because the thing stays where it is.
 
 **On D41 — why it keeps no list.** A person who thinks of a bridge does not run through every bridge they have
@@ -684,7 +684,7 @@ over things needs a population shared by those things, and a neuron that fires f
 population.
 
 **On D42 — where a variable comes from.** The greedy pick builds a pattern per variant: a ball ahead, a fist
-ahead, each a function with no parameters, each returning the same thing every time. The evidence that they are
+ahead, each a function with no parameters, each standing for the same thing every time. The evidence that they are
 one function is in the table, side by side: two patterns identical but for one offset. Putting a variable where
 two examples differ is anti-unification in its original form (Plotkin, Reynolds, 1970), and the merge does it
 over the table, two patterns at a time, as the greedy pick builds two neighborhoods at a time. Which offsets
@@ -702,7 +702,7 @@ residual has no shape to read, since its occurrences share no neuron, and the ta
 since its occurrences are already covered. So a class is built where a pattern is long and its variants many,
 and it serves the long tail; a variant frequent enough to keep its own pattern keeps it, as the hot path stays
 inlined, and the general pattern takes the variant over when it becomes rare and its pattern retires. A lookup
-table whose cases each return something different, addition's pairs of digits, never merges, since nothing
+table whose cases each infer something different, addition's pairs of digits, never merges, since nothing
 is left in the residual for a general pattern to gain on.
 
 **On R36 — a neuron several variables hold votes several times.** Every variable is a voter, so an event that
@@ -737,8 +737,8 @@ boundary with the world is one-way for each kind: the machine can make the world
 cannot make it show an event. So an event the machine put in the frame is a different thing from one the
 environment reported, and an action is the same thing whether or not anything outside executes it. A weak event
 is a variable, written by a call and read by recognition like anything else, and it is the same neuron as the
-one the world would report, so what a pattern learned on the seen thing holds for the returned one, and what
-the neuron learned to do while seen it votes for while returned. It learns nothing itself: a returned `7` that
+one the world would report, so what a pattern learned on the seen thing holds for the expected one, and what
+the neuron learned to do while seen it votes for while expected. It learns nothing itself: an expected `7` that
 wrote exposures would mix what followed imagining a `7` into what followed seeing one. What keeps it from being
 mistaken for the world is that it does not persist, and that the world's report replaces it. The literature's
 oldest answer has the same shape: a motor command sends a copy of itself to a predictor, the prediction is
@@ -752,11 +752,11 @@ it looks for something better when what it has hurts, which is what people do wh
 environment that wants a behavior discovered rather than taught has to make its absence cost something.
 
 **On §3.5 — the two functions of the loop.** A situation is a function the machine owns: it fires, and what it
-returns is an action, looked up in its connections and chosen by estimate. An action is a function the world
-owns: it is called, and what it returns is the next events. The run is the two composed over and over, and a
+infers is an action, looked up in its connections and chosen by estimate. An action is a function the world
+owns: it is called, and what follows it is the next events. The run is the two composed over and over, and a
 program is a stretch of that alternation that recurs. A learned function is a compression first and a callable
 unit second: only a situation whose window holds its whole length can call it (R36), and below that height the
-same behavior is a chain of one-step lessons, each returned by the situation the last step created.
+same behavior is a chain of one-step lessons, each inferred by the situation the last step created.
 
 **On D37 — where calls come from.** A call the environment executes appears in the frame as an activation of
 that action (D37), and sits in the action neuron's history as a pixel sits in an event neuron's. So a
@@ -783,7 +783,7 @@ everything; a habit that pays is a program.
 
 **On D25 — why the fan-out is the apex.** Every uncovered activation connects to everything that stood on the
 apex of the frames after it, event and action alike. That is more than the earlier draft's one apex action per
-dimension, and it is what a prediction needs: an expected event is returned only because it was once seen to
+dimension, and it is what a prediction needs: an expected event is inferred only because it was once seen to
 follow. The bound is the apex itself, which compression is meant to keep to a handful per frame. Whether the
 lower apex, base symbols nothing chunked, should connect at all is open (algorithm-evaluation.md).
 

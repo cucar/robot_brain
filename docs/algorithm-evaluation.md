@@ -287,7 +287,7 @@ What is still open, in the order it bites:
   needs it to recover the run.
 - **A function is callable only from a situation whose window holds it.** A voter can start a program only
   from an offset at least as far out as the program is long (R36), and an activation is open for `reach_t`
-  frames (D9). Below that height the same behavior is dispatched a step at a time, each step returned by the
+  frames (D9). Below that height the same behavior is dispatched a step at a time, each step inferred by the
   situation the last one created, with the recent past in the pattern carrying what the step needs to know.
   That works only when every decision's facts are within reach of the situation that makes it.
 - **A situation that recurs unchanged runs again.** If a step leaves what its situation sees exactly as it was,
@@ -304,8 +304,8 @@ What is still open, in the order it bites:
   not (D40). Making inferred actions weak too would remove the asymmetry; what it would mean for a child fit by
   them, and for the habit vote, has not been worked out.
 - **Crossing kinds.** A variable holds an event as an event. "Write the digit you see" needs the action that
-  corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. Copy (algorithm-copy.md) returns the event it was given and does not need one; writing it does.
-- **A call returned by several situations** fires at each of their coordinates (D37). That is taken to be right
+  corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. Copy (algorithm-copy.md) expects the event it was given and does not need one; writing it does.
+- **A call inferred by several situations** fires at each of their coordinates (D37). That is taken to be right
   and has not been worked through against "one call per dimension per frame".
 - **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
   member fires (H2, H5). Under D41 a class neuron is a variable that fires only when an accepted bid reads it,

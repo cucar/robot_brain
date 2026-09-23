@@ -33,11 +33,11 @@ of the variable.
 
 | Kind | Neurons |
 |---|---|
-| base events | `a0`, `a1`, `b0`, `b1`, and the returned `c` |
+| base events | `a0`, `a1`, `b0`, `b1`, and the expected `c` |
 | base actions | `out-0`, `out-1`, `carry-1` |
 | patterns | eight steps, in the tables of `out-0` and `out-1`, each naming the digits of the frame before and the actions of its own, each with a child |
 
-# 4. The situations, and what each returns
+# 4. The steps, and what each infers
 
 A step is a pattern in the table of the `out` digit that ran, naming the pair of digits, and the carry if there
 was one, a frame before it, and `carry-1` beside it when it ran (D5). Matched, it says this case happened and
@@ -69,7 +69,7 @@ speaks, and the final `1` is written.
 # 5. One sum, frame by frame
 
 `101 + 111`. The pairs, from the right, are `(1, 1)`, `(0, 1)`, `(1, 1)`. What is chosen in one frame runs in the
-next (R29), and a return fires in the frame its call runs.
+next (R29), and an expected event fires in the frame its step's expansion places it.
 
 | Frame | runs | input | on the apex | infers |
 |---|---|---|---|---|
