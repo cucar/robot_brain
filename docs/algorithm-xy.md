@@ -35,17 +35,16 @@ written flat.
 
 Beside the three recurring pairs, many pairs have gone by once: `s, t, s, t, p`, `u, v, u, v, p`, and so on.
 Nothing recurs by name, so the greedy pick built nothing for them and they stand in the residual, flat. Before
-the next pick runs, `p` groups that residual by offset (D42):
+`p`'s next pick seeds on a neighbor of theirs, clusters the rows it collects, and surveys the cluster of once-seen
+pairs spot by spot (D33, D42):
 
 | Question | Answer |
 |---|---|
-| Which places are filled in a majority of the residual with no one neuron in a majority? | All four. Each is a class. |
-| Which of those classes have the same members? | One back and three back hold the same letters, `t, v, …`; two back and four back hold `s, u, …`. Two kinds, `K` and `J`. |
-| Which places hold the same neuron in a majority of the neighborhoods? | One and three back; two and four back. So `K¹` at both of the first, `J¹` at both of the second. |
+| Which spots hold one neuron in a majority? | None. No constants. |
+| Which spots are filled in a majority with no neuron in a majority? | All four. Each is a slot. |
+| Which slots hold the same neuron in a majority of the neighborhoods? | One and three back; two and four back. So `K¹` at both of the first, `J¹` at both of the second: two classes, two variables. |
 
-`p`'s class table now holds `K` with members `t, v, …` and `J` with members `s, u, …`, and a `K` or `J`
-activation stands beside each of those letters in every neighborhood of the history. The pick then runs over the
-residual and finds a place held by one neuron at last, `K¹` one back in every once-seen pair, and builds:
+The candidate is the pattern and its two classes at once, `K` holding `t, v, …` and `J` holding `s, u, …`:
 
 ```
 (K¹, 1 back),  (J¹, 2 back),  (K¹, 3 back),  (J¹, 4 back)
@@ -65,9 +64,9 @@ names no letter.
 The general pattern saves one on every once-seen pair and nothing on the recurring ones, which it does not
 cover; its line costs five and each class its name and its members (D13), so it pays once enough rare pairs
 have gone by. `P`, `Q` and `R` stand: they differ from the general pattern at places where no class stands
-beside their letters, since `y`, `b` and `n` were never in the residual, so D43 does not pair them with it. When
-x-y becomes rare and `P` retires, `y` and `x` fall to the residual, `p` finds them standing where `K` and `J`
-stand and widens the classes (D42), and the general pattern writes the pair from then on.
+beside their letters, since `y`, `b` and `n` were never in the residual. When x-y becomes rare and `P` retires,
+`y` and `x` fall to the residual, a survey finds them at `K`'s and `J`'s slots, the classes hold them (D41), and
+the general pattern writes the pair from then on.
 
 # 5. The return and the election
 

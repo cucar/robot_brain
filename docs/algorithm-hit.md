@@ -53,9 +53,9 @@ activations of the thing are written as the child and one variable.
 
 **How `Thing` came to be.** Balls and fists came at the body often and got patterns of their own. Everything
 else that ever came at it, once or twice each, stood in `me`'s residual at `(0, +2)` and, a frame earlier, at
-`(0, +4)`: two places filled most of the time by no one neuron. `me` grouped them (D42): one class, since the
-two places hold the same neurons, and one index, since the same neuron stands at both in each neighborhood.
-That is `Thing`, its members the rarities, and the pick then built `incoming-ahead` over it. When balls become
+`(0, +4)`: two spots filled most of the time by no one neuron. The survey (D42) made them slots, and one
+variable, since the same neuron stands at both in each neighborhood. That is `Thing`, holding the rarities, and
+`incoming-ahead` is the candidate that named it. When balls become
 rare and their pattern retires, `ball` falls to the residual, `me` finds it where `Thing` stands, and it joins.
 
 # 5. One moment, worked

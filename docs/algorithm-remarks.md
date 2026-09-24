@@ -683,38 +683,38 @@ the two side by side. A class neuron fires for each of them in turn, so its hist
 over things needs a population shared by those things, and a neuron that fires for all of them is that
 population.
 
-**On D42 — where a kind is found, and why classes come first.** The things of a kind are alternatives, so
-they never appear together in a frame: a ball or a fist stands at that place, never both. Where they do appear
-together is one neuron's history, one place filled by a different neuron each time, and after the greedy pick
-has taken what recurs by name, what is left in the residual at a place is exactly that: things that keep
-standing there without any one of them recurring enough to be named. Grouping the residual by offset reads it
-off directly. It has to run before the pick, because a pattern can name a class only once the class stands in
-the neighborhoods: with pairs that each occur once nothing recurs by name, the pick builds nothing, and only
-the classes give it something to build. An earlier draft found the variable the other way round, by pairing two
-patterns of the table that differed at one offset; that finds it only among variants frequent enough to have
-patterns, and the residual route finds it among the ones too rare to have any, which is where the class pays.
+**On D42 — AND and OR are one survey.** A pattern is the spots of a cluster where the same neuron always
+stands; a class is a spot where something always stands and never the same thing. Both are read off the same
+cluster of neighborhoods, spot by spot, and neither is complete without the other: a spot that varies is not
+noise, it is a parameter, and a parameter means nothing outside the context that stayed the same around it.
+Putting a variable where the examples differ is anti-unification (Plotkin, Reynolds, 1970); the survey does it
+over one cluster at a time. An earlier draft found classes in two other ways, by pairing two finished patterns
+that differed at one spot and by grouping the residual by offset before any pattern was built. The first found
+kinds only among variants frequent enough to have patterns; the second made a class of every spot that varied,
+which in a two-symbol alphabet is every spot. The survey finds them where they are priced, inside a candidate.
 
-**On D42 — kind and instance are two things.** Grouping by offset gives one class per place, and the letters at
-one back and at three back are the same letters, so the two classes merge into one kind. But if every letter
-eventually stands at every place, all four sets coincide, and a pattern naming one class at four places would
-demand one letter at all four. So which places hold the same thing is read within the neighborhoods, the same
-neuron at both in a majority, and written as a variable index: `K¹` at one and three back, `K²` at two and
-four back is one kind and two instances, and that is what an alternation is.
+**On D42 — kind and instance, variable and branch.** Two slots that hold the same neuron in a majority are one
+variable named twice, `K¹` at both, and that is what an alternation is. Two slots whose different neurons pair
+up in a majority, `m` whenever `d` and `n` whenever `e`, are not a variable: the second is explained by the
+first, and the right structure is one candidate per pairing, with constants where the slots were. That is
+dispatch, and it is where a case keeps a lesson of its own. The two readings use the same count over the same
+pairs of spots, and the price settles what the count leaves open: a variable costs one line and a value per
+occurrence, branches cost a line each and no value.
 
-**On D42 — why the observer keeps the members.** A slot has to be fit by something, and a class that took any
-neuron would cover everything at every place and leave nothing to decide which class stands where. So a class
-has members, and they are recorded where the evidence is, in the table of the neuron that saw them stand
-there. The member records nothing: a ball does not know it is a thing that comes at bodies, the body knows.
-The cost is a symbol per member in the dictionary, which is the true cost of remembering who belongs, and a
-neuron never seen at the place does not fit until the observer finds it there and widens the class.
+**On D41 — why the class's history is its member list.** A slot has to be fit by something, and a class that
+took any neuron would cover everything at every spot and leave nothing to decide which class stands where. So
+a class has members, and the cheapest record of them is the one every neuron already keeps: its last `H`
+activations, each holding the value the class stood for. A member the class has not held in `H` activations is
+forgotten, which is what a kind should do, and no list is kept by the observer, who only reads the class, or
+by the member, who never knows. A ball does not know it is a thing that comes at bodies; `Thing` remembers
+having been a ball, for a while.
 
-**On D43 — why the general pattern replaces the pair.** A general pattern kept beside the specifics it came
-from saves nothing: the specifics win every election where they fit, and the dictionary carries both. So
-generalizing is a replacement, and it is priced as one, the lines saved against the value each occurrence now
-pays. What that costs is the specific lesson: three children with three sets of connections become one child
-with one. The place that lesson is kept, when it is worth keeping, is the level above, where the call and the
-variable stand side by side and a pattern may name the two together. That is the hot path, one level up from
-the function. Whether the file prices that trade correctly is not settled (algorithm-evaluation.md).
+**On D42 — the whole alphabet is not a kind.** With two symbols every spot varies and every class is `{0, 1}`.
+Such a class covers a pixel for a value, one symbol for one, and a pattern that named it would pay the value for
+nothing it did not already know, since the spot is always filled. So no pattern names it, and it is never
+bought. The mechanism needs no rule about alphabet size: a class pays only by narrowing, and a class that
+narrows nothing pays nothing. Kinds appear where the alphabet is large, the letters of a stream or the children
+one level up in an image, where a stroke of some slant is a few members out of hundreds.
 
 **On R36 — a neuron several variables hold votes several times.** Every variable is a voter, so an event that
 several accepted bids read produces several voters where an event nothing read produces one, and a candidate's
