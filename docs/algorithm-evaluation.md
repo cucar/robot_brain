@@ -271,9 +271,10 @@ What is still open, in the order it bites:
   restore one symbol per occurrence; but a variable there is named by its class, not its value, so that
   pattern cannot yet be written, and the arithmetic has not been redone with it.
 - **The survey's degenerate case.** Where nothing has a majority at any spot the candidate is all slots over
-  the whole alphabet, it fails the price, and D33 stops. Clustering the seed's neighborhoods by agreement is
-  meant to prevent it, and how well it does on a binary image has not been measured. **Diagnostic:** share of
-  picks that stop on an all-slot candidate, per level.
+  the whole alphabet. Its members earn nothing, so it fails the price (D41), and D33 stops there; clustering
+  the seed's neighborhoods by agreement is meant to find the constant patterns first. How well it does on a
+  binary image has not been measured. **Diagnostic:** share of picks that stop on an all-slot candidate, per
+  level.
 - **Co-variation is quadratic in the slots.** `same` and `paired` are read over every pair of slots of a
   candidate, per cluster, and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The survey reads one table (D42). Two neurons
@@ -283,11 +284,11 @@ What is still open, in the order it bites:
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
   that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
   bids cover mostly the same activations, per level.
-- **Membership lags by one occurrence, and forgets.** A slot is fit only by a neuron the class has held
-  (D38), and a class holds a neuron once a survey found it at a slot (D42). So a pair never seen is written flat
-  the first time and fits the general pattern the second, and a member not seen for `H` activations of the
-  class is forgotten. **Diagnostic:** occurrences of a general pattern's shape left uncovered because a
-  neighbor was not, or no longer, a member.
+- **Membership lags by one call.** A slot is fit only by a member (D38). A non-member standing there is a
+  correction, and it is admitted in that same call if the rest of the pattern fits (R41), but a cover is never
+  re-derived, so the occurrence that admitted it is written with the correction and the next is covered. A
+  member whose occurrences have left the history is retired. **Diagnostic:** occurrences of a general pattern's
+  shape written with a slot correction, per class.
 - **A variable does not thin the level.** A child replaces what its pattern covers; a variable stands one for
   one with what it holds, so a level built from calls that read many variables is wider than D4's doubling reach
   assumes. **Diagnostic:** variables per accepted bid, per level.

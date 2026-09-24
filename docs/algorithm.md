@@ -303,7 +303,7 @@ assumes for anything the file does not state.
 > a base neuron on the apex    =  1                 its own line
 > having a pattern             =  1 + |p|           a line in the dictionary, |p| the neighbors pattern p names
 > a variable on the apex       =  1                 a class activation, standing for its value (D41)
-> having a class              =  1                 its name in the dictionary, written once however many patterns name it (D41)
+> having a class              =  1 + its members   its name and one symbol per member, written once however many patterns name it (D41)
 > ```
 > This is a fixed-length code: a symbol costs one regardless of how often it is used.
 
@@ -387,8 +387,9 @@ read stand beside the call one level up (§7.1).
 
 > **D38 — The body.** The line of a pattern is its body, and every member of the body is a neighbor
 > `(neuron, offset)` (D26). The neuron may be a class neuron (D41), and that neighbor is a **slot**, written
-> `K¹` at its offset: a class and a **variable index**. The slot is fit by any activation whose neuron `K` has
-> held (D41), and what it read is that neuron. **The same class with the
+> `K¹` at its offset: a class and a **variable index**. The slot is fit by any activation whose neuron is a
+> member of `K` (D41), and what it read is that neuron. A non-member standing there is a neighbor named and
+> absent, a correction (D22), and it stands uncovered as itself. **The same class with the
 > same index at two offsets is the same value at both**, `K¹` and `K¹`; the same class with two indices, `K¹`
 > and `K²`, is two things of one kind, free to differ. A class neuron is tied to no dimension. The pattern owns
 > the activation a slot is fit by like any neighbor (D19).
@@ -666,12 +667,13 @@ what stood on the apex in the frames after it, event and action alike.
 > window (D9), and it holds a **value**, another neuron of the level below. A pattern's child says "these
 > happened together"; a class neuron says "one of these happened, and here is which".
 >
-> A neuron's **class table**, beside its patterns table (D32), holds the classes its patterns name (D42); the
-> same class neuron may be named by many patterns of many neurons, and is written once (D13). **What a class
-> has held is its history** (D18): each activation of a class neuron records its value, so the last `H` values
-> are its members, sliding as everything slides, and a slot is fit by a neuron the class has held (D38). A new
-> neuron joins when a survey finds it at the slot's spot (D42), and a member the class has not held for `H`
-> activations is forgotten. Neither the observer nor the member keeps a list.
+> A neuron's **class table**, beside its patterns table (D32), holds the classes its patterns name and their
+> **members** (D42); the same class neuron may be named by many patterns of many neurons, and is written once
+> (D13). **A member is priced as a pattern is.** Admitting `m` to `K` costs one symbol in the dictionary and
+> saves, at every occurrence where a pattern naming `K` then covers `m` at a slot, the correction and the line
+> `m` would otherwise have cost there (D38, D22); `m` joins when that sum over the history exceeds its symbol,
+> and leaves when it no longer does (R41). A class with no paying member retires. The member records nothing;
+> the observer holds the list, and pays for it.
 >
 > **Classes are recognized before patterns.** In each neighborhood the neuron stands a class activation beside
 > every neighbor that is a member of one of its classes, one class per neighbor at a place, and patterns are
@@ -846,8 +848,10 @@ covers it was priced on, and its classes join the class table.
 > that paid: the class joins the class table, and no class neuron exists yet. **Given** when an accepted bid first
 > reads it: the pattern's bid carries a class bid with no class neuron, as it carries no child, and when the bid
 > is accepted the machine gives the class one, reused or new (R43). A new one is born holding nothing, as a
-> child is (R17). **Fired** by the election and by nothing else (§7.4). **Widened** as surveys find new neurons
-> at its slots, and narrowed as its history forgets (D41). **Dead** when no pattern of any table names it: it leaves the class
+> child is (R17). **Fired** by the election and by nothing else (§7.4). **Widened** when a neuron standing at
+> one of its slots, in neighborhoods the pattern otherwise fits, would save more than its symbol as a member,
+> and **narrowed** when a member's saving over the history falls below it (D41): the add and retire tests, R15
+> and R18, run on members. **Dead** when no pattern of any table names it: it leaves the class
 > table, and its class neuron goes on the death ledger and is deleted like any neuron nothing can fire again
 > (R38). It is priced by what names it (D41), and the pattern is what is added and retired. What a class
 > neuron's own table holds it builds itself, from its pooled history, by the same call as any neuron (D33, D42,

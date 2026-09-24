@@ -701,18 +701,21 @@ dispatch, and it is where a case keeps a lesson of its own. The two readings use
 pairs of spots, and the price settles what the count leaves open: a variable costs one line and a value per
 occurrence, branches cost a line each and no value.
 
-**On D41 — why the class's history is its member list.** A slot has to be fit by something, and a class that
+**On D41 — why a member costs a symbol and earns its place.** A slot has to be fit by something, and a class that
 took any neuron would cover everything at every spot and leave nothing to decide which class stands where. So
-a class has members, and the cheapest record of them is the one every neuron already keeps: its last `H`
-activations, each holding the value the class stood for. A member the class has not held in `H` activations is
-forgotten, which is what a kind should do, and no list is kept by the observer, who only reads the class, or
-by the member, who never knows. A ball does not know it is a thing that comes at bodies; `Thing` remembers
-having been a ball, for a while.
+a class has members, and a member is priced as everything else is: one symbol in the dictionary, against the
+corrections it removes. A non-member at a slot is an ordinary error, the slot named and absent and the thing
+that stood there written as itself, two symbols per occurrence; admitting it costs one symbol once and a value
+per occurrence, so it pays from the first occurrence on, provided the rest of the pattern fits. That is what
+keeps a class honest. Nothing joins for standing there once in a shape that did not otherwise fit, and a
+member whose occurrences have left the history is retired, which is what a kind should do. The list lives with
+the observer, who pays for it; the member never knows. A ball does not know it is a thing that comes at
+bodies, the body does, and it keeps the ball on its books for as long as the ball earns its line.
 
-**On D42 — the whole alphabet is not a kind.** With two symbols every spot varies and every class is `{0, 1}`.
-Such a class covers a pixel for a value, one symbol for one, and a pattern that named it would pay the value for
-nothing it did not already know, since the spot is always filled. So no pattern names it, and it is never
-bought. The mechanism needs no rule about alphabet size: a class pays only by narrowing, and a class that
+**On D42 — the whole alphabet is not a kind.** With two symbols every spot varies and every class would be
+`{0, 1}`. But a member has to earn its symbol, and admitting `1` to such a class lets a pattern cover a pixel for
+a value, one symbol for one, saving nothing against the member's cost. So the class gets no member, the
+all-slot candidate fails its price, and nothing is bought. The mechanism needs no rule about alphabet size: a class pays only by narrowing, and a class that
 narrows nothing pays nothing. Kinds appear where the alphabet is large, the letters of a stream or the children
 one level up in an image, where a stroke of some slant is a few members out of hundreds.
 
