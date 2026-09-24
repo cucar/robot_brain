@@ -144,8 +144,8 @@ This sits in the gap between symbolic production systems (which don't learn onli
 
 ## 7. Compression as code — neighbors of the function model
 
-The function model (algorithm.md D37–D41: patterns as functions, class neurons as slots, returned events as
-variables) has neighbors in six fields. None combines them; each has solved a piece. Citations gathered
+The function model (algorithm.md D37–D42: patterns as functions, class neurons as variables read by offset,
+expected events) has neighbors in these fields. None combines them; each has solved a piece. Citations gathered
 2026-09-17 and not yet read in full.
 
 | Field | Nearest work | What it has that the model uses | What it lacks |
@@ -159,6 +159,7 @@ variables) has neighbors in six fields. None combines them; each has solved a pi
 | Skills as compression in RL | SKILLS (Thrun & Schwartz 1994); ReuseRL (2026) | Skill discovery by description length; a PAC-Bayes bound on a dictionary's description of future behavior | — |
 | Inductive logic programming | Knorf (Dumančić et al.) | Predicate invention that shrinks a learned program | — |
 | Forward models and source tagging | Efference copy (von Holst & Mittelstaedt 1950; Sperry 1950); Wolpert, Ghahramani & Jordan 1995; Blakemore, Wolpert & Frith 1998; Frith's comparator; Johnson & Raye 1981; Dijkstra & Fleming 2023; predictive coding (Rao & Ballard 1999); Dyna (Sutton 1990) | A prediction travels on its own path and is compared with input, never mixed with it — a weak activation (D40) is that path | — |
+| Attention and in-context learning | Transformers (Vaswani et al. 2017); induction heads (Olsson et al. 2022); transformer circuits (Elhage et al. 2021); relative position encodings (Shaw et al. 2018; RoPE, Su et al. 2021); MLPs as key–value memories (Geva et al. 2021) | Query, key and value as slot, class and bound value; an induction head as a variable named at two offsets with a value read at a third, the primitive behind in-context learning; relative offsets as the address | Content-addressed at any distance where this design is place-addressed within reach; soft binding by weighted sum where a variable holds one neuron; learned by gradient over a corpus, not by counts over a sliding history |
 | Human abstraction learning | Prospective compression (2026) | Evidence that people choose abstractions for tasks they expect, not only for tasks they have had; the sliding history here is retrospective | — |
 
 What is not found combined: one majority-vote operator, online and greedy, per neuron over a sliding history,

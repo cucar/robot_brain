@@ -729,6 +729,19 @@ requires; synchrony and tensor products are answers for continuous networks and 
 symbols. And the design has an answer of its own that the literature mostly lacks: the variable is found by
 offset. "Whatever is one to my left" reads a thing by location, with no pointer anywhere.
 
+**On D38 — attention, and where the comparison holds.** A transformer's attention head does with vectors what a
+slot does with symbols. The query is the slot, what a position is looking for; the key is what a position
+advertises, the class it would fit; the value is what is bound, the variable's value; the softmax picks a
+binding where the cover picks one. Interpretability work on trained transformers found the same primitive this
+design rests on: an induction head implements "find the earlier `A`, read what followed it, emit that", which
+is a pattern with one variable named at two offsets and a value read at a third (D38), and it is the piece
+behind in-context learning. That is evidence that sameness across a gap is the right thing to have as a
+primitive. Two differences run the other way. Attention is content-addressed: it finds the earlier `A` at any
+distance, and this design is place-addressed, finding it at an offset within reach, rounded to a power of two
+(D6), which is a limit here and not there. And attention binds softly, a weighted sum of values, so two
+similar things in one context blur into each other, where a variable here holds one neuron; that is a
+difference in kind, and whether it is an advantage is not shown by anything the design has done yet.
+
 **On D38 — what a slot saves.** It is priced as a neighbor, one in the line, and the variable it reads costs
 one per occurrence, which is what the thing standing there would have cost beside the child. So a class neuron
 named at one offset nets nothing: the symbol moves from beside the child to the variable. It pays the moment it
