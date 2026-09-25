@@ -221,7 +221,7 @@ it in the residual is free; the only thing a pattern is ever charged for is a ne
 fire (D22). The design pays for false claims, not for unclaimed facts, and a pattern that names less is never
 penalized for it beyond the coverage it forgoes.
 
-**On D19 — why handover is arithmetic.** What an activation holds against each pattern is the index, and nothing
+**On D19 — why handover is arithmetic.** What an activation holds against each pattern is the variable, and nothing
 has to be added to it — a pattern that moved updates its owners in each activation it covers (D29), and every
 activation reaching for it is current again. An activation's share moves whole, so a pattern joining or leaving a cover transfers its
 share in `O(offsets)`. The offset grid grows with the level, since D4's reach does, while the number of
@@ -656,7 +656,7 @@ a base action acts is a focus the environment holds and the machine sees, which 
 machine the design already is, and a fovea. Nothing is declared about an action but its place in the alphabet.
 
 **On D41 — the second axis.** A child says "these things happened together": an AND, part to whole. A class
-neuron says "one of these happened, and here is which": an OR, instance to kind, with its activation holding
+neuron says "one of these happened, and here is which": an OR, instance to class, with its activation holding
 the instance. Both are bought in the same election and both fire one level up, the child for the call and a
 variable for each class neuron the pattern read. The design had the first axis from the start. The second is
 what "whatever", "the same thing" and "one of these" all needed, and it is one object.
@@ -671,7 +671,7 @@ call, an inference. Two calls within reach of one variable read the same value, 
 Nothing is carried, because the thing stays where it is.
 
 **On D41 — why it keeps no list.** A person who thinks of a bridge does not run through every bridge they have
-seen, and that is the point of having the kind. What a class neuron has held is in its history and in its
+seen, and that is the point of having the class. What a class neuron has held is in its history and in its
 connections, pooled, and nowhere as a list. A variable is fit by whatever stands at its offsets alike; a list
 used as a filter would be only as wide as what had been seen, so the pattern would fail exactly where it is
 wanted, on the rare, the once-seen and the new. Membership was priced for a day and dropped: the members of a
@@ -684,23 +684,23 @@ over things needs a population shared by those things, and a neuron that fires f
 population.
 
 **On D38 and D27 — memorizing and equalizing are one rule.** A constant says what stands at an offset; a
-variable says that what stands there is the same as what stands at the other offsets of its index, and names
+variable says that what stands there is the same as what stands at the other offsets of its variable, and names
 nothing. Both are neighbors, both are expected to hold, both pay a correction when they fail, and both enter
 and leave a body by `2 · holds − s − 1`. The whole difference between a pattern and a class is which of the
 two kinds of neighbor it is made of, and most bodies are made of both. Putting a variable where the examples
-differ is anti-unification (Plotkin, Reynolds, 1970); the survey does it over one cluster at a time, and it
+differ is anti-unification (Plotkin, Reynolds, 1970); the collapse does it over one cluster at a time, and it
 adds what the literature mostly lacks: the variable is found by offset, and it is a saving only when it ties
 offsets together.
 
-**On D42 — a variable pays by tying offsets, and that is what stops the trivial kind.** A variable at one
+**On D27 — a variable pays by tying offsets, and that is what stops the trivial class.** A variable at one
 offset covers one neighbor for one value, nothing saved; at five offsets that hold one neuron it covers five
 for one, four saved, less a correction for the repeat that is missing. So a class of the whole alphabet at a
 single offset, "a pixel stands here", is never a saving and is never built, with no rule about alphabets. And
 eight pixels around an activation tied into one variable pays exactly where they are one pixel, a uniform
-patch, which is a real regularity. Earlier drafts tried to keep the trivial kind out by pricing members or by
+patch, which is a real regularity. Earlier drafts tried to keep the trivial class out by pricing members or by
 pricing the value in bits; neither was needed once the members of a class were its offsets.
 
-**On D42 — variable and branch.** Two varying offsets that hold the same neuron in a majority are one
+**On D27 — variable and branch.** Two varying offsets that hold the same neuron in a majority are one
 variable. Two varying offsets whose different neurons pair up in a majority, `m` whenever `d` and `n` whenever
 `e`, are not a variable: the second is explained by the first, and the right structure is one candidate per
 pairing, with constants where the variables were. That is dispatch, and it is where a case keeps a lesson of
@@ -733,12 +733,12 @@ distance, and this design is place-addressed, finding it at an offset within rea
 similar things in one context blur into each other, where a variable here holds one neuron; that is a
 difference in kind, and whether it is an advantage is not shown by anything the design has done yet.
 
-**On D38 — what a variable saves.** An offset in an index is priced as a neighbor, one in the line, and the
-index costs one value per instance, which is what the thing standing there would have cost beside the child.
-So an index at one offset nets nothing: the symbol moves from beside the child to the value. It pays the
+**On D38 — what a variable saves.** An offset in an variable is priced as a neighbor, one in the line, and the
+variable costs one value per instance, which is what the thing standing there would have cost beside the child.
+So an variable at one offset nets nothing: the symbol moves from beside the child to the value. It pays the
 moment it ties two offsets, since the unknown is written once for two covered neighbors, and it pays against
 the real alternative, one pattern per variant, each with a line of its own and none at all for a variant seen
-once. A pattern whose whole body is one index at one offset saves nothing and is retired (R18); a pattern has
+once. A pattern whose whole body is one variable at one offset saves nothing and is retired (R18); a pattern has
 to name or tie something.
 
 **On D38 — how branching works.** There is no branch inside a body. The choice is dispatch: two situations are
@@ -1099,7 +1099,7 @@ so its owners there are empty (D29). It is then charged nothing there and credit
 take it again only if it pays (D28).
 
 **On D19 — why nothing is indexed the other way.** What each activation holds against each pattern is already the
-index (D19), so a reverse map from pattern to the activations it covers would be a second copy of the same fact.
+variable (D19), so a reverse map from pattern to the activations it covers would be a second copy of the same fact.
 
 **On §6.2 — prices and structure move at the same moment and are still different kinds of thing.** Both move
 when a neuron fires, because that is where counts move and where both tests run (R1). But a price is read off
@@ -1265,7 +1265,7 @@ mints one the first time the board buys it. Lines stay with the neuron and neuro
 only from its owner's activation, because the owner is part of the chunk. An owner on the board was called this
 frame and bid every line of its cover, and a line of its table left out of the cover was displaced by a better
 one from the same table, which was bid instead. So everything a search could find is already among the
-election's bids, measured in the same currency, and no index and no further call is needed.
+election's bids, measured in the same currency, and no variable and no further call is needed.
 
 **On R43 — why reuse is a tie, and what that gives up.** The machine prices the window: what a bid covers on
 the board less what it costs there. In that currency an existing child's bid that did better would have won,

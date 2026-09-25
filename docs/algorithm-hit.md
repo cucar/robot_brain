@@ -54,7 +54,7 @@ activations of the thing are written as the child and one variable.
 **How `Thing` came to be.** Balls and fists came at the body often and got patterns of their own. Everything
 else that ever came at it, once or twice each, stood in `me`'s residual at `(0, +2)` and, a frame earlier, at
 `(0, +4)`: two offsets filled most of the time by no one neuron, and by one and the same neuron in each
-neighborhood. The survey (D42) made them one index, `Thing¹`, and `incoming-ahead` is the candidate that read
+neighborhood. The collapse (D27) made them one variable, `Thing¹`, and `incoming-ahead` is the candidate that read
 it: one value covering two neighbors. When balls become
 rare and their pattern retires, `ball` falls to the residual, `me` finds it where `Thing` stands, and it joins.
 
@@ -64,7 +64,7 @@ The body is at `(10, 10)`. A ball is at `(10, 12)`, and a frame ago it was at `(
 
 1. **The machine subtracts.** Assembling the neighborhood of the `me` activation, it takes the difference of
    coordinates and buckets each component (D6): the ball now is at `(0, +2)`, the ball a frame ago at `(0, +4)`.
-2. **The pattern fits.** `incoming-ahead` has its index at exactly those two offsets, and the same neuron stands
+2. **The pattern fits.** `incoming-ahead` has its variable at exactly those two offsets, and the same neuron stands
    at both. `me` bids the child, with a class bid naming the ball it was fit by (D31). The bid is accepted, and
    one level up the child fires at the body's coordinate and a `Thing` variable fires at the ball's, holding
    `ball` (§7.4).

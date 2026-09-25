@@ -37,7 +37,7 @@ The pattern in `show`'s table names two neighbors:
 `Digit` is fit by any digit standing beside `show` (D38), and when the bid is accepted a `Digit` variable
 fires one level up at the digit's coordinate, holding `7` (§7.4). The pattern pays for its line because it
 names `ready`: three activations, `ready`, `show` and the digit, are written as the child and one variable.
-`Digit` itself came from the survey of `show`'s history (D42): the spot beside `show`, a frame after `ready`,
+`Digit` itself came from the collapse of `show`'s history (D27): the spot beside `show`, a frame after `ready`,
 was filled every time by a different digit. On its own that offset would be left out, one value for one
 neighbor; it joins the candidate through the constants `ready` and `show`, whose rows it stands in, and it is
 worth having not for what it saves but for what it exposes: the digit, as a variable one level up.

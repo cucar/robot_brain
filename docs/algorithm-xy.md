@@ -2,7 +2,7 @@
 
 A worked case for [algorithm.md](algorithm.md): how `x, y, x, y`, `a, b, a, b` and `m, n, m, n` become one
 function held once, by a neuron that keeps seeing a different pair in the same places. Nothing here is
-normative. It follows one neuron's table through the greedy pick, the survey of its residual, the price and
+normative. It follows one neuron's table through the greedy pick, the collapse of its residual, the price and
 the election.
 
 ---
@@ -35,14 +35,14 @@ written flat.
 
 Beside the three recurring pairs, many pairs have gone by once: `s, t, s, t, p`, `u, v, u, v, p`, and so on.
 Nothing recurs by name, so the greedy pick built nothing for them and they stand in the residual, flat. Before
-`p`'s next pick seeds on a neighbor of theirs, clusters the rows it collects, and surveys the cluster of once-seen
-pairs spot by spot (D33, D42):
+`p`'s next pick seeds on a neighbor of theirs, clusters the rows it collects, and collapses the cluster of once-seen
+pairs spot by spot (D33, D27):
 
 | Question | Answer |
 |---|---|
 | Which offsets hold one neuron in a majority? | None. No constants. |
 | Which offsets are filled in a majority with no neuron in a majority? | All four. |
-| Which of those hold the same neuron in a majority of the neighborhoods? | One and three back; two and four back. So `K¹` at both of the first, `J¹` at both of the second: two indices, each tying two offsets. |
+| Which of those hold the same neuron in a majority of the neighborhoods? | One and three back; two and four back. So `K¹` at both of the first, `J¹` at both of the second: two variables, each tying two offsets. |
 
 The candidate is a pattern of variables and nothing else, an equalization:
 
@@ -61,7 +61,7 @@ letter, and no list of letters anywhere: any pair that alternates fits it.
 | a recurring pair, by its own pattern: `Q` | 1 |
 | a once-seen pair, by the general pattern: `alternation`, `K¹`, `J¹` | 3 |
 
-Each index ties two offsets for one value, so the two save two per pair between them, and the instance costs
+Each variable ties two offsets for one value, so the two save two per pair between them, and the instance costs
 one: three against four flat, one saved per once-seen pair, and nothing on the recurring ones, which their own
 patterns write for one. Its line costs five and each class neuron its name (D13), so it pays once seven or so
 rare pairs have gone by. `P`, `Q` and `R` stand while their pairs are frequent, and when one becomes rare its
@@ -102,7 +102,7 @@ held, and connections of its own, and uncovered it votes (D41).
 | in the code | in the machine |
 |---|---|
 | three copies of one block with different names in them | `P`, `Q` and `R` in `p`'s table |
-| noticing they are one block with two names that vary | the survey finding four offsets that agree in pairs |
+| noticing they are one block with two names that vary | the collapse finding four offsets that agree in pairs |
 | the variables | the class neurons `K` and `J` |
 | the extracted function | the general pattern, held once in `p`'s table |
 | a call, with the variables it reads | `alternation` firing, with `K` and `J` standing beside it |
