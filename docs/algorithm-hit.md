@@ -53,9 +53,9 @@ activations of the thing are written as the child and one variable.
 
 **How `Thing` came to be.** Balls and fists came at the body often and got patterns of their own. Everything
 else that ever came at it, once or twice each, stood in `me`'s residual at `(0, +2)` and, a frame earlier, at
-`(0, +4)`: two spots filled most of the time by no one neuron. The survey (D42) made them slots, and one
-variable, since the same neuron stands at both in each neighborhood. That is `Thing`, holding the rarities, and
-`incoming-ahead` is the candidate that named it. When balls become
+`(0, +4)`: two offsets filled most of the time by no one neuron, and by one and the same neuron in each
+neighborhood. The survey (D42) made them one index, `Thing¹`, and `incoming-ahead` is the candidate that read
+it: one value covering two neighbors. When balls become
 rare and their pattern retires, `ball` falls to the residual, `me` finds it where `Thing` stands, and it joins.
 
 # 5. One moment, worked
@@ -64,7 +64,7 @@ The body is at `(10, 10)`. A ball is at `(10, 12)`, and a frame ago it was at `(
 
 1. **The machine subtracts.** Assembling the neighborhood of the `me` activation, it takes the difference of
    coordinates and buckets each component (D6): the ball now is at `(0, +2)`, the ball a frame ago at `(0, +4)`.
-2. **The pattern fits.** `incoming-ahead` has its slots at exactly those two offsets, and the same neuron stands
+2. **The pattern fits.** `incoming-ahead` has its index at exactly those two offsets, and the same neuron stands
    at both. `me` bids the child, with a class bid naming the ball it was fit by (D31). The bid is accepted, and
    one level up the child fires at the body's coordinate and a `Thing` variable fires at the ball's, holding
    `ball` (§7.4).
@@ -78,7 +78,7 @@ The body is at `(10, 10)`. A ball is at `(10, 12)`, and a frame ago it was at `(
 Put the body at `(50, 3)` and a fist at `(50, 5)` that was at `(50, 7)`. The subtraction gives the same two
 offsets, `Thing` holds `fist` instead, the same pattern fits, the same child fires, and the same
 connection infers the step that hits. No coordinate ever reached the pattern (D11), so where they are costs nothing, and
-the slot means what they are costs nothing either: it takes whatever stands there, seen before or not.
+the variable means what they are costs nothing either: it takes whatever stands at both, seen before or not.
 
 # 7. Wherever it is relative to the body
 

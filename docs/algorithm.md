@@ -301,9 +301,9 @@ assumes for anything the file does not state.
 > a child on the apex          =  1                 a line in the body
 > what it got wrong            =  number of neighbors its pattern names that did not fire (error correction)
 > a base neuron on the apex    =  1                 its own line
-> having a pattern             =  1 + |p|           a line in the dictionary, |p| the neighbors pattern p names
-> a variable on the apex       =  1                 a class activation, standing for its value (D41)
-> having a class              =  1 + its members   its name and one symbol per member, written once however many patterns name it (D41)
+> having a pattern             =  1 + |p|           a line in the dictionary, |p| the neighbors pattern p names, constants and variables alike
+> a value on the apex          =  1                 per index a pattern instance reads, however many offsets share it (D38, D41)
+> having a class neuron       =  1                 its name, written once however many patterns' indices it stands for (D41)
 > ```
 > This is a fixed-length code: a symbol costs one regardless of how often it is used.
 
@@ -385,14 +385,20 @@ pattern that names a class neuron reads whatever that variable holds where it st
 global: the pattern owns no argument and passes none. **An accepted bid is a call of it**, and the variables it
 read stand beside the call one level up (§7.1).
 
-> **D38 — The body.** The line of a pattern is its body, and every member of the body is a neighbor
-> `(neuron, offset)` (D26). The neuron may be a class neuron (D41), and that neighbor is a **slot**, written
-> `K¹` at its offset: a class and a **variable index**. The slot is fit by any activation whose neuron is a
-> member of `K` (D41), and what it read is that neuron. A non-member standing there is a neighbor named and
-> absent, a correction (D22), and it stands uncovered as itself. **The same class with the
-> same index at two offsets is the same value at both**, `K¹` and `K¹`; the same class with two indices, `K¹`
-> and `K²`, is two things of one kind, free to differ. A class neuron is tied to no dimension. The pattern owns
-> the activation a slot is fit by like any neighbor (D19).
+> **D38 — The body.** The line of a pattern is its body, and every member of the body is a **neighbor** at an
+> offset (D26), of one of two kinds:
+>
+> | Neighbor     | Written    | Holds when                                                                    |
+> |--------------|------------|-------------------------------------------------------------------------------|
+> | a constant   | `(n, δ)`   | neuron `n` stands at `δ`                                                       |
+> | a variable   | `(K¹, δ)`  | some neuron stands at `δ`, and it is the one standing at every other offset of index `K¹` |
+>
+> A constant memorizes what stands there; a variable equalizes it with the other offsets of its **index**,
+> naming no neuron. `K` is the class neuron the index reads and fires (D41); two indices of one class, `K¹` and
+> `K²`, are two things of one kind, free to differ. An index at one offset holds whenever the offset is filled,
+> and says nothing more. Both kinds of neighbor are expected to hold, both are a correction when they do not
+> (D22), and both are added to and dropped from the body by the one rule (D27). The pattern owns the activation
+> a neighbor holds on like any neighbor (D19).
 > A body holds nothing else: no branch, no loop and no argument. What branches is which situation fires; what
 > loops is the frame; what a variable holds is on the level, not in the body (D41).
 
@@ -427,12 +433,13 @@ residual. Every price in the design (D13) is counted off them.
 > costs — its own line, and the neurons it names that did not fire (D13).
 > ```
 > coverage(p, O)  =  1 + | the neighbors of O owned by p |   the activation itself, and what it owns
-> price(p, O)    =  1 + | p \ O |                            its own line, and the neurons it names that did not fire
+> price(p, O)    =  1 + | p \ O |  +  | indices of p |         its own line, the neighbors that did not hold, and a value per index
 > saving(p, O)   =  coverage(p, O)  −  price(p, O)
 > ```
-> A pattern with slots pays one more for each class neuron it names, the variable it reads (D13, D41). A
-> class neuron named at one offset therefore nets nothing, and each further offset it is named at saves one,
-> like a neighbor that is present.
+> A neighbor holds or fails by its kind (D38): a constant fails when its neuron is absent, a variable when its
+> offset is empty or holds a different neuron from the rest of its index. An index costs one value per
+> instance however many offsets share it, so an index at one offset nets nothing, and each further offset it
+> ties saves one, like a constant that is present.
 > A child on the apex stands in for the activation it covers and for the neighbors its pattern owns there;
 > that is what it saves, and that is the coverage. What it costs is its own line, plus a turn-off for every
 > neuron the pattern names that did not fire. A neuron the pattern does not name is not in the account at all:
@@ -475,8 +482,8 @@ machine, over a frame's bids. It is stated here and cited from both.
 
 > **D31 — The bid.** What an activation offers the machine for one pattern of its cover (D17), as the neuron
 > holds it: the pattern's id, its neighbors, and the child it promotes. For each class neuron the pattern
-> names, the activation sends a **class bid** beside it (D41): the class with its members, the activation it
-> was fit by, and the class neuron's own id, none until the machine has created it.
+> reads, the activation sends a **class bid** beside it (D41): the index, the activation it was fit by, and
+> the class neuron's own id, none until the machine has created it.
 >
 > | Component  | Description                                                                      |
 > |------------|----------------------------------------------------------------------------------|
@@ -542,18 +549,23 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 ## 5.4 The collapse
 
 > **D27 — The collapse.** The operation that collapses a set of neighborhoods into a pattern, returning the
-> set of neighbors the pattern names. Every neighbor is decided independently, from the input alone, so the
-> result does not depend on the order they are decided in.
+> set of neighbors the pattern names, constants and variables alike. Every neighbor is decided independently,
+> from the input alone, so the result does not depend on the order they are decided in.
 >
-> For a neighbor `n`, the neighborhoods that count are those in which `n` is not owned by another pattern of
-> the cover (D19). Let `s` be their number and `count(n)` how many of them have `n`. Naming `n` covers it in
-> `count(n)` of them, states it wrongly in the other `s − count(n)`, and costs one symbol in the dictionary
-> line (D13), so it shortens the file by `2 · count(n) − s − 1`.
+> For a neighbor `n`, the neighborhoods that count are those in which the offset is not owned by another
+> pattern of the cover (D19). Let `s` be their number and `holds(n)` how many of them `n` holds in (D38): for a
+> constant, the neuron stands there; for a variable, the offset holds the same neuron as the other offsets
+> of its index. Naming `n` covers it in `holds(n)` of them, states it wrongly in the other `s − holds(n)`, and
+> costs one symbol in the dictionary line (D13), so it shortens the file by `2 · holds(n) − s − 1`.
 >
-> **`n` is taken exactly when `2 · count(n) > s + 1`.** Nothing is divided.
+> **`n` is taken exactly when `2 · holds(n) > s + 1`.** Nothing is divided. A pattern of constants memorizes
+> its neighborhoods; a pattern of variables equalizes them; the rule is the same for both, and a body may hold
+> both.
 >
-> A class neuron already on the level is a neighbor like any other: its variable stands at a coordinate, and
-> the vote counts it where it stands.
+> **An index enters with two offsets, or not at all.** A new index costs a value per instance (D22), and one
+> offset covers one neighbor for that value, so it nets nothing; two offsets that hold the same neuron in a
+> majority, `2 · same(δ₁, δ₂) > s + 1`, are the smallest variable that pays. An offset joins an existing index
+> by the rule above, `holds` being the neighborhoods where it agrees with the index.
 
 The collapse is the only operation that decides what a pattern names. It runs in two places:
 
@@ -603,7 +615,7 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 >    spots form one cluster, and each cluster is surveyed apart, so that two shapes sharing a seed are not
 >    averaged into one.
 > 3. **Survey** (D42) each cluster: the candidate, a pattern not yet in the table (D15, D32), its constants,
->    its slots and the classes they need.
+>    its variables and the class neurons they read.
 > 4. **Price** the candidate: its margin (D30) read with the candidate credited the residual only, over the
 >    activations where its saving there is positive (D22), the classes it needs priced with it. **Stop** if the
 >    margin is not strictly positive. Otherwise the candidate joins the table and the covers it was priced on,
@@ -612,31 +624,27 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 >
 > **What it returns is the patterns added and the classes they name.**
 
-> **D42 — The survey.** The operation that reads one cluster of `s` neighborhoods spot by spot, a spot being
-> an offset, and decides each spot as one of three things, skipping owned neighbors as the collapse does (D27).
-> Let `filled(δ)` be how many neighborhoods have some neuron at `δ`, and `count(n, δ)` how many have `n`.
+> **D42 — The survey.** The operation that reads one cluster of `s` neighborhoods offset by offset and decides
+> each offset as a constant, a variable or nothing, skipping owned neighbors as the collapse does (D27). Let
+> `filled(δ)` be how many neighborhoods have some neuron at `δ`, `count(n, δ)` how many have `n`, and
+> `same(δ₁, δ₂)` how many hold one neuron at both.
 >
-> | Outcome     | Test                                                   | Written                                |
-> |-------------|--------------------------------------------------------|----------------------------------------|
-> | constant    | one neuron `n` holds the majority, `2 · count(n, δ) > s + 1` | `(n, δ)`: the AND, D27 as always |
-> | slot        | no neuron holds it, the spot is filled in a majority, `2 · filled(δ) > s + 1` | `(K, δ)`: the OR, `K` the neurons found there |
-> | left out    | otherwise                                              | nothing                                |
+> | Outcome     | Test                                                                 | Written             |
+> |-------------|----------------------------------------------------------------------|---------------------|
+> | constant    | one neuron holds the majority, `2 · count(n, δ) > s + 1`             | `(n, δ)`            |
+> | variable    | no neuron holds it, `2 · filled(δ) > s + 1`, and some other such offset agrees with it in a majority, `2 · same > s + 1` | `(K¹, δ)`, one index for every set of offsets that agree |
+> | left out    | otherwise                                                            | nothing             |
 >
-> **Co-variation** is then read between every two slots `δ₁, δ₂`, as `same(δ₁, δ₂)`, how many neighborhoods
-> hold the same neuron at both, and `paired(δ₁, δ₂)`, how many hold a fixed pairing of different neurons:
+> An offset that varies but agrees with no other is left out unless it joins a candidate through a constant's
+> rows; on its own it would cost a value to cover one neighbor. Where two varying offsets hold a fixed pairing
+> of different neurons in a majority, `paired(δ₁, δ₂)`, the variation at one is explained by the other: the
+> cluster is split on the first into one candidate per pairing, with constants where the variables were. That
+> is dispatch, and it is where a case keeps a lesson of its own.
 >
-> - **One variable.** `2 · same > s + 1`: the two slots are one variable, `K¹` at both (D38).
-> - **A branch.** `2 · paired > s + 1` with different neurons: what varies at `δ₂` is explained by what stands
->   at `δ₁`, and the cluster is split on `δ₁` into one candidate per pairing, each with constants where the
->   slots were. Variation that something else active accounts for is dispatch, not a parameter.
-> - **Two variables.** Otherwise, `K¹` and `K²`, or two classes.
->
-> **A class is a candidate until a pattern that names it pays.** The neurons found at a slot are the class's
-> first members. A class the class table already holds, of this neuron or, by the machine, of another (R43),
-> is named again and costs nothing again; a new one costs its name (D13). **A pattern whose spots are all
-> slots is ordinary**: an alternation names no letter. **A class that is the whole alphabet says nothing**: it
-> covers a neuron for a value, one symbol for one, and no pattern gains by naming it, so it is never bought
-> and never given a neuron. That is what keeps the two pixels of a binary image from becoming a class.
+> **What it returns is one candidate**: constants, indices and their offsets, priced as one (D33). A pattern
+> of constants alone is a chunk; a pattern of indices alone is an equalization, an alternation that names no
+> letter; most have both. Each index reads a class neuron (D41): one already in the class table when an
+> existing index stands at the same offsets, else a new one, which costs its name once (D13).
 
 ## 5.8 Connections
 
@@ -663,38 +671,31 @@ what stood on the apex in the frames after it, event and action alike.
 
 ## 5.9 Class neurons
 
-> **D41 — The class neuron.** A neuron whose activation is a **variable**: it stands at a coordinate, for its
-> window (D9), and it holds a **value**, another neuron of the level below. A pattern's child says "these
-> happened together"; a class neuron says "one of these happened, and here is which".
+> **D41 — The class neuron.** The neuron an index reads and fires (D38). Its activation is a **variable**: it
+> stands at a coordinate, for its window (D9), and it holds a **value**, the neuron that stood at the index's
+> offsets. A pattern's child says "these happened together"; a class neuron says "these are one and the
+> same, and here is which".
 >
-> A neuron's **class table**, beside its patterns table (D32), holds the classes its patterns name and their
-> **members** (D42); the same class neuron may be named by many patterns of many neurons, and is written once
-> (D13). **A member is priced as a pattern is.** Admitting `m` to `K` costs one symbol in the dictionary and
-> saves, at every occurrence where a pattern naming `K` then covers `m` at a slot, the correction and the line
-> `m` would otherwise have cost there (D38, D22); `m` joins when that sum over the history exceeds its symbol,
-> and leaves when it no longer does (R41). A class with no paying member retires. The member records nothing;
-> the observer holds the list, and pays for it.
+> A neuron's **class table**, beside its patterns table (D32), holds the class neurons its indices read. A
+> class neuron is defined by its name alone (D13): **it has no members.** What it has held is its history
+> (D18), a record of values and never a filter: an index is fit by whatever neuron stands at its offsets alike,
+> seen before or not. The same class neuron may be read by many indices of many patterns of many neurons, and
+> is written once.
 >
-> **Classes are recognized before patterns.** In each neighborhood the neuron stands a class activation beside
-> every neighbor that is a member of one of its classes, one class per neighbor at a place, and patterns are
-> then measured against the neighborhood with the classes standing in it (§6.2): a specific pattern is fit by
-> the neuron, a general one by the class beside it, and the two contend in the cover and the election like any
-> two patterns. Standing a class beside a neighbor buys nothing and goes nowhere by itself.
+> **A variable fires one level up only when a bid that reads it is accepted** (§7.4), at the nearest of its
+> index's offsets, holding the neuron that stood there as its value, as strong or as weak as that activation
+> (D40): the variable's activation parent is its value. It belongs to no dimension and no kind, so a variable
+> may hold an event or an action. It is a global of its level: any pattern of any neuron within reach reads it
+> by naming it at the offset where it stands, and an expansion or an inference that names it reads it the same
+> way (R28, D25). It holds a table, a history and connections exactly as any neuron does (D32, D18, D25): it is
+> handed its neighborhoods, it bids, it is covered by bids of its own level that name it, and uncovered it
+> stands on the apex and votes. Its history pools the neighborhoods around everything it has held, which no one
+> of those neurons' histories does, and what it learns there is the kind's own function.
 >
-> **A variable fires one level up only when a bid that reads it is accepted** (§7.4), at the coordinate of the
-> activation the slot was fit by, holding that activation's neuron as its value, as strong or as weak as that
-> activation (D40): the variable's activation parent is its value. It belongs to no dimension and no kind, so a
-> variable may hold an event or an action. It is a global of its level: any pattern of any neuron within reach
-> reads it by naming it at the offset where it stands, and an expansion or an inference that names it reads it
-> the same way (R28, D25). It holds a table, a history and connections exactly as any neuron does (D32, D18,
-> D25): it is handed its neighborhoods, it bids, it is covered by bids of its own level that name it, and
-> uncovered it stands on the apex and votes. Its history pools the neighborhoods around everything it has held,
-> which no one of those neurons' histories does, and what it learns there is the class's own function.
->
-> **A class is paid for from above.** A variable stands in the file where its value stood, one symbol for one,
-> so a class saves nothing by itself; what pays for it is whatever names it, a pattern of the observer's table
-> or a pattern of the level above, the class neuron's own included. Nothing about a value is learned or
-> carried (D11): it is read off the level where the variable stands.
+> **A variable is paid for by the offsets it ties.** It costs one value per instance and covers every offset of
+> its index, so it saves nothing at one offset and one for every further offset (D22), and the patterns that
+> read it save the rows they could not otherwise have covered. Nothing about a value is learned or carried
+> (D11): it is read off the level where the variable stands.
 
 # Part II — The past and present: a neuron
 
@@ -712,7 +713,7 @@ what stood on the apex in the frames after it, event and action alike.
 > | recognize classes  | Stand a class activation beside every neighbor that is a member of one of the neuron's classes.                    |
 > | recognize patterns | Cover the residual of the history with the table, and re-center every pattern whose covered activations changed. |
 > | delete patterns    | Retire every pattern whose margin is negative.                                                                    |
-> | create patterns    | Seed, cluster, survey and price: build new patterns out of the residual, constants and slots together, until one does not pay. |
+> | create patterns    | Seed, cluster, survey and price: build new patterns out of the residual, constants and variables together, until one does not pay. |
 > | return patterns    | The bids, with a class bid for each class neuron a bid pattern names, and the patterns retired.                  |
 
 The call runs before the election (R24).
@@ -723,16 +724,15 @@ The history holds `H` activations (D18). A frame bringing `A` activations evicts
 full, and fewer before, as many as it takes to make room; every pattern of an evicted cover loses it. The frame's
 activations then join the history, whole (D7) and wholly residual (D21).
 
-## 6.2 Recognize classes and patterns
+## 6.2 Recognize patterns
 
 Recognition is the procedure that chooses a cover for a new activation/neighborhood (D17): the greedy cover
-(D28) over the residual of the history (D21). Classes go first (D41): the neuron stands a class activation
-beside every neighbor that is a member of one of its classes, one class per neighbor at a place, and the
-patterns are then measured against the neighborhood with the classes in it.
+(D28) over the residual of the history (D21).
 
-**A slot is fit by a member standing at its offset.** Measuring a pattern against a neighborhood, a slot is
-present when a member of its class stands at its offset (D38), and the same class and index at two offsets
-when the same neuron stands at both; the activation a slot is fit by is what its class bid names (D31).
+**A variable holds where its offsets agree.** Measuring a pattern against a neighborhood, a constant holds
+when its neuron stands at its offset and a variable when its offsets hold one neuron (D38); each offset that
+fails is a correction (D22). What an index was fit by is the neuron at its offsets, and that is what its class
+bid names (D31).
 
 **Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
 empty table covers nothing and bids nothing.
@@ -754,7 +754,7 @@ Every pattern whose covered activations changed, by eviction or by cover, re-cen
 ## 6.4 Create patterns
 
 The greedy pick (D33) runs over the residual of the history: seed, cluster, survey, price, repeated until a
-candidate does not pay. The survey (D42) decides every spot of a cluster at once, constant, slot or left out,
+candidate does not pay. The survey (D42) decides every spot of a cluster at once, constant, variable or left out,
 so a pattern and the classes it needs are one candidate and one price. Each that pays joins the table and the
 covers it was priced on, and its classes join the class table.
 
@@ -844,18 +844,16 @@ covers it was priced on, and its classes join the class table.
 > **It is born holding nothing.** No patterns, no history and no connections (R16). Everything it comes to
 > hold is over the situations its parent's pattern actually took (D25), from its first activation on.
 
-> **R41 — The life of a class neuron.** **Found** by a survey (D42) as the neurons at a slot of a candidate
-> that paid: the class joins the class table, and no class neuron exists yet. **Given** when an accepted bid first
-> reads it: the pattern's bid carries a class bid with no class neuron, as it carries no child, and when the bid
-> is accepted the machine gives the class one, reused or new (R43). A new one is born holding nothing, as a
-> child is (R17). **Fired** by the election and by nothing else (§7.4). **Widened** when a neuron standing at
-> one of its slots, in neighborhoods the pattern otherwise fits, would save more than its symbol as a member,
-> and **narrowed** when a member's saving over the history falls below it (D41): the add and retire tests, R15
-> and R18, run on members. **Dead** when no pattern of any table names it: it leaves the class
-> table, and its class neuron goes on the death ledger and is deleted like any neuron nothing can fire again
-> (R38). It is priced by what names it (D41), and the pattern is what is added and retired. What a class
-> neuron's own table holds it builds itself, from its pooled history, by the same call as any neuron (D33, D42,
-> D27), priced by its own margin (D30).
+> **R41 — The life of a class neuron.** **Read** by an index of a candidate that paid (D42): the class neuron
+> joins the class table, and none exists yet. **Given** when an accepted bid first reads it: the pattern's bid
+> carries a class bid with no class neuron, as it carries no child, and when the bid is accepted the machine
+> gives the index one, reused or new (R43). A new one is born holding nothing, as a child is (R17). **Fired**
+> by the election and by nothing else (§7.4). **Dead** when no index of any table reads it, by a pattern
+> retiring (R18) or by re-centering dropping the index (D27, D29): it leaves the class table, and its class
+> neuron goes on the death ledger and is deleted like any neuron nothing can fire again (R38). It is priced by
+> the indices that read it (D41), and the pattern is what is added and retired. What a class neuron's own table
+> holds it builds itself, from its pooled history, by the same call as any neuron (D33, D42, D27), priced by its
+> own margin (D30).
 
 ## 6.5 Return patterns
 
@@ -904,10 +902,10 @@ Then, once the last level has run:
 ## 7.1 Process levels
 
 **A level is explained as a set of function calls over global variables.** Every accepted bid is a call, a
-pattern's child, and every class neuron it reads is a variable of the level, holding the neuron the slot was
+pattern's child, and every class neuron it reads is a variable of the level, holding the neuron its index was
 fit by (D38, D41). The level above is made of the calls and the variables: the child fires for the call, and a
 variable fires for each class neuron the pattern read, at the coordinate of what it holds (§7.4). A call owns
-no argument; two calls within reach of one variable read the same value. A pattern with no slot is a call that
+no argument; two calls within reach of one variable read the same value. A pattern with no variable is a call that
 reads nothing.
 
 > **R26 — One stack, at the derived reach.** Base neurons run `process functions` and offer; the election settles which bids
@@ -932,7 +930,7 @@ reads nothing.
 > ```
 > the bid   the pattern, the child's id or none, and its class bids                (D31)
 > covered   the bidder, and the neurons it names that fired and no earlier bid covers — the activations it
->           asks to subsume, those its slots were fit by among them
+>           asks to subsume, those its variables were fit by among them
 > price     1 + |p \ O|   its own line in the body, and the neurons it names in those
 >                          same frames that did not fire, plus one per class neuron it reads (D13)
 > ```
@@ -1041,9 +1039,9 @@ is given one. A bid that lost is given nothing.
 > it (D28), so reuse is only ever a tie; a bid that does better than every bid carrying a child states a
 > different chunk, and gets a child of its own.
 >
-> **A class neuron is reused on the same members.** A class bid carries the class's members (D31). If another
-> bid of this election, or a class neuron already standing, has the same members, the accepted bid's class is
-> wired to that class neuron: two neurons found the same kind.
+> **A class neuron is reused on the same variable.** If another bid of this election reads an index that has
+> a class neuron at the activation the accepted bid's index was fit by, the accepted bid's index is wired to
+> that class neuron: two neurons found the same variable.
 >
 > **Otherwise the machine creates one**: an id, its parent, its level, the coordinate it inherits (D2) and an
 > empty table (R16); a class neuron at the child's level, with no dimension (R41).
@@ -1060,7 +1058,7 @@ class at its class neuron, by the wire call (§5.1).
 Every accepted bid activates its child one level up, at the bidder's coordinate (D2). The activation records
 the pattern whose bid fired it, since a child may have several (R43), and is expanded through that pattern
 (R28). For each class neuron the pattern read it also activates a variable (D41), at the same level as the
-child, at the coordinate of the activation the slot was fit by — the nearest one where the class neuron is named
+child, at the coordinate of the activation its index was fit by — the nearest one where the index is named
 at several offsets — holding that activation's neuron as its value. A variable another accepted bid already
 activated there is not activated twice. Every activation no accepted bid covers stands as itself.
 

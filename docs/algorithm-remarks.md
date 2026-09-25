@@ -672,10 +672,10 @@ Nothing is carried, because the thing stays where it is.
 
 **On D41 — why it keeps no list.** A person who thinks of a bridge does not run through every bridge they have
 seen, and that is the point of having the kind. What a class neuron has held is in its history and in its
-connections, pooled, and nowhere as a list. Membership is decided by the slot and not by a record: whatever
-stands where the slot is, the variable holds. A list used as a filter would be only as wide as what had been
-seen, so the pattern would fail exactly where it is wanted, on the rare, the once-seen and the new. It also
-makes the class cost one symbol, its name, however many things it comes to hold.
+connections, pooled, and nowhere as a list. A variable is fit by whatever stands at its offsets alike; a list
+used as a filter would be only as wide as what had been seen, so the pattern would fail exactly where it is
+wanted, on the rare, the once-seen and the new. Membership was priced for a day and dropped: the members of a
+class are its offsets, not the neurons that have filled it, and the offsets are priced as any neighbor is.
 
 **On D41 — why it has a history of its own.** A pattern lives in the table of the neuron that fired, so what
 surrounds a `ball` is evidence in `ball`'s history and what surrounds a `fist` in `fist`'s, and no neuron sees
@@ -683,41 +683,29 @@ the two side by side. A class neuron fires for each of them in turn, so its hist
 over things needs a population shared by those things, and a neuron that fires for all of them is that
 population.
 
-**On D42 — AND and OR are one survey.** A pattern is the spots of a cluster where the same neuron always
-stands; a class is a spot where something always stands and never the same thing. Both are read off the same
-cluster of neighborhoods, spot by spot, and neither is complete without the other: a spot that varies is not
-noise, it is a parameter, and a parameter means nothing outside the context that stayed the same around it.
-Putting a variable where the examples differ is anti-unification (Plotkin, Reynolds, 1970); the survey does it
-over one cluster at a time. An earlier draft found classes in two other ways, by pairing two finished patterns
-that differed at one spot and by grouping the residual by offset before any pattern was built. The first found
-kinds only among variants frequent enough to have patterns; the second made a class of every spot that varied,
-which in a two-symbol alphabet is every spot. The survey finds them where they are priced, inside a candidate.
+**On D38 and D27 — memorizing and equalizing are one rule.** A constant says what stands at an offset; a
+variable says that what stands there is the same as what stands at the other offsets of its index, and names
+nothing. Both are neighbors, both are expected to hold, both pay a correction when they fail, and both enter
+and leave a body by `2 · holds − s − 1`. The whole difference between a pattern and a class is which of the
+two kinds of neighbor it is made of, and most bodies are made of both. Putting a variable where the examples
+differ is anti-unification (Plotkin, Reynolds, 1970); the survey does it over one cluster at a time, and it
+adds what the literature mostly lacks: the variable is found by offset, and it is a saving only when it ties
+offsets together.
 
-**On D42 — kind and instance, variable and branch.** Two slots that hold the same neuron in a majority are one
-variable named twice, `K¹` at both, and that is what an alternation is. Two slots whose different neurons pair
-up in a majority, `m` whenever `d` and `n` whenever `e`, are not a variable: the second is explained by the
-first, and the right structure is one candidate per pairing, with constants where the slots were. That is
-dispatch, and it is where a case keeps a lesson of its own. The two readings use the same count over the same
-pairs of spots, and the price settles what the count leaves open: a variable costs one line and a value per
-occurrence, branches cost a line each and no value.
+**On D42 — a variable pays by tying offsets, and that is what stops the trivial kind.** A variable at one
+offset covers one neighbor for one value, nothing saved; at five offsets that hold one neuron it covers five
+for one, four saved, less a correction for the repeat that is missing. So a class of the whole alphabet at a
+single offset, "a pixel stands here", is never a saving and is never built, with no rule about alphabets. And
+eight pixels around an activation tied into one variable pays exactly where they are one pixel, a uniform
+patch, which is a real regularity. Earlier drafts tried to keep the trivial kind out by pricing members or by
+pricing the value in bits; neither was needed once the members of a class were its offsets.
 
-**On D41 — why a member costs a symbol and earns its place.** A slot has to be fit by something, and a class that
-took any neuron would cover everything at every spot and leave nothing to decide which class stands where. So
-a class has members, and a member is priced as everything else is: one symbol in the dictionary, against the
-corrections it removes. A non-member at a slot is an ordinary error, the slot named and absent and the thing
-that stood there written as itself, two symbols per occurrence; admitting it costs one symbol once and a value
-per occurrence, so it pays from the first occurrence on, provided the rest of the pattern fits. That is what
-keeps a class honest. Nothing joins for standing there once in a shape that did not otherwise fit, and a
-member whose occurrences have left the history is retired, which is what a kind should do. The list lives with
-the observer, who pays for it; the member never knows. A ball does not know it is a thing that comes at
-bodies, the body does, and it keeps the ball on its books for as long as the ball earns its line.
-
-**On D42 — the whole alphabet is not a kind.** With two symbols every spot varies and every class would be
-`{0, 1}`. But a member has to earn its symbol, and admitting `1` to such a class lets a pattern cover a pixel for
-a value, one symbol for one, saving nothing against the member's cost. So the class gets no member, the
-all-slot candidate fails its price, and nothing is bought. The mechanism needs no rule about alphabet size: a class pays only by narrowing, and a class that
-narrows nothing pays nothing. Kinds appear where the alphabet is large, the letters of a stream or the children
-one level up in an image, where a stroke of some slant is a few members out of hundreds.
+**On D42 — variable and branch.** Two varying offsets that hold the same neuron in a majority are one
+variable. Two varying offsets whose different neurons pair up in a majority, `m` whenever `d` and `n` whenever
+`e`, are not a variable: the second is explained by the first, and the right structure is one candidate per
+pairing, with constants where the variables were. That is dispatch, and it is where a case keeps a lesson of
+its own. The two readings use the same counts over the same pairs of offsets, and the price settles what the
+count leaves open: a variable costs one value per instance, branches cost a line each and no value.
 
 **On R36 — a neuron several variables hold votes several times.** Every variable is a voter, so an event that
 several accepted bids read produces several voters where an event nothing read produces one, and a candidate's
@@ -745,12 +733,13 @@ distance, and this design is place-addressed, finding it at an offset within rea
 similar things in one context blur into each other, where a variable here holds one neuron; that is a
 difference in kind, and whether it is an advantage is not shown by anything the design has done yet.
 
-**On D38 — what a slot saves.** It is priced as a neighbor, one in the line, and the variable it reads costs
-one per occurrence, which is what the thing standing there would have cost beside the child. So a class neuron
-named at one offset nets nothing: the symbol moves from beside the child to the variable. It pays the moment it
-is named twice, since the unknown is written once for two covered activations, and it pays against the real
-alternative, one pattern per variant, each with a line of its own and none at all for a variant seen once. A
-pattern whose whole body is one slot saves nothing and is retired (R18); a pattern has to name something.
+**On D38 — what a variable saves.** An offset in an index is priced as a neighbor, one in the line, and the
+index costs one value per instance, which is what the thing standing there would have cost beside the child.
+So an index at one offset nets nothing: the symbol moves from beside the child to the value. It pays the
+moment it ties two offsets, since the unknown is written once for two covered neighbors, and it pays against
+the real alternative, one pattern per variant, each with a line of its own and none at all for a variant seen
+once. A pattern whose whole body is one index at one offset saves nothing and is retired (R18); a pattern has
+to name or tie something.
 
 **On D38 — how branching works.** There is no branch inside a body. The choice is dispatch: two situations are
 two patterns, and which one fires is the whole of "if". "If there is a carry, write 1" is a carry pattern with a

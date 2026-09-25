@@ -248,9 +248,9 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 **Patterns as functions and class neurons (D37–D42) — what stands between the model and an implementation.**
 There is one kind of pattern above the base, its body naming events and actions together (D5), and one kind of
 connection (D25). Every level is explained as a set of function calls over global variables: an accepted bid is a call, its child
-is the function, and each class neuron it reads is a variable of the level holding the neuron the slot was fit
-by (§7.1). Base actions take no arguments and act at a focus the environment holds; a slot is a class neuron
-named at an offset, tied to no dimension; a candidate's constants and slots are read from one cluster of
+is the function, and each class neuron it reads is a variable of the level holding the neuron its index was fit
+by (§7.1). Base actions take no arguments and act at a focus the environment holds; a variable is an index of a class neuron
+named at offsets that hold one neuron, tied to no dimension; a candidate's constants and variables are read from one cluster of
 neighborhoods in one survey (D42) and priced together (D33); an inferred pattern runs its actions and expects
 its events, weakly (R30).
 Four cases are worked by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md),
@@ -270,12 +270,11 @@ What is still open, in the order it bites:
   intended answer is the level above, where a pattern naming the call and the variable's value together would
   restore one symbol per occurrence; but a variable there is named by its class, not its value, so that
   pattern cannot yet be written, and the arithmetic has not been redone with it.
-- **The survey's degenerate case.** Where nothing has a majority at any spot the candidate is all slots over
-  the whole alphabet. Its members earn nothing, so it fails the price (D41), and D33 stops there; clustering
-  the seed's neighborhoods by agreement is meant to find the constant patterns first. How well it does on a
-  binary image has not been measured. **Diagnostic:** share of picks that stop on an all-slot candidate, per
-  level.
-- **Co-variation is quadratic in the slots.** `same` and `paired` are read over every pair of slots of a
+- **The survey's degenerate case.** Where nothing has a majority at any offset and no two offsets agree, the
+  candidate is empty and D33 stops there; clustering the seed's neighborhoods by agreement is meant to find the
+  constant patterns first. How well it does on a binary image has not been measured. **Diagnostic:** share of
+  picks that stop on an empty candidate, per level.
+- **Co-variation is quadratic in the offsets.** `same` and `paired` are read over every pair of varying offsets of a
   candidate, per cluster, and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The survey reads one table (D42). Two neurons
   that each saw one variant never share a class on their own; reuse (R43) joins their class neurons only when
@@ -284,17 +283,18 @@ What is still open, in the order it bites:
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
   that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
   bids cover mostly the same activations, per level.
-- **Membership lags by one call.** A slot is fit only by a member (D38). A non-member standing there is a
-  correction, and it is admitted in that same call if the rest of the pattern fits (R41), but a cover is never
-  re-derived, so the occurrence that admitted it is written with the correction and the next is covered. A
-  member whose occurrences have left the history is retired. **Diagnostic:** occurrences of a general pattern's
-  shape written with a slot correction, per class.
+- **A variable takes anything that agrees.** An index is fit by whatever stands at its offsets alike, so a
+  pattern with variables fires for fillers its lessons were never learned on, and its estimates average them
+  in. The design's answer is dispatch: a filler frequent enough gets a constant pattern of its own, and a
+  branch the survey found keeps its lesson (D42). A rare one is paid for. **Diagnostic:** per child of a
+  pattern with variables, the spread of reward by the value held.
 - **A variable does not thin the level.** A child replaces what its pattern covers; a variable stands one for
   one with what it holds, so a level built from calls that read many variables is wider than D4's doubling reach
   assumes. **Diagnostic:** variables per accepted bid, per level.
 - **A class's lesson is one lesson.** A general pattern's child has one set of connections over every member,
-  so what it learned after a ball it applies to a human in the same slot, and a bad outcome on one lowers the
+  so what it learned after a ball it applies to a human in the same variable, and a bad outcome on one lowers the
   estimate for all. The specific lesson lives, if anywhere, one level up, or in a branch the survey kept (D42).
+  This and the item above are one fact seen twice.
 - **Reach bounds what a call can read.** A variable is read at the offset where it stands, within the reader's
   reach (D4). A value a call needs from further back than its level reaches is out of sight, which is the same
   bound the return path meets.
