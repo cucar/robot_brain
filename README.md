@@ -12,7 +12,7 @@ The brain core is implemented in Rust (with Rayon multi-threading) and exposed t
 
 The brain is a **prediction machine**. Every neuron exists to predict what fires alongside it (in space) and what comes next (in time). Learning happens when predictions fail.
 
-Processing is **spatio-temporal**. Each frame runs two sweeps: a **spatial** sweep over inputs that co-fire in the same frame (distance 0 — e.g. neighboring pixels, co-moving stocks), and a **temporal** sweep over sequences across frames (distance ≥ 1 — what predicts what N frames later). Each builds its own hierarchy of patterns.
+Processing is **spatio-temporal**. Each frame runs two phases: **spatial processing** over inputs that co-fire in the same frame (distance 0 — e.g. neighboring pixels, co-moving stocks), and **temporal processing** over sequences across frames (distance ≥ 1 — what predicts what N frames later). Each builds its own hierarchy of patterns.
 
 ### The Core Loop
 

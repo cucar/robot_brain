@@ -11,15 +11,20 @@ export declare class Brain {
    * Options shape (all optional, with defaults matching JS Brain):
    *   contextLength: number (default 10)
    *   groupThreshold: number (default 0.5) — the single grouping coefficient θ, shared by spatial and temporal.
-   *     Seeds one adaptive per-unit threshold: recognition fires at similarity ≥ θ, correction at < θ, then both
-   *     float together off the unit's error stats once it has history (see groupMode).
+   *     It SEEDS one adaptive per-unit threshold: recognition fires at similarity ≥ θ and correction at < θ
+   *     until a unit has error history, after which both float together off its stats (see groupMode).
    *   groupMode: string (default 'neutral') — how the live grouping threshold adapts from error stats
-   *   (retired: mergeThreshold / errorCorrectionThreshold and their spatial*/temporal* variants — now ignored with a warning)
+   *     ('static' pins it at the θ seed; conservative/neutral/aggressive shift it by mean ± σ)
    *   patternForgetRate: number (default 0.01)
    *   regions: number (default 1)
    *   columns: number (default 1)
    *   consensus: string 'democratic' | 'nb' (default 'democratic')
    *   debug: boolean (default false)
+   *   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
+   *
+   * The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
+   * variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
+   * opposite sides, so there is one number, not six. Passing any retired key logs a one-time warning and is ignored.
    */
   constructor(options?: object | undefined | null)
   /**
@@ -64,15 +69,6 @@ export declare class Brain {
    */
   setEmitVotes(enabled: boolean): void
   /**
-   * Master learning toggle.
-   * When false, subsequent `processFrame` calls skip op-2 (decay/reap) and error-correction pattern neuron creation.
-   * They also skip event→event connection strengthening, child-activation strengthening, and accuracy-stats tracking.
-   * Sensory neuron creation (op-1) still runs because without it the frame cannot be processed at all.
-   * Pattern activation and voting still run, so inferences remain populated.
-   * Used by supervised harnesses (MNIST) for the held-out evaluation pass.
-   */
-  setLearning(learning: boolean): void
-  /**
    * Supervised wiring step that sits on top of the last `processFrame` call.
    * `actions: Map<channelId, Map<dimId, Map<value, reward>>>` names every action target with its per-value reward.
    * Each `value` is quantized to the corresponding action neuron; reward is applied to that connection
@@ -80,7 +76,7 @@ export declare class Brain {
    * on the dim — correct value with reward=1, others with reward=0 — so `conn.reward` converges to P(target|voter).
    * `distance` is the connection-table slot at which to wire and read back.
    * Wires every currently-active age-0 voter to every supplied action target at the given distance.
-   * Then runs a post-wire inference sweep at age (distance - 1) and returns the resulting FrameResult.
+   * Then runs post-wire inference at age (distance - 1) and returns the resulting FrameResult.
    * Single-frame supervised harnesses (MNIST) pass distance=1 to match the existing temporal voting slot.
    */
   learn(actions: object, distance: number): object
@@ -92,6 +88,8 @@ export declare class Brain {
   resetAccuracyStats(): void
   /** Cumulative count of spatial corrections minted since brain start (or last hard reset). */
   getSpatialCorrectionCount(): number
+  /** Cumulative count of spatial children retired by the delete test since brain start. */
+  getSpatialDeletionCount(): number
   /** Number of correction neurons currently sitting above the base spatial level. */
   countActiveSpatialCorrections(): number
   /**
@@ -100,6 +98,11 @@ export declare class Brain {
    */
   spatialLevelCounts(): Array<number>
   /**
+   * Per-level count of PAID correction neurons — patterns that may fire, as opposed to unpaid
+   * hypotheses still accumulating evidence toward their price. Same indexing as spatialLevelCounts.
+   */
+  spatialLevelPaidCounts(): Array<number>
+  /**
    * Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
    * This is the set a channel may co-fire with in the same frame to form a spatial pattern.
    * Names not in the registry are silently ignored; an empty list shrinks the spatial
@@ -107,6 +110,13 @@ export declare class Brain {
    * neighborhood. Call AFTER registering all channels — neighbor names are resolved at this call.
    */
   setSpatialNeighbors(name: string, neighborNames: Array<string>): void
+  /**
+   * Declare per-level SPATIAL neighbor sets for a registered channel — the level-based radius.
+   * `neighborNamesByLevel[l]` is the neighbor list a level-l neuron of this channel uses (e.g. the
+   * radius-(l+1) neighborhood of a retinotopic pixel); levels past the end reuse the last set. Each list is
+   * used verbatim like `setSpatialNeighbors`. Call AFTER registering all channels.
+   */
+  setSpatialNeighborLevels(name: string, neighborNamesByLevel: Array<Array<string>>): void
   /**
    * Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
    * This is the set whose past a channel may sequence against to predict the future.
