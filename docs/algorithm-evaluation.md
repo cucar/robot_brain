@@ -249,7 +249,7 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 There is one kind of pattern above the base, its body naming events and actions together (D5), and one kind of
 connection (D25). Every level is explained as a set of function calls over global variables: an accepted bid is a call, its child
 is the function, and each class neuron it reads is a variable of the level holding the neuron its variable was fit
-by (§7.1). Base actions take no arguments and act at a focus the environment holds; a variable is an variable of a class neuron
+by (§7.1). Base actions take no arguments and act at a focus the environment holds; a variable is a variable of a class neuron
 named at offsets that hold one neuron, tied to no dimension; a candidate's constants and variables are read from one cluster of
 neighborhoods in one collapse (D27) and priced together (D33); an inferred pattern runs its actions and expects
 its events, weakly (R30).
@@ -270,10 +270,12 @@ What is still open, in the order it bites:
   intended answer is the level above, where a pattern naming the call and the variable's value together would
   restore one symbol per occurrence; but a variable there is named by its class, not its value, so that
   pattern cannot yet be written, and the arithmetic has not been redone with it.
-- **The collapse's degenerate case.** Where nothing has a majority at any offset and no two offsets agree, the
-  candidate is empty and D33 stops there; clustering the seed's neighborhoods by agreement is meant to find the
-  constant patterns first. How well it does on a binary image has not been measured. **Diagnostic:** share of
-  picks that stop on an empty candidate, per level.
+- **What a class activation costs on the board.** The neuron prices it against the `n` it has seen (D13); the
+  machine has no `n` of its own and compares bids from neurons with different ones. Whether the election uses
+  the level's population, or a whole symbol, or something else, is not decided (R22).
+- **Prices are no longer counts.** A class activation costs a logarithm, so every margin carries one, "nothing
+  is divided" is gone, and the neighbor rule is weighted. And `n` slides with the history, so a pattern can
+  cross zero with no change in its rows. **Diagnostic:** retirements whose cause was a change in `n` alone.
 - **Co-variation is quadratic in the offsets.** `same` and `paired` are read over every pair of varying offsets of a
   candidate, per cluster, and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The collapse reads one table (D27). Two neurons
@@ -283,11 +285,10 @@ What is still open, in the order it bites:
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
   that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
   bids cover mostly the same activations, per level.
-- **A variable takes anything that agrees.** An variable is fit by whatever stands at its offsets alike, so a
-  pattern with variables fires for fillers its lessons were never learned on, and its estimates average them
-  in. The design's answer is dispatch: a filler frequent enough gets a constant pattern of its own, and a
-  branch the collapse found keeps its lesson (D27). A rare one is paid for. **Diagnostic:** per child of a
-  pattern with variables, the spread of reward by the value held.
+- **Membership lags by one call.** A class fits only a member (D38); a non-member at its offset is a correction,
+  and it joins when it has stood there twice with the rest of the pattern holding (D27). A pair never seen is
+  written flat the first time and covered the second. **Diagnostic:** occurrences of a general pattern written
+  with a class correction, per class.
 - **A variable does not thin the level.** A child replaces what its pattern covers; a variable stands one for
   one with what it holds, so a level built from calls that read many variables is wider than D4's doubling reach
   assumes. **Diagnostic:** variables per accepted bid, per level.
@@ -298,8 +299,9 @@ What is still open, in the order it bites:
 - **Reach bounds what a call can read.** A variable is read at the offset where it stands, within the reader's
   reach (D4). A value a call needs from further back than its level reaches is out of sight, which is the same
   bound the return path meets.
-- **A variable is a symbol in the file.** D13 prices it; D12 and D14 do not yet write it, and R28's expansion
-  needs it to recover the run.
+- **Replaying the run is lossy about members.** Expansion puts back a class's most frequent member (R28), and
+  is wrong as often as the class was uncertain. Whether anything downstream needs the exact member when the
+  activation has closed has not been checked.
 - **A function is callable only from a situation whose window holds it.** A voter can start a program only
   from an offset at least as far out as the program is long (R36), and an activation is open for `reach_t`
   frames (D9). Below that height the same behavior is dispatched a step at a time, each step inferred by the

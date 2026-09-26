@@ -670,12 +670,14 @@ it holds its value, and whatever names its class neuron at the offset where it s
 call, an inference. Two calls within reach of one variable read the same value, which is what "the same thing" means.
 Nothing is carried, because the thing stays where it is.
 
-**On D41 — why it keeps no list.** A person who thinks of a bridge does not run through every bridge they have
-seen, and that is the point of having the class. What a class neuron has held is in its history and in its
-connections, pooled, and nowhere as a list. A variable is fit by whatever stands at its offsets alike; a list
-used as a filter would be only as wide as what had been seen, so the pattern would fail exactly where it is
-wanted, on the rare, the once-seen and the new. Membership was priced for a day and dropped: the members of a
-class are its offsets, not the neurons that have filled it, and the offsets are priced as any neighbor is.
+**On D41 — why the member list is short, and whose it is.** A person who thinks of a bridge does not run
+through every bridge they have seen, and the class table does not either: a member is kept while it has stood
+where the class stands in two neighborhoods of the history, and no longer, so the list is only as long as what
+still recurs, and it costs a symbol per member exactly because it is a list. It belongs to the neuron that
+formed the class, in its own class table; the member neuron knows nothing of it, and the class neuron, one
+level up, keeps its own history of what it has held rather than a list. A neuron never seen at the class's
+offsets does not fit until it has stood there twice, which is the one-call lag the evaluation records, and the
+price of a class that means something.
 
 **On D41 — why it has a history of its own.** A pattern lives in the table of the neuron that fired, so what
 surrounds a `ball` is evidence in `ball`'s history and what surrounds a `fist` in `fist`'s, and no neuron sees
@@ -684,28 +686,47 @@ over things needs a population shared by those things, and a neuron that fires f
 population.
 
 **On D38 and D27 — memorizing and equalizing are one rule.** A constant says what stands at an offset; a
-variable says that what stands there is the same as what stands at the other offsets of its variable, and names
-nothing. Both are neighbors, both are expected to hold, both pay a correction when they fail, and both enter
-and leave a body by `2 · holds − s − 1`. The whole difference between a pattern and a class is which of the
-two kinds of neighbor it is made of, and most bodies are made of both. Putting a variable where the examples
-differ is anti-unification (Plotkin, Reynolds, 1970); the collapse does it over one cluster at a time, and it
-adds what the literature mostly lacks: the variable is found by offset, and it is a saving only when it ties
-offsets together.
+class says that one of its members does, and forgets which. Both are neighbors, both are expected to hold, both
+pay a correction when they fail, and both enter and leave a body by the same test, a neighbor's worth where it
+holds against a correction where it fails. The whole difference between a pattern and a class is which of the
+two kinds of neighbor it is made of, and most bodies are made of both. Putting a class where the examples differ
+is anti-unification (Plotkin, Reynolds, 1970); the collapse does it over one pattern's rows at a time.
 
-**On D27 — a variable pays by tying offsets, and that is what stops the trivial class.** A variable at one
-offset covers one neighbor for one value, nothing saved; at five offsets that hold one neuron it covers five
-for one, four saved, less a correction for the repeat that is missing. So a class of the whole alphabet at a
-single offset, "a pixel stands here", is never a saving and is never built, with no rule about alphabets. And
-eight pixels around an activation tied into one variable pays exactly where they are one pixel, a uniform
-patch, which is a real regularity. Earlier drafts tried to keep the trivial class out by pricing members or by
-pricing the value in bits; neither was needed once the members of a class were its offsets.
+**On D13 — why a class activation costs the choice it leaves open.** A symbol that could be anything carries no
+information, and a class that admits everything should be worth nothing without anyone forbidding it. Pricing
+the class activation at a whole symbol gets that case right by accident and underpays every narrow class: three
+letters out of twenty-six have done real work and would earn nothing on the cell. Pricing it at nothing gets the
+narrow class right and lets the everything-class cover the history for free; a two-pixel image collapses into
+"every neighbor was a pixel" in a couple of dozen symbols, and no count of members prevents it, since the
+class is never wrong. The one price that gets both right is Shannon's: the activation costs `log₂|K|` against
+the `log₂n` a full symbol carries, the fraction of the choice the class did not settle. The everything-class
+costs a whole symbol and saves nothing; a class of one is a constant and costs nothing; and the specific pattern
+rises above the general one by exactly the bits it settles. `n` is the neurons the owner has actually seen
+beside it, counted from its history, so nothing is declared and the price is the owner's own.
 
-**On D27 — variable and branch.** Two varying offsets that hold the same neuron in a majority are one
-variable. Two varying offsets whose different neurons pair up in a majority, `m` whenever `d` and `n` whenever
-`e`, are not a variable: the second is explained by the first, and the right structure is one candidate per
-pairing, with constants where the variables were. That is dispatch, and it is where a case keeps a lesson of
-its own. The two readings use the same counts over the same pairs of offsets, and the price settles what the
-count leaves open: a variable costs one value per instance, branches cost a line each and no value.
+**On D27 — what a class saves, and where the line falls.** Against a specific pattern, which carries the member
+inside its name, a class at one offset costs its activation on every row and saves one dictionary line per
+variant it absorbs (D43). So it pays when the variants are many and each is rare, and the specific patterns win
+where a variant recurs often: frequent things keep a symbol of their own, the rest go through the class. A
+class spanning several offsets under one mark saves a whole symbol at every offset after the first, since the
+activation is paid once, and that is the alternation. And when a member comes to dominate a class's offset, the
+collapse prefers the constant, which is worth more and costs nothing on the apex: the general pattern
+specializes back into a specific one, and the other members fall to the residual. Nothing about this is a rule
+about alphabets: with two symbols every class is the alphabet, costs a whole symbol, and is never built.
+
+**On D27 — class and branch.** Two offsets that hold the same neuron in a majority are one class activation
+under one mark. Two offsets whose different neurons pair up in a majority, `m` whenever `d` and `n` whenever
+`e`, are not a class: the second is explained by the first, and the right structure is one candidate per
+pairing, with constants where the class would have been. That is dispatch, and it is where a case keeps a
+lesson of its own. The two readings use the same counts over the same pairs of offsets, and the price settles
+what the count leaves open.
+
+**On D12 — the file forgets the member.** The third loss is not a leak; it is what a class is for. The neuron
+covers `d` with `K` so that it need not remember `d`, and its account of its history says `K`. What actually
+stood there is still on the level, as the class activation's value, for as long as the activation is open, and
+the connections and the level above read it there. Replaying the run from the file alone puts back the class's
+most frequent member, the oldest on a tie, and is wrong exactly as often as the class was uncertain, which is
+what its price already charged for.
 
 **On R36 — a neuron several variables hold votes several times.** Every variable is a voter, so an event that
 several accepted bids read produces several voters where an event nothing read produces one, and a candidate's
@@ -733,13 +754,12 @@ distance, and this design is place-addressed, finding it at an offset within rea
 similar things in one context blur into each other, where a variable here holds one neuron; that is a
 difference in kind, and whether it is an advantage is not shown by anything the design has done yet.
 
-**On D38 — what a variable saves.** An offset in an variable is priced as a neighbor, one in the line, and the
-variable costs one value per instance, which is what the thing standing there would have cost beside the child.
-So an variable at one offset nets nothing: the symbol moves from beside the child to the value. It pays the
-moment it ties two offsets, since the unknown is written once for two covered neighbors, and it pays against
-the real alternative, one pattern per variant, each with a line of its own and none at all for a variant seen
-once. A pattern whose whole body is one variable at one offset saves nothing and is retired (R18); a pattern has
-to name or tie something.
+**On D38 — what a class in a body saves.** A class is priced as a neighbor, one in the line, and its
+activation costs on the apex what it leaves open. So at a single offset it saves only the narrowing, and it
+pays against the real alternative, one pattern per variant, each with a line of its own and none at all for a
+variant seen once. Under one mark at two offsets it saves a whole symbol at the second, since one activation
+stands for both. A pattern whose whole body is one class at one offset saves less than it costs and is retired
+(R18); a pattern has to name or tie something.
 
 **On D38 — how branching works.** There is no branch inside a body. The choice is dispatch: two situations are
 two patterns, and which one fires is the whole of "if". "If there is a carry, write 1" is a carry pattern with a

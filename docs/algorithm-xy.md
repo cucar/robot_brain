@@ -31,41 +31,43 @@ whatever recurs, so each pair that came round twice gets one:
 Each writes its occurrence as one symbol where the letters cost four. The pairs seen once stay in the residual,
 written flat.
 
-# 3. Classes from the residual
+# 3. A class from what recurs without a name
 
 Beside the three recurring pairs, many pairs have gone by once: `s, t, s, t, p`, `u, v, u, v, p`, and so on.
-Nothing recurs by name, so the greedy pick built nothing for them and they stand in the residual, flat. Before
-`p`'s next pick seeds on a neighbor of theirs, clusters the rows it collects, and collapses the cluster of once-seen
-pairs spot by spot (D33, D27):
+No letter recurs in them, so no pair of neurons reaches a count of two in the residual. What recurs is a
+relation between offsets: one back and three back hold one neuron in every such row, and so do two back and
+four back. The greedy pick seeds on the first of those ties (D33) and re-centers over the rows that hold it
+(D27):
 
 | Question | Answer |
 |---|---|
-| Which offsets hold one neuron in a majority? | None. No constants. |
-| Which offsets are filled in a majority with no neuron in a majority? | All four. |
-| Which of those hold the same neuron in a majority of the neighborhoods? | One and three back; two and four back. So `K¹` at both of the first, `J¹` at both of the second: two variables, each tying two offsets. |
-
-The candidate is a pattern of variables and nothing else, an equalization:
+| Does any neuron hold a majority at any offset? | No. No constants. |
+| Which offsets hold one neuron in a majority of the rows? | One and three back; two and four back. |
+| So what does the candidate name? | A class `K` under one mark at one and three back, and a class `J` under one mark at two and four back. |
 
 ```
 (K¹, 1 back),  (J¹, 2 back),  (K¹, 3 back),  (J¹, 4 back)
 ```
 
-`K¹` is whatever stood one back, and the same thing three back; `J¹` likewise (D38). The pattern names no
-letter, and no list of letters anywhere: any pair that alternates fits it.
+`K¹` twice means one member at both; `J¹` likewise (D38). The pattern names no letter. `K`'s first members are
+the letters that stood one and three back in those rows, `J`'s the others.
 
 # 4. The price
+
+`p` has seen some thirty letters beside it, and eight of them are members of `K`. A `K` activation therefore
+costs `log₂ 8 / log₂ 30`, about six tenths of a symbol (D13); `J` the same.
 
 | written as | symbols |
 |---|---|
 | a once-seen pair, flat | 4 |
 | a recurring pair, by its own pattern: `Q` | 1 |
-| a once-seen pair, by the general pattern: `alternation`, `K¹`, `J¹` | 3 |
+| a once-seen pair, by the general pattern: the instance, one `K` activation, one `J` activation | 1 + 0.6 + 0.6 = 2.2 |
 
-Each variable ties two offsets for one value, so the two save two per pair between them, and the instance costs
-one: three against four flat, one saved per once-seen pair, and nothing on the recurring ones, which their own
-patterns write for one. Its line costs five and each class neuron its name (D13), so it pays once seven or so
-rare pairs have gone by. `P`, `Q` and `R` stand while their pairs are frequent, and when one becomes rare its
-pattern retires (R18) and the general pattern writes that pair from then on, with nothing to learn first.
+The general pattern saves about 1.8 on every once-seen pair and nothing on the recurring ones, which their own
+patterns write for one. Its line costs five, and each class its name and eight members (D13), so it pays once a
+dozen or so rare pairs have gone by. `P`, `Q` and `R` stand while their pairs are frequent; when one becomes
+rare its pattern retires (R18) and the general pattern writes that pair too, its letters joining `K` and `J` as
+they stand there twice (D27).
 
 # 5. The return and the election
 

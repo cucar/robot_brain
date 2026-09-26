@@ -54,8 +54,8 @@ activations of the thing are written as the child and one variable.
 **How `Thing` came to be.** Balls and fists came at the body often and got patterns of their own. Everything
 else that ever came at it, once or twice each, stood in `me`'s residual at `(0, +2)` and, a frame earlier, at
 `(0, +4)`: two offsets filled most of the time by no one neuron, and by one and the same neuron in each
-neighborhood. The collapse (D27) made them one variable, `Thing¹`, and `incoming-ahead` is the candidate that read
-it: one value covering two neighbors. When balls become
+neighborhood. The collapse (D27) made them one class under one mark, `Thing¹` at both, and `incoming-ahead` is
+the candidate that named it: one activation, paid once, covering two neighbors. When balls become
 rare and their pattern retires, `ball` falls to the residual, `me` finds it where `Thing` stands, and it joins.
 
 # 5. One moment, worked
