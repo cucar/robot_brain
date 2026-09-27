@@ -38,7 +38,7 @@ The pattern in `show`'s table names two neighbors:
 fires one level up at the digit's coordinate, holding `7` (§7.4). The pattern pays for its line because it
 names `ready`: three activations, `ready`, `show` and the digit, are written as the child and one variable.
 `Digit` itself came from the collapse of `show`'s history (D27): the spot beside `show`, a frame after `ready`,
-was filled every time by a different digit, ten of them out of the few dozen neurons `show` has seen beside it.
+was filled every time by a different digit, ten of them out of the few dozen neurons at that level.
 A `Digit` activation therefore costs about six tenths of a symbol and saves the rest on that cell (D13), which is
 what lets the collapse name it there; and what it exposes one level up is the digit itself.
 

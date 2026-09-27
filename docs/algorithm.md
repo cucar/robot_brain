@@ -308,12 +308,21 @@ assumes for anything the file does not state.
 > a base neuron on the apex    =  1                 its own line
 > having a pattern             =  1 + |p|           a line in the dictionary, |p| the neighbors pattern p names
 > having a class               =  1 + |K|           its name and one symbol per member, written once (D41)
-> a class activation on the apex  =  log₂|K| / log₂ n     the choice it leaves open, out of the n neighboring neurons the owner has seen
+> a class activation on the apex  =  log₂|K| / log₂ n     the choice it leaves open, out of the n neurons of its level
 > ```
-> A symbol costs one regardless of how often it is used. A class activation costs the information it withholds:
-> a class with one member is a constant and costs nothing, a class of every neuron the owner has ever seen
-> beside it says nothing and costs a whole symbol, and a class of two out of two hundred and fifty-six costs an
-> eighth. `n` is counted, not declared: the distinct neurons standing in the owner's history (D18).
+> **This is one fixed-length code with two alphabets.** In a fixed-length code every symbol drawn from one
+> alphabet costs the same, `log₂` of the alphabet's size, however often it is used. The unit here is one
+> symbol of the level's alphabet, a choice among the `n` neurons that stand at that level, and every symbol
+> above is priced at one such unit. A class activation is drawn from a smaller alphabet: once the pattern has
+> said "a member of `K` stands here", what is left is a choice among `|K|` members, which in the same code
+> costs `log₂|K|` bits, and `log₂|K| / log₂ n` of a unit. Nothing about frequency enters: the logarithm only
+> converts one alphabet's symbols into the other's units. A class with one member is a constant and costs
+> nothing; a class of every neuron of the level says nothing and costs a whole symbol; a class of two out of
+> two hundred and fifty-six costs an eighth.
+>
+> **`n` is the machine's count of the neurons at the level**, raised when a neuron of that level is created and
+> lowered when one is deleted. The machine hands it to every neuron of the level with its call (R20), so every
+> neuron of the level prices against the same `n`, and so does the election over their bids (R22).
 
 > **D14 — File length.** Over the run the file is
 > ```
@@ -556,7 +565,7 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 
 > **R4 — `H` is the only free parameter.** The alphabet (D1) states the problem and is not a knob. The reach
 > (D4), adjacency (D5) and the offsets (D6) are derived, not declared; the `n` a class is priced against is
-> counted from the history (D13). **No rule introduces a constant, a
+> the machine's count of the neurons at the level (D13). **No rule introduces a constant, a
 > threshold, a window or a cap of its own.**
 
 ## 5.4 The collapse
@@ -723,7 +732,8 @@ what stood on the apex in the frames after it, event and action alike.
 # 6. The process functions call
 
 > **R20 — The call, in order.** Once per level per frame, the machine asks one neuron for everything it owes
-> that frame, handing it **every activation of it that fired this frame with a neighborhood that is not empty**,
+> that frame, handing it the count `n` of neurons at its level (D13) and **every activation of it that fired
+> this frame with a neighborhood that is not empty**,
 > each with its neighborhood, at age 0 (R1). They are processed together. A neuron none of whose activations
 > has a neighbor is not called; such an activation is still open (D9) and on the apex (R27) like any uncovered
 > activation.
@@ -953,8 +963,8 @@ reads nothing.
 > covered   the bidder, and the neurons it names that fired and no earlier bid covers — the activations it
 >           asks to subsume, the members its classes were fit by among them
 > price     1 + |p \ O|   its own line in the body, and the neurons it names in those
->                          same frames that did not fire, plus each class activation it stands up;
->           what a class activation costs on the board, and against which n, is not yet decided
+>                          same frames that did not fire, plus each class activation it stands up at
+>                          log₂|K| / log₂ n, n the count the machine handed the level's neurons (D13)
 > ```
 > `coverage − price` is the saving over stating the chunk flat, D22's expression over the machine's population.
 >

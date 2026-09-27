@@ -701,8 +701,13 @@ narrow class right and lets the everything-class cover the history for free; a t
 class is never wrong. The one price that gets both right is Shannon's: the activation costs `log₂|K|` against
 the `log₂n` a full symbol carries, the fraction of the choice the class did not settle. The everything-class
 costs a whole symbol and saves nothing; a class of one is a constant and costs nothing; and the specific pattern
-rises above the general one by exactly the bits it settles. `n` is the neurons the owner has actually seen
-beside it, counted from its history, so nothing is declared and the price is the owner's own.
+rises above the general one by exactly the bits it settles. This is not a variable-length code slipped into
+a fixed-length one: a fixed-length code charges `log₂` of the alphabet's size for every symbol of that alphabet,
+and the class activation is a symbol of a smaller alphabet, its members, priced in the units of the larger
+one. `n` is the neurons at the level, which the machine already counts as it creates and deletes them; every
+neuron of the level prices against the same number, and so does the election, so the neuron's books and the
+board read a class activation alike. The "one" that every other symbol costs was always this unit: a choice
+among the level's neurons.
 
 **On D27 — what a class saves, and where the line falls.** Against a specific pattern, which carries the member
 inside its name, a class at one offset costs its activation on every row and saves one dictionary line per

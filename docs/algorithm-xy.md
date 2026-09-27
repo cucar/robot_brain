@@ -54,7 +54,7 @@ the letters that stood one and three back in those rows, `J`'s the others.
 
 # 4. The price
 
-`p` has seen some thirty letters beside it, and eight of them are members of `K`. A `K` activation therefore
+Say thirty neurons stand at `p`'s level, and eight of them are members of `K`. A `K` activation therefore
 costs `log₂ 8 / log₂ 30`, about six tenths of a symbol (D13); `J` the same.
 
 | written as | symbols |

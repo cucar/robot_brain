@@ -270,12 +270,11 @@ What is still open, in the order it bites:
   intended answer is the level above, where a pattern naming the call and the variable's value together would
   restore one symbol per occurrence; but a variable there is named by its class, not its value, so that
   pattern cannot yet be written, and the arithmetic has not been redone with it.
-- **What a class activation costs on the board.** The neuron prices it against the `n` it has seen (D13); the
-  machine has no `n` of its own and compares bids from neurons with different ones. Whether the election uses
-  the level's population, or a whole symbol, or something else, is not decided (R22).
 - **Prices are no longer counts.** A class activation costs a logarithm, so every margin carries one, "nothing
-  is divided" is gone, and the neighbor rule is weighted. And `n` slides with the history, so a pattern can
-  cross zero with no change in its rows. **Diagnostic:** retirements whose cause was a change in `n` alone.
+  is divided" is gone, and the neighbor rule is weighted. And `n` is the level's population, which grows as the
+  level fills and shrinks as it is pruned, so a pattern can cross zero with no change in its rows, and every
+  class of the level gets cheaper as the level grows. **Diagnostic:** retirements whose cause was a change in
+  `n` alone.
 - **Co-variation is quadratic in the offsets.** `same` and `paired` are read over every pair of varying offsets of a
   candidate, per cluster, and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The collapse reads one table (D27). Two neurons
