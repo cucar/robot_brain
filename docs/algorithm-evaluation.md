@@ -245,14 +245,14 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 
 # 3. Open questions
 
-**Patterns as functions and class neurons (D37–D41) — what stands between the model and an implementation.**
+**Patterns, classes and parameters (D37–D45) — what stands between the model and an implementation.**
 There is one kind of pattern above the base, its body naming events and actions together (D5), and one kind of
-connection (D25). Every level is explained as a set of function calls over global variables: an accepted bid is a call, its child
-is the function, and each class neuron it reads is a variable of the level holding the neuron its variable was fit
-by (§7.1). Base actions take no arguments and act at a focus the environment holds; a variable is a variable of a class neuron
-named at offsets that hold one neuron, tied to no dimension; a candidate's constants and variables are read from one cluster of
-neighborhoods in one collapse (D27) and priced together (D33); an inferred pattern runs its actions and expects
-its events, weakly (R30).
+connection (D25). A body names constants, classes and parameters (D38). Every level is explained as a set of
+function calls with their arguments: an accepted bid is a call, its child is the function, and each parameter
+it names fires a value child with what it held (§7.1, D45). Base actions take no arguments and act at a focus
+the environment holds; a pattern and the classes and parameters it needs are read from the neighborhoods in one
+collapse (D27) and priced together (D33); an inferred pattern runs its actions and expects its events, weakly
+(R30).
 Four cases are worked by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md),
 [hit](algorithm-hit.md), [an alternating pair](algorithm-xy.md)).
 What is still open, in the order it bites:
@@ -266,10 +266,10 @@ What is still open, in the order it bites:
 - **Recurring variants never generalize.** A seed whose neighborhoods all hold one pair collapses them to
   constants, so three pairs seen ten times each are three patterns for good, and a general pattern over them
   is never a candidate. Replacing them afterward was tried and dropped: on frequent variants the general
-  pattern costs two more symbols per occurrence than the specifics and no dictionary saving covers it. The
-  intended answer is the level above, where a pattern naming the call and the variable's value together would
-  restore one symbol per occurrence; but a variable there is named by its class, not its value, so that
-  pattern cannot yet be written, and the arithmetic has not been redone with it.
+  pattern costs more per occurrence than the specifics and no dictionary saving covers it. The intended answer
+  is the level above, where a pattern naming the call and a value child together restores one symbol per
+  occurrence. That pattern can now be written, since a value child is an ordinary neuron of that level (D45);
+  the arithmetic has not been redone with it.
 - **Prices are no longer counts.** A class activation costs a logarithm, so every margin carries one, "nothing
   is divided" is gone, and the neighbor rule is weighted. And `n` is the level's population, which grows as the
   level fills and shrinks as it is pruned, so a pattern can cross zero with no change in its rows, and every
@@ -278,7 +278,7 @@ What is still open, in the order it bites:
 - **Co-variation is quadratic in the offsets.** `same` and `paired` are read over every pair of varying offsets of a
   candidate, per cluster, and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The collapse reads one table (D27). Two neurons
-  that each saw one variant never share a class on their own; reuse (R43) joins their class neurons only when
+  that each saw one variant never share a class on their own; reuse (R43) joins their class children only when
   two bids read a class at one activation in one election.
 - **Near-duplicates stay apart, and nothing merges children.** A child is reused only on a tie over the same
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
@@ -288,16 +288,22 @@ What is still open, in the order it bites:
   and it joins when it has stood there twice with the rest of the pattern holding (D27). A pair never seen is
   written flat the first time and covered the second. **Diagnostic:** occurrences of a general pattern written
   with a class correction, per class.
-- **A variable does not thin the level.** A child replaces what its pattern covers; a variable stands one for
-  one with what it holds, so a level built from calls that read many variables is wider than D4's doubling reach
-  assumes. **Diagnostic:** variables per accepted bid, per level.
 - **A class's lesson is one lesson.** A general pattern's child has one set of connections over every member,
-  so what it learned after a ball it applies to a human in the same variable, and a bad outcome on one lowers the
+  so what it learned after a ball it applies to a human in the same place, and a bad outcome on one lowers the
   estimate for all. The specific lesson lives, if anywhere, one level up, or in a branch the collapse kept (D27).
   This and the item above are one fact seen twice.
-- **Reach bounds what a call can read.** A variable is read at the offset where it stands, within the reader's
-  reach (D4). A value a call needs from further back than its level reaches is out of sight, which is the same
-  bound the return path meets.
+- **Reach bounds what a parameter can carry.** A parameter binds from offsets within its owner's reach (D4). A
+  value needed from further back than that is out of sight, and a value carried forward is carried only as far
+  as the pattern's reach, which is the same bound the return path meets.
+- **A parameter holding one class passes the same value every time.** Its value is the class (D44), so its value
+  neuron fires identically on every call and says nothing the child does not. Whether such a parameter should
+  pass the member instead, or fire nothing, is not decided. **Diagnostic:** value children that fired for only
+  one value over their life.
+- **Class bids for members nothing covers.** A class covering a member on its own pays by its narrowing alone
+  (D41). When a neuron sends such a bid, and how often the board takes one, has not been worked through.
+- **Who owns a copying pattern.** A parameter carrying a value forward (D44) needs an owner present every time
+  the value reappears, whatever the value is: a cue the world gives at that frame. What happens when no such
+  neuron stands there has not been worked out.
 - **Replaying the run is lossy about members.** Expansion puts back a class's most frequent member (R28), and
   is wrong as often as the class was uncertain. Whether anything downstream needs the exact member when the
   activation has closed has not been checked.
@@ -319,12 +325,12 @@ What is still open, in the order it bites:
 - **Whether an inferred action should be weak.** Events the machine puts in a frame are weak and actions are
   not (D40). Making inferred actions weak too would remove the asymmetry; what it would mean for a child fit by
   them, and for the habit vote, has not been worked out.
-- **Crossing kinds.** A variable holds an event as an event. "Write the digit you see" needs the action that
+- **Crossing kinds.** A parameter holds an event as an event. "Write the digit you see" needs the action that
   corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. Copy (algorithm-copy.md) expects the event it was given and does not need one; writing it does.
 - **A call inferred by several situations** fires at each of their coordinates (D37). That is taken to be right
   and has not been worked through against "one call per dimension per frame".
-- **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
-  member fires (H2, H5). Under D41 a class neuron is a variable that fires only when an accepted bid reads it,
+- **The hippocampus document predates D41.** Its moment is written as a class child that fires wherever a
+  member fires (H2, H5). Under D41 a class child fires only for a member nothing else covers,
   so the moment has to be restated.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
   base actions that move it.

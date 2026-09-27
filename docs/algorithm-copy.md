@@ -1,18 +1,20 @@
 # Copy, as a machine that could be built
 
-A worked case for [algorithm.md](algorithm.md): a machine that holds on to whatever digit it was just shown,
+A worked case for [algorithm.md](algorithm.md): a machine that gives back whatever digit it was just shown,
 `a => a`, written out neuron by neuron. Nothing here is normative, and the machine is shown running: its tables
-and connections are as listed, and its histories already hold moments like this one. It shows a value travelling
-the whole loop without anything being decided per value: a variable holds what was seen, the step that follows
-expects that variable's value, and the variable is still standing when the expectation reads it, so what comes
-back is what went in.
+and connections are as listed, and its histories already hold moments like this one. It shows a value carried
+forward in time by a parameter, with nothing deciding anything per value: a cue puts the machine in a state,
+the state infers the copy program, and the program's parameter takes its value from what stands now and places
+it two frames on.
 
 ---
 
 # 1. The environment
 
-**In.** A digit is shown in event dimension `d`, ten buckets, `0` to `9`. Every showing is announced: a `ready`
-event fires the frame before, and a `show` event fires in the frame the digit does, both in event dimension `cue`.
+**In.** A digit is shown in event dimension `d`, ten buckets, `0` to `9`. Every showing is announced in event
+dimension `cue`: `ready` fires the frame before the digit, `show` fires with it, and `again` fires two frames
+after it. While the machine is being taught, the world shows the same digit again with `again`. Afterwards it
+shows `again` alone, and the digit is the machine's to supply.
 
 **Out.** Nothing. The machine acts only on itself.
 
@@ -20,67 +22,49 @@ event fires the frame before, and a `show` event fires in the frame the digit do
 
 | Kind | Neurons |
 |---|---|
-| base events | `ready`, `show`, and the ten digits |
-| class neuron | `Digit`, a variable that holds whichever digit was shown (D41) |
-| base action | `hold`, in an action dimension the environment does not have, so nothing outside the machine sees it run (D37) |
-| patterns | one in the table of `show`, with its child `shown`; one in the table of `hold`, the step, with its child `held` |
+| base events | `ready`, `show`, `again`, and the ten digits |
+| the cue state | `show`'s pattern, `(ready, one frame ago)`, and its child `shown`, at level 1 |
+| the copy program | `again`'s pattern, `(show, two frames ago)` and a parameter `P` over the digit now and the digit two frames ago; its child `copy`, at level 1 |
+| value children | `P:0` to `P:9`, one level up, one per digit `P` has passed (D45) |
 
-# 3. The situation
+# 3. How it was learned
 
-The pattern in `show`'s table names two neighbors:
+1. **The cue becomes a state.** `ready` then `show` recurs on every showing, so `show` holds a pattern for it,
+   and its child `shown` fires at level 1 whenever the cues appear. `shown` standing on the apex is the state
+   "a copy has been asked for".
+2. **The copy becomes a pattern.** At the frame `again` fires, the digit beside it is always the digit shown
+   two frames before, whatever that digit is. So in `again`'s history the digit's place now and its place two
+   frames back hold one neuron in every row: a parameter (D27, D44). It pays, one value covering two cells, and
+   the pattern that names it, with `show` two frames back, is bought; its child `copy` fires at level 1.
+3. **The state learns to call the program.** `shown` is still open two frames later, uncovered, and `copy`
+   stands on the apex then. So `shown` connects to `copy` at offset two (D25, R31), and every taught showing
+   strengthens it.
 
-| names | offset |
-|---|---|
-| `ready` | one frame ago |
-| `Digit` | now |
+# 4. One showing, frame by frame, after teaching
 
-`Digit` is fit by any digit standing beside `show` (D38), and when the bid is accepted a `Digit` variable
-fires one level up at the digit's coordinate, holding `7` (§7.4). The pattern pays for its line because it
-names `ready`: three activations, `ready`, `show` and the digit, are written as the child and one variable.
-`Digit` itself came from the collapse of `show`'s history (D27): the spot beside `show`, a frame after `ready`,
-was filled every time by a different digit, ten of them out of the few dozen neurons at that level.
-A `Digit` activation therefore costs about six tenths of a symbol and saves the rest on that cell (D13), which is
-what lets the collapse name it there; and what it exposes one level up is the digit itself.
+| Frame | input | on the apex | what happens |
+|---|---|---|---|
+| 1 | `ready` | `ready` | |
+| 2 | `show`, `7` | `shown`, `7` | `shown` infers `copy` two frames ahead (R36) |
+| 3 | | | |
+| 4 | `again` | `copy`, and `P:7` beside it | the `7` fires weakly beside `again`, as expected |
 
-# 4. What the situation infers, and what that expects
+In frame 2 the inference places `copy` at its completion, frame 4, and expands it back from there (R28).
+`copy`'s body names `show` two frames back, which is frame 2, where `show` stands; and `P` at frame 2 and at
+frame 4. Frame 2 has happened, so `P` takes its value from what stands there, the `7`; frame 4 has not, so
+expansion places the `7` there, weakly, as an expected event (D44, R40). In frame 4 the world shows `again` and
+no digit, the expected `7` stands beside it, `again`'s pattern fits, and `copy` is bought with `P = 7`.
 
-The step, in `hold`'s table, names `show` and `Digit` a frame before and `hold` beside it (D5); its child is
-`held`.
+Show a `3` instead and nothing in the machine is different: the same state infers the same program, and the
+same parameter carries a `3`. One program serves every digit, because nothing in it names a digit.
 
-| Holder | Connection | Reads as |
-|---|---|---|
-| `shown` | `(held, one frame on)` (D25) | infer the step next frame: run `hold` |
-| `held` | `(Digit, one frame on)` (D25) | expect whatever `Digit` holds the frame after |
-
-Neither connection names a digit. The step is inferred at the coordinate of the `shown` activation (D37), one
-frame after the `Digit` variable fired, and the variable is open for its window (D9), so it is still standing
-within reach. `held`'s connection was learned while the world kept showing the digit a second time; now the
-expectation stands in for it (R40): it names `Digit`, and what fires is the value of the variable standing
-there: the digit `7`, weakly, there for that frame and gone.
-
-# 5. One showing, frame by frame
-
-| Frame | runs | input | on the apex | infers |
-|---|---|---|---|---|
-| 1 | | `ready` | `ready` | |
-| 2 | | `show`, `7` | `shown`, and `Digit` holding `7` | the step `held` |
-| 3 | `hold` | | `held`, covering `show`, `7` and `hold` | `Digit`'s value, expected |
-| 4 | | `7`, weakly, expected | `7` | |
-
-In frame 2 the pattern covers `ready`, `show` and the `7`, and its child stands on the apex beside a `Digit`
-variable holding `7` (§7.4). In frame 3 `hold` runs and the
-step is matched. In frame 4 the world shows nothing, and the `7` is there anyway.
-
-Show a `3` instead and nothing in the machine is different: the same pattern fits, the same two connections
-speak, and a `3` comes back. One situation, one step and one expectation serve every digit, because none of them
-ever says which digit it is.
-
-# 6. The same thing as code
+# 5. The same thing as code
 
 | in the code | in the machine |
 |---|---|
-| the variable `a` | the class neuron `Digit`, named in the situation's body |
-| the value `a` holds | the `Digit` variable on the level, holding `7` |
-| the function | the step `held`, inferred by the situation's connection |
-| `return a` | `held`'s connection, which names `Digit` and reads the variable standing there |
-| the value | the digit `7`, expected and fired weakly the frame after `hold` runs |
+| calling `copy` | `shown` inferring `copy` two frames ahead |
+| the function `a => a` | `again`'s pattern, whose parameter spans the digit now and two frames back |
+| the parameter `a` | `P`, in `again`'s parameters table |
+| binding `a` to the argument | `P` taking its value from the `7` standing at frame 2 |
+| `return a` | expansion placing the same value at frame 4 |
+| the value | the digit `7`, expected and fired weakly two frames after it was shown |

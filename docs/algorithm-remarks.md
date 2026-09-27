@@ -221,7 +221,7 @@ it in the residual is free; the only thing a pattern is ever charged for is a ne
 fire (D22). The design pays for false claims, not for unclaimed facts, and a pattern that names less is never
 penalized for it beyond the coverage it forgoes.
 
-**On D19 — why handover is arithmetic.** What an activation holds against each pattern is the variable, and nothing
+**On D19 — why handover is arithmetic.** What an activation holds against each pattern is the index, and nothing
 has to be added to it — a pattern that moved updates its owners in each activation it covers (D29), and every
 activation reaching for it is current again. An activation's share moves whole, so a pattern joining or leaving a cover transfers its
 share in `O(offsets)`. The offset grid grows with the level, since D4's reach does, while the number of
@@ -656,43 +656,66 @@ a base action acts is a focus the environment holds and the machine sees, which 
 machine the design already is, and a fovea. Nothing is declared about an action but its place in the alphabet.
 
 **On D41 — the second axis.** A child says "these things happened together": an AND, part to whole. A class
-neuron says "one of these happened, and here is which": an OR, instance to class, with its activation holding
-the instance. Both are bought in the same election and both fire one level up, the child for the call and a
-variable for each class neuron the pattern read. The design had the first axis from the start. The second is
-what "whatever", "the same thing" and "one of these" all needed, and it is one object.
+neuron says "one of these happened": an OR, instance to class. Both are bought in the same election and both fire
+one level up, but a class fires only for a member nothing else covered. A class named inside a pattern needs no
+activation of its own, because the pattern child already says that one of its members stood there; firing it
+too would say the same thing twice. The design had the first axis from the start. The second is what "whatever"
+and "one of these" needed.
 
-**On D41 — why a variable is global and a call owns nothing.** An earlier draft gave a call arguments: a
-binding per slot, found by the bidder, carried on the bid, copied to the child, carried by the call it returned
-and by what that returned. It was a local variable, and everything that goes wrong with local variables went
-wrong with it: the collapse could not count it, a connection had to key on it, and a neighbor's own bindings had
-to be written into a body. A variable of the level has none of that. It stands at a coordinate for its window,
-it holds its value, and whatever names its class neuron at the offset where it stands reads it: a pattern, a
-call, an inference. Two calls within reach of one variable read the same value, which is what "the same thing" means.
-Nothing is carried, because the thing stays where it is.
+**On D44 — the third construct.** A neighbor is a neuron at an offset, and a body can say three things about it:
+which neuron and where, a constant; which set and where, a class; where only, at several offsets, and that the
+neuron is the same at all of them, a parameter. An earlier draft had only the first two, and wrote sameness as a
+mark on a class, `K¹` at two offsets. That made an alternation carry a list of letters it did not care about,
+and made a pair never seen wait for its letters to join the class. The alternation says only that one and three
+agree and two and four agree; it is two parameters and no class at all.
+
+**On D45 — why a parameter fires a value and a class fires a kind.** A class's activation carries information
+by itself: "one of these stood here" is a fact the level above can use. A parameter's would not: "there was an
+argument" says nothing. What the level above needs from a parameter is its value, which is what distinguishes
+this call from every other call of the same function. So the class fires as itself and the parameter fires as
+its value.
+
+**On D45 — why the value is a child and not the lower neuron lifted.** The value is a neuron of the level below,
+and neurons do not change levels: a neighborhood one level up is made of neurons of that level, and every price
+there is in that level's units. Letting the lower neuron stand one level up would put two levels' alphabets on
+one apex and two units in one sum. A value child is an ordinary child of the level above, created, priced,
+expanded and deleted by the rules every child obeys; it only happens to stand for one value of one parameter.
+
+**On D45 — why one value child per parameter and value.** Two parameters of one activation that both hold `x`
+are two arguments that happen to be equal, and the level above should hear two things. If it matters that they
+are equal, the two value children will recur together, and the level above can make a pattern of that. One
+parameter that passes `x` again fires the same value child, so what the level above learns about that argument
+holding `x` accumulates in one place.
+
+**On D44 — carrying a value forward is copying.** A parameter over an offset now and an offset two frames on,
+inferred and expanded, takes its value from what stands now and places it two frames later as an expectation.
+Nothing in the design copies anything else; every value that moves forward in time moves this way, and `a => a`
+is a pattern of one parameter over two frames.
 
 **On D41 — why the member list is short, and whose it is.** A person who thinks of a bridge does not run
 through every bridge they have seen, and the class table does not either: a member is kept while it has stood
 where the class stands in two neighborhoods of the history, and no longer, so the list is only as long as what
 still recurs, and it costs a symbol per member exactly because it is a list. It belongs to the neuron that
-formed the class, in its own class table; the member neuron knows nothing of it, and the class neuron, one
+formed the class, in its own class table; the member neuron knows nothing of it, and the class child, one
 level up, keeps its own history of what it has held rather than a list. A neuron never seen at the class's
 offsets does not fit until it has stood there twice, which is the one-call lag the evaluation records, and the
 price of a class that means something.
 
 **On D41 — why it has a history of its own.** A pattern lives in the table of the neuron that fired, so what
 surrounds a `ball` is evidence in `ball`'s history and what surrounds a `fist` in `fist`'s, and no neuron sees
-the two side by side. A class neuron fires for each of them in turn, so its history pools theirs. Generalizing
+the two side by side. A class child fires for each of them in turn, so its history pools theirs. Generalizing
 over things needs a population shared by those things, and a neuron that fires for all of them is that
-population.
+population. A value child's history is the other side of the same idea: everything that happened around one
+argument holding one value.
 
 **On D38 and D27 — memorizing and equalizing are one rule.** A constant says what stands at an offset; a
-class says that one of its members does, and forgets which. Both are neighbors, both are expected to hold, both
-pay a correction when they fail, and both enter and leave a body by the same test, a neighbor's worth where it
-holds against a correction where it fails. The whole difference between a pattern and a class is which of the
-two kinds of neighbor it is made of, and most bodies are made of both. Putting a class where the examples differ
-is anti-unification (Plotkin, Reynolds, 1970); the collapse does it over one pattern's rows at a time.
+class says that one of its members does, and forgets which; a parameter says that the same thing stands at
+several offsets, and names it nowhere. All three are neighbors, all three are expected to hold, all three pay a
+correction when they fail, and all three enter and leave a body by the same test, a neighbor's worth where it
+holds against a correction where it fails. Putting a class or a parameter where the examples differ is
+anti-unification (Plotkin, Reynolds, 1970); the collapse does it over one pattern's rows at a time.
 
-**On D13 — why a class activation costs the choice it leaves open.** A symbol that could be anything carries no
+**On D13 — why a class costs the choice it leaves open.** A symbol that could be anything carries no
 information, and a class that admits everything should be worth nothing without anyone forbidding it. Pricing
 the class activation at a whole symbol gets that case right by accident and underpays every narrow class: three
 letters out of twenty-six have done real work and would earn nothing on the cell. Pricing it at nothing gets the
@@ -713,50 +736,50 @@ among the level's neurons.
 inside its name, a class at one offset costs its activation on every row and saves one dictionary line per
 variant it absorbs (D43). So it pays when the variants are many and each is rare, and the specific patterns win
 where a variant recurs often: frequent things keep a symbol of their own, the rest go through the class. A
-class spanning several offsets under one mark saves a whole symbol at every offset after the first, since the
-activation is paid once, and that is the alternation. And when a member comes to dominate a class's offset, the
+parameter spanning several offsets saves a whole symbol at every offset after the first, since its value is
+paid once, and that is the alternation. And when a member comes to dominate a class's offset, the
 collapse prefers the constant, which is worth more and costs nothing on the apex: the general pattern
 specializes back into a specific one, and the other members fall to the residual. Nothing about this is a rule
 about alphabets: with two symbols every class is the alphabet, costs a whole symbol, and is never built.
 
-**On D27 — class and branch.** Two offsets that hold the same neuron in a majority are one class activation
-under one mark. Two offsets whose different neurons pair up in a majority, `m` whenever `d` and `n` whenever
-`e`, are not a class: the second is explained by the first, and the right structure is one candidate per
-pairing, with constants where the class would have been. That is dispatch, and it is where a case keeps a
+**On D27 — parameter and branch.** Two offsets that hold the same neuron in a majority are one parameter. Two
+offsets whose different neurons pair up in a majority, `m` whenever `d` and `n` whenever `e`, are not a
+parameter: the second is explained by the first, and the right structure is one candidate per pairing, with
+constants where the parameter would have been. That is dispatch, and it is where a case keeps a
 lesson of its own. The two readings use the same counts over the same pairs of offsets, and the price settles
 what the count leaves open.
 
 **On D12 — the file forgets the member.** The third loss is not a leak; it is what a class is for. The neuron
 covers `d` with `K` so that it need not remember `d`, and its account of its history says `K`. What actually
-stood there is still on the level, as the class activation's value, for as long as the activation is open, and
-the connections and the level above read it there. Replaying the run from the file alone puts back the class's
+stood there is still on the level for as long as its activation is open, and where it matters to the level
+above it is passed as a parameter's value rather than covered by a class. Replaying the run from the file alone puts back the class's
 most frequent member, the oldest on a tie, and is wrong exactly as often as the class was uncertain, which is
 what its price already charged for.
 
-**On R36 — a neuron several variables hold votes several times.** Every variable is a voter, so an event that
-several accepted bids read produces several voters where an event nothing read produces one, and a candidate's
-estimate is a mean over voters. This is accepted: a thing that takes part in more of what the machine has found
+**On R36 — a neuron several parameters pass is heard several times.** Every value child is a voter, so an
+event that several accepted bids pass as a value produces several voters where an event nothing passed produces
+one, and a candidate's estimate is a mean over voters. This is accepted: a thing that takes part in more of what the machine has found
 worth writing down is more likely to matter.
 
-**On D38 — the known mechanisms, and where each lands.** Numbering variables by first appearance is the
-canonical renaming a programming language uses so that two functions differing only in their variable names
-are the same term; here two class neurons are the same neuron when reuse finds them at one activation (R43).
-The value is read off the level, the indirection answer to the binding problem, never learned, which D11
-requires; synchrony and tensor products are answers for continuous networks and do not fit a machine of discrete
-symbols. And the design has an answer of its own that the literature mostly lacks: the variable is found by
-offset. "Whatever is one to my left" reads a thing by location, with no pointer anywhere.
+**On D38 — the known mechanisms, and where each lands.** Two functions differing only in the names of their
+parameters are the same term in a programming language; here a parameter has no name to differ in, only the
+offsets it spans, so two patterns naming the same offsets name the same parameter (D44). The value is carried by a
+neuron of the level above, the indirection answer to the binding problem, never learned, which D11 requires;
+synchrony and tensor products are answers for continuous networks and do not fit a machine of discrete symbols.
+And the design has an answer of its own that the literature mostly lacks: the parameter is found by offset.
+"Whatever is one to my left" reads a thing by location, with no pointer anywhere.
 
 **On D38 — attention, and where the comparison holds.** A transformer's attention head does with vectors what a
 slot does with symbols. The query is the slot, what a position is looking for; the key is what a position
-advertises, the class it would fit; the value is what is bound, the variable's value; the softmax picks a
+advertises, the class it would fit; the value is what is bound, the parameter's value; the softmax picks a
 binding where the cover picks one. Interpretability work on trained transformers found the same primitive this
 design rests on: an induction head implements "find the earlier `A`, read what followed it, emit that", which
-is a pattern with one variable named at two offsets and a value read at a third (D38), and it is the piece
+is a pattern with one parameter over two offsets and a value read at a third (D38), and it is the piece
 behind in-context learning. That is evidence that sameness across a gap is the right thing to have as a
 primitive. Two differences run the other way. Attention is content-addressed: it finds the earlier `A` at any
 distance, and this design is place-addressed, finding it at an offset within reach, rounded to a power of two
 (D6), which is a limit here and not there. And attention binds softly, a weighted sum of values, so two
-similar things in one context blur into each other, where a variable here holds one neuron; that is a
+similar things in one context blur into each other, where a parameter here holds one neuron; that is a
 difference in kind, and whether it is an advantage is not shown by anything the design has done yet.
 
 **On D38 — what a class in a body saves.** A class is priced as a neighbor, one in the line, and its
@@ -777,7 +800,7 @@ and expects its events (R30); the run is what the world reports back, and the ma
 boundary with the world is one-way for each kind: the machine can make the world perform an action and
 cannot make it show an event. So an event the machine put in the frame is a different thing from one the
 environment reported, and an action is the same thing whether or not anything outside executes it. A weak event
-is a variable, written by a call and read by recognition like anything else, and it is the same neuron as the
+is placed by an expansion and read by recognition like anything else, and it is the same neuron as the
 one the world would report, so what a pattern learned on the seen thing holds for the expected one, and what
 the neuron learned to do while seen it votes for while expected. It learns nothing itself: an expected `7` that
 wrote exposures would mix what followed imagining a `7` into what followed seeing one. What keeps it from being
@@ -802,7 +825,7 @@ same behavior is a chain of one-step lessons, each inferred by the situation the
 **On D37 — where calls come from.** A call the environment executes appears in the frame as an activation of
 that action (D37), and sits in the action neuron's history as a pixel sits in an event neuron's. So a
 demonstration is a population of calls, the patterns chunk them with the events they ran beside, the class grouping
-abstracts what varied into variables, and what stood on the apex connects to what followed.
+abstracts what varied into classes and parameters, and what stood on the apex connects to what followed.
 
 **On D25 — connections are measured, never chosen.** A connection is not in the bid (D31), not in any dictionary
 line (D13), and it enters no test. Connections are read in one place, when the activation stands on the apex
@@ -1124,7 +1147,7 @@ so its owners there are empty (D29). It is then charged nothing there and credit
 take it again only if it pays (D28).
 
 **On D19 — why nothing is indexed the other way.** What each activation holds against each pattern is already the
-variable (D19), so a reverse map from pattern to the activations it covers would be a second copy of the same fact.
+index (D19), so a reverse map from pattern to the activations it covers would be a second copy of the same fact.
 
 **On §6.2 — prices and structure move at the same moment and are still different kinds of thing.** Both move
 when a neuron fires, because that is where counts move and where both tests run (R1). But a price is read off
@@ -1290,7 +1313,7 @@ mints one the first time the board buys it. Lines stay with the neuron and neuro
 only from its owner's activation, because the owner is part of the chunk. An owner on the board was called this
 frame and bid every line of its cover, and a line of its table left out of the cover was displaced by a better
 one from the same table, which was bid instead. So everything a search could find is already among the
-election's bids, measured in the same currency, and no variable and no further call is needed.
+election's bids, measured in the same currency, and no index and no further call is needed.
 
 **On R43 — why reuse is a tie, and what that gives up.** The machine prices the window: what a bid covers on
 the board less what it costs there. In that currency an existing child's bid that did better would have won,
