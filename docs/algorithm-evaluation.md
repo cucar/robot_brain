@@ -295,12 +295,6 @@ What is still open, in the order it bites:
 - **Reach bounds what a parameter can carry.** A parameter binds from offsets within its owner's reach (D4). A
   value needed from further back than that is out of sight, and a value carried forward is carried only as far
   as the pattern's reach, which is the same bound the return path meets.
-- **A parameter holding one class passes the same value every time.** Its value is the class (D44), so its value
-  neuron fires identically on every call and says nothing the child does not. Whether such a parameter should
-  pass the member instead, or fire nothing, is not decided. **Diagnostic:** value children that fired for only
-  one value over their life.
-- **Class bids for members nothing covers.** A class covering a member on its own pays by its narrowing alone
-  (D41). When a neuron sends such a bid, and how often the board takes one, has not been worked through.
 - **Who owns a copying pattern.** A parameter carrying a value forward (D44) needs an owner present every time
   the value reappears, whatever the value is: a cue the world gives at that frame. What happens when no such
   neuron stands there has not been worked out.

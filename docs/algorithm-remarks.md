@@ -667,7 +667,10 @@ which neuron and where, a constant; which set and where, a class; where only, at
 neuron is the same at all of them, a parameter. An earlier draft had only the first two, and wrote sameness as a
 mark on a class, `K¹` at two offsets. That made an alternation carry a list of letters it did not care about,
 and made a pair never seen wait for its letters to join the class. The alternation says only that one and three
-agree and two and four agree; it is two parameters and no class at all.
+agree and two and four agree; it is two parameters and no class at all. A parameter holds no class: a class
+says "one of these, here" and a parameter "the same thing, at these places", and asking one construct to say
+both made its value ambiguous, the member or the class. With the two apart, a parameter always passes the
+member, and a class never passes anything.
 
 **On D45 — why a parameter fires a value and a class fires a kind.** A class's activation carries information
 by itself: "one of these stood here" is a fact the level above can use. A parameter's would not: "there was an
