@@ -672,6 +672,21 @@ says "one of these, here" and a parameter "the same thing, at these places", and
 both made its value ambiguous, the member or the class. With the two apart, a parameter always passes the
 member, and a class never passes anything.
 
+**On D44 — parameters are found on their own.** A parameter is a fact about where one neuron reappears, and that
+fact does not depend on any pattern: the neuron counts, over its residual, how often two offsets hold one
+neuron, and a parameter exists where that pays. It can cover alone, as a class can, and any pattern may name
+it. So classes and parameters are exactly parallel: both found by their own counts, both able to stand alone
+through a bid, both usable by any pattern, and a pattern is what is built on them where they recur in the same
+company.
+
+**On D13 — why an argument costs less inside a pattern.** Standing alone, a value child is one choice among every
+neuron at its level, a whole symbol. Inside a pattern the instance has already said which parameter this is, so
+what is left is one choice among the values that parameter has passed. That is the same narrowing a class
+gives, and it is what a pattern of parameters is worth: `p` with two parameters costs `p` and two whole symbols
+without the pattern, and the instance and two narrowed arguments with it. Without that narrowing a pattern made
+only of parameters could never pay, because its instance absorbs its constants and nothing else; with it, the
+structure "these go together here" is exactly what makes the values cheaper to state.
+
 **On D45 — why a parameter fires a value and a class fires a kind.** A class's activation carries information
 by itself: "one of these stood here" is a fact the level above can use. A parameter's would not: "there was an
 argument" says nothing. What the level above needs from a parameter is its value, which is what distinguishes

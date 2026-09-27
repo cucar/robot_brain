@@ -273,8 +273,8 @@ What is still open, in the order it bites:
 - **Prices are no longer counts.** A class activation costs a logarithm, so every margin carries one, "nothing
   is divided" is gone, and the neighbor rule is weighted. And `n` is the level's population, which grows as the
   level fills and shrinks as it is pruned, so a pattern can cross zero with no change in its rows, and every
-  class of the level gets cheaper as the level grows. **Diagnostic:** retirements whose cause was a change in
-  `n` alone.
+  class of the level gets cheaper as the level grows. An argument's price moves too, as its parameter passes new
+  values. **Diagnostic:** retirements whose cause was a change in `n` or `|V|` alone.
 - **Co-variation is quadratic in the offsets.** `same` and `paired` are read over every pair of varying offsets of a
   candidate, per cluster, and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The collapse reads one table (D27). Two neurons
@@ -295,9 +295,6 @@ What is still open, in the order it bites:
 - **Reach bounds what a parameter can carry.** A parameter binds from offsets within its owner's reach (D4). A
   value needed from further back than that is out of sight, and a value carried forward is carried only as far
   as the pattern's reach, which is the same bound the return path meets.
-- **Who owns a copying pattern.** A parameter carrying a value forward (D44) needs an owner present every time
-  the value reappears, whatever the value is: a cue the world gives at that frame. What happens when no such
-  neuron stands there has not been worked out.
 - **Replaying the run is lossy about members.** Expansion puts back a class's most frequent member (R28), and
   is wrong as often as the class was uncertain. Whether anything downstream needs the exact member when the
   activation has closed has not been checked.

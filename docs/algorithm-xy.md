@@ -36,14 +36,16 @@ written flat.
 Beside the three recurring pairs, many pairs have gone by once: `s, t, s, t, p`, `u, v, u, v, p`, and so on.
 No letter recurs in them, so no pair of neurons reaches a count of two in the residual. What recurs is a
 relation between offsets: one back and three back hold one neuron in every such row, and so do two back and
-four back. The greedy pick seeds on the first of those relations (D33) and re-centers over the rows that hold
-it (D27):
+four back. Those are two parameters, found on their own (D44): `P` over one and three back, `Q` over two and
+four back, each paying alone by covering two letters for one value child. Then `P` and `Q` recur together in
+the same rows, and that is a relation too, so the greedy pick seeds on it (D33) and re-centers over those rows
+(D27):
 
 | Question | Answer |
 |---|---|
 | Does any neuron hold a majority at any offset? | No. No constants. |
 | Which offsets hold one neuron in a majority of the rows? | One and three back; two and four back. |
-| So what does the candidate name? | A parameter `P` over one and three back, and a parameter `Q` over two and four back. No class. |
+| So what does the candidate name? | The two parameters, `P` and `Q`. No class and no constant. |
 
 ```
 (P, 1 back, 3 back),  (Q, 2 back, 4 back)
@@ -54,15 +56,19 @@ pattern names no letter and keeps no list of letters.
 
 # 4. The price
 
+Say thirty neurons stand at the level above, and `P` and `Q` have each passed eight letters, so an argument of
+either costs `log₂ 8 / log₂ 30`, about six tenths of a symbol inside a pattern (D13).
+
 | written as | symbols |
 |---|---|
 | a once-seen pair, flat: `p` and four letters | 5 |
-| a recurring pair, by its own pattern: `Q`'s child | 1 |
-| a once-seen pair, by the general pattern: the instance, and a value child for each parameter | 1 + 1 + 1 = 3 |
+| by `P` and `Q` standing alone, and `p` as itself | 1 + 1 + 1 = 3 |
+| by the general pattern: the instance and two arguments | 1 + 0.6 + 0.6 = 2.2 |
+| a recurring pair, by its own pattern | 1 |
 
-The general pattern saves two on every once-seen pair and nothing on the recurring ones, which their own
-patterns write for one. Its line costs three, one and a symbol each for `P` and `Q`, and each parameter costs
-three in the parameters table (D13), so it pays once five or so rare pairs have gone by. `P`, `Q` and `R` stand
+The parameters alone already save two on every once-seen pair; the pattern saves another 0.8, because inside it
+each value is a choice among eight letters rather than among everything. Its line costs three, `P` and `Q` being
+named once each, so it pays after four such pairs. `P`, `Q` and `R` stand
 while their pairs are frequent; when one becomes rare its pattern retires (R18) and the general pattern writes
 that pair too, with nothing to learn first.
 

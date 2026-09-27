@@ -312,7 +312,8 @@ assumes for anything the file does not state.
 > having a class                  =  1 + |K|              its name and one symbol per member, written once (D41)
 > having a parameter              =  1 + its offsets      its name and one symbol per offset, written once (D44)
 > a class, in an instance         =  log₂|K| / log₂ n     the choice among its members it leaves open, n the neurons of its level
-> a value child on the apex      =  1                    what a parameter passed (D45)
+> a value child on the apex      =  1                    a parameter's value, standing alone (D45)
+> an argument, in an instance     =  log₂|V| / log₂ n     a parameter's value inside a pattern, |V| its value children
 > a class child on the apex      =  log₂|K| / log₂ n     a class covering a member nothing else covers (D41)
 > ```
 > **This is one fixed-length code with two alphabets.** In a fixed-length code every symbol drawn from one
@@ -323,8 +324,10 @@ assumes for anything the file does not state.
 > costs `log₂|K|` bits, and `log₂|K| / log₂ n` of a unit. Nothing about frequency enters: the logarithm only
 > converts one alphabet's symbols into the other's units. A class with one member is a constant and costs
 > nothing; a class of every neuron of the level says nothing and costs a whole symbol; a class of two out of
-> two hundred and fifty-six costs an eighth. A value child is a symbol of the level above like any child, one
-> unit.
+> two hundred and fifty-six costs an eighth. A value child standing alone is a symbol of the level above like
+> any child, one unit. Inside a pattern it is an **argument**: the instance has already said which parameter it
+> is, so what is left is a choice among the values that parameter has passed, `|V|` of them, and it costs
+> `log₂|V| / log₂ n`, the same conversion. The pattern narrows its arguments as a function's signature does.
 >
 > **`n` is the machine's count of the neurons at the level**, raised when a neuron of that level is created and
 > lowered when one is deleted. The machine hands it to every neuron of the level with its call (R20), so every
@@ -461,15 +464,15 @@ residual. Every price in the design (D13) is counted off them.
 > costs — its own line, and the neurons it names that did not fire (D13).
 > ```
 > coverage(p, O)  =  1 + | the neighbors of O owned by p |   the activation itself, and what it owns
-> price(p, O)    =  1 + | p \ O |  +  Σ over p's classes  log₂|K| / log₂ n  +  Σ over p's parameters  their value's price
+> price(p, O)    =  1 + | p \ O |  +  Σ over p's classes  log₂|K| / log₂ n  +  Σ over p's parameters  log₂|V| / log₂ n
 >                                                             its own line, the neighbors that did not hold,
->                                                             what each class left open, and each parameter's value (D13)
+>                                                             what each class left open, and each argument (D13)
 > saving(p, O)   =  coverage(p, O)  −  price(p, O)
 > ```
 > A neighbor holds or fails as D38 says: a constant fails when its neuron is absent, a class when no member
 > stands at its offset, and a parameter at each of its offsets where what stands differs from the neuron most of
-> its offsets hold. A parameter's value is paid once however many offsets it spans, so its first offset saves
-> nothing, since its value costs what the neuron would have, and every further offset saves a whole symbol.
+> its offsets hold. An argument is paid once however many offsets its parameter spans, so its first offset saves
+> what the pattern narrows, `1 − log₂|V| / log₂ n`, and every further offset saves a whole symbol.
 > A child on the apex stands in for the activation it covers and for the neighbors its pattern owns there;
 > that is what it saves, and that is the coverage. What it costs is its own line, plus a turn-off for every
 > neuron the pattern names that did not fire. A neuron the pattern does not name is not in the account at all:
@@ -522,6 +525,9 @@ machine, over a frame's bids. It is stated here and cited from both.
 > | neighbors  | the dictionary line (D12)                                                        |
 > | child      | the id of the child this pattern promotes; none until a bid of the pattern has been accepted (R16) |
 > | values     | per parameter, the value it held and that value's value child, none until the machine has created it (D45) |
+>
+> Beside its bids the activation also sends a **parameter bid** for each parameter of the table whose offsets
+> hold one neuron and that no pattern of its cover took (D44): the parameter, the value, and the value child.
 
 # 5. The neuron
 
@@ -592,8 +598,8 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 > ```
 > worth(constant)                          =  1
 > worth(class K)                           =  1 − log₂|K| / log₂ n     what the class narrows (D13)
-> worth(parameter, its first offset)       =  0                         its value costs what the neuron would
-> worth(parameter, each further offset)    =  1                         its value is already paid for
+> worth(parameter, its first offset)       =  1 − log₂|V| / log₂ n     what the pattern narrows its argument to
+> worth(parameter, each further offset)    =  1                         its argument is already paid for
 > ```
 > **`x` is taken exactly when `count(x) · worth(x) > s − count(x) + 1`.** For a constant that is the majority,
 > `2 · count > s + 1`; for a class it is a majority weighted by how much the class says. A pattern of constants
@@ -601,11 +607,10 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 > three, and a body may hold all three. Where a constant and a class both qualify at one offset, the constant is taken: it is worth
 > more and costs nothing on the apex.
 >
-> **What an offset offers.** At each offset the candidates are the neuron standing there and every class of the
-> class table it is a member of (D41). Two offsets that hold one neuron in a majority of the neighborhoods,
-> `same(δ₁, δ₂)`, offer a parameter over both (D44). An offset joins a parameter when it holds the parameter's
-> neuron in enough neighborhoods by the rule above, and leaves it when it no longer does; a parameter left with
-> one offset is dropped.
+> **What an offset offers.** At each offset the candidates are the neuron standing there, every class of the
+> class table it is a member of (D41), and every parameter of the parameters table that spans the offset and
+> holds there (D44). A pattern names a parameter as it names a class: it does not make one. Parameters are found,
+> grown and dropped on their own (D44).
 >
 > **A branch.** Where two offsets hold a fixed pairing of different neurons in a majority, `paired(δ₁, δ₂)`, `m`
 > whenever `d` and `n` whenever `e`, the variation at one is explained by the other. The neighborhoods are split
@@ -666,12 +671,14 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 >    then to the nearer offset. A relation is one of three things, and the count is over residual
 >    neighborhoods:
 >    ```
->    a neuron a at δ₁ with the same neuron b at δ₂          → two constants
->    a neuron a at δ₁ with two different neurons at δ₂       → a and a class of those neurons at δ₂
->    two offsets δ₁, δ₂ holding one neuron                   → a parameter over both
+>    a at δ₁ with the same b at δ₂                          → a pattern of those two
+>    a neuron a at δ₁ with two different neurons at δ₂       → a pattern of a and a class of those neurons at δ₂
+>    two offsets δ₁, δ₂ holding one neuron                   → a parameter over both, standing alone (D44)
 >    ```
->    A class named here is one of the class table's that already holds the neurons, else a new one (D41); a
->    parameter is the parameters table's with those offsets, else a new one (D44).
+>    In the first two, `a` and `b` may be neurons or parameters of the table: two parameters that recur together
+>    in the same rows are a pattern of two parameters. A class named here is one of the class table's that already
+>    holds the neurons, else a new one (D41); a parameter seeded by the third is the parameters table's with those
+>    offsets, else a new one, and it is priced as a claimant of its own (D44).
 > 2. **Re-center** the candidate over the neighborhoods whose residual holds the relation: the collapse (D27)
 >    over those, so the seed grows to every neighbor that holds in them before anything is written.
 > 3. **Price** the candidate: its margin (D30) read with the candidate credited the residual only, over the
@@ -755,10 +762,18 @@ what stood on the apex in the frames after it, event and action alike.
 > **Its value** is the neuron that stood at its offsets. Where its offsets disagree, the value is the neuron at most
 > of them, the nearest on a tie, and every offset that holds something else is a correction (D22).
 >
-> **It is found, grown and dropped by the collapse** (D27): born where two offsets hold one neuron in a majority
-> of neighborhoods (D33), joined by an offset that comes to agree with it and left by one that stops, and
-> dropped when fewer than two offsets remain. Two parameters with the same offsets are one (D43). A parameter no pattern names is deleted, and its
-> value children with it (R44).
+> **It is found on its own, independent of any pattern.** The neuron counts, over its residual, how often two
+> offsets hold one neuron (D33), and where that recurrence pays for a parameter, one is made. It covers on its own
+> as well: where one neuron stands at its offsets and no pattern of the cover took them, the observer sends a
+> **parameter bid** beside its other bids (D31), covering those cells for one value child, a whole symbol (D13).
+> So a parameter alone saves a symbol for every offset after the first, and it is measured the same way in the
+> observer's cover (D28) and on the board (R22). A pattern that names it, where it recurs in the same company,
+> pays less for it, since there it is an argument (D13), and so outbids it there.
+>
+> **It is grown and dropped by its own counts**, over the neighborhoods where it holds, by the collapse's rule
+> (D27): an offset that comes to hold its neuron joins it, one that stops leaves, and it is dropped when fewer
+> than two offsets remain. Two parameters with the same offsets are one (D43). A parameter that neither pays on
+> its own nor is named by a pattern is deleted, and its value children with it (R44).
 >
 > **Bound from what has happened, placed at what has not.** When a pattern is expanded (R28), a parameter whose
 > offsets fall partly in frames that have happened and partly in frames to come takes its value from what stands
@@ -771,10 +786,11 @@ what stood on the apex in the frames after it, event and action alike.
 > It sits one level above its parameter's owner, has a level and an id like any higher neuron (D2), and holds a
 > table, a history and connections of its own.
 >
-> It fires one level up beside the pattern child when a bid naming its parameter with its value is accepted
-> (§7.4), at the coordinate of the nearest of the parameter's offsets, and it tells the level above what the
-> call was given, which the pattern child alone does not: the pattern child says which function ran, the value children say with
-> what. On the apex it costs one symbol (D13). It
+> It fires one level up when a bid carrying its parameter with its value is accepted (§7.4), a pattern's bid or
+> the parameter's own, at the coordinate of the nearest of the parameter's offsets. Beside a pattern child it
+> tells the level above what the call was given, which the pattern child alone does not: the pattern child says
+> which function ran, the value children say with what. It costs a whole symbol standing alone and an argument's
+> price inside a pattern (D13). It
 > expands to its value at every offset of its parameter (R28).
 
 # Part II — The past and present: a neuron
@@ -794,7 +810,7 @@ what stood on the apex in the frames after it, event and action alike.
 > | recognize patterns | Cover the residual of the history with the table, a class fitting where a member stands and a parameter where its offsets hold one neuron, and re-center every pattern whose covered activations changed. |
 > | delete patterns    | Retire every pattern whose margin is negative.                                                                    |
 > | create patterns    | Seed on what recurs in the residual, re-center it at once, price it; then merge what has become identical. |
-> | return patterns    | The bids, each with its parameters' values, a class bid for each member of a class nothing else covers, and the patterns retired. |
+> | return patterns    | The bids, each with its parameters' values; a class bid for each member of a class, and a parameter bid for each parameter, that nothing else covers; and the patterns retired. |
 
 The call runs before the election (R24).
 
@@ -814,7 +830,8 @@ neighborhood, a constant holds when its neuron stands at its offset, a class whe
 and a parameter when one neuron stands at all its offsets (D38); each
 offset that fails is a correction (D22). What each parameter held is what the bid carries (D31). A class also
 enters the cover as a claimant of its own, for any neighbor that is a member and that no pattern took, covering
-that one neighbor for what the class leaves open (D41).
+that one neighbor for what the class leaves open (D41); and so does a parameter, for offsets that hold one
+neuron and that no pattern took, covering them for a whole symbol (D44).
 
 **Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
 empty table covers nothing and bids nothing.
@@ -983,7 +1000,7 @@ accepts no bid:
 | process functions | Call every neuron with an activation at this level, class and value children included (§6).                              |
 | elect bids        | Cover the level's uncovered activations with the bids, by the greedy cover over the board.                    |
 | create children   | Give every accepted bid that has no pattern child one, every value it passed that has no value child one, and every accepted class bid whose class has no class child one: reused where another bid of the election tied it, created otherwise (R43). |
-| activate children | Every accepted bid activates its pattern child one level up and a value child for each of its parameters; every accepted class bid activates its class child; the uncovered stand on the apex. |
+| activate children | Every accepted bid activates its pattern child one level up and a value child for each of its parameters; every accepted class bid activates its class child and every accepted parameter bid its value child; the uncovered stand on the apex. |
 
 Then, once the last level has run:
 
@@ -1024,7 +1041,8 @@ neurons of members nothing else covered (§7.4). A pattern with no parameter is 
 > price     1 + |p \ O|   its own line in the body, and the neurons it names in those same frames that did
 >                          not fire, plus what each class leaves open and each value child's price, against
 >                          the n the machine handed the level's neurons (D13); a class bid covers its one
->                          member and costs what the class leaves open, as it did in the observer's cover
+>                          member and costs what the class leaves open, and a parameter bid covers its offsets
+>                          for a whole symbol, as each did in the observer's cover
 > ```
 > `coverage − price` is the saving over stating the chunk flat, D22's expression over the machine's population.
 >
@@ -1155,7 +1173,8 @@ Every accepted bid activates its child one level up, at the bidder's coordinate 
 the pattern whose bid fired it, since a child may have several (R43), and is expanded through that pattern
 (R28). For each parameter the pattern names it also activates that parameter's value child for the value the
 bid carried (D45), at the same level as the child, at the coordinate of the nearest of the parameter's
-offsets. For each accepted class bid it activates the class child at the member's coordinate (D41). A class
+offsets. For each accepted class bid it activates the class child at the member's coordinate (D41), and for each
+accepted parameter bid the value child at the nearest of the parameter's offsets (D44). A class
 named inside a pattern activates nothing of its own. Every activation no accepted bid covers stands as itself.
 
 > **R27 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** — the
