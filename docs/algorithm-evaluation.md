@@ -257,12 +257,6 @@ Four cases are worked by hand on it ([addition](algorithm-addition.md), [copy](a
 [hit](algorithm-hit.md), [an alternating pair](algorithm-xy.md)).
 What is still open, in the order it bites:
 
-- **How a computed value comes back as an input.** The result of recognizing a situation is its child, one level
-  up, and nothing that takes a digit can read it as a digit; the carry is the case. The direction is to build it
-  as function calls, a function's result being a value of the same kind as its arguments, and the design is not
-  done. What exists is expectation (R40): an inferred pattern's events fire weakly at the base, so a step's
-  expected outcome, the carry mark, is an input of the next frame once it was seen to follow. That covers the
-  carry as [addition](algorithm-addition.md) shows it, and not a conclusion nothing was ever seen to follow.
 - **Frequent variants stay specific.** A variant that recurs keeps its own pattern, and the general pattern is
   built only over the residual the specific ones leave (D33). While a variant is frequent that is the shorter
   file, so the general pattern never takes it over; it does when the variant turns rare, its pattern retires and
@@ -293,7 +287,7 @@ What is still open, in the order it bites:
   This and the item above are one fact seen twice.
 - **Reach bounds what a parameter can carry.** A parameter binds from offsets within its owner's reach (D4). A
   value needed from further back than that is out of sight, and a value carried forward is carried only as far
-  as the pattern's reach, which is the same bound the return path meets.
+  as the pattern's reach.
 - **Replaying the run is lossy about members.** Expansion puts back a class's most frequent member (R28), and
   is wrong as often as the class was uncertain. Whether anything downstream needs the exact member when the
   activation has closed has not been checked.

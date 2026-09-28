@@ -376,8 +376,8 @@ weakly, as what the actions are expected to bring (D40). What follows any activa
 connections (D25), one kind, and an inference is a connection read.
 
 Four cases are worked by hand on these definitions: [adding two binary numbers](algorithm-addition.md), where
-an expected event is the carry; [copying what was seen](algorithm-copy.md), where a parameter binds a value
-now and places it two frames on; [hitting whatever comes at you](algorithm-hit.md), where offsets from
+the carry is an action nothing outside the machine sees, recognized a frame after it ran;
+[copying what was seen](algorithm-copy.md), where a parameter binds a value now and places it two frames on; [hitting whatever comes at you](algorithm-hit.md), where offsets from
 the body are the reference frame; and [an alternating pair](algorithm-xy.md), where a neuron that keeps seeing a
 different pair writes it as one pattern of two parameters, and holds the alternation once.
 
