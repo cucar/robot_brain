@@ -655,12 +655,10 @@ All four come from one decision, that a base action says where it acts, and all 
 a base action acts is a focus the environment holds and the machine sees, which is the head of the Turing
 machine the design already is, and a fovea. Nothing is declared about an action but its place in the alphabet.
 
-**On D41 — the second axis.** A child says "these things happened together": an AND, part to whole. A class
-neuron says "one of these happened": an OR, instance to class. Both are bought in the same election and both fire
-one level up, but a class fires only for a member nothing else covered. A class named inside a pattern needs no
-activation of its own, because the pattern child already says that one of its members stood there; firing it
-too would say the same thing twice. The design had the first axis from the start. The second is what "whatever"
-and "one of these" needed.
+**On D41 — the second axis.** A pattern says "these things happened together": an AND, part to whole. A class
+inside it says "one of these happened here": an OR, instance to class. The design had the first axis from the
+start. The second is what "whatever" and "one of these" needed, and it lives inside the first: a class is a part
+a pattern refers to, never a symbol of its own.
 
 **On D44 — the third construct.** A neighbor is a neuron at an offset, and a body can say three things about it:
 which neuron and where, a constant; which set and where, a class; where only, at several offsets, and that the
@@ -714,17 +712,17 @@ is a pattern of one parameter over two frames.
 through every bridge they have seen, and the class table does not either: a member is kept while it has stood
 where the class stands in two neighborhoods of the history, and no longer, so the list is only as long as what
 still recurs, and it costs a symbol per member exactly because it is a list. It belongs to the neuron that
-formed the class, in its own class table; the member neuron knows nothing of it, and the class child, one
-level up, keeps its own history of what it has held rather than a list. A neuron never seen at the class's
+formed the class, in its own class table, and the member neuron knows nothing of it. A neuron never seen at the class's
 offsets does not fit until it has stood there twice, which is the one-call lag the evaluation records, and the
 price of a class that means something.
 
-**On D41 — why it has a history of its own.** A pattern lives in the table of the neuron that fired, so what
-surrounds a `ball` is evidence in `ball`'s history and what surrounds a `fist` in `fist`'s, and no neuron sees
-the two side by side. A class child fires for each of them in turn, so its history pools theirs. Generalizing
-over things needs a population shared by those things, and a neuron that fires for all of them is that
-population. A value child's history is the other side of the same idea: everything that happened around one
-argument holding one value.
+**On D41 — why a class has no child.** A class inside a pattern says "one of these stood here", and the pattern
+child already says it: a class child firing beside it would say it twice. Standing alone, a class would be one
+symbol of the level above for one cell, and one for one saves nothing; what a class is worth, the choice among
+its members rather than among everything at the level, exists only where a pattern has already said "a member of
+this class stands here". So a class is a part and nothing more: found by its own count, priced through the
+patterns that refer to it, and deleted when none does. What pooling across members there is, is in the pattern
+child, whose history holds every row the class let it cover.
 
 **On D38 and D27 — memorizing and equalizing are one rule.** A constant says what stands at an offset; a
 class says that one of its members does, and forgets which; a parameter says that the same thing stands at
@@ -735,19 +733,19 @@ anti-unification (Plotkin, Reynolds, 1970); the collapse does it over one patter
 
 **On D13 — why a class costs the choice it leaves open.** A symbol that could be anything carries no
 information, and a class that admits everything should be worth nothing without anyone forbidding it. Pricing
-the class activation at a whole symbol gets that case right by accident and underpays every narrow class: three
+a class at a whole symbol per row gets that case right by accident and underpays every narrow class: three
 letters out of twenty-six have done real work and would earn nothing on the cell. Pricing it at nothing gets the
 narrow class right and lets the everything-class cover the history for free; a two-pixel image collapses into
 "every neighbor was a pixel" in a couple of dozen symbols, and no count of members prevents it, since the
-class is never wrong. The one price that gets both right is Shannon's: the activation costs `log₂|K|` against
+class is never wrong. The one price that gets both right is Shannon's: a class costs `log₂|K|` against
 the `log₂n` a full symbol carries, the fraction of the choice the class did not settle. The everything-class
 costs a whole symbol and saves nothing; a class of one is a constant and costs nothing; and the specific pattern
 rises above the general one by exactly the bits it settles. This is not a variable-length code slipped into
 a fixed-length one: a fixed-length code charges `log₂` of the alphabet's size for every symbol of that alphabet,
-and the class activation is a symbol of a smaller alphabet, its members, priced in the units of the larger
+and inside a pattern the class's choice is a symbol of a smaller alphabet, its members, priced in the units of the larger
 one. `n` is the neurons at the level, which the machine already counts as it creates and deletes them; every
 neuron of the level prices against the same number, and so does the election, so the neuron's books and the
-board read a class activation alike. The "one" that every other symbol costs was always this unit: a choice
+board price a class alike. The "one" that every other symbol costs was always this unit: a choice
 among the level's neurons.
 
 **On D27 — what a class saves, and where the line falls.** Against a specific pattern, which carries the member
@@ -757,9 +755,12 @@ and the rest go through the class, and when a variant becomes rare its pattern r
 residual, and it joins the class by its running count. No pattern ever makes a class; the general pattern is
 found where the class already stands. A
 parameter spanning several offsets saves a whole symbol at every offset after the first, since its value is
-paid once, and that is the alternation. And when a member comes to dominate a class's offset, the
-collapse prefers the constant, which is worth more and costs nothing on the apex: the general pattern
-specializes back into a specific one, and the other members fall to the residual. Nothing about this is a rule
+paid once, and that is the alternation. And when a member comes to dominate a class's offset enough that
+naming it saves more than naming the class, the collapse takes the constant and the general pattern becomes a
+specific one; when the member's share falls back, the class saves more again and the pattern turns general.
+Taking whichever saves more, rather than preferring the constant whenever it qualifies, is what puts that
+switch at the point where the two cost the same: with a class of three costing a third of a symbol, a member
+holding sixty rows in a hundred saves twenty named as a constant and the class saves sixty-eight. Nothing about this is a rule
 about alphabets: with two symbols every class is the alphabet, costs a whole symbol, and is never built.
 
 **On D27 — parameter and branch.** Two offsets that hold the same neuron in a majority are one parameter. Two

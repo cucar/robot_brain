@@ -21,7 +21,7 @@ straight ahead of the body, `turn-left` and `turn-right`.
 
 `me`, `ball` and `fist` are not base neurons. Each is the top of an ordinary stack of patterns below it, a body
 or a ball as the lower levels have put it together out of edges and patches, and none of those lower patterns
-names a class child. They stand at a level whose reach spans four steps (D4), and at that level they are each
+names a class. They stand at a level whose reach spans four steps (D4), and at that level they are each
 other's neighbors (D5). Offsets are bucketed by powers of two (D6), so the distances that matter here are `2`
 and `4`.
 

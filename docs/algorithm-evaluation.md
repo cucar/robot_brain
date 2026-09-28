@@ -277,8 +277,8 @@ What is still open, in the order it bites:
 - **Co-variation is quadratic in the offsets.** `same` and `paired` are read over every pair of varying offsets of a
   candidate, per cluster, and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The collapse reads one table (D27). Two neurons
-  that each saw one variant never share a class on their own; reuse (R43) joins their class children only when
-  two bids read a class at one activation in one election.
+  that each saw one variant never share a class; a class is a part of one neuron's tables and nothing joins
+  classes across neurons.
 - **Near-duplicates stay apart, and nothing merges children.** A child is reused only on a tie over the same
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
   that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
@@ -319,8 +319,8 @@ What is still open, in the order it bites:
   corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. Copy (algorithm-copy.md) expects the event it was given and does not need one; writing it does.
 - **A call inferred by several situations** fires at each of their coordinates (D37). That is taken to be right
   and has not been worked through against "one call per dimension per frame".
-- **The hippocampus document predates D41.** Its moment is written as a class child that fires wherever a
-  member fires (H2, H5). Under D41 a class child fires only for a member nothing else covers,
+- **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
+  member fires (H2, H5). Under D41 a class is a part with no neuron of its own,
   so the moment has to be restated.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
   base actions that move it.
