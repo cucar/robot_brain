@@ -263,13 +263,12 @@ What is still open, in the order it bites:
   done. What exists is expectation (R40): an inferred pattern's events fire weakly at the base, so a step's
   expected outcome, the carry mark, is an input of the next frame once it was seen to follow. That covers the
   carry as [addition](algorithm-addition.md) shows it, and not a conclusion nothing was ever seen to follow.
-- **Recurring variants never generalize.** A seed whose neighborhoods all hold one pair collapses them to
-  constants, so three pairs seen ten times each are three patterns for good, and a general pattern over them
-  is never a candidate. Replacing them afterward was tried and dropped: on frequent variants the general
-  pattern costs more per occurrence than the specifics and no dictionary saving covers it. The intended answer
-  is the level above, where a pattern naming the call and a value child together restores one symbol per
-  occurrence. That pattern can now be written, since a value child is an ordinary neuron of that level (D45);
-  the arithmetic has not been redone with it.
+- **Frequent variants stay specific.** A variant that recurs keeps its own pattern, and the general pattern is
+  built only over the residual the specific ones leave (D33). While a variant is frequent that is the shorter
+  file, so the general pattern never takes it over; it does when the variant turns rare, its pattern retires and
+  its rows fall to the residual. What is open is whether a few variants, each frequent, should ever share one
+  general form. The place for it is the level above, where a pattern naming a pattern child and a value child
+  together can be written (D45); the arithmetic has not been done.
 - **Prices are no longer counts.** A class activation costs a logarithm, so every margin carries one, "nothing
   is divided" is gone, and the neighbor rule is weighted. And `n` is the level's population, which grows as the
   level fills and shrinks as it is pruned, so a pattern can cross zero with no change in its rows, and every

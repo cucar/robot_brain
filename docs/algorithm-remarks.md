@@ -751,9 +751,11 @@ board read a class activation alike. The "one" that every other symbol costs was
 among the level's neurons.
 
 **On D27 — what a class saves, and where the line falls.** Against a specific pattern, which carries the member
-inside its name, a class at one offset costs its activation on every row and saves one dictionary line per
-variant it absorbs (D43). So it pays when the variants are many and each is rare, and the specific patterns win
-where a variant recurs often: frequent things keep a symbol of their own, the rest go through the class. A
+inside its name, a class at one offset costs what it leaves open on every row, and a general pattern naming it
+is built only over the residual the specific patterns left (D33). So frequent things keep a symbol of their own
+and the rest go through the class, and when a variant becomes rare its pattern retires, its rows fall to the
+residual, and it joins the class by its running count. No pattern ever makes a class; the general pattern is
+found where the class already stands. A
 parameter spanning several offsets saves a whole symbol at every offset after the first, since its value is
 paid once, and that is the alternation. And when a member comes to dominate a class's offset, the
 collapse prefers the constant, which is worth more and costs nothing on the apex: the general pattern

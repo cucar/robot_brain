@@ -559,7 +559,8 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 > **R1 — One decision point: the frame it fires.** A neuron is called once per frame it fires in, for every
 > activation of that frame together, at age 0, and everything structural happens in that call: it refreshes
 > its history, recognizes the frame's neighborhoods, retires what no longer pays, builds every candidate that
-> pays, and returns a bid for every pattern of each cover together with the patterns it retired (R20).
+> pays, merges what became identical, and returns a bid for every pattern of each cover together with
+> everything it retired (R20).
 
 ## 5.2 The patterns table
 
@@ -667,43 +668,45 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 > one at a time, until nothing recurs. A pattern starts as the smallest thing seen twice and grows at once. It
 > repeats:
 >
-> 1. **Seed**: the relation with the highest count among the residual's, ties to declaration order (D1) and
->    then to the nearer offset. A relation is one of three things, and the count is over residual
->    neighborhoods:
+> 1. **Seed**: of the relations present in this call's new activations, both ends in the residual, the one with
+>    the highest count, ties to declaration order (D1) and then to the nearer offset. A relation is two offsets of
+>    one neighborhood, counted over the residual neighborhoods of the history, and it is one of three things:
 >    ```
 >    a at δ₁ with the same b at δ₂                          → a pattern of those two
->    a neuron a at δ₁ with two different neurons at δ₂       → a pattern of a and a class of those neurons at δ₂
+>    two different neurons at δ₂ beside the same a at δ₁     → a class of those neurons, standing alone (D41)
 >    two offsets δ₁, δ₂ holding one neuron                   → a parameter over both, standing alone (D44)
 >    ```
->    In the first two, `a` and `b` may be neurons or parameters of the table: two parameters that recur together
->    in the same rows are a pattern of two parameters. A class named here is one of the class table's that already
->    holds the neurons, else a new one (D41); a parameter seeded by the third is the parameters table's with those
->    offsets, else a new one, and it is priced as a claimant of its own (D44).
+>    In the first, `a` and `b` may be neurons, classes or parameters of the tables: a neuron that recurs with a
+>    class, or two parameters that recur together, seed a pattern of those two. The second and third make no
+>    pattern. A class seeded by the second is one of the class table's that already holds the neurons, else a
+>    new one, priced as a claimant of its own through its class bids (D41); a parameter seeded by the third is
+>    the parameters table's with those offsets, else a new one, priced as a claimant of its own (D44).
 > 2. **Re-center** the candidate over the neighborhoods whose residual holds the relation: the collapse (D27)
 >    over those, so the seed grows to every neighbor that holds in them before anything is written.
 > 3. **Price** the candidate: its margin (D30) read with the candidate credited the residual only, over the
->    activations where its saving there is positive (D22), a new class's or parameter's line priced with it. If
->    the margin is not strictly positive, the relation is passed over. Otherwise the candidate joins the table and
->    the covers it was priced on, owning the residual it names there (D19), its class joins the class table and
->    its parameter the parameters table, and the round repeats from 1 over the smaller residual.
+>    activations where its saving there is positive (D22), a new class's or parameter's line priced with it.
+>    **Stop** if the margin is not strictly positive. Otherwise the candidate joins its table and the covers it
+>    was priced on, owning the residual it names there (D19), and the round repeats from 1 over the smaller
+>    residual.
 >
-> The pick stops when no relation has a count of two. **What it returns is the patterns added, and the classes
+> **Why it may stop there.** A row with `c` cells holds about `c²` relations, so a call's work is bounded by its
+> new activations and not by the history. A relation absent from this call's new rows was tried the last time it
+> occurred, and it is tried again the next time, with its count one higher and the prices of that call; one
+> that fails now is not lost, only deferred to its next occurrence. The stop is the same greedy compromise the
+> cover and the election make. The pick also stops when no such relation has a count of two. **What it returns is
+> the patterns added, and the classes
 > and parameters they name.**
 
-> **D43 — Merging.** Whenever a pattern or a class is added or re-centered, it is compared with the table it is
-> in, exactly:
+> **D43 — Merging.** Whenever a pattern, a class or a parameter is added or re-centered, it is compared with the
+> table it is in, exactly, and of each identical group the oldest is kept and the rest are retired (§6.5):
 >
 > - Two patterns with the same neighbors are one pattern, their covered activations joined.
 > - Two classes with the same members are one class.
 > - Two parameters with the same offsets are one parameter, and their value children for each
 >   value are one.
-> - Patterns identical but for one offset, where the neurons at that offset are members of one class or would
->   make one, are candidates for **one pattern naming the class there**. It is priced as a replacement: the
->   lines saved, less the class's line and less what the class leaves open on every activation the
->   replaced patterns covered (D13). If it pays, the general pattern is added and the specific ones retire;
->   if not, nothing changes. This is where a class at a single offset is born from things that recur often
->   enough to have had patterns of their own, and the price says it pays when the variants are many and each
->   is rare.
+>
+> Nothing else is merged. A pattern never makes a class or a parameter: a general pattern is built over the
+> residual that the specific ones left, from a class or a parameter found there on its own (D33).
 
 ## 5.8 Connections
 
@@ -807,10 +810,11 @@ what stood on the apex in the frames after it, event and action alike.
 > | Step               | Description                                                                                                       |
 > |--------------------|-------------------------------------------------------------------------------------------------------------------|
 > | refresh history    | Evict as many of the oldest activations as the frame's need, then admit the frame's.                              |
-> | recognize patterns | Cover the residual of the history with the table, a class fitting where a member stands and a parameter where its offsets hold one neuron, and re-center every pattern whose covered activations changed. |
-> | delete patterns    | Retire every pattern whose margin is negative.                                                                    |
-> | create patterns    | Seed on what recurs in the residual, re-center it at once, price it; then merge what has become identical. |
-> | return patterns    | The bids, each with its parameters' values; a class bid for each member of a class, and a parameter bid for each parameter, that nothing else covers; and the patterns retired. |
+> | recognize          | Cover the residual of the history with the tables, a class fitting where a member stands and a parameter where its offsets hold one neuron, and re-center every pattern, class and parameter whose evidence changed. |
+> | delete             | Retire every pattern whose margin is negative, and every class and parameter that no longer pays or that nothing names. |
+> | create             | Seed on what recurs in the residual, re-center it at once, price it: patterns, classes and parameters alike. |
+> | merge              | Compare everything added or re-centered this call against its table, exactly; keep the oldest of each identical group and retire the rest. |
+> | return             | The bids, each with its parameters' values; a class bid for each member of a class, and a parameter bid for each parameter, that nothing else covers; and everything retired. |
 
 The call runs before the election (R24).
 
@@ -820,7 +824,7 @@ The history holds `H` activations (D18). A frame bringing `A` activations evicts
 full, and fewer before, as many as it takes to make room; every pattern of an evicted cover loses it. The frame's
 activations then join the history, whole (D7) and wholly residual (D21).
 
-## 6.2 Recognize patterns
+## 6.2 Recognize
 
 Recognition is the procedure that chooses a cover for a new activation/neighborhood (D17): the greedy cover
 (D28) over the residual of the history (D21).
@@ -838,7 +842,7 @@ empty table covers nothing and bids nothing.
 
 Every pattern whose covered activations changed, by eviction or by cover, re-centers (D29).
 
-## 6.3 Delete patterns
+## 6.3 Delete
 
 > **R18 — Retire.** After the frame's activations are recognized and the patterns re-centered (R20), retire
 > every pattern whose margin (D30) is strictly negative:
@@ -847,17 +851,16 @@ Every pattern whose covered activations changed, by eviction or by cover, re-cen
 > ```
 > Retiring is deletion from the table (D32). The pattern leaves that instant: it stops competing for a place in
 > any cover, and the neurons it held fall to the residual (D21), where the next call's recognition may re-cover
-> them (R20). The retired patterns go on the return (§6.5), and the machine deletes their children (§7.5). The
+> them (R20). The retired patterns go on the return (§6.6), and the machine deletes their children (§7.5). The
 > neuron keeps no retired state.
 
-## 6.4 Create patterns
+## 6.4 Create
 
-The greedy pick (D33) runs over the residual of the history: seed on the most frequent relation, re-center it
-into a candidate, price it, repeated until nothing recurs. A candidate is a pattern and any class or parameter
+The greedy pick (D33) runs over the residual of the history: seed on the most frequent relation of this call's
+new activations still in the residual, re-center it into a candidate, price it, and stop at the first that does
+not pay. A candidate is a pattern and any class or parameter
 it needs, one price. Each that pays joins the table and the covers it was priced on, its class the class table
 and its parameter the parameters table.
-Then merging (D43): identical patterns and identical classes become one, and patterns identical but for one
-offset are priced as one pattern naming a class there.
 
 > **R14 — The candidate.** A candidate `C` is what one round of the greedy pick builds (D33): the collapse over
 > the neighborhoods whose residual holds the seed relation. Nothing seeds it from outside, and nothing grows it a
@@ -908,8 +911,9 @@ offset are priced as one pattern naming a class there.
 > asked over the same evidence the cover will use when `C` next competes for one. Nothing here is decided on half
 > an activation and nothing later can hand `C` less than the test counted.
 >
-> **The pick stops at the first candidate that does not pay** (D33). What it leaves uncovered is the next
-> call's residual, and the next call's seed is whatever is then failing most.
+> **The pick stops at the first candidate that does not pay** (D33), and it seeds only on relations present in
+> this call's new activations and in the residual. What it leaves uncovered is the next call's residual, and a
+> relation passed over now is tried again when it next occurs.
 
 > **R16 — What a child is at birth.** The neuron proposes, the election decides, and the machine creates. A
 > pattern is the neuron's own: it is added, used in covers and bid on the neuron's evidence alone. A pattern
@@ -945,9 +949,9 @@ offset are priced as one pattern naming a class there.
 > **It is born holding nothing.** No patterns, no history and no connections (R16). Everything it comes to
 > hold is over the situations its parent's pattern actually took (D25), from its first activation on.
 
-> **R41 — The life of a class child.** **Born** in a candidate that paid: two different neurons standing in
-> one relation (D33), or patterns identical but for one offset merged into one (D43); it joins the class table
-> with the neurons it stood for as its first members. **Given** a class child when an accepted bid first names
+> **R41 — The life of a class child.** **Born** where two different neurons stand at one offset beside the same
+> neighbor and the class pays on its own (D33); it joins the class table with the neurons it stood for as its
+> first members. **Given** a class child when an accepted bid first names
 > it: the pattern's bid carries a class bid with no class child, as it carries no pattern child, and when the bid is
 > accepted the machine gives the class one, reused or new (R43). A new one is born holding nothing, as a child is
 > (R17). **Fired** by the election, and only for a member nothing else covers (D41, §7.4). **Widened and
@@ -963,14 +967,32 @@ offset are priced as one pattern naming a class there.
 > else (§7.4). **Dead** when its parameter is deleted, or when the neuron it stands for is: it goes on the death
 > ledger and is deleted like any neuron nothing can fire again (R38).
 
-## 6.5 Return patterns
+## 6.5 Merge
 
-The call returns two lists of patterns: **the bids**, one per pattern of each of the frame's activations'
-covers (D31, R21), and **the patterns retired** this call (R18). A bid is a line of the table, the pattern's
+Recognition re-centers, and creation adds, so either can leave two things in a table that are the same: two
+patterns with the same neighbors, two classes with the same members, two parameters with the same offsets.
+Merging compares everything added or re-centered this call against its own table, exactly (D43), and keeps
+the oldest of each identical group, the lowest creation order, because the oldest has already accumulated its
+children's histories, connections and estimates. The rest are retired:
+
+| identical | kept | retired |
+|---|---|---|
+| patterns | the oldest, taking the others' covered activations | the newer patterns; each pattern child dies when nothing points to it and its last open activation closes (R38) |
+| classes | the oldest and its class child | the newer classes; their class children go on the death ledger |
+| parameters | the oldest and, for each value both passed, its value child | the newer parameters and their value children for values the oldest also passed; a value only a newer one passed moves to the oldest with its value child |
+
+What merging retires goes on the return with everything else retired this call (§6.6), so the machine deletes
+the children on its ordinary pass.
+
+## 6.6 Return
+
+The call returns two lists: **the bids**, one per pattern of each of the frame's activations' covers (D31, R21),
+with the class bids and parameter bids beside them, and **everything retired** this call, by deletion (R18) or
+by merging (§6.5). A bid is a line of the table, the pattern's
 id, its neighbors and its child (D32), with its parameters' values (D31), and beside the bids any class bid for
 a member nothing else covers. A pattern that has never won a bid has no child, and its bid says so: if it is
 accepted the machine gives it a pattern child, a value child for each value it passed that has none, and a class
-neuron for each accepted class bid whose class has none, reused or new (R16, R41, R43, R44), and wires them by
+child for each accepted class bid whose class has none, reused or new (R16, R41, R43, R44), and wires them by
 the wire call (§5.1).
 A pattern retired is named by its id, and the machine deletes its pattern child and its value children, if it has
 any, when they are due (R18).
