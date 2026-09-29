@@ -38,13 +38,13 @@ No letter recurs in them, so no pair of neurons reaches a count of two in the re
 relation between offsets: one back and three back hold one neuron in every such row, and so do two back and
 four back. Those are two parameters, each found by its own collapse and paying on its own uses, two letters
 written as one value (D27, D33): `P` over one and three back, `Q` over two and four back. Then `P` and `Q` recur
-together in the same rows, and that is a relation between parts, so the pick's second stage seeds on it and
+together in the same rows, and that is a relation between variables, so the pick's second stage seeds on it and
 grows it over those rows (D33, D27):
 
 | Question | Answer |
 |---|---|
 | Does any neuron pay as a constant at any offset? | No. No constants. |
-| Which parts hold in those rows? | `P`, over one and three back; `Q`, over two and four back. |
+| Which variables hold in those rows? | `P`, over one and three back; `Q`, over two and four back. |
 | So what does the candidate name? | The two parameters, `P` and `Q`. No class and no constant. |
 
 ```
@@ -76,7 +76,7 @@ first.
 
 `p` bids the general pattern whenever it is in a cover, carrying the letter each parameter held (D31). Nothing
 has a neuron yet. The first time the bid is accepted the machine gives the pattern a child, `alternation`, and
-each parameter a value child for the letter it passed, `P:t` and `Q:s`, one level above `p`, holding nothing
+each parameter a value neuron for the letter it passed, `P:t` and `Q:s`, one level above `p`, holding nothing
 (R16, R44).
 
 # 6. One occurrence
@@ -89,8 +89,8 @@ each parameter a value child for the letter it passed, `P:t` and `Q:s`, one leve
 | the election | The bid covers `p` and the four letters, 25 bits, for a price of 13, and is accepted. |
 | activate children | One level up, `alternation` fires at `p`'s coordinate, `P:t` at the nearest `t` and `Q:s` at the nearest `s` (§7.4). |
 
-The level above reads `alternation` beside two value children, `P:t` and `Q:s`: which function ran, and with what.
-Nothing about `s` or `t` had to be learned first; only their value children are new.
+The level above reads `alternation` beside two value neurons, `P:t` and `Q:s`, at its coordinate: which function
+ran, and with what. Nothing about `s` or `t` had to be learned first; only their value neurons are new.
 
 `s, t, u, t, p` does not fit fully: `P` holds `t` at both its offsets, but `Q` holds `s` at two back and `u` at
 four back. `Q`'s value is the nearer, `s`, and four back is a correction (D44, D22).
@@ -98,8 +98,8 @@ four back. `Q`'s value is the nearer, `s`, and four back is a correction (D44, D
 # 7. What the one child buys
 
 `alternation` is one neuron whatever the pair was, so its connections are one set (D25): what the machine learns
-to do after an alternation it has learned for every pair, and the value children standing beside it say which
-pair this was. Each value child is a neuron too, `P:t` with a history of everything that followed an
+to do after an alternation it has learned for every pair, and the value neurons standing beside it say which
+pair this was. Each value neuron has a history of its own, `P:t` with a history of everything that followed an
 alternation whose first letter was `t`, so the level above can learn about a particular pair where that matters,
 by a pattern naming `alternation` and `P:t` together.
 
@@ -112,4 +112,4 @@ by a pattern naming `alternation` and `P:t` together.
 | the parameters | `P` and `Q`, in `p`'s parameters table |
 | the extracted function | the general pattern, held once in `p`'s table |
 | a call with its arguments | `alternation` firing, with `P:t` and `Q:s` beside it |
-| keeping the hot path inlined | `AB` staying in the table while `a, b` is frequent, and a pattern one level up that names the call with a value child |
+| keeping the hot path inlined | `AB` staying in the table while `a, b` is frequent, and a pattern one level up that names the call with a value neuron |

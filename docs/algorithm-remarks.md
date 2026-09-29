@@ -226,7 +226,7 @@ neighbors in it stays fixed by construction — that is the invariant the reach 
 ## 4.3 The saving
 
 **On D22 — the price is not a notion invented for matching.** It is literally the fields that would stand in the
-file for the activation: its owner and which of its bids, what its parts leave open, and which of its cells did not
+file for the activation: its owner and which of its patterns, what its variables leave open, and which of its cells did not
 hold. A neuron that fired and nothing named costs its own neuron whether or not the pattern exists, so it is
 charged to nobody — which is why the residual is a term of the activation and not of any pattern.
 
@@ -460,14 +460,14 @@ over those two, call by call, and they are held rather than recomputed because n
 
 ## 5.4 The collapse
 
-> **T5 — The collapse is the per-part minimizer of the pattern's margin over its population.** Over the
-> activations a pattern covers, naming a part moves the summed margin by its worth wherever it holds in the
+> **T5 — The collapse minimizes the pattern's margin over its population, one name at a time.** Over the
+> activations a pattern covers, naming a constant or a variable moves the summed margin by its worth wherever it holds in the
 > residual — more of the neighborhood covered, less what it leaves open — by a failed cell wherever it does not
 > hold (D22), and by its reference once, for its place in the line (D13). Where another pattern of the same cover
 > already holds the offset, nothing moves at all: no `coverage` to gain, no `price` to pay. So the population for
-> that part is the activations of the first two kinds, and the part pays exactly when
+> that name is the activations of the first two kinds, and it pays exactly when
 > `count · worth − (s − count) · log₂ cells − reference > 0`, which is D27's rule. Given the pattern's size,
-> which the price of a failed cell reads, the parts are independent, so the per-part rule minimizes the sum. It is
+> which the price of a failed cell reads, the names are independent, so deciding each on its own minimizes the sum. It is
 > a *center*, not a medoid: synthesized, possibly a set the neuron has never seen. That is the point — it is the
 > typical neighborhood, not a sample of one.
 
@@ -475,22 +475,22 @@ over those two, call by call, and they are held rather than recomputed because n
 be written into the file, and has no symmetric difference. The counts **are** the fractional object; the
 collapse is how the design gets from it to something the decoder can expand.
 
-**On D27 — why the line is in the part rule.** The threshold is a file-length statement, and the dictionary
+**On D27 — why the line is in the rule.** The threshold is a file-length statement, and the dictionary
 line is part of the file (D12). Naming `x` in a pattern that covers `s` activations, `count(x)` of which hold it
 in the residual:
 
 ```
 body       − count(x) · worth(x)            those residual cells are gone, less what they leave open
 body       + (s − count(x)) · log₂ cells    the activations without x now carry a failed cell
-dictionary + reference(x)                   the line names one more part, and its entry if it is new
+dictionary + reference(x)                   the line names one more thing, and its entry if it is new
 ```
 
-The part is taken when the net change is negative. **A rule that counts the body and forgets the line** takes a
-part whose saving in the body exactly pays its reference, and the file is the same length. An earlier draft took
+`x` is taken when the net change is negative. **A rule that counts the body and forgets the line** takes an
+`x` whose saving in the body exactly pays its reference, and the file is the same length. An earlier draft took
 a neighbor at that bare balance and charged the line only in the tests that add and retire (R15, R18), which left
-the per-neighbor decision off the objective by exactly the reference. Charging it where the part is decided makes
+the per-neighbor decision off the objective by exactly the reference. Charging it where `x` is decided makes
 every decision a descent on the margin, which is what T7 needs, and it removes the last place a pattern could
-grow at no gain. At equality naming saves exactly what it costs, and the part is left out: the collapse is a
+grow at no gain. At equality naming saves exactly what it costs, and `x` is left out: the collapse is a
 function of its population and of nothing the pattern already names.
 
 **On D27 — a class's collapse, worked.** A neuron costs 8 bits. At one back, `a` stood in 5 rows of the
@@ -618,13 +618,13 @@ pattern stays as long as it pays on the neuron's own books, which is the trade
 > - **Retire.** Removing `p` changes `L_N` by exactly R18's margin, with the sign reversed: its neighbors that
 >   no other pattern of the cover names return to the residual, its lines and charges leave, its dictionary
 >   line leaves. `p` is retired only when that is strictly negative, so `L_N` falls.
-> - **Re-center.** The covers stand and the pattern moves, its owners following it (D29). `L_N` is then a sum
->   over parts of independent terms, given the pattern's size, because an activation's residual at an offset
->   depends on nothing but that offset. Naming a part takes it from the residual and changes `L_N` by exactly
->   the negative of D27's term for it over the population the abstention leaves (T5); dropping it returns it to
->   the residual and changes `L_N` by exactly that term. D27 takes a neighbor exactly when its term falls, so a re-center is
->   non-increasing and strictly decreasing whenever a neighbor enters. **It is a sum over the population**: an
->   individual activation can get dearer under the moved pattern while the total falls.
+> - **Re-center.** The covers stand and the pattern moves, its owners following it (D29). `L_N` is then a sum over
+>   names of independent terms, given the pattern's size, because an activation's residual at an offset depends on
+>   nothing but that offset. Naming a constant or a variable takes it from the residual and changes `L_N` by
+>   exactly the negative of D27's term for it over the population the abstention leaves (T5); dropping it returns
+>   it to the residual and changes `L_N` by exactly that term. D27 takes a neighbor exactly when its term falls, so
+>   a re-center is non-increasing and strictly decreasing whenever a neighbor enters. **It is a sum over the
+>   population**: an individual activation can get dearer under the moved pattern while the total falls.
 > - **Recognize.** D28 over the residual takes a pattern only when its coverage strictly exceeds its price
 >   there, so each pattern taken lowers `L_N`, and nothing standing is disturbed (§6.2).
 >
@@ -659,12 +659,12 @@ answers that used to sit between the two ages.
 
 ## 5.7 The greedy pick
 
-**On D33 — parts before patterns.** A class and a parameter are each a fact of their own — these neurons stand
+**On D33 — variables before patterns.** A class and a parameter are each a fact of their own — these neurons stand
 in for one another, these offsets hold one neuron — and each is priced on its own uses, before any pattern
-exists to name it. A pattern is then what recurs among the parts, and its collapse only chooses among them. Built
+exists to name it. A pattern is then what recurs among the variables, and its collapse only chooses among them. Built
 the other way round, a pattern's collapse would have to decide what a class holds and where a parameter stands
 at the same time as what the pattern names, over one pattern's rows, and two patterns seeing the same variation
-would each build their own. Claiming is what keeps the parts apart: a cell one part was built on is no evidence
+would each build their own. Claiming is what keeps the variables apart: a cell one variable was built on is no evidence
 for the next, so a cell is never paid for twice.
 
 **On D33 — why creation runs to exhaustion.** An earlier rule built one candidate per call, on the argument
@@ -692,8 +692,8 @@ machine the design already is, and a fovea. Nothing is declared about an action 
 
 **On D41 — the second axis.** A pattern says "these things happened together": an AND, part to whole. A class
 inside it says "one of these happened here": an OR, instance to class. The design had the first axis from the
-start. The second is what "whatever" and "one of these" needed, and it lives inside the first: a class is a part
-a pattern refers to, never a neuron of its own, and what it held reaches the level above as a class child (D46).
+start. The second is what "whatever" and "one of these" needed, and it lives inside the first: a class is a variable
+a pattern refers to, never a neuron of its own, and what it held reaches the level above as a value neuron (D45).
 
 **On D44 — the third construct.** A neighbor is a neuron at an offset, and a body can say three things about it:
 which neuron and where, a constant; which set and where, a class; where only, at several offsets, and that the
@@ -712,28 +712,34 @@ collapse, both priced on their own uses, both covering only through a pattern th
 what they held to the level above, and a pattern is what is built on them where they recur in the same
 company.
 
-**On D13 — why an argument costs its value and nothing else.** A pattern's occurrence writes its owner and which
+**On D13 — why a variable costs its value and nothing else.** A pattern's occurrence writes its owner and which
 pattern once, and its line says which parameter stands where, so what is left on each occurrence is the value
 alone, a choice among the values that parameter has passed. A parameter standing alone would have to say which
 parameter on every use, and a pattern of the owner and that one parameter says the same for the same bits on
-each occurrence, with a pattern child besides; so neither a parameter nor a class stands alone.
+each occurrence, with a pattern child besides; so no variable stands alone.
 
-**On D45 and D46 — why both fire what they held.** The pattern child says which function ran. What tells this
-call from every other call of the same function is what its parameters held and which members its classes held,
-and the file already pays for both on every occurrence (D13). So both fire it one level up, a value child for a
-value and a class child for a member, and the level above hears the call and what it was given.
+**On D45 — why a variable fires what it held.** The pattern child says which function ran. What tells this
+call from every other call of the same function is what its variables held, and the file already pays for it on
+every occurrence (D13). So each variable fires it one level up, as a value neuron beside the pattern child, and
+the level above hears the call and what it was given. A class's member and a parameter's value light up the same
+way, so they are one kind of neuron.
 
-**On D45 and D46 — why a value or a member is a child and not the lower neuron lifted.** The value is a neuron
-of the level below, and neurons do not change levels: a neighborhood one level up is made of neurons of that
-level, and every neuron there is priced against that level's count. Letting the lower neuron stand one level up
-would put two levels' alphabets on one apex. A value child or a class child is an ordinary child of the level
-above, created, priced, expanded and deleted by the rules every child obeys; it only happens to stand for one
-value of one parameter, or one member of one class.
+**On D45 — why a value is a neuron of its own and not the lower neuron lifted.** The value is a neuron of the
+level below, and neurons do not change levels: a neighborhood one level up is made of neurons of that level, and
+every neuron there is priced against that level's count. Letting the lower neuron stand one level up would put
+two levels' alphabets on one apex. A value neuron is an ordinary neuron of the level above, created, priced,
+expanded and deleted by the rules every child obeys; it only happens to stand for one value of one variable.
 
-**On D45 — why one value child per parameter and value.** Two parameters of one activation that both hold `x`
+**On D45 — why it fires where the pattern child does.** A value neuron fires at the bidder's coordinate, so the
+call and what it was given stand at offset zero from one another one level up, and a pattern naming the pattern
+child and a value neuron together, the specific case written over the general one, is as near as anything can be.
+Where the value stood is not lost: the value neuron gives the content and the pattern the position, since the
+pattern's line records each variable with its offset.
+
+**On D45 — why one value neuron per variable and value.** Two variables of one activation that both hold `x`
 are two arguments that happen to be equal, and the level above should hear two things. If it matters that they
-are equal, the two value children will recur together, and the level above can make a pattern of that. One
-parameter that passes `x` again fires the same value child, so what the level above learns about that argument
+are equal, the two value neurons will recur together, and the level above can make a pattern of that. One
+variable that holds `x` again fires the same value neuron, so what the level above learns about that variable
 holding `x` accumulates in one place.
 
 **On D44 — carrying a value forward is copying.** A parameter over an offset now and an offset two frames on,
@@ -749,13 +755,13 @@ formed the class, in its own class table, and the member neuron knows nothing of
 offsets does not fit until its occurrences there pay for its entry, which is the lag the evaluation records, and
 the price of a class that means something.
 
-**On D46 — why a class has a child.** A class inside a pattern says "one of these stood here", and which one is
-written in the file on every occurrence (D13), so nothing is saved by hiding it from the level above. The class
-child tells it: the pattern child's connections pool every row the class let it cover, one lesson for every
-member, and the class child's connections hold what followed this member, so a lesson can be about a member
-where it needs to be and about the class where it does not. A class never stands alone, and neither does a parameter:
-a pattern writes the owner, which pattern and where each part stands once for all its parts, so a class child
-fires only beside the pattern child of a call that names its class.
+**On D45 — why a class fires its member.** A class inside a pattern says "one of these stood here", and which one
+is written in the file on every occurrence (D13), so nothing is saved by hiding it from the level above. The value
+neuron tells it: the pattern child's connections pool every row the class let it cover, one lesson for every
+member, and the value neuron's connections hold what followed this member, so a lesson can be about a member
+where it needs to be and about the class where it does not. No variable stands alone: a pattern writes the owner,
+which pattern and where each variable stands once for all it names, so a value neuron fires only beside the
+pattern child of a call that names its variable.
 
 **On D38 and D27 — memorizing and equalizing are one rule.** A constant says what stands at an offset; a
 class says that one of its members does, and leaves which to each occurrence; a parameter says that the same thing stands at
@@ -805,11 +811,11 @@ what the count leaves open.
 **On D12 — the file keeps the member.** A class's occurrence pays for which member stood, `log₂|K|` bits, so
 the file holds it; a price charged for something the file then dropped would count a file shorter than the one
 written. What a class gives up is not in the file: the pattern child it is part of has one lesson for every
-member, and the class child beside it is where a member's own lesson lives (D46). Replaying the run puts back
-the member the class child names. An inferred call brings no class child, since nothing has stood yet, and
+member, and the value neuron beside it is where a member's own lesson lives (D45). Replaying the run puts back
+the member the value neuron names. An inferred call brings no value neuron, since nothing has stood yet, and
 there expansion places the class's most frequent member, the oldest on a tie.
 
-**On R36 — a neuron several parameters pass is heard several times.** Every value child and class child is a voter,
+**On R36 — a neuron several parameters pass is heard several times.** Every value neuron is a voter,
 so an event that several accepted bids pass as a value or a member produces several voters where an event nothing
 passed produces one, and a candidate's estimate is a mean over voters. This is accepted: a thing that takes part in
 more of what the machine has found worth writing down is more likely to matter.
@@ -1806,11 +1812,11 @@ measured on at the moment it is made. Strict where marked.
 - **Retire (R18).** Strict. A pattern's margin *is* the change in the ring's file on its removal: the body
   term rises by `Σ (coverage − price)` and the dictionary term falls by its line, which is the margin with the
   sign reversed. Negative margin, shorter file.
-- **Re-centering (D29).** Non-increase. Naming a part changes the ring's file by the negative of D27's term for it
-  over the pattern's population at that offset, dropping one by that term, and D27 names only when the sign is
-  right. This depends on D27's population at a neighbor holding the activations where the
-  neighbor was residual: counted over the owned share alone, the count that decides entry is missing and the
-  claim does not hold.
+- **Re-centering (D29).** Non-increase. Naming a constant or a variable changes the ring's file by the negative of
+  D27's term for it over the pattern's population at that offset, dropping one by that term, and D27 names only
+  when the sign is right. This depends on D27's population at a neighbor holding the activations where the neighbor
+  was residual: counted over the owned share alone, the count that decides entry is missing and the claim does not
+  hold.
 - **Cover (D28) and election (R24).** Each accepted pattern or bid names strictly more than it costs, so a
   covered activation or frame is strictly shorter than the same activation or frame stated flat, by what each
   acceptance saves.

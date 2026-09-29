@@ -245,12 +245,11 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 
 # 3. Open questions
 
-**Patterns, classes and parameters (D37–D46) — what stands between the model and an implementation.**
+**Patterns and variables (D37–D47) — what stands between the model and an implementation.**
 There is one kind of pattern above the base, its body naming events and actions together (D5), and one kind of
 connection (D25). A body names constants, classes and parameters (D38). Every level is explained as a set of
-function calls with their arguments: an accepted bid is a call, its child is the function, each class it names
-fires a class child with the member that stood, and each parameter a value child with what it held (§7.1, D46,
-D45). Base actions take no arguments and act at a focus
+function calls with their arguments: an accepted bid is a call, its child is the function, and each variable it
+names fires a value neuron with what it held (§7.1, D45). Base actions take no arguments and act at a focus
 the environment holds; classes and parameters are built first, each by its own collapse and priced on its own uses,
 and patterns are built over them (D27, D33); an inferred pattern runs its actions and expects its events, weakly
 (R30).
@@ -262,15 +261,15 @@ What is still open, in the order it bites:
   built only over the residual the specific ones leave (D33). While a variant is frequent that is the shorter
   file, so the general pattern never takes it over; it does when the variant turns rare, its pattern retires and
   its rows fall to the residual. What is open is whether a few variants, each frequent, should ever share one
-  general form. The place for it is the level above, where a pattern naming a pattern child and a class child
-  or a value child together can be written (D46, D45); the arithmetic has not been done.
+  general form. The place for it is the level above, where a pattern naming a pattern child and a value neuron
+  together can be written (D45); the arithmetic has not been done.
 - **Prices move.** Every price is `log₂` of an alphabet (D13), and the alphabets move: `n` as the level fills
   and is pruned, a table as entries come and go, a class with its members, a parameter with the values it has
   passed. So a pattern can cross zero with no change in its rows. **Diagnostic:** retirements whose cause was a
   change in an alphabet alone.
-- **A call is priced below and credited above.** A call's class children and value children are paid inside
+- **A call is priced below and credited above.** A call's value neurons are paid inside
   its pattern's price, and the call is written once (D14). The level above prices every neuron it covers at a
-  neuron of its own level, class children and value children included, so covering a call there is credited
+  neuron of its own level, value neurons included, so covering a call there is credited
   more than the call cost where it was bought. Whether a covered call's children should be credited at what they
   cost below has not been decided.
 - **Every relation is tried in every call.** Keeping the relations counted (D47) costs `c²` per row entering
@@ -280,7 +279,7 @@ What is still open, in the order it bites:
 - **Co-variation is quadratic in the offsets.** `same` and `paired` are read over every pair of varying offsets of a
   candidate, per cluster, and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The collapse reads one table (D27). Two neurons
-  that each saw one variant never share a class; a class is a part of one neuron's tables and nothing joins
+  that each saw one variant never share a class; a class is a variable of one neuron's tables and nothing joins
   classes across neurons.
 - **Near-duplicates stay apart, and nothing merges children.** A child is reused only on a tie over the same
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
@@ -315,8 +314,8 @@ What is still open, in the order it bites:
 - **A call inferred by several situations** fires at each of their coordinates (D37). That is taken to be right
   and has not been worked through against "one call per dimension per frame".
 - **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
-  member fires (H2, H5). Under D41 a class is a part with no neuron of its own,
-  and what fires is a class child beside a pattern child (D46), so the moment has to be restated.
+  member fires (H2, H5). Under D41 a class is a variable with no neuron of its own,
+  and what fires is a value neuron beside a pattern child (D45), so the moment has to be restated.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
   base actions that move it.
 

@@ -25,7 +25,7 @@ shows `again` alone, and the digit is the machine's to supply.
 | base events | `ready`, `show`, `again`, and the ten digits |
 | the cue state | `show`'s pattern, `(ready, one frame ago)`, and its child `shown`, at level 1 |
 | the copy program | `again`'s pattern, `(show, two frames ago)` and a parameter `P` over the digit now and the digit two frames ago; its child `copy`, at level 1 |
-| value children | `P:0` to `P:9`, one level up, one per digit `P` has passed (D45) |
+| value neurons | `P:0` to `P:9`, one level up, one per digit `P` has passed (D45) |
 
 # 3. How it was learned
 

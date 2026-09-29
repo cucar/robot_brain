@@ -144,7 +144,7 @@ This sits in the gap between symbolic production systems (which don't learn onli
 
 ## 7. Compression as code — neighbors of the function model
 
-The function model (algorithm.md D37–D46: patterns as functions, classes and parameters, class children and value children,
+The function model (algorithm.md D37–D47: patterns as functions, classes and parameters as variables, value neurons,
 expected events) has neighbors in these fields. None combines them; each has solved a piece. Citations gathered
 2026-09-17 and not yet read in full.
 

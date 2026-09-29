@@ -67,7 +67,7 @@ The body is at `(10, 10)`. A ball is at `(10, 12)`, and a frame ago it was at `(
    coordinates and buckets each component (D6): the ball now is at `(0, +2)`, the ball a frame ago at `(0, +4)`.
 2. **The pattern fits.** `incoming-ahead`'s parameter spans exactly those two offsets, and the same neuron stands
    at both. `me` bids the child, carrying `T = ball` (D31). The bid is accepted, and one level up the child fires
-   at the body's coordinate and `T`'s value child for `ball` fires at the ball's (§7.4).
+   at the body's coordinate, and `T`'s value neuron for `ball` fires beside it (§7.4).
 3. **The child speaks.** Its connection names the step, one frame on (D25). That is the entire record: no
    position is in it, and none is needed, because `hit` strikes what is ahead of the body and the situation only
    fires when something is.
