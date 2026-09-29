@@ -49,7 +49,8 @@ A step is the same pattern seen from the action: in `hit`'s table, `me` and the 
 before, and `hit` beside it (D5). Matched, it says the body hit something incoming; inferred, it hits (R30).
 
 Each pattern pays for its line because its parameter spans two offsets and its value is paid once: the body and
-two activations of the thing are written as the child and one value child.
+two activations of the thing are written as the body, which of its bids, and one value, a choice among the
+things `T` has passed.
 
 **How `T` came to be.** Balls and fists came at the body often and got patterns of their own. Everything
 else that ever came at it, once or twice each, stood in `me`'s residual at `(0, +2)` and, a frame earlier, at

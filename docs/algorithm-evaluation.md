@@ -245,11 +245,12 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 
 # 3. Open questions
 
-**Patterns, classes and parameters (D37–D45) — what stands between the model and an implementation.**
+**Patterns, classes and parameters (D37–D46) — what stands between the model and an implementation.**
 There is one kind of pattern above the base, its body naming events and actions together (D5), and one kind of
 connection (D25). A body names constants, classes and parameters (D38). Every level is explained as a set of
-function calls with their arguments: an accepted bid is a call, its child is the function, and each parameter
-it names fires a value child with what it held (§7.1, D45). Base actions take no arguments and act at a focus
+function calls with their arguments: an accepted bid is a call, its child is the function, each class it names
+fires a class child with the member that stood, and each parameter a value child with what it held (§7.1, D46,
+D45). Base actions take no arguments and act at a focus
 the environment holds; a pattern and the classes and parameters it needs are read from the neighborhoods in one
 collapse (D27) and priced together (D33); an inferred pattern runs its actions and expects its events, weakly
 (R30).
@@ -261,13 +262,17 @@ What is still open, in the order it bites:
   built only over the residual the specific ones leave (D33). While a variant is frequent that is the shorter
   file, so the general pattern never takes it over; it does when the variant turns rare, its pattern retires and
   its rows fall to the residual. What is open is whether a few variants, each frequent, should ever share one
-  general form. The place for it is the level above, where a pattern naming a pattern child and a value child
-  together can be written (D45); the arithmetic has not been done.
-- **Prices are no longer counts.** A class activation costs a logarithm, so every margin carries one, "nothing
-  is divided" is gone, and the neighbor rule is weighted. And `n` is the level's population, which grows as the
-  level fills and shrinks as it is pruned, so a pattern can cross zero with no change in its rows, and every
-  class of the level gets cheaper as the level grows. An argument's price moves too, as its parameter passes new
-  values. **Diagnostic:** retirements whose cause was a change in `n` or `|V|` alone.
+  general form. The place for it is the level above, where a pattern naming a pattern child and a class child
+  or a value child together can be written (D46, D45); the arithmetic has not been done.
+- **Prices move.** Every price is `log₂` of an alphabet (D13), and the alphabets move: `n` as the level fills
+  and is pruned, a table as entries come and go, a class with its members, a parameter with the values it has
+  passed. So a pattern can cross zero with no change in its rows. **Diagnostic:** retirements whose cause was a
+  change in an alphabet alone.
+- **A call is priced below and credited above.** A call's class children and value children are paid inside
+  its pattern's price, and the call is written once (D14). The level above prices every neuron it covers at a
+  neuron of its own level, class children and value children included, so covering a call there is credited
+  more than the call cost where it was bought. Whether a covered call's children should be credited at what they
+  cost below has not been decided.
 - **Co-variation is quadratic in the offsets.** `same` and `paired` are read over every pair of varying offsets of a
   candidate, per cluster, and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The collapse reads one table (D27). Two neurons
@@ -277,20 +282,12 @@ What is still open, in the order it bites:
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
   that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
   bids cover mostly the same activations, per level.
-- **Membership lags by one call.** A class fits only a member (D38); a non-member at its offset is a correction,
-  and it joins when it has stood there twice with the rest of the pattern holding (D27). A pair never seen is
-  written flat the first time and covered the second. **Diagnostic:** occurrences of a general pattern written
-  with a class correction, per class.
-- **A class's lesson is one lesson.** A general pattern's child has one set of connections over every member,
-  so what it learned after a ball it applies to a human in the same place, and a bad outcome on one lowers the
-  estimate for all. The specific lesson lives, if anywhere, one level up, or in a branch the collapse kept (D27).
-  This and the item above are one fact seen twice.
+- **Membership lags.** A class fits only a member (D38); a non-member at its offset is a failed cell, and it
+  joins when its occurrences there pay for its entry (D27). Until then a new variant is written with a failed
+  cell. **Diagnostic:** occurrences of a general pattern written with a class correction, per class.
 - **Reach bounds what a parameter can carry.** A parameter binds from offsets within its owner's reach (D4). A
   value needed from further back than that is out of sight, and a value carried forward is carried only as far
   as the pattern's reach.
-- **Replaying the run is lossy about members.** Expansion puts back a class's most frequent member (R28), and
-  is wrong as often as the class was uncertain. Whether anything downstream needs the exact member when the
-  activation has closed has not been checked.
 - **A function is callable only from a situation whose window holds it.** A voter can start a program only
   from an offset at least as far out as the program is long (R36), and an activation is open for `reach_t`
   frames (D9). Below that height the same behavior is dispatched a step at a time, each step inferred by the
@@ -315,7 +312,7 @@ What is still open, in the order it bites:
   and has not been worked through against "one call per dimension per frame".
 - **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
   member fires (H2, H5). Under D41 a class is a part with no neuron of its own,
-  so the moment has to be restated.
+  and what fires is a class child beside a pattern child (D46), so the moment has to be restated.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
   base actions that move it.
 
@@ -354,7 +351,7 @@ winner was placed by a base voter over a pattern voter that disagreed, and which
 
 **The cross-neuron seam.** D27's abstention teaches a pattern not to name what another pattern of the *same
 cover* holds. Across neurons nothing teaches it: a neighbor some other neuron's child reliably covers is still
-present, still wins its majority, and stays in the pattern, paying its neighbor in the line. This is the same
+present, still pays for its place, and stays in the pattern, paying its neighbor in the line. This is the same
 omission as the neuron never hearing what it sold, seen from the pattern's side rather than the bid's,
 and it is the same bet. The one-bit fallback above would not close it; closing it takes the per-neighbor report
 the design removed. **Diagnostic:** per pattern, the share of its named neighbors that its bought bids were

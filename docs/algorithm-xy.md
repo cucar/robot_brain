@@ -24,12 +24,12 @@ whatever recurs, so each pair that came round twice gets one:
 
 | in `p`'s table | the pattern | its child |
 |---|---|---|
-| for `x, y` | `(y, 1 back)`, `(x, 2 back)`, `(y, 3 back)`, `(x, 4 back)` | `P` |
-| for `a, b` | `(b, 1 back)`, `(a, 2 back)`, `(b, 3 back)`, `(a, 4 back)` | `Q` |
-| for `m, n` | `(n, 1 back)`, `(m, 2 back)`, `(n, 3 back)`, `(m, 4 back)` | `R` |
+| for `x, y` | `(y, 1 back)`, `(x, 2 back)`, `(y, 3 back)`, `(x, 4 back)` | `XY` |
+| for `a, b` | `(b, 1 back)`, `(a, 2 back)`, `(b, 3 back)`, `(a, 4 back)` | `AB` |
+| for `m, n` | `(n, 1 back)`, `(m, 2 back)`, `(n, 3 back)`, `(m, 4 back)` | `MN` |
 
-Each writes its occurrence as one symbol where the letters cost four. The pairs seen once stay in the residual,
-written flat.
+Each writes its occurrence as `p` and which of `p`'s bids, where the letters cost four neurons. The pairs seen once
+stay in the residual, written flat.
 
 # 3. Parameters from what recurs without a name
 
@@ -37,7 +37,7 @@ Beside the three recurring pairs, many pairs have gone by once: `s, t, s, t, p`,
 No letter recurs in them, so no pair of neurons reaches a count of two in the residual. What recurs is a
 relation between offsets: one back and three back hold one neuron in every such row, and so do two back and
 four back. Those are two parameters, found on their own (D44): `P` over one and three back, `Q` over two and
-four back, each paying alone by covering two letters for one value child. Then `P` and `Q` recur together in
+four back, each paying alone by covering two letters for which bid and which value. Then `P` and `Q` recur together in
 the same rows, and that is a relation too, so the greedy pick seeds on it (D33) and re-centers over those rows
 (D27):
 
@@ -56,21 +56,24 @@ pattern names no letter and keeps no list of letters.
 
 # 4. The price
 
-Say thirty neurons stand at the level above, and `P` and `Q` have each passed eight letters, so an argument of
-either costs `log₂ 8 / log₂ 30`, about six tenths of a symbol inside a pattern (D13).
+Say `p`'s level holds thirty-two neurons, so a neuron costs 5 bits; `P` and `Q` have each passed eight letters,
+so a value costs 3; and `p` holds four patterns and two parameters, so which of its bids costs `log₂ 6`, about
+2.6 (D13).
 
-| written as | symbols |
+| written as | bits |
 |---|---|
-| a once-seen pair, flat: `p` and four letters | 5 |
-| by `P` and `Q` standing alone, and `p` as itself | 1 + 1 + 1 = 3 |
-| by the general pattern: the instance and two arguments | 1 + 0.6 + 0.6 = 2.2 |
-| a recurring pair, by its own pattern | 1 |
+| a once-seen pair, flat: `p` and four letters | 5 × 5 = 25 |
+| by `P` and `Q` standing alone, and `p` as itself | 5 + (2.6 + 3) + (2.6 + 3) = 16.2 |
+| by the general pattern: `p` and which bid, and two values | 5 + 2.6 + 3 + 3 = 13.6 |
+| a recurring pair, by its own pattern | 5 + 2.6 = 7.6 |
 
-The parameters alone already save two on every once-seen pair; the pattern saves another 0.8, because inside it
-each value is a choice among eight letters rather than among everything. Its line costs three, `P` and `Q` being
-named once each, so it pays after four such pairs. `P`, `Q` and `R` stand
-while their pairs are frequent; when one becomes rare its pattern retires (R18) and the general pattern writes
-that pair too, with nothing to learn first.
+The parameters alone already save 8.8 bits on every once-seen pair; the pattern saves another 2.6, the second
+bid, because inside it the values need no bid of their own. Its line is two references, a bit each, `P` and `Q`
+being two entries of the parameters table, so it pays at its first occurrence. What each parameter's entry
+costs, an offset per offset and a neuron per value, `2 · 2 + 8 · 5 = 44` bits, is paid once, and a letter new to
+`P` pays its entry the first time it passes. `XY`, `AB` and `MN` stand while their pairs are frequent; when one
+becomes rare its pattern retires (R18) and the general pattern writes that pair too, with nothing to learn
+first.
 
 # 5. The return and the election
 
@@ -86,7 +89,7 @@ each parameter a value child for the letter it passed, `P:t` and `Q:s`, one leve
 | Stage | what happens |
 |---|---|
 | `process functions`, in `p` | No specific pattern fits. The general one does: one neuron one back and three back, one neuron two and four back. `p` bids `alternation`, carrying `P = t` and `Q = s`. |
-| the election | The bid covers `p` and the four letters for a price of three, and is accepted. |
+| the election | The bid covers `p` and the four letters, 25 bits, for a price of 13.6, and is accepted. |
 | activate children | One level up, `alternation` fires at `p`'s coordinate, `P:t` at the nearest `t` and `Q:s` at the nearest `s` (§7.4). |
 
 The level above reads `alternation` beside two value children, `P:t` and `Q:s`: which function ran, and with what.
@@ -107,9 +110,9 @@ by a pattern naming `alternation` and `P:t` together.
 
 | in the code | in the machine |
 |---|---|
-| three copies of one block with different names in them | `P`, `Q` and `R` in `p`'s table |
+| three copies of one block with different names in them | `XY`, `AB` and `MN` in `p`'s table |
 | noticing they are one block with two names that vary | the collapse finding four offsets that agree in pairs |
 | the parameters | `P` and `Q`, in `p`'s parameters table |
 | the extracted function | the general pattern, held once in `p`'s table |
 | a call with its arguments | `alternation` firing, with `P:t` and `Q:s` beside it |
-| keeping the hot path inlined | `Q` staying in the table while `a, b` is frequent, and a pattern one level up that names the call with a value child |
+| keeping the hot path inlined | `AB` staying in the table while `a, b` is frequent, and a pattern one level up that names the call with a value child |
