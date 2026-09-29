@@ -736,10 +736,10 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 >    joins the table and the covers it was priced on, owning the residual it names there (D19). Then the next
 >    relation.
 >
-> Each stage ends when every relation of its kind has been tried or no residual is left. **A variable that no
-> pattern names by the end of the pick is dropped**: a variable covers only through a pattern (D41, D44), and its uses
-> stay potential until one names it. Its relation is tried again at the next call. **What the pick returns is
-> the patterns added, and the classes and parameters they name.**
+> A relation counted fewer than twice seeds nothing. Each stage ends when every relation of its kind has been tried
+> or no residual is left. **A variable that no pattern names by the end of the pick is dropped**: a variable covers
+> only through a pattern (D41, D44), and its uses stay potential until one names it. Its relation is tried again at
+> the next call. **What the pick returns is the patterns added, and the classes and parameters they name.**
 
 > **D43 — Merging.** Whenever a pattern, a class or a parameter is added or re-centered, it is compared with the
 > table it is in, exactly, and of each identical group the oldest is kept and the rest are retired (§6.5):

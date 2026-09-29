@@ -432,9 +432,9 @@ deepens (T13). One number, three effects, all monotone in it, and it should be t
 > took a neuron is the pattern charged for it, at every reading and for the life of the activation. **The forward
 > half is never a term in that comparison**, so it cannot contradict it.
 
-> **T4 — Every loop in the design is bounded, and none is capped.** A bill is five passes, each over a fixed
-> set — the ring, the table, the offsets — and none of them repeats until a condition holds (R20): one candidate
-> is built by one seed and one collapse, one pattern retires at most. The election is two decisions and a
+> **T4 — Every loop in the design is bounded, and none is capped.** A call is six steps, each over a fixed
+> set — the ring, the table, the offsets, the relations — and none of them repeats until a condition holds
+> (R20): the greedy pick tries each relation once, and retirement reads each margin once (D33, R18). The election is two decisions and a
 > settling, none of them repeated (R24). A retirement is collected within `reach_t(D)` frames and takes
 > its whole subtree in one step (R18). The level stack is bounded by the base activity behind a frame (T12) and
 > by the run so far against `H` (T13), which together also bound the settlement walk (settlement, in [algorithm-evaluation.md](algorithm-evaluation.md)) and the depth of an
@@ -1167,8 +1167,8 @@ is policy emerging** — and it arrives as evidence for the next inference, neve
    frame 10                                  frames 11 … 13
    ────────────────────────────────────────  ───────────────────────────────
    fire — the neighborhood is whole         u runs at +1, then +2, +3
-   cover, save, evict, re-center             the apex child connects to it
-   build one, retire one                     the reward for u lands beside it
+   evict, admit, cover, re-center            the apex child connects to it
+   retire, build, merge                      the reward for u lands beside it
    offer the cover
    ── the level elects, and says nothing ──  the apex child infers
                                              THIS NEURON WRITES NOTHING
@@ -1184,7 +1184,7 @@ The order §2 states, drawn. Every node names where it is specified.
 flowchart TD
     A["THE MACHINE holds every open activation, one per<br/>(neuron, age, position), and calls each neuron once<br/>in the frame it fires — §6"]
     A --> B["REFRESH, RECOGNIZE, DELETE — age 0<br/>evict, admit; cover, re-center; retire — R20"]
-    B --> M["CREATE A PATTERN<br/>seed, neighborhoods, collapse, price — R20 step 3"]
+    B --> M["CREATE, THEN MERGE<br/>variables, then patterns: seed, collapse, price — D33"]
     M --> P["RETURN PATTERNS<br/>the bids, the patterns added, the patterns retired — R20"]
     P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free activations<br/>they name, until the best left does not pay — R24"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §7.1"]
@@ -1354,10 +1354,9 @@ saving and the eviction have moved, so what does not pay for its line today is m
 behind it recur enough to pay for it. Re-centering then means a child that does get minted improves with
 exposure rather than freezing at the shape it was cut to.
 
-**On R15 — one per bill is not a limit on how much structure a neuron can build.** A neuron fires once per
-frame per position, and every activation is a bill. What one bill leaves unmet is the next bill's seed. A neuron
-that needs three patterns builds them over three of its own activations, which is the same rhythm the machine
-keeps: one election per frame, and the level above built from what it bought.
+**On R15 — a call builds as much as its evidence supports.** The greedy pick tries every relation (D33), so a
+frame that brings three new chunks builds three patterns in the call it arrives in, and the level above is built
+from what the election bought of them, in the same rhythm the machine keeps: one election per frame.
 
 **On R16 — what makes release safe** is R18's condition rather than any wait: a pattern is deleted only when
 its child has nothing open, so the neuron released has no open activations, and by the same argument neither

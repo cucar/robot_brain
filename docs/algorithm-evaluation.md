@@ -31,12 +31,12 @@ and R18 takes what is left.
 
 # 2. Risks
 
-**Neither the election nor the table finds the optimum.** The election (R24) is a heuristic for the frame's
-sum, and a bill takes one candidate and one retirement rather than iterating (R20). The table provably reaches
-a local optimum on a fixed history (T7), and a local optimum is what it is: two patterns straddling one
-cluster, each paying while the other stands, are never merged at their own level. **Diagnostic:** on a small
-neuron, compare the standing file cost against an exact cover solved offline over the same activations and
-pattern count. The gap is the basin.
+**Neither the election nor the table finds the optimum.** The election (R24) is a heuristic for the frame's sum,
+and the greedy pick builds one candidate at a time and keeps each that pays (D33). The table provably reaches a
+local optimum on a fixed history (T7), and a local optimum is what it is: two patterns straddling one cluster, each
+paying while the other stands, are never merged at their own level. **Diagnostic:** on a small neuron, compare the
+standing file cost against an exact cover solved offline over the same activations and pattern count. The gap is
+the basin.
 
 **The neuron never hears what it sold.** This is the design's largest deliberate omission. The election writes
 the coverage set and reports nothing back (R24), so a neuron prices every pattern on what it saw, whether or
@@ -55,13 +55,6 @@ often an accepted bid's tally lost exactly one activation to an earlier frame's 
 would have flipped the acceptance. If the second number is not small, the alternative is re-electing the past
 within the coverage set's window, which is bounded and has been rejected so far for the ripple it sends up the
 stack.
-
-**One candidate and one retirement per bill.** A neuron restructures at most one step per activation in each
-direction (R20). A neuron whose situation changes wholesale — three new chunks at once — takes three of its own
-activations to build them and rebuilds nothing until it fires. That is the same rhythm the machine keeps, and it
-is a rate, not a cap. **Diagnostic:** the fraction of bills whose candidate paid, over a run. Near one for a
-long stretch means the neuron is building as fast as it is allowed and has a backlog; near zero means the rate
-is not binding.
 
 **The offer is the cover, and the board is not the history.** A neuron bids the patterns its cover took over
 its own residual (R21); the machine covers the board, where earlier frames' children already hold activations, so a
@@ -106,8 +99,7 @@ compression side is where to look.
 **Several children per activation may not halve the level above.** A neuron used to promote at most one child,
 which is what made T11's halving argument work — and the halving is what D4's doubling reach is derived from,
 what T12's depth bound rests on, and what keeps `|O|` constant across levels. A cover of `m` patterns promotes
-up to `m` children at one coordinate (D8, D28), and the wide offer lets patterns outside the cover be bought
-too, so a level can be *wider* than the one below it wherever activations decompose into several chunks. Nothing
+up to `m` children at one coordinate (D8, D28), so a level can be *wider* than the one below it wherever activations decompose into several chunks. Nothing
 caps `m`; what bounds it is that each extra child is another line and another set of charges, and the
 election stops buying the moment one does not pay. **Diagnostic:** bought bids per activation and neurons per
 level per frame, against the halving T11 assumes. If levels stop thinning, D4's reach schedule is calibrated
@@ -172,15 +164,15 @@ is absent, that can drop the pattern out of a cover, and the smaller population 
 The claim is that on stationary input this is flicker around a fixed point, confined to boundary neighbors, with an
 amplitude that does not grow with run length — a claim about noise, which nothing in the rules proves. **This is
 the standing test.** Per pattern per bill: neighbor flips against the neighbor's distance from the boundary,
-`2 · count − s − 1`, and cover changes per bill for the cascade. Expected: flips concentrated within a step or
+`count · worth − (s − count) · log₂ cells − reference` (D27), and cover changes per bill for the cascade. Expected: flips concentrated within a step or
 two of the boundary, at a rate that settles once the ring is full and does not drift. A flip rate that rises with
 run length, or flips far from the boundary, is the churn engine and a bug. Early tests are also decided by very
 little evidence, so read the same numbers over the first thousand frames and again in steady state.
 
-**One-shot builds.** A seed present in a handful of activations gives a population of that handful, and the
-collapse over a small population names most of what it holds. Re-centering largely defuses it — the pattern is
-pulled toward whatever recurs, or starves. **Fallback if it still churns:** require the seed's population to
-span at least two activations before a candidate is priced. Exact, and costs one recurrence of latency.
+**Small builds.** A relation seeds once it has been counted twice (D33), so a candidate can be built on a
+population of two or three, and the collapse over a small population names most of what it holds. Re-centering
+largely defuses it — the pattern is pulled toward whatever recurs, or starves. **Diagnostic:** patterns retired
+within a few calls of being built, against the size of the population they were built on.
 
 **Shared patterns fit every position worse than tuned ones would.** D11 pools activations from everywhere into one
 pattern, so a pattern describes statistics that genuinely differ by position and fits each of them worse. That
@@ -276,8 +268,8 @@ What is still open, in the order it bites:
   or leaving for the two kinds within a row, `c` its cells, and `c · d` for class relations, `d ≤ H` the distinct
   neurons seen at an offset. Each relation tried costs a collapse over its uses, `O(H · c)`, and the greedy pick
   tries every one in every call (D33). How to try fewer without passing over one that would pay is open.
-- **Co-variation is quadratic in the offsets.** `same` and `paired` are read over every pair of varying offsets of a
-  candidate, per cluster, and kept nowhere. The cost has not been estimated.
+- **Branches are quadratic in the offsets.** `paired` is read over every pair of offsets that vary in a
+  pattern's rows (D27), and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The collapse reads one table (D27). Two neurons
   that each saw one variant never share a class; a class is a variable of one neuron's tables and nothing joins
   classes across neurons.
