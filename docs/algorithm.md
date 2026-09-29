@@ -284,7 +284,9 @@ assumes for anything the file does not state.
 > constants, classes and parameters, and one line per pattern, the constants and variables it refers to (D38).
 > **The body**: every neuron no accepted bid covers (D10) — each pattern child among them written as its call, its
 > owner and which of its patterns, the member each class held and the value each parameter held, and the cells it
-> names that did not hold (error correction); and each bare neuron standing as itself.
+> names that did not hold (error correction); and each bare neuron standing as itself. The level that made a call
+> writes it that way; the level above reads the same pattern child and value neurons as neurons of its own
+> (D14).
 >
 > **Both types are in it.** An action the machine executed is a neuron that fired (D8), and it stands in the
 > file exactly as an observed event does, compressed by the same patterns (§3.5).
@@ -344,16 +346,20 @@ assumes for anything the file does not state.
 > neuron of the level prices against the same `n`, and so does the election over their bids (R22). Every other
 > alphabet is the owner's own: its tables, a class's members, a parameter's values.
 
-> **D14 — File length.** Over the run the file is
+> **D14 — File length.** Each level reads the file from its own side, in its own alphabet: its activations, each
+> standing as a neuron of the level or covered by one of the level's calls, and the tables of the level's neurons.
+> Over the run, at level `k`:
 > ```
-> L  =  Σ over every neuron's tables:  its constants, classes and parameters, and its patterns' lines     the dictionary
->    +  Σ over the base neurons on the apex:  a neuron                                                  the body
->    +  Σ over the pattern children on the apex:  its call, the pattern on one activation (D13)
+> L_k  =  Σ over the tables of the level's neurons:  constants, variables and pattern lines      the dictionary
+>      +  Σ over the level's activations no call covers:  a neuron                               the body
+>      +  Σ over the level's accepted calls:  the pattern on one activation (D13)
 > ```
-> summing D13's prices over the two parts D12 gives. A call's pattern child and value neurons
-> are written once, as the call, and none of them again as a neuron of the level above. **There is one `L`**, and
-> every neuron's structure is priced against it. Nothing computes it: every quantity the design uses is a
-> **difference** in `L`, which is finite however long the run is (D30).
+> summing D13's prices over the two parts D12 gives. **Each level is its own coder.** A call's pattern child and
+> value neurons are activations of the level above, and that level reads them as neurons of its own, regular
+> choices among its `n`, knowing nothing of how the values were distributed below. So the two levels price one
+> call differently, and are meant to: each compresses what it sees with what it knows. Nothing computes any `L_k`:
+> every quantity the design uses is a **difference** in the reading of the level that makes it, which is finite
+> however long the run is (D30).
 
 ---
 
@@ -705,8 +711,8 @@ smoothing or probability estimate enters.
 > cost(p)     =  its line                                                           D13
 > margin(p)   =  benefit(p) − cost(p)
 > ```
-> It is the difference in `L` (D14) between the file with the pattern and the file without it, and both terms
-> are sums over what the neuron already holds.
+> It is the difference in its level's reading of the file (D14) between the file with the pattern and the file
+> without it, and both terms are sums over what the neuron already holds.
 
 A pattern is added only when its margin is strictly positive (R15) and retired only when strictly negative (R18).
 

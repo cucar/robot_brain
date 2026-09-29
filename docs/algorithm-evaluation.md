@@ -205,17 +205,17 @@ says nothing about the slack on real frames, and since apex-neurons-per-frame is
 real structure are conflated in it. **Diagnostic:** solve one small window exactly (ILP) and compare, which
 locates the realized slack inside the `H(n)` ceiling.
 
-**The composition gap.** Both scopes price in one currency against one `L`, and the neuron's prices and the
-machine's are meant to differ (D22). What remains is that candidates are *generated* locally: a demand no
-neuron proposes is a symbol the election never gets to consider, and no neuron proposes one whose value lies in
-what it would let a *different* neuron stop paying for. Distinct from election slack, which measures the
-election against a perfect election over the same bids; this measures propose-then-elect against optimizing
-dictionary and frames together. **Diagnostic:** over a short run on one small level, compare the file this
-design writes against the file a joint optimization over the same activations produces. That gap decides whether
-contraction should stay purely a buyer or start supplying candidates back into the tables it covered. The
-constituents of one chunk each build their own line for it; where those lines tie on the board they now share
-one child (R43), and where they are only near each other they still do not, which is where a constructive
-variant would pay first.
+**The composition gap.** Both scopes price in one currency against their level's reading of the file (D14), and the
+neuron's prices and the machine's are meant to differ (D22). What remains is that candidates are *generated*
+locally: a demand no neuron proposes is a symbol the election never gets to consider, and no neuron proposes one
+whose value lies in what it would let a *different* neuron stop paying for. Distinct from election slack, which
+measures the election against a perfect election over the same bids; this measures propose-then-elect against
+optimizing dictionary and frames together. **Diagnostic:** over a short run on one small level, compare the file
+this design writes against the file a joint optimization over the same activations produces. That gap decides
+whether contraction should stay purely a buyer or start supplying candidates back into the tables it covered. The
+constituents of one chunk each build their own line for it; where those lines tie on the board they now share one
+child (R43), and where they are only near each other they still do not, which is where a constructive variant would
+pay first.
 
 ---
 
@@ -259,11 +259,6 @@ What is still open, in the order it bites:
   and is pruned, a table as entries come and go, a class with its members, a parameter with the values it has
   passed. So a pattern can cross zero with no change in its rows. **Diagnostic:** retirements whose cause was a
   change in an alphabet alone.
-- **A call is priced below and credited above.** A call's value neurons are paid inside
-  its pattern's price, and the call is written once (D14). The level above prices every neuron it covers at a
-  neuron of its own level, value neurons included, so covering a call there is credited
-  more than the call cost where it was bought. Whether a covered call's children should be credited at what they
-  cost below has not been decided.
 - **Every relation is tried in every call.** Keeping the relations counted (D47) costs `c²` per row entering
   or leaving for the two kinds within a row, `c` its cells, and `c · d` for class relations, `d ≤ H` the distinct
   neurons seen at an offset. Each relation tried costs a collapse over its uses, `O(H · c)`, and the greedy pick

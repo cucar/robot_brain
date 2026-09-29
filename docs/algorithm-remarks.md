@@ -165,6 +165,15 @@ nothing was ever going to write it.
 it discharges up to `reach_t + 1` frames of the run at once. That is why a wider reach is worth paying a wider
 line for, and it is why the residual is free and a child is not.
 
+**On D14 — each level its own coder.** A level knows its own tables and nothing below them, so a call is
+written by the level that made it with the narrowed choices its tables allow, and read by the level above as
+neurons of that level, each a regular choice. The two prices of one call differ, and nothing reconciles them:
+each level saves what it can see. It is what lets categories nest. A class at one level is a category — the
+pattern child says that one of its members stood — and its value neurons stand one level up as ordinary
+neurons, with nothing marking them as members of anything. A class the level above builds over some of them
+is a sub-category, and a constant naming one singles one member out; the level above finds those groupings from
+its own evidence, never from the list below.
+
 **On D14 — why `L` never appears in the arithmetic.** `L` is what the differences are differences *in*; it is
 the reason the arithmetic is the arithmetic, and it is never a term in it.
 
