@@ -34,8 +34,9 @@ shows `again` alone, and the digit is the machine's to supply.
    "a copy has been asked for".
 2. **The copy becomes a pattern.** At the frame `again` fires, the digit beside it is always the digit shown
    two frames before, whatever that digit is. So in `again`'s history the digit's place now and its place two
-   frames back hold one neuron in every row: a parameter (D27, D44). It pays, one value covering two cells, and
-   the pattern that names it, with `show` two frames back, is bought; its child `copy` fires at level 1.
+   frames back hold one neuron in every row: a parameter, found by its own collapse (D27, D44). It pays, one
+   value covering two cells, and the pattern that names it, with `show` two frames back, is bought; its child
+   `copy` fires at level 1.
 3. **The state learns to call the program.** `shown` is still open two frames later, uncovered, and `copy`
    stands on the apex then. So `shown` connects to `copy` at offset two (D25, R31), and every taught showing
    strengthens it.

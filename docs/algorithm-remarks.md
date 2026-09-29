@@ -493,6 +493,35 @@ every decision a descent on the margin, which is what T7 needs, and it removes t
 grow at no gain. At equality naming saves exactly what it costs, and the part is left out: the collapse is a
 function of its population and of nothing the pattern already names.
 
+**On D27 — a class's collapse, worked.** A neuron costs 8 bits. At one back, `a` stood in 5 rows of the
+residual, `b` in 4, `c` in 3 and `d` in 1, and the seed is the relation between `a` and `b`. Its uses are the
+cells holding a member at an offset where two members have stood; its candidates are the neurons that stood
+there in the other rows, in order of count.
+
+| class | uses | saves per use | entry | net |
+|---|---|---|---|---|
+| `{a, b}` | 9 | log₂(256/2) = 7 | 2 × 8 = 16 | 63 − 16 = **47** |
+| `{a, b, c}` | 12 | log₂(256/3) ≈ 6.4 | 24 | 77 − 24 = **53**: `c` joins |
+| `{a, b, c, d}` | 13 | log₂(256/4) = 6 | 32 | 78 − 32 = **46**: `d` does not, and the collapse ends |
+
+The class is `{a, b, c}`, with twelve uses, and it claims those twelve cells. `d`'s row stays residual. Nothing
+counts against `d` here, since no pattern has claimed the offset: it does not pay its way in. The failure appears
+later, when a pattern names the class at one back and `d` stands there.
+
+**On D27 — a parameter's collapse, worked.** A neuron costs 8 bits and an offset 2. One back and three back
+hold one neuron in 10 rows of the residual, with 4 different values among them; five back holds the same value
+in 7 of those rows, and two back in 1.
+
+| step | arithmetic | result |
+|---|---|---|
+| the seed: one back and three back | 10 uses × (16 − log₂ 4) = 140; entry 2 × 2 + 4 × 8 = 36 | **104** |
+| five back, 7 of 10 | saves 7 × 8 = 56; costs 3 failures × log₂ 3 ≈ 4.8, and 2 for where | taken, **≈ 153** |
+| two back, 1 of 10 | saves 8; costs 9 failures × log₂ 4 = 18, and 2 | not taken |
+
+The parameter spans one, three and five back, with ten uses. A value seen only once pays for itself: its entry
+costs a neuron, and the second offset it fills is saved outright, so copying something never seen before pays as
+long as it is copied at all.
+
 **On D27 — why an owned neighbor is skipped, and nothing else is.** An activation is never left out of a question
 the design is asking it; this one it has already answered, for that neighbor, by having the neighbor covered.
 Skipping it is not an exception to counting everything but the recognition that there is nothing to count.
@@ -630,6 +659,14 @@ answers that used to sit between the two ages.
 
 ## 5.7 The greedy pick
 
+**On D33 — parts before patterns.** A class and a parameter are each a fact of their own — these neurons stand
+in for one another, these offsets hold one neuron — and each is priced on its own uses, before any pattern
+exists to name it. A pattern is then what recurs among the parts, and its collapse only chooses among them. Built
+the other way round, a pattern's collapse would have to decide what a class holds and where a parameter stands
+at the same time as what the pattern names, over one pattern's rows, and two patterns seeing the same variation
+would each build their own. Claiming is what keeps the parts apart: a cell one part was built on is no evidence
+for the next, so a cell is never paid for twice.
+
 **On D33 — why creation runs to exhaustion.** An earlier rule built one candidate per call, on the argument
 that one candidate per call was the rhythm of one election per frame. The election takes any number of bids,
 so the rhythm was never a constraint, and with the frame's activations arriving together it became a
@@ -637,9 +674,9 @@ bottleneck: a frame carrying five repeating shapes across a hundred activations 
 waited four more for the rest, with the evidence for all five already in the history. Every other stage runs to
 exhaustion — recognition covers until no pattern pays, retirement removes every negative margin — and the pick
 is the same greedy as recognition: build the best candidate on what is left, take it if it pays, repeat. It
-terminates because every accepted candidate strictly shortens the file (T7). The stop rule is greedy in the
-same way D28's is: a failing seed ends the round even where a seed that would save less would have paid, and that
-candidate waits for the residual to change. The table grows faster early than it did, since every pair of
+terminates because every accepted candidate strictly shortens the file (T7), and it tries every relation: a seed
+that fails costs its collapse and nothing else, and one that would pay is never passed over for being tried late.
+The table grows faster early than it did, since every pair of
 co-occurring neighborhoods becomes a pattern in the frame it repeats; each of those adds is a strict descent,
 and retirement prunes what the sliding history stops supporting.
 
@@ -670,18 +707,16 @@ parameter its value, a class its member.
 
 **On D44 — parameters are found on their own.** A parameter is a fact about where one neuron reappears, and that
 fact does not depend on any pattern: the neuron counts, over its residual, how often two offsets hold one
-neuron, and a parameter exists where that pays. It can cover alone, which a class cannot, since a parameter
-covers two cells or more for one bid and a class one cell for one, and any pattern may name it. Otherwise
-classes and parameters are parallel: both found by their own counts, both usable by any pattern, both passing
+neuron, and a parameter exists where that pays. Classes and parameters are parallel: both found by their own
+collapse, both priced on their own uses, both covering only through a pattern that names them, both passing
 what they held to the level above, and a pattern is what is built on them where they recur in the same
 company.
 
-**On D13 — why an argument costs less inside a pattern.** Standing alone, a parameter's occurrence writes which
-of its owner's bids it is and which value it passed. Inside a pattern the instance has already said which
-parameter this is, so what is left is the value alone, a choice among the values that parameter has passed.
-That is what a pattern of parameters is worth: `p` with two parameters writes two bids and two values without
-the pattern, and one bid and two values with it. The structure "these go together here" is exactly what saves
-the second bid.
+**On D13 — why an argument costs its value and nothing else.** A pattern's occurrence writes its owner and which
+pattern once, and its line says which parameter stands where, so what is left on each occurrence is the value
+alone, a choice among the values that parameter has passed. A parameter standing alone would have to say which
+parameter on every use, and a pattern of the owner and that one parameter says the same for the same bits on
+each occurrence, with a pattern child besides; so neither a parameter nor a class stands alone.
 
 **On D45 and D46 — why both fire what they held.** The pattern child says which function ran. What tells this
 call from every other call of the same function is what its parameters held and which members its classes held,
@@ -718,9 +753,9 @@ the price of a class that means something.
 written in the file on every occurrence (D13), so nothing is saved by hiding it from the level above. The class
 child tells it: the pattern child's connections pool every row the class let it cover, one lesson for every
 member, and the class child's connections hold what followed this member, so a lesson can be about a member
-where it needs to be and about the class where it does not. A class never stands alone: one cell for one neuron
-of the level above would contract nothing, so its child fires only beside the pattern child of a call that names
-it.
+where it needs to be and about the class where it does not. A class never stands alone, and neither does a parameter:
+a pattern writes the owner, which pattern and where each part stands once for all its parts, so a class child
+fires only beside the pattern child of a call that names its class.
 
 **On D38 and D27 — memorizing and equalizing are one rule.** A constant says what stands at an offset; a
 class says that one of its members does, and leaves which to each occurrence; a parameter says that the same thing stands at
@@ -802,9 +837,8 @@ difference in kind, and whether it is an advantage is not shown by anything the 
 
 **On D38 — what a class in a body saves.** A class's reference in the line costs which class and where, and
 each occurrence costs which member, so where it holds it saves `log₂(n / |K|)`, and it pays against the real
-alternative, one pattern per variant, each with a line of its own and none at all for a variant seen once. A
-pattern of the owner and one class at one offset pays wherever the class is narrow and recurs enough to cover
-its line and the class's entry, and that is how a class is born (D33).
+alternative, one pattern per variant, each with a line of its own and none at all for a variant seen once. A class
+is born on its own uses before any pattern names it (D33), and it is kept once a pattern does.
 
 **On D38 — how branching works.** There is no branch inside a body. The choice is dispatch: two situations are
 two patterns, and which one fires is the whole of "if". "If there is a carry, write 1" is a carry pattern with a

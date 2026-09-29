@@ -251,8 +251,8 @@ connection (D25). A body names constants, classes and parameters (D38). Every le
 function calls with their arguments: an accepted bid is a call, its child is the function, each class it names
 fires a class child with the member that stood, and each parameter a value child with what it held (§7.1, D46,
 D45). Base actions take no arguments and act at a focus
-the environment holds; a pattern and the classes and parameters it needs are read from the neighborhoods in one
-collapse (D27) and priced together (D33); an inferred pattern runs its actions and expects its events, weakly
+the environment holds; classes and parameters are built first, each by its own collapse and priced on its own uses,
+and patterns are built over them (D27, D33); an inferred pattern runs its actions and expects its events, weakly
 (R30).
 Four cases are worked by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md),
 [hit](algorithm-hit.md), [an alternating pair](algorithm-xy.md)).
@@ -273,6 +273,10 @@ What is still open, in the order it bites:
   neuron of its own level, class children and value children included, so covering a call there is credited
   more than the call cost where it was bought. Whether a covered call's children should be credited at what they
   cost below has not been decided.
+- **Every relation is tried in every call.** Keeping the relations counted (D47) costs `c²` per row entering
+  or leaving for the two kinds within a row, `c` its cells, and `c · d` for class relations, `d ≤ H` the distinct
+  neurons seen at an offset. Each relation tried costs a collapse over its uses, `O(H · c)`, and the greedy pick
+  tries every one in every call (D33). How to try fewer without passing over one that would pay is open.
 - **Co-variation is quadratic in the offsets.** `same` and `paired` are read over every pair of varying offsets of a
   candidate, per cluster, and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The collapse reads one table (D27). Two neurons

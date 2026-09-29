@@ -49,14 +49,14 @@ A step is the same pattern seen from the action: in `hit`'s table, `me` and the 
 before, and `hit` beside it (D5). Matched, it says the body hit something incoming; inferred, it hits (R30).
 
 Each pattern pays for its line because its parameter spans two offsets and its value is paid once: the body and
-two activations of the thing are written as the body, which of its bids, and one value, a choice among the
+two activations of the thing are written as the body, which of its patterns, and one value, a choice among the
 things `T` has passed.
 
 **How `T` came to be.** Balls and fists came at the body often and got patterns of their own. Everything
 else that ever came at it, once or twice each, stood in `me`'s residual at `(0, +2)` and, a frame earlier, at
 `(0, +4)`: two offsets filled most of the time by no one neuron, and by one and the same neuron in each
-neighborhood. The collapse (D27) made them one parameter, `T`, and `incoming-ahead` is the candidate that named
-it: one value, paid once, covering two neighbors. When balls become rare and their pattern retires, balls are
+neighborhood. The parameter's collapse (D27) made them one parameter, `T`, and `incoming-ahead` is the pattern
+built over it: one value, paid once, covering two neighbors. When balls become rare and their pattern retires, balls are
 written through `T` like everything else, with nothing to join.
 
 # 5. One moment, worked

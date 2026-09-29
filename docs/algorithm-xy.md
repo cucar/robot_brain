@@ -36,15 +36,15 @@ stay in the residual, written flat.
 Beside the three recurring pairs, many pairs have gone by once: `s, t, s, t, p`, `u, v, u, v, p`, and so on.
 No letter recurs in them, so no pair of neurons reaches a count of two in the residual. What recurs is a
 relation between offsets: one back and three back hold one neuron in every such row, and so do two back and
-four back. Those are two parameters, found on their own (D44): `P` over one and three back, `Q` over two and
-four back, each paying alone by covering two letters for which bid and which value. Then `P` and `Q` recur together in
-the same rows, and that is a relation too, so the greedy pick seeds on it (D33) and re-centers over those rows
-(D27):
+four back. Those are two parameters, each found by its own collapse and paying on its own uses, two letters
+written as one value (D27, D33): `P` over one and three back, `Q` over two and four back. Then `P` and `Q` recur
+together in the same rows, and that is a relation between parts, so the pick's second stage seeds on it and
+grows it over those rows (D33, D27):
 
 | Question | Answer |
 |---|---|
-| Does any neuron hold a majority at any offset? | No. No constants. |
-| Which offsets hold one neuron in a majority of the rows? | One and three back; two and four back. |
+| Does any neuron pay as a constant at any offset? | No. No constants. |
+| Which parts hold in those rows? | `P`, over one and three back; `Q`, over two and four back. |
 | So what does the candidate name? | The two parameters, `P` and `Q`. No class and no constant. |
 
 ```
@@ -57,18 +57,15 @@ pattern names no letter and keeps no list of letters.
 # 4. The price
 
 Say `p`'s level holds thirty-two neurons, so a neuron costs 5 bits; `P` and `Q` have each passed eight letters,
-so a value costs 3; and `p` holds four patterns and two parameters, so which of its bids costs `log₂ 6`, about
-2.6 (D13).
+so a value costs 3; and `p` holds four patterns, so which of them costs 2 (D13).
 
 | written as | bits |
 |---|---|
 | a once-seen pair, flat: `p` and four letters | 5 × 5 = 25 |
-| by `P` and `Q` standing alone, and `p` as itself | 5 + (2.6 + 3) + (2.6 + 3) = 16.2 |
-| by the general pattern: `p` and which bid, and two values | 5 + 2.6 + 3 + 3 = 13.6 |
-| a recurring pair, by its own pattern | 5 + 2.6 = 7.6 |
+| by the general pattern: `p` and which pattern, and two values | 5 + 2 + 3 + 3 = 13 |
+| a recurring pair, by its own pattern | 5 + 2 = 7 |
 
-The parameters alone already save 8.8 bits on every once-seen pair; the pattern saves another 2.6, the second
-bid, because inside it the values need no bid of their own. Its line is two references, a bit each, `P` and `Q`
+The general pattern saves 12 bits on every once-seen pair. Its line is two references, a bit each, `P` and `Q`
 being two entries of the parameters table, so it pays at its first occurrence. What each parameter's entry
 costs, an offset per offset and a neuron per value, `2 · 2 + 8 · 5 = 44` bits, is paid once, and a letter new to
 `P` pays its entry the first time it passes. `XY`, `AB` and `MN` stand while their pairs are frequent; when one
@@ -89,7 +86,7 @@ each parameter a value child for the letter it passed, `P:t` and `Q:s`, one leve
 | Stage | what happens |
 |---|---|
 | `process functions`, in `p` | No specific pattern fits. The general one does: one neuron one back and three back, one neuron two and four back. `p` bids `alternation`, carrying `P = t` and `Q = s`. |
-| the election | The bid covers `p` and the four letters, 25 bits, for a price of 13.6, and is accepted. |
+| the election | The bid covers `p` and the four letters, 25 bits, for a price of 13, and is accepted. |
 | activate children | One level up, `alternation` fires at `p`'s coordinate, `P:t` at the nearest `t` and `Q:s` at the nearest `s` (§7.4). |
 
 The level above reads `alternation` beside two value children, `P:t` and `Q:s`: which function ran, and with what.
