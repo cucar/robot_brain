@@ -124,9 +124,11 @@ above has not made.
 
 **A newly minted child infers little for a while.** Its connections start forming at its first purchase and
 only in the frames it is bought in (R17, D25), so until it has been bought a few times it infers from one or
-two exposures, or nothing but the default. The parent it was minted from is covered whenever the child is
-bought, so nothing speaks for that situation with much history until the child has some. **Diagnostic:** frames
-from a child's mint to the first time its inference wins a dimension, against how often it is bought.
+two exposures. Until it has any, what it covers speaks in its place (R36), so the situation is answered by its
+parents' habits rather than the default; whether those habits are a good enough first guess for the more
+specific situation the child names is the question. **Diagnostic:** frames from a child's mint to the first
+time its own inference wins a dimension, against how often it is bought, and how the reward under its parents'
+choices compared with the reward once it chose itself.
 
 **Nothing retires a pattern for a useless future.** A pattern is priced on what it names that did not fire
 beside it, and never on what its child was followed by (D25, R18). So a child whose connections are worthless keeps

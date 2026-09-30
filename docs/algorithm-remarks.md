@@ -824,6 +824,15 @@ member, and the value neuron beside it is where a member's own lesson lives (D45
 the member the value neuron names. An inferred call brings no value neuron, since nothing has stood yet, and
 there expansion places the class's most frequent member, the oldest on a tie.
 
+**On R36 — why speaking falls through, and why nothing explores at height.** A child is minted for a situation
+its parents were already in; it is that situation, named more finely. So until it has seen anything follow it,
+the best guess for what to do is what its parents saw follow them, and letting them speak costs nothing: they
+hold their connections whether or not they are covered. The child learns from what ran under it either way
+(R32), so the fall-through lasts exactly as long as the child has nothing of its own. No walk is needed above
+the base: a high pattern with nothing to say hands the frame down, and what is genuinely new reaches the base,
+where the walk is (R37). A situation the machine has never been in at any level is one no neuron has a
+connection for, and that is the base's default, which is the one place a first action has to come from.
+
 **On R36 — a neuron several parameters pass is heard several times.** Every value neuron is a voter,
 so an event that several accepted bids pass as a value or a member produces several voters where an event nothing
 passed produces one, and a candidate's estimate is a mean over voters. This is accepted: a thing that takes part in

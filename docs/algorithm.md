@@ -253,8 +253,10 @@ the environment does not have, the action the machine inferred there, weak (D40)
 > not connect to what follows. **A neuron is covered only after it has fired** (R27), so
 > coverage acquired at a later age stops all three from that frame on and revokes nothing before it: the
 > exposures the activation wrote while uncovered stand, and a reward for one of those frames still reaches the
-> connection it wrote (R33). An activation covered already at age 0 writes nothing, ever (R27). That is the
-> whole of inhibition in the design.
+> connection it wrote (R33). An activation covered already at age 0 writes nothing, ever (R27). **One
+> exception, on inferring alone:** a covered activation speaks when its coverer has nothing to infer for the
+> frame ahead (R36). It still writes nothing and connects to nothing; only its coverer learns what ran. That is
+> the whole of inhibition in the design.
 
 There is no rest value. A dimension where nothing happens supplies no symbol, and silence is what the decoder
 assumes for anything the file does not state.
@@ -1587,6 +1589,8 @@ stop the writing — there is no second call and nothing is saved twice.
 > every standing inference that places a base action at f + 1                          R30
 > plus  every open activation the machine holds at f                                     (D9)
 >   less  every activation an accepted bid covers                                       (D10)
+>   plus  every covered activation whose coverer infers nothing for f + 1,
+>         and so on down through the covers to the base                                 (D10)
 >   less  every activation at age reach_t             it has no offset left to read
 >   read as (neuron, age)                             position carries no connection          (D11)
 > ```
@@ -1614,8 +1618,12 @@ stop the writing — there is no second call and nothing is saved twice.
 > by rank. **Nothing corrects for how many exposures an estimate rests on**, so a sharp estimate on three
 > exposures outranks a coarse one on two hundred.
 >
-> **A covered neuron supplies nothing** (D10). A newly minted child therefore starts with no inference at all; the
-> other voters, or the default, decide until something has run under it, and it learns what ran (R35).
+> **Speaking falls through the cover.** A covered neuron supplies nothing while its coverer speaks (D10). Where
+> the coverer has no inference for the frame ahead, what it covers speaks in its place, and what they cover in
+> theirs, down to the base; the default is output only where nothing down to the base has anything. A newly
+> minted child therefore starts with its parents' voices: they say what usually followed them, it learns what
+> ran under it (R35), and from then on it speaks for itself. At the base a neuron with nothing outputs the
+> default, and the walk (R37) wires the next action where an estimate turns negative.
 
 > **R37 — Exploration.** The default policy resolves explore–exploit without randomness: **the action alphabet
 > is declared in order**, and **a connection whose estimate turns negative wires the next action in that
