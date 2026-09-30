@@ -5,8 +5,9 @@ learns what to do by observing rewards. It is defined by two alphabets, like a T
 alphabet** it can observe and the **action alphabet** it can execute. Above each, it forms symbols of its
 own. Every symbol, base or learned, event or action, is a **neuron**.
 
-It has two inputs and one output. Inputs: the events observed and the rewards earned. Output: the actions it
-executes, written in the base alphabet.
+It has two inputs and one output. Inputs: the events observed, the actions that ran, and the rewards earned.
+Output: the actions it infers, written in the base alphabet; the environment executes what it will of them and
+reports what ran.
 
 This document is the specification, and nothing else. **D** is a definition and **R** a rule; together they
 are the machine. Theorems, worked examples and all commentary on why the design is shaped this way live in
@@ -207,10 +208,11 @@ offset, with one activation dimension and a reach of 1:
 ## 3.3 Activations
 
 Every frame, each event dimension quantizes what was observed (if anything) and each action dimension
-carries the action executing in that same frame (if there is one).
+carries the action reported as run in that same frame (if there is one), by the environment, or by the machine
+for a dimension the environment does not have (D40).
 
-> **D8 — Activation.** A neuron is activated (fires) only when something happens: an event neuron input, or an action neuron
-> output when its action is executed.
+> **D8 — Activation.** A neuron is activated (fires) only when something happens: an event neuron when its event
+> is observed, or an action neuron when its action runs.
 >
 > **A neuron may fire many times in one frame**, and those activations are instances of one type.
 >
@@ -262,17 +264,20 @@ assumes for anything the file does not state.
 > and they pool: both carry the same relative neighborhood, so the same patterns cover them and one pattern
 > serves both. A shape learned anywhere is learned everywhere, and the dictionary holds it once.
 
-> **D40 — Strength.** An event activation is **strong** when the environment reported it and **weak** when the
-> machine put it in the frame (§8.4). The neuron is the same either way: a weak activation is an activation of
-> the neuron the environment would have reported. An action activation is never weak: a call is a call whether
-> or not anything outside the machine executes it (D37).
+> **D40 — Strength.** An activation is **strong** when whoever executes its dimension reports it — the
+> environment for the dimensions it has, the machine for the dimensions it does not — and **weak** when an
+> inference placed it (§8.4). The neuron is the same either way: a weak activation is an activation of the neuron
+> the report would name. An event the machine expects and an action it infers are weak alike, and the report
+> replaces both.
 >
 > A strong activation is everything D9 says. **A weak activation lasts its one frame**: it is not open
 > afterward, and it can be named as a neighbor at time offset zero only. A pattern that names the neuron is fit
 > by a weak activation as by a strong one. It may be covered, or stand on the apex and vote once (R36), with the
-> connections the neuron's strong activations wrote; it writes no connection itself. It is not in the file
-> (D12) and it is never handed to `process functions`. **What the environment reports replaces it**: where a
-> strong activation of the same dimension stands at the same coordinate, the weak one is dropped.
+> connections the neuron's strong activations wrote; it writes no connection, and nothing connects to it (R31).
+> It is not in the file (D12) and it is never handed to `process functions`. **The report replaces it**: where a
+> strong activation of the same neuron stands at the same coordinate, at any level, the weak one is dropped. An
+> inferred action nothing reports as run is a call that never happened, and an expected event nothing reports as
+> seen is a thing never seen: each lasts its frame and leaves no trace.
 >
 > **A child is as strong as what it covers.** An accepted bid's child is strong when any activation it covers
 > is strong, and weak when every one of them is: a situation made entirely of expected inputs is expected. A
@@ -365,7 +370,7 @@ assumes for anything the file does not state.
 
 ## 3.5 Actions
 
-**An action is a function, and its activation is a call.** An action dimension carries what the machine executes
+**An action is a function, and its activation is a call.** An action dimension carries what ran in it
 (D1), and it is compressed in the same patterns its events are (D8): above the base there is one kind of
 pattern, and its body may name what was seen and what was done together (D5).
 
@@ -373,22 +378,31 @@ pattern, and its body may name what was seen and what was done together (D5).
 in the alphabet (D1). Where it acts is state the environment holds, a **focus**: base actions move it as they do
 anything else, and the environment reports it to the machine as events like anything else.
 
+**An action the environment executes on its own is a lesson.** It arrives strong, with its reward, whether or not
+the machine inferred it (D40): patterns form over it beside the events it ran with, and what stood on the apex
+connects to it with what it earned (R31), so in the same situation the machine comes to infer it (R36). That is
+teaching by demonstration, and it needs no rule of its own. Exploration is the other way an action is first
+tried (R37).
+
 > **D37 — The call.** An activation of an action (D8). It fires in the frame it runs, at the coordinate of the
 > activation that inferred it. Where the action's body names a parameter, expanding the call binds it from what
 > stands at those of its offsets that have happened and places its value at the rest (D44, R28), so a call
 > carries nothing of its own. **An
 > action dimension is a set of functions that contend with each other**: one call per dimension runs in a
-> frame. The environment may execute a call as well as the machine, and it appears in the frame either way. A
-> call of a dimension the environment does not have runs like any other, and nothing outside the machine sees
-> it.
+> frame. The machine outputs the calls it infers, and whether one ran is the report's to say (D40). The
+> environment executes the calls of its dimensions, those it was given and those it makes on its own, and
+> reports what ran. A dimension the environment does not have is executed by the machine itself, which reports
+> its own calls: they run as inferred, and nothing outside the machine sees them.
 
-> **D34 — The apex action.** The base action that ran this frame in an action dimension, as the highest
-> uncovered activation whose expansion placed it (R27). An action dimension no inference reaches runs
-> its declared **default action**, and that is the apex action of the frame like any other.
+> **D34 — The apex action.** The base action reported as run this frame in an action dimension, as the highest
+> uncovered activation whose expansion placed it (R27), or the report itself where nothing placed it. An action
+> dimension no inference reaches is output its declared **default action**, a proposal like any other, and what
+> the report names there is the apex action of the frame.
 
 **A pattern is matched or inferred, and both kinds of member take part in both.** Matched, a pattern says that
-its events stood and its actions ran. Inferred, it is expanded (R28): its actions run and its events fire
-weakly, as what the actions are expected to bring (D40). What follows any activation is held on its neuron as
+its events stood and its actions ran. Inferred, it is expanded (R28): its actions are placed as the
+machine's output and its events as what the actions are expected to bring, both weakly, and the report makes
+strong what ran and what was seen (D40). What follows any activation is held on its neuron as
 connections (D25), one kind, and an inference is a connection read.
 
 Four cases are worked by hand on these definitions: [adding two binary numbers](algorithm-addition.md), where
@@ -1296,17 +1310,17 @@ other:
 |--------------------|------------------------------------------------------------------------------------------------------------------------------|
 | process actions    | Call every open activation with what stands on the apex this frame and any reward at its distance; collect what those on the apex infer. |
 | expand inferences  | Place each inference at its completion and expand it through the dictionary to the base symbols it names.                    |
-| resolve actions    | One winner per action dimension at the frame ahead, by estimate; it runs next frame and its reward arrives with it. |
-| expect events      | The events the winning inferences' expansions place at the frame ahead fire weakly there (D40).             |
+| resolve actions    | One winner per action dimension at the frame ahead, by estimate; it is output for that frame, and what ran arrives with that frame's report and its reward. |
+| place inferences   | The actions and events the winning inferences' expansions place at the frame ahead fire weakly there (D40). |
 
-> **R29 — Two frames: infer, then execute and reward.** What is chosen in one frame runs in the next, and what
-> it earned arrives with that frame.
+> **R29 — Two frames: infer, then execute and reward.** What is chosen in one frame is output for the next, and
+> what ran, with what it earned, arrives with that frame.
 > ```
 > f      infer     the frame's events are recognized, `process actions` returns the inferences,
->                  the inference resolves (R36), committing an action for the frame ahead
-> f + 1  execute   the action runs, and its neuron fires in this frame's column alongside
->        reward    this frame's events — every uncovered activation open connects to the apex;
->                  what the action earned arrives as this frame's input, and the connection
+>                  the inference resolves (R36), and an action is output for the frame ahead
+> f + 1  execute   the report names what ran, and its neuron fires strong in this frame's column
+>        reward    alongside this frame's events — every uncovered activation open connects to the
+>                  apex; what the action earned arrives as this frame's input, and the connection
 >                  it strengthens takes the reward in the same write (R31)
 > ```
 > **The reward is part of the frame the action ran in.** The environment reports what it observed and what the
@@ -1344,15 +1358,16 @@ specific covers it.
 stop the writing — there is no second call and nothing is saved twice.
 
 > **R31 — A connection carries an estimate.** What stands on the apex at `f + 1` is not known at `f`: the
-> action is settled only once every level has run and the inferences resolve (R36), and the events only when the
-> environment reports them. So at `f + 1`, once the last level has run, **every uncovered activation open at
-> that frame connects to every activation standing on the apex of that frame** (R27) at its own age (D25,
-> §8.1), and the reward of that frame's actions goes into each. That connection binds what the neuron stands for
+> action is settled only when the report names what ran, and the events only when the environment reports them
+> (D40). So at `f + 1`, once the last level has run, **every uncovered activation open at that frame connects to
+> every strong activation standing on the apex of that frame** (R27) at its own age (D25, §8.1), and the reward
+> of that frame's actions goes into each. A weak activation is connected to by nothing: it is a proposal, not a
+> fact. That connection binds what the neuron stands for
 > to what followed — formed against what actually stood, so **a neuron that inferred something else, or nothing,
 > learns from what happened.**
 >
-> **One activation connects to the apex of every frame it is open through, and one apex activation is connected
-> to by every uncovered activation open when it stood.** The offset is the age — the distance from the frame the
+> **One activation connects to the apex of every frame it is open through, and one strong apex activation is
+> connected to by every uncovered activation open when it stood.** The offset is the age — the distance from the frame the
 > activation opened to the frame the call ran — rounded as every offset is (D6), so a neuron open at ages 1, 2
 > and 3 holds the same neuron at two offsets, `1` and `2`, and the exposure at age 3 strengthens the second.
 > **A coarse offset takes one exposure per frame of its group**, so the outer offsets pool the apexes of many
@@ -1495,18 +1510,21 @@ stop the writing — there is no second call and nothing is saved twice.
 > next frame, one frame nearer.
 
 > **R30 — Execution is an expansion**, of the selected pattern (R36) through its dictionary line (R28). A high
-> pattern becomes its members at the offsets its line records, down to base symbols. Its base actions execute,
-> each in the frame its expansion places it in, the nearest being `+1` (R29); its base events fire weakly in
-> theirs, as what the program is expected to see (D40), and the environment's report replaces them where it
-> disagrees. Execution is not a second mechanism; it is this expansion read as a program, and expectation is the
-> same expansion read as a prediction. A weak pattern's expansion places no action: what runs is chosen by
+> pattern becomes its members at the offsets its line records, down to base symbols. Its base actions are output,
+> each in the frame its expansion places it in, the nearest being `+1` (R29); its base events are placed in
+> theirs, as what the program is expected to see. Both fire weakly (D40), and the report replaces them: the
+> actions it names as run and the events it names as seen become strong, and the rest last their frame.
+> Execution is not a second mechanism; it is this expansion read as a program, and expectation is the same
+> expansion read as a prediction. A weak pattern's expansion places no action: what is output is chosen by
 > estimate, never by expecting itself to act.
 >
-> **Execution activates what it expands.** The base actions fire the frames they run (D8), and every pattern the
-> expansion passed through fires when its expansion completes, at the coordinate the expansion placed it — the
-> last frame of its chunk, which is the coordinate recognition would have given it, as strong as what it covers
-> (D40). An executed pattern is therefore on its level's frame like a bought one: it runs `process functions`, is
-> chunked upward (§7.1), and every uncovered activation open at that frame connects to it (D25). While its
+> **Execution activates what it expands.** The base actions fire weakly in the frames they are placed, and every
+> pattern the expansion passed through fires weakly when its expansion completes, at the coordinate the
+> expansion placed it — the last frame of its chunk, which is the coordinate recognition would have given it.
+> Where the report makes its actions strong, recognition builds the strong activation of the same pattern at
+> the same coordinate, and it replaces the weak one (D40). An executed pattern is therefore on its level's frame
+> like a bought one: it runs `process functions`, is chunked upward (§7.1), and every uncovered activation open
+> at that frame connects to it (D25). While its
 > program runs, the apex action at each frame is the base action, or a lower pattern as it completes; the whole
 > stands on the apex only in the frame it completes, and what the program earned reaches it through the span a
 > reward names (R33).
@@ -1515,7 +1533,7 @@ stop the writing — there is no second call and nothing is saved twice.
 
 > **R35 — Selection.** No fit says which action to take; it says only what a situation was followed by.
 > Choosing comes from the connections of the neurons standing on the apex, each carrying the reward that
-> arrived averaged over its exposures, and **the machine executes the best. Nothing else decides it.**
+> arrived averaged over its exposures, and **the machine outputs the best. Nothing else decides it.**
 >
 > **A situation is a set of active neurons** — any one of them, and any subset of them. Situations
 > intersect, and **nothing ever materializes one**: a situation is what a voter fires in, never an object the
@@ -1534,10 +1552,10 @@ stop the writing — there is no second call and nothing is saved twice.
 > and reward prices the habit like anything else. Nothing selects an event: what an inference places in an
 > event dimension is expected, not chosen (R30).
 >
-> **The default runs; it is not wired.** An action dimension no inference reaches runs the declared default
-> action. Nothing holds it in advance: when it runs it is the apex action of that frame, every uncovered
-> activation connects to it with its reward by the ordinary path (R31), and from then on it is an action like
-> any other. A neuron is born holding no connection at all — a base neuron at cold start and a freshly
+> **The default is output; it is not wired.** An action dimension no inference reaches is output the declared
+> default action. Nothing holds it in advance: where the report names it as run it is the apex action of that
+> frame, every uncovered activation connects to it with its reward by the ordinary path (R31), and from then on
+> it is an action like any other. A neuron is born holding no connection at all — a base neuron at cold start and a freshly
 > minted pattern alike say nothing about the next action until something has run under them, and what they
 > then hold is whatever was executed. R37's walk is the only thing that wires an action ahead of its running,
 > one at a time and only where the best known has been judged and found wanting.
@@ -1590,7 +1608,7 @@ stop the writing — there is no second call and nothing is saved twice.
 > fires weakly there once the winners are settled, the expectation of the winning plans (R30). **A candidate's estimate is the mean of the estimates
 > its voters placed it with, each weighted by that voter's share** — one vote per voter, split across the actions
 > it placed in that dimension by strength, so a voter that hedges between two actions counts as one voter and
-> not two — and **the candidate with the largest estimate runs**. Ties go to the larger share of voters, and
+> not two — and **the candidate with the largest estimate is output**. Ties go to the larger share of voters, and
 > then to the older action. **Level is not read**: a level-4 voter's inference and a base voter's meet on the
 > estimate alone, and a specific situation wins over a general one only by being right about what pays, never
 > by rank. **Nothing corrects for how many exposures an estimate rests on**, so a sharp estimate on three
@@ -1619,11 +1637,13 @@ stop the writing — there is no second call and nothing is saved twice.
 
 ## 8.4 Expectations
 
-> **R40 — An inference expects what it does not do.** The winning inferences' expansions place events as well as
-> actions (R30). In the frame such an event is placed, it fires weakly (D40) unless the environment reports that
-> dimension at that coordinate, in which case the report stands and the expectation is dropped. Where the
-> expansion names a parameter, what fires is its value, bound from what has happened (D44). An
-> expected event above the base is expanded in turn, one frame at a time as its members come due, so what a plan
-> expects reaches the base as expected inputs exactly as what it does reaches the base as actions. An expected
-> event is an input of its frame: it is recognized as a neighbor, it may be covered or stand on the apex and
-> vote once, and then it is gone. It carries no reward and connects to nothing itself.
+> **R40 — An inference is weak until the report makes it strong.** The winning inferences' expansions place
+> events as well as actions (R30), and both fire weakly in the frame they are placed (D40): the action as the
+> machine's output, the event as what it expects. Where the report names that dimension at that coordinate, the
+> report stands and the weak activation is dropped; an action nothing reports as run, or an event nothing
+> reports as seen, lasts its frame and is gone. Where the expansion names a parameter, what fires is its value,
+> bound from what has happened (D44). An expected event above the base is expanded in turn, one frame at a time
+> as its members come due, so what a plan expects reaches the base as expected inputs exactly as what it does
+> reaches the base as output. A weak activation is an input of its frame: it is recognized as a neighbor, it may
+> be covered or stand on the apex and vote once, and then it is gone. It carries no reward, connects to nothing,
+> and is connected to by nothing (R31).

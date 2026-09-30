@@ -861,19 +861,28 @@ lesson and a no-carry pattern with another, and nothing inspects a condition, be
 Loops are the same story one level up: a constant repeat is unrolled in the body, and a repeat that depends on
 the world is the situation recurring and being dispatched again until it stops recurring.
 
-**On D40 — weak and strong, and why only events have the distinction.** An inferred pattern runs its actions
-and expects its events (R30); the run is what the world reports back, and the machine holds both halves. The
-boundary with the world is one-way for each kind: the machine can make the world perform an action and
-cannot make it show an event. So an event the machine put in the frame is a different thing from one the
-environment reported, and an action is the same thing whether or not anything outside executes it. A weak event
-is placed by an expansion and read by recognition like anything else, and it is the same neuron as the
-one the world would report, so what a pattern learned on the seen thing holds for the expected one, and what
-the neuron learned to do while seen it votes for while expected. It learns nothing itself: an expected `7` that
-wrote exposures would mix what followed imagining a `7` into what followed seeing one. What keeps it from being
-mistaken for the world is that it does not persist, and that the world's report replaces it. The literature's
-oldest answer has the same shape: a motor command sends a copy of itself to a predictor, the prediction is
-compared with what comes back rather than mixed with it (von Holst and Mittelstaedt, Sperry, 1950; Wolpert,
-Ghahramani and Jordan, 1995), and losing the distinction is hallucination.
+**On D40 — weak and strong, and why both kinds have the distinction.** An inferred pattern outputs its actions
+and expects its events (R30); what ran and what was seen is what the world reports back, and the machine holds
+both halves. The boundary with the world is the same for each kind: the machine proposes, and the world
+reports. So an action the machine inferred is a different thing from one the report names as run, exactly as an
+event it expected is a different thing from one the environment reported. A weak activation is placed by an
+expansion and read by recognition like anything else, and it is the same neuron as the one the report would
+name, so what a pattern learned on the real thing holds for the proposed one, and what the neuron learned to do
+after the real thing it votes for after the proposed one. It learns nothing itself and nothing learns from it:
+an expected `7` that wrote exposures would mix what followed imagining a `7` into what followed seeing one, and
+an inferred action that was connected to would be learned as having run when it did not. What keeps a proposal
+from being mistaken for the world is that it does not persist, and that the world's report replaces it. An
+inferred action the world does not report as run is a phantom limb; an expected event the world does not report
+as seen is a hallucination; both last one frame. The literature's oldest answer has the same shape: a motor
+command sends a copy of itself to a predictor, the prediction is compared with what comes back rather than mixed
+with it (von Holst and Mittelstaedt, Sperry, 1950; Wolpert, Ghahramani and Jordan, 1995), and losing the
+distinction is hallucination.
+
+**On D40 — teaching and trying are told apart by nothing.** An action the environment executes on its own and one
+the machine inferred and the environment executed arrive the same way, strong, with a reward, and the machine
+learns from both alike. A demonstration is therefore not a mode: it is the environment moving first. Where the
+environment stops moving first, the machine's own inferences carry on, and where it never moved, the walk (R37)
+tries the first action.
 
 **On R37 — the machine satisfices, on purpose.** A new action is wired only when an estimate turns negative, so
 a machine whose situation is good enough does not explore, and one that explores does so in the declared order

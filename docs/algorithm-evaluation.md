@@ -293,9 +293,6 @@ What is still open, in the order it bites:
   measured. Limiting connections to the highest levels, or to apex activations above the base, is the fallback,
   and it is not decided. An expected event that recreates the situation that inferred it is a loop with no
   world in it, and nothing breaks it but reward.
-- **Whether an inferred action should be weak.** Events the machine puts in a frame are weak and actions are
-  not (D40). Making inferred actions weak too would remove the asymmetry; what it would mean for a child fit by
-  them, and for the habit vote, has not been worked out.
 - **Crossing kinds.** A parameter holds an event as an event. "Write the digit you see" needs the action that
   corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. Copy (algorithm-copy.md) expects the event it was given and does not need one; writing it does.
 - **A call inferred by several situations** fires at each of their coordinates (D37). That is taken to be right
