@@ -868,7 +868,7 @@ reports. So an action the machine inferred is a different thing from one the rep
 event it expected is a different thing from one the environment reported. A weak activation is placed by an
 expansion and read by recognition like anything else, and it is the same neuron as the one the report would
 name, so what a pattern learned on the real thing holds for the proposed one, and what the neuron learned to do
-after the real thing it votes for after the proposed one. It learns nothing itself and nothing learns from it:
+after the real thing it votes for after the proposed one. It learns nothing itself and nothing connects to it:
 an expected `7` that wrote exposures would mix what followed imagining a `7` into what followed seeing one, and
 an inferred action that was connected to would be learned as having run when it did not. What keeps a proposal
 from being mistaken for the world is that it does not persist, and that the world's report replaces it. An

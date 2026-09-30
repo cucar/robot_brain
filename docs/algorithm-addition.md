@@ -22,8 +22,8 @@ The environment holds nothing else. There is no sheet, no position and no carry 
 # 2. The carry
 
 The carry is internal. A second action dimension, `carry`, has one base action, `carry-1`. The environment
-does not have that dimension, so the machine executes `carry-1` itself and reports it as run: it is strong, and
-nothing outside the machine sees it (D37, D40). It stands in the
+does not have that dimension, so nothing reports it: `carry-1` feeds back as a weak activation, in the frame the
+next step reads it in, and nothing outside the machine sees it (D37, D40). It stands in the
 frame it runs like any action, and what was done a frame ago is context as much as what was seen (D5), so the
 step of the next column names `carry-1` a frame before, beside that column's digits. Writing the carry is
 running `carry-1`; reading it is recognizing that `carry-1` ran. That is the whole of the variable, and nothing

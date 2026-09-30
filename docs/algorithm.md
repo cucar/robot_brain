@@ -209,7 +209,7 @@ offset, with one activation dimension and a reach of 1:
 
 Every frame, each event dimension quantizes what was observed (if anything) and each action dimension
 carries the action the environment reports as run in that same frame (if there is one), or, for a dimension
-the environment does not have, the action the machine inferred there (D40).
+the environment does not have, the action the machine inferred there, weak (D40).
 
 > **D8 — Activation.** A neuron is activated (fires) only when something happens: an event neuron when its event
 > is observed, or an action neuron when its action runs.
@@ -267,17 +267,17 @@ assumes for anything the file does not state.
 > **D40 — Strength.** An activation is **strong** when the environment reported it, and **weak** when an
 > inference placed it (§8.4). That holds for events and actions alike: an event the machine expects and an action
 > it infers are both weak, and the environment's report replaces both. The neuron is the same either way: a
-> weak activation is an activation of the neuron the environment would have reported. A dimension the environment
-> does not have is the machine's own: what the machine infers there runs, and it is strong.
+> weak activation is an activation of the neuron the environment would have reported.
 >
-> A strong activation is everything D9 says. **A weak activation lasts its one frame**: it is not open
-> afterward, and it can be named as a neighbor at time offset zero only. A pattern that names the neuron is fit
-> by a weak activation as by a strong one. It may be covered, or stand on the apex and vote once (R36), with the
-> connections the neuron's strong activations wrote; it writes no connection, and nothing connects to it (R31).
-> It is not in the file (D12) and it is never handed to `process functions`. **The report replaces it**: where a
-> strong activation of the same neuron stands at the same coordinate, at any level, the weak one is dropped. An
-> inferred action nothing reports as run is a call that never happened, and an expected event nothing reports as
-> seen is a thing never seen: each lasts its frame and leaves no trace.
+> **A weak activation is an input of its frame like a strong one.** It is in the neighborhood of everything that
+> fires within reach of it, at whatever offset, so it enters histories, and patterns name it and price it like any
+> cell; its neuron is called with it, it may be covered, and it may stand on the apex and vote once (R36), with
+> the connections its neuron's strong activations wrote. **It differs in one thing: it lasts its one frame.** It
+> is not open afterward: it writes no connection, nothing connects to it, and no reward reaches it (R31). **The
+> report replaces it**: where a strong activation of the same neuron stands at the same coordinate, at any level,
+> the weak one is dropped. Where nothing reports, the inference peeks through: an inferred action nothing reports
+> as run, and an expected event nothing reports as seen, are what the machine had in that frame, and a dimension
+> the environment does not have holds nothing else.
 >
 > **A child is as strong as what it covers.** An accepted bid's child is strong when any activation it covers
 > is strong, and weak when every one of them is: a situation made entirely of expected inputs is expected. A
@@ -391,7 +391,8 @@ tried (R37).
 > action dimension is a set of functions that contend with each other**: one call per dimension runs in a
 > frame. The machine outputs the calls it infers, and a call has run when the environment reports it (D40). The
 > environment executes what it will of them, and calls of its own, and reports what ran. In a dimension the
-> environment does not have, the machine's own calls run as inferred, and nothing outside the machine sees them.
+> environment does not have, nothing is output: the machine's inference feeds back as a weak activation, as an
+> expected event does, and nothing outside the machine sees it.
 
 > **D34 — The apex action.** The base action reported as run this frame in an action dimension, as the highest
 > uncovered activation whose expansion placed it (R27), or the report itself where nothing placed it. An action
