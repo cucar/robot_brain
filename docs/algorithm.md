@@ -208,8 +208,8 @@ offset, with one activation dimension and a reach of 1:
 ## 3.3 Activations
 
 Every frame, each event dimension quantizes what was observed (if anything) and each action dimension
-carries the action reported as run in that same frame (if there is one), by the environment, or by the machine
-for a dimension the environment does not have (D40).
+carries the action the environment reports as run in that same frame (if there is one), or, for a dimension
+the environment does not have, the action the machine inferred there (D40).
 
 > **D8 — Activation.** A neuron is activated (fires) only when something happens: an event neuron when its event
 > is observed, or an action neuron when its action runs.
@@ -264,11 +264,11 @@ assumes for anything the file does not state.
 > and they pool: both carry the same relative neighborhood, so the same patterns cover them and one pattern
 > serves both. A shape learned anywhere is learned everywhere, and the dictionary holds it once.
 
-> **D40 — Strength.** An activation is **strong** when whoever executes its dimension reports it — the
-> environment for the dimensions it has, the machine for the dimensions it does not — and **weak** when an
-> inference placed it (§8.4). The neuron is the same either way: a weak activation is an activation of the neuron
-> the report would name. An event the machine expects and an action it infers are weak alike, and the report
-> replaces both.
+> **D40 — Strength.** An activation is **strong** when the environment reported it, and **weak** when an
+> inference placed it (§8.4). That holds for events and actions alike: an event the machine expects and an action
+> it infers are both weak, and the environment's report replaces both. The neuron is the same either way: a
+> weak activation is an activation of the neuron the environment would have reported. A dimension the environment
+> does not have is the machine's own: what the machine infers there runs, and it is strong.
 >
 > A strong activation is everything D9 says. **A weak activation lasts its one frame**: it is not open
 > afterward, and it can be named as a neighbor at time offset zero only. A pattern that names the neuron is fit
@@ -389,10 +389,9 @@ tried (R37).
 > stands at those of its offsets that have happened and places its value at the rest (D44, R28), so a call
 > carries nothing of its own. **An
 > action dimension is a set of functions that contend with each other**: one call per dimension runs in a
-> frame. The machine outputs the calls it infers, and whether one ran is the report's to say (D40). The
-> environment executes the calls of its dimensions, those it was given and those it makes on its own, and
-> reports what ran. A dimension the environment does not have is executed by the machine itself, which reports
-> its own calls: they run as inferred, and nothing outside the machine sees them.
+> frame. The machine outputs the calls it infers, and a call has run when the environment reports it (D40). The
+> environment executes what it will of them, and calls of its own, and reports what ran. In a dimension the
+> environment does not have, the machine's own calls run as inferred, and nothing outside the machine sees them.
 
 > **D34 — The apex action.** The base action reported as run this frame in an action dimension, as the highest
 > uncovered activation whose expansion placed it (R27), or the report itself where nothing placed it. An action
