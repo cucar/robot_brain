@@ -621,16 +621,21 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 
 ## 5.4 The relations and the collapse
 
-> **D47 — The relation.** Two cells of the residual (D21) that bear on one another, counted over the history
-> (D18). It is one of three kinds, and each is the evidence for one kind of candidate:
+> **D47 — The relation.** Two cells of the residual (D21) that bear on one another, or the owner and one such
+> cell, counted over the history (D18). It is one of four kinds, and each is the evidence for one kind of
+> candidate:
 > ```
+> the owner with one neuron of its row        n at δ                       a pattern of one constant
 > two neurons standing together in one row    a at δ₁ and b at δ₂          a pattern of constants
 > one neuron at two offsets of one row        n at δ₁ and n at δ₂          a parameter over δ₁ and δ₂ (D44)
 > two neurons at one offset, in two rows      a at δ in one, b at δ in another   a class of a and b (D41)
 > ```
-> The first two are within a row and are counted by the rows that hold them. The third is across rows: `a` and
-> `b` never stand together at one offset, they stand there instead of each other, and it is counted by the
-> residual cells holding either of them at an offset where both have stood, pooled over every offset. Once variables
+> The owner stands in every row, so it is part of every pattern and of no variable: a neuron that agrees with it
+> is a constant, and it never varies. The first kind is what a row of one cell can carry, which at the base in a
+> stream of text is every row. The first three are within a row and are counted by the rows that hold them. The
+> fourth is across rows: `a` and `b` never stand together at one offset, they stand there instead of each other,
+> and it is counted by the residual cells holding either of them at an offset where both have stood, pooled over
+> every offset. Once variables
 > exist, the first kind also holds between them: two things standing together in a row, each a neuron at an
 > offset or a variable holding there. The counts move as rows enter and leave the history and as
 > cells are claimed and covered; how they are kept is the implementation's.
@@ -750,8 +755,8 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 >    used rather than a new one. A variable that is kept **claims** the cells of its uses, and every relation from
 >    then on counts only unclaimed cells, so no cell is evidence for two variables. Then the next relation.
 > 2. **Patterns.** Each residual row is now read in variables: a claimed cell as its variable, an
->    unclaimed cell as a neuron at its offset. Of the relations between two things standing together in a row,
->    the one that would save most is taken first, with the same ties. The collapse grows it into a pattern over
+>    unclaimed cell as a neuron at its offset. Of the relations of the owner with one thing, and of two things
+>    standing together in a row, the one that would save most is taken first, with the same ties. The collapse grows it into a pattern over
 >    the neighborhoods whose residual holds it, choosing at each offset among the variables that exist, and it is
 >    priced by its margin (D30), read with the candidate credited the residual only, over the activations where
 >    its saving there is positive (D22), with the entry of every constant it brings new. A candidate that pays
