@@ -1,0 +1,58 @@
+# Digits from pixels
+
+A worked case for [algorithm.md](algorithm.md): an image channel, a digit action, and a machine that learns to
+name what it sees. Nothing here is normative. It follows the definitions through what forms over one image,
+how the frontier closes the shapes the levels leave open, and how the digit is taught and then inferred.
+
+---
+
+# 1. The environment
+
+**In.** One channel, `image`, laid out over two spatial activation dimensions, `x` and `y`, and time. It
+declares one event dimension, `pixel`, with two buckets, ink and no ink. A pixel with no ink reports nothing:
+there is no rest value (D10), so a blank region costs nothing and holds no activation. Each image is one frame,
+and consecutive images are unrelated.
+
+The resolution is the environment's to raise. With 256 buckets the dimension reports a gray level at each point.
+With three channels sharing the layout, each with one event dimension, it reports red, green and blue; neurons of
+the three channels are neighbors at offset zero in `x`, `y` and time (D5), so a pattern names across them like
+anything else.
+
+**Out.** One action dimension, `digit`, with ten base actions, `digit-0` to `digit-9`. It runs in the frame after
+the image (R29), and the reward that arrives with that frame is positive when the action named the image's
+digit and negative when it did not.
+
+# 2. What forms over an image
+
+| Level | reach | what a neuron sees, and what forms |
+|---|---|---|
+| 0 | 1 | An inked pixel sees the inked pixels at `±1` in `x` and `y`. The relations are the owner with one neighbor and two neighbors standing together (D47); the patterns are pairs and corners, a child each. |
+| 1 | 2 | A pair child sees the frontier within 2: other children, and the pixels the level-0 patterns left uncovered. Strokes form, and a stroke of three pixels forms as a pair child beside the pixel it did not cover (D5). |
+| 2 and up | 4, 8 | Strokes join into parts of digits, and parts into a digit's whole shape, at the level one above the highest thing each covers (D2). |
+
+Variables form where the shapes vary. An offset where different children have stood, the end of a stroke that
+curves either way, is a class (D41); the same patch at two offsets, a symmetric digit, is a parameter (D44).
+Time offsets recur in nothing, since the images are unrelated, so no pattern comes to name one: a part of the
+previous image is a neighbor like any other, and it never pays.
+
+# 3. The digit, taught and then inferred
+
+**Taught.** In the first stretch the environment executes the digit action itself, in the frame after each
+image (§3.5). It arrives strong, with its reward. Every uncovered activation of the image's frame, the children
+at the top of the stack and the pixels nothing covered, is open at age 1 and connects to it (R31): a connection
+to `digit-7` at offset `+1`, with the reward it earned. The shapes that recur over sevens accumulate exposures
+to `digit-7` and nothing else, so their estimates for it climb; a pixel's connections are a marginal over every
+digit it has stood in (R35).
+
+**Inferred.** When the environment stops moving first, the frontier of the image's frame votes (R36). A child
+standing for a shape seen only in sevens infers `digit-7` at a high estimate; a bare pixel infers the digit
+that most often followed it, at a low one. The largest estimate is output, the environment executes it and
+reports it with its reward, and the frontier connects to what ran. A wrong answer lowers the estimates that
+chose it, and the walk (R37) tries the next digit where an estimate turns negative.
+
+# 4. Where the levels stop
+
+The stack ends on an image when no level above holds an activation (R26), which is when the shapes on the
+frontier no longer recur in company worth a line. What stands there then is the image's description: a few
+children for its parts, and whatever pixels nothing covered. That is the frontier that learns and votes, and the
+level at which it stands is nothing the machine was told.

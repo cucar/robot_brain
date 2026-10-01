@@ -247,8 +247,7 @@ names fires a value neuron with what it held (§7.1, D45). Base actions take no 
 the environment holds; classes and parameters are built first, each by its own collapse and priced on its own uses,
 and patterns are built over them (D27, D33); an inferred pattern runs its actions and expects its events, weakly
 (R30).
-Four cases are worked by hand on it ([addition](algorithm-addition.md), [copy](algorithm-copy.md),
-[hit](algorithm-hit.md), [an alternating pair](algorithm-xy.md)).
+Seven cases are worked by hand on it ([algorithm.md](algorithm.md), Part V).
 What is still open, in the order it bites:
 
 - **Frequent variants stay specific.** A variant that recurs keeps its own pattern, and the general pattern is

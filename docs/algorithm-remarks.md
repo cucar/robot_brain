@@ -57,6 +57,20 @@ a chunk. And through the reach, because each level's neurons are sparser than th
 further to find each other at all. Neither is declared per level: the first is what a pattern *is*, and D4
 derives the second from the first.
 
+**On D5 — the frontier is what the machine sees.** Adjacency reads the apex, not a level: a neighbor is whatever
+nothing has covered within reach, at whatever level it stands. The apex was already what the file writes, what
+learns what ran and what votes; this makes it what is seen as well, and the four say one thing. What it buys is
+every chunk whose length is not a power of two. Take `cat`: `a`'s pattern naming `c` one back is bought at `a`'s
+frame and covers `c` and `a`; at `t`'s frame, `t`'s pattern naming `a` covers nothing but `t`, since `a` is
+credited, and a bid covering only its bidder never pays. With adjacency tied to levels `t` stays stranded, since
+a level-1 pattern names level-1 neighbors only, and `cat` never forms. With the frontier as the neighborhood,
+`t`'s own pattern names the `ca` child one frame back, and `cat` is a child one level above the highest thing it
+covered, level 2. A letter added at a time costs a level each; two children joined cost one. Lifting uncovered
+neurons to the level above would have bought the same at the price of a table per level per neuron; nothing is
+lifted here, because nothing needs to be: what is uncovered is simply visible. The price of a cell follows: a
+cell may hold a neuron of any level, so `n` is the machine's count of all its neurons, one alphabet for the
+frontier.
+
 **On D5 — why adjacency is not declared.** A conjunction over shared activation dimensions already says
 everything a visibility declaration would, and it says it without a table to maintain: what a channel is laid
 out over settles which channels it can be adjacent to.
