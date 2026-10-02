@@ -144,7 +144,7 @@ export default class StockTestJob extends Job {
 		}
 
 		// By default, spatial processing (d=0 co-activation) is OFF: an empty spatial neighbor list shrinks
-		// each channel's spatial neighborhood to {itself}, so the spatial sweep mints nothing — matching the
+		// each channel's spatial neighborhood to {itself}, so spatial processing mints nothing — matching the
 		// pre-spatial `main` behavior. Temporal neighbors are left at the default all-pairs (every symbol can
 		// sequence against every other), which is the original stock behavior.
 		// With --spatial, we skip this loop entirely, leaving every channel at its default all-pairs spatial

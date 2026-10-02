@@ -18,18 +18,18 @@ still learn comparably), not byte-identity.
 2. **Apex handoff** — the spatial apex feeds temporal, exactly as today.
 3. **`process_temporal`** (d>0) — relationships between the current frame and past frames.
 
-**Both already run the same settling level-sweep** — `process_spatial_levels`
+**Both already run the same settling level loop** — `process_spatial_levels`
 ([brain.rs](../brain/brain-core/src/brain.rs)) and `process_temporal_levels`
 ([brain.rs](../brain/brain-core/src/brain.rs)) are the identical loop: walk levels bottom-up, each level's
 matched patterns activate one level up, stop when a level produces no activations that push the hierarchy
-higher. The active set is fixed at the start of the sweep; freshly-minted error patterns are excluded from
-their own level and fire *next* frame. So the "wave" is **not new** — it is this existing sweep, just with the
+higher. The active set is fixed at the start of the climb; freshly-minted error patterns are excluded from
+their own level and fire *next* frame. So the "wave" is **not new** — it is this existing loop, just with the
 level no longer stored as an intrinsic neuron field.
 
 They stay two functions for the reasons they are two today, both narrow: temporal **persists per-neuron state
 across frames** (`write_back_level_neurons`, [brain.rs](../brain/brain-core/src/brain.rs)) and reads d>0
 connections; spatial is **ephemeral** ([brain.rs](../brain/brain-core/src/brain.rs)) and reads d=0. The
-sweep loop itself is the same.
+level loop itself is the same.
 
 There is **no** `process_ages` collapse and **no** age-to-age chaining — the apex fans out to every temporal
 distance in parallel; d=1 does not feed d=2.
@@ -40,23 +40,23 @@ distance in parallel; d=1 does not feed d=2.
 
 Every correction is minted from exactly one erroring parent and lives in that parent's routing table — one
 correction per erroring parent, as today (`neuron_parents` is scalar,
-[thalamus.rs](../brain/brain-core/src/thalamus.rs)). This is what keeps per-neuron sweep state simple: a
-correction with a single parent has a single activation path, so the sweep reaches it at exactly **one depth per
+[thalamus.rs](../brain/brain-core/src/thalamus.rs)). This is what keeps per-neuron state simple: a
+correction with a single parent has a single activation path, so the climb reaches it at exactly **one depth per
 frame**. Per-neuron state therefore stays keyed by `(neuron, frame)` — no depth dimension. (That key already
-handles the same neuron active at several *ages*; ages are the `frame` dimension, distinct from sweep depth.)
+handles the same neuron active at several *ages*; ages are the `frame` dimension, distinct from depth.)
 
 ---
 
 ## No stored levels
 
-The level-sweep already settles bottom-up until no higher level fires (above). What changes here is that
-**the level is no longer a stored intrinsic neuron field** — it is only the sweep's loop variable. The loop
+The level loop already settles bottom-up until no higher level fires (above). What changes here is that
+**the level is no longer a stored intrinsic neuron field** — it is only the loop variable. The loop
 already drives off `max_active_level` read from memory's activation index, not the stored
 `neuron_spatial_levels` / `neuron_temporal_levels` maps. Those maps have four readers, all of which move to
 activation-derived, recomputed, or predicate-based values:
 
 1. **mint** (child level = parent level + 1) — under the wave the parent's level *is* the loop variable at the
-   depth it fired, so mint reads it from the sweep, not the map;
+   depth it fired, so mint reads it from the loop, not the map;
 2. **diagnostics** (depth, per-level counts) — recomputed from the activation index;
 3. **serialization** — the level columns are dropped from `neurons.csv` (below);
 4. **base-neuron identity** — `skip_action_neuron` ([thalamus.rs](../brain/brain-core/src/thalamus.rs)) uses
@@ -65,9 +65,9 @@ activation-derived, recomputed, or predicate-based values:
    `footprint == {self}`). Replacing it is part of removing the maps — miss it and the action-skip silently
    breaks.
 
-A neuron's depth becomes purely "how far the sweep had climbed when it fired," never recorded on the neuron.
+A neuron's depth becomes purely "how far the loop had climbed when it fired," never recorded on the neuron.
 
-The sweep, unchanged in shape (only neighborhood and coordinate handling differ — see below):
+The loop, unchanged in shape (only neighborhood and coordinate handling differ — see below):
 
 ```
 process_spatial (d=0):
@@ -172,9 +172,9 @@ neighbor filtering loses its input mid-migration.
 ## Code touched (large — this is a rearchitecture)
 
 - **`brain/brain-core/src/thalamus.rs`** — convert `process_spatial` and `process_temporal` to settling waves
-  (propagate to fixpoint instead of a counted level-sweep). Delete **both** `neuron_spatial_levels` and
+  (propagate to fixpoint instead of a counted level loop). Delete **both** `neuron_spatial_levels` and
   `neuron_temporal_levels` ([thalamus.rs](../brain/brain-core/src/thalamus.rs)) and all four readers (mint
-  child-level → loop variable; sweep bounds/diagnostics → activation-derived; snapshot → dropped columns;
+  child-level → loop variable; level bounds/diagnostics → activation-derived; snapshot → dropped columns;
   base-neuron identity in `skip_action_neuron` → explicit base predicate). Delete channel-neighbor machinery
   (`temporal_channel_neighbors`, `is_temporal_neighbor_channel`, `set_temporal_neighbors`, spatial
   equivalents) in favor of footprint adjacency.
@@ -185,7 +185,7 @@ neighbor filtering loses its input mid-migration.
 - **`brain/brain-core/src/memory.rs`** — **no shape change.** Each correction is reached at one depth per frame
   (one correction per parent), so the existing `LevelAgeState` per `(neuron, frame)`
   ([memory.rs](../brain/brain-core/src/memory.rs)) is sufficient — it already handles the same neuron at multiple
-  *ages* (the `frame` dimension), which is distinct from sweep depth. The level *indices* (`spatial_level_index`
+  *ages* (the `frame` dimension), which is distinct from depth. The level *indices* (`spatial_level_index`
   / `temporal_level_index`) remain as the wave's activation state.
 - **`brain/brain-core/src/brain.rs`** — drive the two waves + apex handoff (structure unchanged); voting
   unchanged (already base-only).
