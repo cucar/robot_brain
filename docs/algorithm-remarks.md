@@ -731,15 +731,16 @@ parameter its value, a class its member.
 **On D44 — parameters are found on their own.** A parameter is a fact about where one neuron reappears, and that
 fact does not depend on any pattern: the neuron counts, over its residual, how often two offsets hold one
 neuron, and a parameter exists where that pays. Classes and parameters are parallel: both found by their own
-collapse, both priced on their own uses, both covering only through a pattern that names them, both passing
-what they held to the level above, and a pattern is what is built on them where they recur in the same
+collapse, both priced on their own uses, both covering on their own or inside a pattern that names them, both
+passing what they held to the level above, and a pattern is what is built on them where they recur in the same
 company.
 
-**On D13 — why a variable costs its value and nothing else.** A pattern's occurrence writes its owner and which
-pattern once, and its line says which parameter stands where, so what is left on each occurrence is the value
-alone, a choice among the values that parameter has passed. A parameter standing alone would have to say which
-parameter on every use, and a pattern of the owner and that one parameter says the same for the same bits on
-each occurrence, with a pattern child besides; so no variable stands alone.
+**On D13 — why a variable inside a pattern costs its value and nothing else.** A pattern's occurrence writes its
+owner and which pattern once, and its line says which variable stands where, so what is left on each occurrence
+is the value alone, a choice among the values that variable has passed. A variable standing alone pays for which
+variable on every use as well; where it stands, its value neuron says, by firing at the cell (D45). So a pattern
+that names several variables saves the second and later "which variable" on every occurrence, and that is what
+makes a pattern of variables worth its line.
 
 **On D45 — why a variable fires what it held.** The pattern child says which function ran. What tells this
 call from every other call of the same function is what its variables held, and the file already pays for it on
@@ -753,11 +754,15 @@ every neuron there is priced against that level's count. Letting the lower neuro
 two levels' alphabets on one apex. A value neuron is an ordinary neuron of the level above, created, priced,
 expanded and deleted by the rules every child obeys; it only happens to stand for one value of one variable.
 
-**On D45 — why it fires where the pattern child does.** A value neuron fires at the bidder's coordinate, so the
-call and what it was given stand at offset zero from one another one level up, and a pattern naming the pattern
-child and a value neuron together, the specific case written over the general one, is as near as anything can be.
-Where the value stood is not lost: the value neuron gives the content and the pattern the position, since the
-pattern's line records each variable with its offset.
+**On D45 — why it fires where the value stood.** A value neuron is what a variable passes up, and what it
+passes is a value in a place: this member, here; this value, at these offsets. Firing at the cell keeps the place
+with the content, so the level above reads where as well as what, and expansion needs no pattern to put the value
+back. The cell may be in a frame that has run, and then the activation is born in the past, at the age that
+coordinate gives it: the machine has realized what something was, and from then on learns what follows it. A
+parameter's value fires at every offset it held, one activation per cell, so a call with variables puts as many
+activations above as the cells they covered; the compression is in what each of them says, a value in a role,
+not in their number, and it is the constants, absorbed into the pattern child, that make a level thinner than the
+one below.
 
 **On D45 — why one value neuron per variable and value.** Two variables of one activation that both hold `x`
 are two arguments that happen to be equal, and the level above should hear two things. If it matters that they
@@ -782,9 +787,8 @@ the price of a class that means something.
 is written in the file on every occurrence (D13), so nothing is saved by hiding it from the level above. The value
 neuron tells it: the pattern child's connections pool every row the class let it cover, one lesson for every
 member, and the value neuron's connections hold what followed this member, so a lesson can be about a member
-where it needs to be and about the class where it does not. No variable stands alone: a pattern writes the owner,
-which pattern and where each variable stands once for all it names, so a value neuron fires only beside the
-pattern child of a call that names its variable.
+where it needs to be and about the class where it does not. Standing alone, the class says the same of the one cell it
+covers, and its value neuron fires at that cell either way.
 
 **On D38 and D27 — memorizing and equalizing are one rule.** A constant says what stands at an offset; a
 class says that one of its members does, and leaves which to each occurrence; a parameter says that the same thing stands at

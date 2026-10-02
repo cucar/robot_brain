@@ -48,7 +48,7 @@ shows `again` alone, and the digit is the machine's to supply.
 | 1 | `ready` | `ready` | |
 | 2 | `show`, `7` | `shown`, `7` | `shown` infers `copy` two frames ahead (R36) |
 | 3 | | | |
-| 4 | `again` | `copy`, and `P:7` beside it | the `7` fires weakly beside `again`, as expected |
+| 4 | `again` | `copy`, and `P:7` at frames 2 and 4 | the `7` fires weakly beside `again`, as expected |
 
 In frame 2 the inference places `copy` at its completion, frame 4, and expands it back from there (R28).
 `copy`'s body names `show` two frames back, which is frame 2, where `show` stands; and `P` at frame 2 and at

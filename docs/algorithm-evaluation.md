@@ -101,7 +101,10 @@ which is what made T11's halving argument work — and the halving is what D4's 
 what T12's depth bound rests on, and what keeps `|O|` constant across levels. A cover of `m` patterns promotes
 up to `m` children at one coordinate (D8, D28), so a level can be *wider* than the one below it wherever activations decompose into several chunks. Nothing
 caps `m`; what bounds it is that each extra child is another line and another set of charges, and the
-election stops buying the moment one does not pay. **Diagnostic:** bought bids per activation and neurons per
+election stops buying the moment one does not pay. A value neuron fires at every cell its variable covered (D45),
+so a call with variables puts as many activations above as the cells they held, and that is by design: the
+compression is in what each activation says, not in how many there are. What thins a level is the constants,
+which the pattern child absorbs. **Diagnostic:** bought bids per activation and neurons per
 level per frame, against the halving T11 assumes. If levels stop thinning, D4's reach schedule is calibrated
 against an invariant that no longer holds, and the reach has to be derived from measured spacing instead.
 

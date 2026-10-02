@@ -89,8 +89,9 @@ each parameter a value neuron for the letter it passed, `P:t` and `Q:s`, one lev
 | the election | The bid covers `p` and the four letters, 25 bits, for a price of 13, and is accepted. |
 | activate children | One level up, `alternation` fires at `p`'s coordinate, `P:t` at the nearest `t` and `Q:s` at the nearest `s` (§7.4). |
 
-The level above reads `alternation` beside two value neurons, `P:t` and `Q:s`, at its coordinate: which function
-ran, and with what. Nothing about `s` or `t` had to be learned first; only their value neurons are new.
+The level above reads `alternation` beside two value neurons, `P:t` at one and three back and `Q:s` at two and
+four: which function ran, and with what, where. Nothing about `s` or `t` had to be learned first; only their value
+neurons are new.
 
 `s, t, u, t, p` does not fit fully: `P` holds `t` at both its offsets, but `Q` holds `s` at two back and `u` at
 four back. `Q`'s value is the nearer, `s`, and four back is a correction (D44, D22).
