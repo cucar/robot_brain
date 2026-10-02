@@ -179,14 +179,13 @@ nothing was ever going to write it.
 it discharges up to `reach_t + 1` frames of the run at once. That is why a wider reach is worth paying a wider
 line for, and it is why the residual is free and a child is not.
 
-**On D14 — each level its own coder.** A level knows its own tables and nothing below them, so a call is
-written by the level that made it with the narrowed choices its tables allow, and read by the level above as
-neurons of that level, each a regular choice. The two prices of one call differ, and nothing reconciles them:
-each level saves what it can see. It is what lets categories nest. A class at one level is a category — the
-pattern child says that one of its members stood — and its value neurons stand one level up as ordinary
-neurons, with nothing marking them as members of anything. A class the level above builds over some of them
-is a sub-category, and a constant naming one singles one member out; the level above finds those groupings from
-its own evidence, never from the list below.
+**On D14 — each level its own coder.** A level knows its own tables and nothing below them, so a call is written by
+the level that made it with the narrowed choices its tables allow, and read by the level above as neurons of that
+level, each a regular choice. The two prices of one call differ, and nothing reconciles them: each level saves what
+it can see. It is what lets categories nest. A class at one level is a category — its child says that one of its
+members stood — and its value neurons stand one level up as ordinary neurons, with nothing marking them as members
+of anything. A class the level above builds over some of them is a sub-category, and a constant naming one singles
+one member out; the level above finds those groupings from its own evidence, never from the list below.
 
 **On D14 — why `L` never appears in the arithmetic.** `L` is what the differences are differences *in*; it is
 the reason the arithmetic is the arithmetic, and it is never a term in it.
@@ -518,8 +517,8 @@ function of its population and of nothing the pattern already names.
 
 **On D27 — a class's collapse, worked.** A neuron costs 8 bits. At one back, `a` stood in 5 rows of the
 residual, `b` in 4, `c` in 3 and `d` in 1, and the seed is the relation between `a` and `b`. Its uses are the
-cells holding a member at an offset where two members have stood; its candidates are the neurons that stood
-there in the other rows, in order of count.
+residual cells at one back holding a member; its candidates are the neurons that stood there in the other rows,
+in order of count.
 
 | class | uses | saves per use | entry | net |
 |---|---|---|---|---|
@@ -529,7 +528,7 @@ there in the other rows, in order of count.
 
 The class is `{a, b, c}`, with twelve uses, and it claims those twelve cells. `d`'s row stays residual. Nothing
 counts against `d` here, since no pattern has claimed the offset: it does not pay its way in. The failure appears
-later, when a pattern names the class at one back and `d` stands there.
+later, when the class stands at one back and `d` stands there instead.
 
 **On D27 — a parameter's collapse, worked.** A neuron costs 8 bits and an offset 2. One back and three back
 hold one neuron in 10 rows of the residual, with 4 different values among them; five back holds the same value
@@ -682,13 +681,12 @@ answers that used to sit between the two ages.
 
 ## 5.7 The greedy pick
 
-**On D33 — variables before patterns.** A class and a parameter are each a fact of their own — these neurons stand
-in for one another, these offsets hold one neuron — and each is priced on its own uses, before any pattern
-exists to name it. A pattern is then what recurs among the variables, and its collapse only chooses among them. Built
-the other way round, a pattern's collapse would have to decide what a class holds and where a parameter stands
-at the same time as what the pattern names, over one pattern's rows, and two patterns seeing the same variation
-would each build their own. Claiming is what keeps the variables apart: a cell one variable was built on is no evidence
-for the next, so a cell is never paid for twice.
+**On D33 — variables before constants.** A class and a parameter are each a fact of their own — these neurons
+stand in for one another, these offsets hold one neuron — and each is priced on its own uses. A constant is what
+is left fixed once the variation has been named, so the constants are grown over the cells the variables leave,
+and a cell the two would both cover goes to whichever saves more on it (D27). Nothing composes them at their own
+level: a constant beside a class, a function beside its argument, is a fact about their children, and the level
+above holds it as a constant over the two.
 
 **On D33 — why creation runs to exhaustion.** An earlier rule built one candidate per call, on the argument
 that one candidate per call was the rhythm of one election per frame. The election takes any number of bids,
@@ -715,10 +713,11 @@ machine the design already is, and a fovea. Nothing is declared about an action 
 
 **On D41 — the second axis.** A pattern says "these things happened together": an AND, part to whole. A class
 inside it says "one of these happened here": an OR, instance to class. The design had the first axis from the
-start. The second is what "whatever" and "one of these" needed, and it lives inside the first: a class is a variable
-a pattern refers to, never a neuron of its own, and what it held reaches the level above as a value neuron (D45).
+start. The second is what "whatever" and "one of these" needed, and the two stand side by side: a class is a pattern of
+one cell with its neuron left open, and what it held reaches the level above as a value neuron beside its child
+(D45), where a constant over the two axes is built.
 
-**On D44 — the third construct.** A neighbor is a neuron at an offset, and a body can say three things about it:
+**On D44 — the third kind.** A cell is a neuron at an offset, and a pattern can say three things about its cells:
 which neuron and where, a constant; which set and where, a class; where only, at several offsets, and that the
 neuron is the same at all of them, a parameter. An earlier draft had only the first two, and wrote sameness as a
 mark on a class, `K¹` at two offsets. That made an alternation carry a list of letters it did not care about,
@@ -730,23 +729,23 @@ parameter its value, a class its member.
 
 **On D44 — parameters are found on their own.** A parameter is a fact about where one neuron reappears, and that
 fact does not depend on any pattern: the neuron counts, over its residual, how often two offsets hold one
-neuron, and a parameter exists where that pays. Classes and parameters are parallel: both found by their own
-collapse, both priced on their own uses, both covering on their own or inside a pattern that names them, both
-passing what they held to the level above, and a pattern is what is built on them where they recur in the same
-company.
+neuron, and a parameter exists where that pays. Classes and parameters are parallel: both patterns of their own,
+found by their own collapse, priced on their own uses, covering their own cells, and passing what they held to
+the level above beside a child that says they held; what recurs with them is a constant of the level above,
+over their children.
 
-**On D13 — why a variable inside a pattern costs its value and nothing else.** A pattern's occurrence writes its
-owner and which pattern once, and its line says which variable stands where, so what is left on each occurrence
-is the value alone, a choice among the values that variable has passed. A variable standing alone pays for which
-variable on every use as well; where it stands, its value neuron says, by firing at the cell (D45). So a pattern
-that names several variables saves the second and later "which variable" on every occurrence, and that is what
-makes a pattern of variables worth its line.
+**On D13 — why a variable's occurrence costs which pattern and what it held.** A variable's line says where it
+stands, once, so each occurrence writes only which of the owner's patterns it is and what stood in it: a member
+among `|K|`, a value among `|V|`. A constant's occurrence writes its owner and which pattern, and nothing about
+content, since its line fixed the neurons once. That is the whole difference between the kinds in the body: a
+constant's occurrence says that it happened, a variable's says that it happened and what it was.
 
-**On D45 — why a variable fires what it held.** The pattern child says which function ran. What tells this
-call from every other call of the same function is what its variables held, and the file already pays for it on
-every occurrence (D13). So each variable fires it one level up, as a value neuron beside the pattern child, and
-the level above hears the call and what it was given. A class's member and a parameter's value light up the same
-way, so they are one kind of neuron.
+**On D45 — why a variable fires what it held, and that it held.** A variable's child says that the variable held
+here; what tells this occurrence from every other is what it held, and the file already pays for that on every
+occurrence (D13). So the variable fires both, one level up: its child, and a value neuron beside it. The level
+above can then build on the child alone, a pattern for every value, or on the child and the value neuron, a pattern
+for one; the general and the specific are two constants there, and each pays or does not on its own. A class's
+member and a parameter's value light up the same way, so they are one kind of neuron.
 
 **On D45 — why a value is a neuron of its own and not the lower neuron lifted.** The value is a neuron of the
 level below, and neurons do not change levels: a neighborhood one level up is made of neurons of that level, and
@@ -754,15 +753,12 @@ every neuron there is priced against that level's count. Letting the lower neuro
 two levels' alphabets on one apex. A value neuron is an ordinary neuron of the level above, created, priced,
 expanded and deleted by the rules every child obeys; it only happens to stand for one value of one variable.
 
-**On D45 — why it fires where the value stood.** A value neuron is what a variable passes up, and what it
-passes is a value in a place: this member, here; this value, at these offsets. Firing at the cell keeps the place
-with the content, so the level above reads where as well as what, and expansion needs no pattern to put the value
-back. The cell may be in a frame that has run, and then the activation is born in the past, at the age that
-coordinate gives it: the machine has realized what something was, and from then on learns what follows it. A
-parameter's value fires at every offset it held, one activation per cell, so a call with variables puts as many
-activations above as the cells they covered; the compression is in what each of them says, a value in a role,
-not in their number, and it is the constants, absorbed into the pattern child, that make a level thinner than the
-one below.
+**On D45 — why it fires at the owner's coordinate.** A variable's child and value neuron fire where the owner
+stands, as a constant's child does, so everything one activation's patterns put up stands at one coordinate one
+level higher, siblings at offset zero (D26), which is where composition is cheapest. Where the value stood is in
+the variable's line, so expansion puts it back without being told. A centroid of the cells was considered and
+dropped: it put a child's cells on both sides of its coordinate, so a line had offsets into its own future and an
+inference placed a center rather than a completion, for no gain the owner's coordinate does not give.
 
 **On D45 — why one value neuron per variable and value.** Two variables of one activation that both hold `x`
 are two arguments that happen to be equal, and the level above should hear two things. If it matters that they
@@ -776,26 +772,26 @@ Nothing in the design copies anything else; every value that moves forward in ti
 is a pattern of one parameter over two frames.
 
 **On D41 — why the member list is short, and whose it is.** A person who thinks of a bridge does not run
-through every bridge they have seen, and the class table does not either: a member is kept while what it saves where
+through every bridge they have seen, and the table does not either: a member is kept while what it saves where
 the class stands pays for its entry, and no longer, so the list is only as long as what still recurs, and it
 costs a neuron per member exactly because it is a list. It belongs to the neuron that
-formed the class, in its own class table, and the member neuron knows nothing of it. A neuron never seen at the class's
+formed the class, in its own table, and the member neuron knows nothing of it. A neuron never seen at the class's
 offsets does not fit until its occurrences there pay for its entry, which is the lag the evaluation records, and
 the price of a class that means something.
 
-**On D45 — why a class fires its member.** A class inside a pattern says "one of these stood here", and which one
-is written in the file on every occurrence (D13), so nothing is saved by hiding it from the level above. The value
-neuron tells it: the pattern child's connections pool every row the class let it cover, one lesson for every
-member, and the value neuron's connections hold what followed this member, so a lesson can be about a member
-where it needs to be and about the class where it does not. Standing alone, the class says the same of the one cell it
-covers, and its value neuron fires at that cell either way.
+**On D45 — why a class fires its member.** A class says "one of these stood here", and which one is written in
+the file on every occurrence (D13), so nothing is saved by hiding it from the level above. The value neuron tells
+it: the class's child's connections pool every row the class covered, one lesson for every member, and the value
+neuron's connections hold what followed this member, so a lesson can be about a member where it needs to be and
+about the class where it does not.
 
 **On D38 and D27 — memorizing and equalizing are one rule.** A constant says what stands at an offset; a
 class says that one of its members does, and leaves which to each occurrence; a parameter says that the same thing stands at
-several offsets, and names it nowhere. All three are neighbors, all three are expected to hold, all three pay a
-failed cell when they fail, and all three enter and leave a body by the same test, a neighbor's worth where it
+several offsets, and names it nowhere. All three are sets of cells, all three are expected to hold, all three pay a
+failed cell when they fail, and all three enter and leave the table by the same test, a cell's worth where it
 holds against a correction where it fails. Putting a class or a parameter where the examples differ is
-anti-unification (Plotkin, Reynolds, 1970); the collapse does it over one pattern's rows at a time.
+anti-unification (Plotkin, Reynolds, 1970); the collapse does it over one pattern's rows at a time, and the
+constant that is left is what the examples agreed on.
 
 **On D13 — why a class costs the choice it leaves open.** A symbol that could be anything carries no
 information, and a class that admits everything should be worth nothing without anyone forbidding it. Pricing
@@ -813,32 +809,23 @@ variable-length one: nothing about how often a value occurs enters. `n` is the n
 machine already counts as it creates and deletes them; every neuron of the level prices against the same number,
 and so does the election, so the neuron's books and the board price a class alike.
 
-**On D27 — what a class saves, and where the line falls.** Against a specific pattern, which carries the member
-in its own line, a class at one offset leaves which member open on every row, and a general pattern naming it is
-built only over the residual the specific patterns left (D33). So frequent things keep a pattern of their own
-and the rest go through the class, and when a variant becomes rare its pattern retires, its rows fall to the
-residual, and it joins the class by the membership test. No pattern ever makes a class; the general pattern is
-found where the class already stands. A parameter spanning several offsets saves a whole neuron at every offset
-after the first, since its value is paid once, and that is the alternation. And when a member comes to dominate a
-class's offset enough that naming it saves more than naming the class, the collapse takes the constant and the
-general pattern becomes a specific one; when the member's share falls back, the class saves more again and the
-pattern turns general. Taking whichever saves more, rather than preferring the constant whenever it qualifies,
-is what puts that switch at the point where the two save the same: at 8 bits a neuron and 2 a failed cell, with
-a class of three leaving 1.6 bits open, a member holding sixty rows in a hundred saves 400 bits named as a
-constant and the class saves 642, and the constant takes over at eighty-five. Nothing about this is a rule about
-alphabets: at a level of two neurons every class of two is the whole level, saves nothing, and is never built.
-
-**On D27 — parameter and branch.** Two offsets that hold the same neuron, where that pays, are one parameter.
-Two offsets whose different neurons pair up in most rows, `m` whenever `d` and `n` whenever `e`, are not a
-parameter: the second is explained by the first, and the right structure is one candidate per pairing, with
-constants where the parameter would have been. That is dispatch, and it is where a case keeps a
-lesson of its own. The two readings use the same counts over the same pairs of offsets, and the price settles
-what the count leaves open.
+**On D27 — what a class saves, and where the line falls.** Against a constant, which carries the member in its
+own line, a class leaves which member open on every row, and it is built over the residual the constants leave
+(D33). So frequent things keep a constant of their own and the rest go through the class, and when a variant
+becomes rare its constant retires, its cells fall to the residual, and it joins the class by the membership test.
+A parameter spanning several offsets saves a whole neuron at every offset after the first, since its value is
+paid once, and that is the alternation. A cell the two would both cover goes to whichever saves more on it
+(D27): when a member comes to dominate a class's offset enough that a constant saves more there, the constant
+takes the cell and the class loses it; when the member's share falls back, the class saves more again and takes
+it back. At 8 bits a neuron and 2 a failed cell, with a class of three leaving 1.6 bits open, a member holding
+sixty rows in a hundred saves 400 bits as a constant's cell and the class saves 642, and the constant takes over
+at eighty-five. Nothing about this is a rule about alphabets: at a level of two neurons every class of two is the
+whole level, saves nothing, and is never built.
 
 **On D12 — the file keeps the member.** A class's occurrence pays for which member stood, `log₂|K|` bits, so
 the file holds it; a price charged for something the file then dropped would count a file shorter than the one
-written. What a class gives up is not in the file: the pattern child it is part of has one lesson for every
-member, and the value neuron beside it is where a member's own lesson lives (D45). Replaying the run puts back
+written. What a class gives up is not in the file: its child has one lesson for every member, and the value
+neuron beside it is where a member's own lesson lives (D45). Replaying the run puts back
 the member the value neuron names. An inferred call brings no value neuron, since nothing has stood yet, and
 there expansion places the class's most frequent member, the oldest on a tie.
 
@@ -877,10 +864,10 @@ distance, and this design is place-addressed, finding it at an offset within rea
 similar things in one context blur into each other, where a parameter here holds one neuron; that is a
 difference in kind, and whether it is an advantage is not shown by anything the design has done yet.
 
-**On D38 — what a class in a body saves.** A class's reference in the line costs which class and where, and
-each occurrence costs which member, so where it holds it saves `log₂(n / |K|)`, and it pays against the real
-alternative, one pattern per variant, each with a line of its own and none at all for a variant seen once. A class
-is born on its own uses before any pattern names it (D33), and it is kept once a pattern does.
+**On D38 — what a class saves.** A class's line costs its offset and a neuron per member, once, and each
+occurrence costs which pattern and which member, so where it holds it saves `log₂(n / |K|)` less the pointer,
+and it pays against the real alternative, one constant per variant, each with a line of its own and none at all
+for a variant seen once. It is born on its own uses (D33), and what recurs beside it is the level above's to say.
 
 **On D38 — how branching works.** There is no branch inside a body. The choice is dispatch: two situations are
 two patterns, and which one fires is the whole of "if". "If there is a carry, write 1" is a carry pattern with a

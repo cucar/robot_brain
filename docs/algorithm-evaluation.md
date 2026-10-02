@@ -104,7 +104,7 @@ caps `m`; what bounds it is that each extra child is another line and another se
 election stops buying the moment one does not pay. A value neuron fires at every cell its variable covered (D45),
 so a call with variables puts as many activations above as the cells they held, and that is by design: the
 compression is in what each activation says, not in how many there are. What thins a level is the constants,
-which the pattern child absorbs. **Diagnostic:** bought bids per activation and neurons per
+which a constant's child absorbs. **Diagnostic:** bought bids per activation and neurons per
 level per frame, against the halving T11 assumes. If levels stop thinning, D4's reach schedule is calibrated
 against an invariant that no longer holds, and the reach has to be derived from measured spacing instead.
 
@@ -242,23 +242,23 @@ it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay
 
 # 3. Open questions
 
-**Patterns and variables (D37–D47) — what stands between the model and an implementation.**
-There is one kind of pattern above the base, its body naming events and actions together (D5), and one kind of
-connection (D25). A body names constants, classes and parameters (D38). Every level is explained as a set of
-function calls with their arguments: an accepted bid is a call, its child is the function, and each variable it
-names fires a value neuron with what it held (§7.1, D45). Base actions take no arguments and act at a focus
-the environment holds; classes and parameters are built first, each by its own collapse and priced on its own uses,
-and patterns are built over them (D27, D33); an inferred pattern runs its actions and expects its events, weakly
-(R30).
-Seven cases are worked by hand on it ([algorithm.md](algorithm.md), Part V).
-What is still open, in the order it bites:
+**Patterns and variables (D37–D47) — what stands between the model and an implementation.** There is one kind of
+pattern above the base, its body naming events and actions together (D5), and one kind of connection (D25). A
+pattern is of one of three kinds, a constant, a class or a parameter, each a set of cells (D38), and no pattern
+names another. Every level is explained as a set of function calls with their arguments: an accepted bid is a call,
+its child the function, and a variable's call carries its value neuron with what it held (§7.1, D45); a function
+and its argument meet one level up, as a constant over their children. Base actions take no arguments and act at a
+focus the environment holds; the variables are built first, each by its own collapse and priced on its own uses,
+and the constants over what they leave (D27, D33); an inferred pattern runs its actions and expects its events,
+weakly (R30). Seven cases are worked by hand on it ([algorithm.md](algorithm.md), Part V). What is still open, in
+the order it bites:
 
-- **Frequent variants stay specific.** A variant that recurs keeps its own pattern, and the general pattern is
-  built only over the residual the specific ones leave (D33). While a variant is frequent that is the shorter
-  file, so the general pattern never takes it over; it does when the variant turns rare, its pattern retires and
-  its rows fall to the residual. What is open is whether a few variants, each frequent, should ever share one
-  general form. The place for it is the level above, where a pattern naming a pattern child and a value neuron
-  together can be written (D45); the arithmetic has not been done.
+- **Frequent variants stay specific.** A variant that recurs keeps its own constant, and a class is built only
+  over the residual the constants leave (D33). While a variant is frequent that is the shorter file, so the class
+  never takes it over; it does when the variant turns rare, its constant retires and its cells fall to the
+  residual. What is open is whether a few variants, each frequent, should ever share one general form. The level
+  above holds both forms side by side, a constant over the variable's child and one over the child and its value
+  neuron (D45); the arithmetic of when each pays has not been done.
 - **Prices move.** Every price is `log₂` of an alphabet (D13), and the alphabets move: `n` as the level fills
   and is pruned, a table as entries come and go, a class with its members, a parameter with the values it has
   passed. So a pattern can cross zero with no change in its rows. **Diagnostic:** retirements whose cause was a
@@ -267,8 +267,6 @@ What is still open, in the order it bites:
   or leaving for the two kinds within a row, `c` its cells, and `c · d` for class relations, `d ≤ H` the distinct
   neurons seen at an offset. Each relation tried costs a collapse over its uses, `O(H · c)`, and the greedy pick
   tries every one in every call (D33). How to try fewer without passing over one that would pay is open.
-- **Branches are quadratic in the offsets.** `paired` is read over every pair of offsets that vary in a
-  pattern's rows (D27), and kept nowhere. The cost has not been estimated.
 - **A class is found only where one neuron saw the variants.** The collapse reads one table (D27). Two neurons
   that each saw one variant never share a class; a class is a variable of one neuron's tables and nothing joins
   classes across neurons.
@@ -303,7 +301,7 @@ What is still open, in the order it bites:
   and has not been worked through against "one call per dimension per frame".
 - **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
   member fires (H2, H5). Under D41 a class is a variable with no neuron of its own,
-  and what fires is a value neuron beside a pattern child (D45), so the moment has to be restated.
+  and what fires is a value neuron beside its variable's child (D45), so the moment has to be restated.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
   base actions that move it.
 

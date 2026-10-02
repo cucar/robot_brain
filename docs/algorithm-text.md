@@ -17,11 +17,12 @@ At the base the reach is 1 (D4), so a letter's neighborhood is one cell, the let
 carries two relations (D47): the owner with that one cell, and, across rows, the different letters that have
 stood there.
 
-- **Bigrams.** `h` has `t` one back in most of its rows, so `h`'s table holds the pattern `(t, one back)`, and
-  its child `th` fires at `h`'s frame whenever the pair recurs. Every frequent pair gets one.
+- **Bigrams.** `h` has `t` one back in most of its rows, so `h`'s table holds the constant `(h, 0)`, `(t, one
+  back)`, and its child `th` fires at `h`'s frame whenever the pair recurs. Every frequent pair gets one.
 - **Classes of letters.** At one back of `h`, `t`, `s`, `c` and `w` have each stood; where naming the set saves
-  more than naming any one of them, `h`'s class table holds that class, and a pattern of `h` with the class
-  covers `th`, `sh`, `ch` and `wh` at once (D41). Beside its child a value neuron says which (D45).
+  more than a constant per letter, `h`'s table holds a class at one back with those members (D41). It covers the
+  letter before `h`, and at `h`'s frame its child says one of them stood and its value neuron says which (D45),
+  beside `h` itself. One level up, a constant over `h` and the class's child is "`h` after one of those".
 
 # 3. Words, on the frontier
 

@@ -30,34 +30,38 @@ and `4`.
 | Kind | Neurons |
 |---|---|
 | events at the level | `me`, `ball`, `fist`, and whatever else the field holds |
-| parameter | `T`, in `me`'s parameters table: the same thing at two offsets (D44) |
+| parameters | `T`, `T′` and `T″`, in `me`'s table: the same thing at two offsets, one per direction (D44) |
 | base actions | `hit`, `turn-left`, `turn-right` |
-| patterns | three situations in the table of `me`, each with a child; three steps, one in the table of each base action, each naming the situation's neighbors a frame before and the action beside it |
+| the situations | three constants one level above `me`, each over `me` and one parameter's child, each with a child |
+| the steps | three, one in the table of each base action, naming the situation's child a frame before and the action beside it |
 
 # 4. The situations, and what each infers
 
-Every pattern is in `me`'s table, so every offset is measured from the body. Each names a parameter over two
-offsets, which means the same thing at both, whatever it is (D38): one thing, nearer than it was a frame ago.
+Every parameter is in `me`'s table, so every offset is measured from the body. Each spans two offsets, which means
+the same thing at both, whatever it is (D38): one thing, nearer than it was a frame ago. When one holds, `me`'s
+bid for it covers the two cells, and the parameter's child and value neuron fire at the body's coordinate one
+level up, beside `me` itself, which stands uncovered. A constant there over `me` and the parameter's child is the
+situation:
 
-| Child | names | connects to, a frame on |
+| Situation, over `me` and | the parameter's offsets | connects to, a frame on |
 |---|---|---|
-| `incoming-ahead` | `(T, (0, +2) now, (0, +4) one frame ago)` | the step `hit`, in `hit`'s table |
-| `incoming-left` | `(T′, (−2, 0) now, (−4, 0) one frame ago)` | the step `turn-left` |
-| `incoming-right` | `(T″, (+2, 0) now, (+4, 0) one frame ago)` | the step `turn-right` |
+| `incoming-ahead`: `T`'s child | `(0, +2)` now, `(0, +4)` one frame ago | the step `hit`, in `hit`'s table |
+| `incoming-left`: `T′`'s child | `(−2, 0)` now, `(−4, 0)` one frame ago | the step `turn-left` |
+| `incoming-right`: `T″`'s child | `(+2, 0)` now, `(+4, 0)` one frame ago | the step `turn-right` |
 
-A step is the same pattern seen from the action: in `hit`'s table, `me` and the thing at those offsets a frame
-before, and `hit` beside it (D5). Matched, it says the body hit something incoming; inferred, it hits (R30).
+A step is the same seen from the action: in `hit`'s table, the situation's child a frame before and `hit` beside
+it (D5). Matched, it says the body hit something incoming; inferred, it hits (R30).
 
-Each pattern pays for its line because its parameter spans two offsets and its value is paid once: the body and
-two activations of the thing are written as the body, which of its patterns, and one value, a choice among the
-things `T` has passed.
+`T` pays for its line because it spans two offsets and its value is paid once: two activations of the thing are
+written as which pattern and one value, a choice among the things `T` has passed. The situation pays because `me`
+and `T`'s child recur together, at one coordinate, on every approach.
 
-**How `T` came to be.** Balls and fists came at the body often and got patterns of their own. Everything
-else that ever came at it, once or twice each, stood in `me`'s residual at `(0, +2)` and, a frame earlier, at
+**How `T` came to be.** Balls and fists came at the body often and got constants of their own. Everything else
+that ever came at it, once or twice each, stood in `me`'s residual at `(0, +2)` and, a frame earlier, at
 `(0, +4)`: two offsets filled most of the time by no one neuron, and by one and the same neuron in each
-neighborhood. The parameter's collapse (D27) made them one parameter, `T`, and `incoming-ahead` is the pattern
-built over it: one value, paid once, covering two neighbors. When balls become rare and their pattern retires, balls are
-written through `T` like everything else, with nothing to join.
+neighborhood. The parameter's collapse (D27) made them one parameter, `T`: one value, paid once, covering two
+cells, and its child is what the situation is built on. When balls become rare and their constant retires, balls
+are written through `T` like everything else, with nothing to join.
 
 # 5. One moment, worked
 
@@ -65,20 +69,21 @@ The body is at `(10, 10)`. A ball is at `(10, 12)`, and a frame ago it was at `(
 
 1. **The machine subtracts.** Assembling the neighborhood of the `me` activation, it takes the difference of
    coordinates and buckets each component (D6): the ball now is at `(0, +2)`, the ball a frame ago at `(0, +4)`.
-2. **The pattern fits.** `incoming-ahead`'s parameter spans exactly those two offsets, and the same neuron stands
-   at both. `me` bids the child, carrying `T = ball` (D31). The bid is accepted, and one level up the child fires
-   at the body's coordinate, and `T`'s value neuron for `ball` fires where the ball is now and where it was a frame
-   ago (§7.4).
-3. **The child speaks.** Its connection names the step, one frame on (D25). That is the entire record: no
+2. **The parameter fits.** `T` spans exactly those two offsets, and the same neuron stands at both. `me` bids
+   it, carrying `T = ball` (D31). The bid is accepted, and one level up, at the body's coordinate, `T`'s child and
+   its value neuron for `ball` fire, beside `me` (§7.4).
+3. **The situation fits.** `me` and `T`'s child stand together at one coordinate, which is `incoming-ahead`'s
+   constant; its bid is accepted and its child fires one level higher, at the body's coordinate.
+4. **The child speaks.** Its connection names the step, one frame on (D25). That is the entire record: no
    position is in it, and none is needed, because `hit` strikes what is ahead of the body and the situation only
    fires when something is.
-4. **Next frame the step is expanded and `hit` runs** (R30).
+5. **Next frame the step is expanded and `hit` runs** (R30).
 
 # 6. Wherever the two of them are
 
 Put the body at `(50, 3)` and a fist at `(50, 5)` that was at `(50, 7)`. The subtraction gives the same two
-offsets, `T` holds `fist` instead, the same pattern fits, the same child fires, and the same
-connection infers the step that hits. No coordinate ever reached the pattern (D11), so where they are costs nothing, and
+offsets, `T` holds `fist` instead, the same parameter and the same situation fit, the same child fires, and the
+same connection infers the step that hits. No coordinate ever reached the pattern (D11), so where they are costs nothing, and
 the parameter means what they are costs nothing either: it takes whatever stands at both, seen before or not.
 
 # 7. Wherever it is relative to the body
@@ -97,6 +102,6 @@ and distances to a handful.
 | a location in the frame | an offset from that activation (D6) |
 | a feature at a location | a neighbor, `(neuron, offset)` |
 | the same object at any place in the world | one pattern, since no coordinate is part of a neuron (D11) |
-| any object at that location | a class named at the offset (D38) |
+| any object at that location | a class at the offset (D38) |
 | the same object at two locations | one parameter over two offsets (D44) |
-| what to do about it | the child's connection to a step, which names no location at all |
+| what to do about it | the situation's connection to a step, which names no location at all |
