@@ -24,14 +24,14 @@ digit and negative when it did not.
 
 # 2. What forms over an image
 
-| Level | reach | what a neuron sees, and what forms |
+| What stands | its reach | what it sees, and what forms |
 |---|---|---|
-| 0 | 1 | An inked pixel sees the inked pixels at `±1` in `x` and `y`. The relations are the owner with one neighbor and two neighbors standing together (D47); the patterns are pairs and corners, a child each. |
-| 1 | 2 | A pair child sees the frontier within 2: other children, and the pixels the level-0 patterns left uncovered. Strokes form, and a stroke of three pixels forms as a pair child beside the pixel it did not cover (D5). |
-| 2 and up | 4, 8 | Strokes join into parts of digits, and parts into a digit's whole shape, at the level one above the highest thing each covers (D2). |
+| a pixel | 1 | An inked pixel sees the inked pixels at `±1` in `x` and `y`. The relations are the owner with one neighbor and two neighbors standing together (D47); the functions are pairs and corners, a child each. |
+| a pair or a corner | 2 along what it spans, 1 across | A child sees the frontier within its reach: other children, and the pixels the base left uncovered. Strokes form, and a stroke of three pixels forms as a pair child beside the pixel it did not cover (D5). |
+| a stroke, a part | twice what it spans (D4) | Strokes join into parts of digits, and parts into a digit's whole shape, each a level above the highest thing it covers (D2). |
 
 Variables form where the shapes vary. An offset where different children have stood, the end of a stroke that
-curves either way, is a class (D41); the same patch at two offsets, a symmetric digit, is a parameter (D44).
+curves either way, is a class (D41); the same patch at two offsets, a symmetric digit, is a parameter (D41).
 Time offsets recur in nothing, since the images are unrelated, so no pattern comes to name one: a part of the
 previous image is a neighbor like any other, and it never pays.
 

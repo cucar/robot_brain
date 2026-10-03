@@ -24,14 +24,14 @@ frame it closed in the most.
 
 # 2. What forms over frames
 
-| Level | reach | what forms |
+| What stands | its reach | what forms |
 |---|---|---|
-| 0 | 1 | A move sees the move before. The owner with its one cell is the relation (D47); recurring pairs of moves get a pattern and a child. |
-| 1 | 2 | A pair child sees the frontier two bars back: other children and the bars nothing covered. A run of three bars forms as a pair beside the bar it left out (D5). |
-| 2 and up | 4, 8 | Longer shapes, and shapes across instruments: a child in one channel standing beside a child in another at offset zero. |
+| a bar's move | 1 | A move sees the move before. The owner with its one cell is the relation (D47); recurring pairs of moves get a function and a child. |
+| a pair of bars | 2 | A pair child sees the frontier two bars back: other children and the bars nothing covered. A run of three bars forms as a pair beside the bar it left out (D5). |
+| a longer shape | twice what it spans (D4) | Longer shapes, and shapes across instruments: a child in one channel standing beside a child in another at offset zero. |
 
 Variables form where the shapes vary. An offset where moves of different size have stood is a class, "a fall of
-any size here" (D41); the same bucket at two offsets, a move that repeats, is a parameter (D44). Since no pattern
+any size here" (D41); the same bucket at two offsets, a move that repeats, is a parameter (D41). Since no pattern
 names an action, the dictionary describes the market and nothing the machine did.
 
 # 3. Taking a position

@@ -35,12 +35,12 @@ had to be shown to the machine to make it one.
 |---|---|
 | base events | `a0`, `a1`, `b0`, `b1` |
 | base actions | `out-0`, `out-1`, `carry-1` |
-| patterns | nine steps, in the tables of `out-0` and `out-1`, each naming what stood and ran the frame before and the actions of its own, each with a child |
+| functions | nine steps, in the tables of `out-0` and `out-1`, each naming what stood and ran the frame before and `carry-1` beside it where it carries, each with a child |
 
 # 4. The steps, and what each infers
 
-A step is a pattern in the table of the `out` digit that ran, naming the pair of digits a frame before it, and
-`carry-1` there if it ran, and `carry-1` beside it when it runs (D5). Matched, it says this case happened and
+A step is a function in the table of the `out` digit that ran, naming the pair of digits a frame before it, and
+`carry-1` there if it ran, and `carry-1` beside it when it runs (D5). Its bid covers the `out` digit itself (D31). Matched, it says this case happened and
 this was written for it; inferred, it writes the digit and, where it names `carry-1` beside it, carries (R30).
 
 | Step, in the table of | names a frame before | names beside it |
@@ -55,12 +55,12 @@ this was written for it; inferred, it writes the digit and, where it names `carr
 | `out-1` | `a1`, `b1`, `carry-1` | `carry-1` |
 | `out-1` | `carry-1` | |
 
-What a frame infers is its connections (D25): what stood uncovered on the apex connected, a frame on, to the
-step that followed it, and that step's estimate is what the sums earned. The step is expanded (R28): `out-0` or
-`out-1` runs, and `carry-1` runs where the step names it beside it. After a carry, the step that carried stands
+What a frame infers is its connections (D25): what stood on the apex connected, a frame on, to the step that
+covered it (D10), and that step's estimate is what the sums earned. The step is expanded (R28): its bidder, `out-0`
+or `out-1`, runs, and `carry-1` runs where the step names it beside it. After a carry, the step that carried stands
 on the apex beside the next pair of digits. The pair alone connects both to the step that names `carry-1` and to
-the one that does not; the step that carried connects only to steps that name it, since those are what followed
-it on every sum, so the two together infer the step that reads the carry.
+the one that does not; the step that carried connects only to steps that name it, since those are what followed it
+on every sum, so the two together infer the step that reads the carry.
 
 **The last carry.** In the frame after the numbers run out no digits arrive, and only the step that carried
 stands on the apex. On every taught sum whose last column carried, what followed it there was the last step of

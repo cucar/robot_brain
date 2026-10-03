@@ -96,17 +96,14 @@ against the true worth, per frame after the change, split by the age of the voti
 still decide the dimension long after the change, the hierarchy is not minting where it is needed, and the
 compression side is where to look.
 
-**Several children per activation may not halve the level above.** A neuron used to promote at most one child,
-which is what made T11's halving argument work — and the halving is what D4's doubling reach is derived from,
-what T12's depth bound rests on, and what keeps `|O|` constant across levels. A cover of `m` patterns promotes
-up to `m` children at one coordinate (D8, D28), so a level can be *wider* than the one below it wherever activations decompose into several chunks. Nothing
-caps `m`; what bounds it is that each extra child is another line and another set of charges, and the
-election stops buying the moment one does not pay. A value neuron fires at every cell its variable covered (D45),
-so a call with variables puts as many activations above as the cells they held, and that is by design: the
-compression is in what each activation says, not in how many there are. What thins a level is the constants,
-which a constant's child absorbs. **Diagnostic:** bought bids per activation and neurons per
-level per frame, against the halving T11 assumes. If levels stop thinning, D4's reach schedule is calibrated
-against an invariant that no longer holds, and the reach has to be derived from measured spacing instead.
+**The frontier need not thin.** A cover of `m` functions promotes up to `m` children at one coordinate (D8, D28),
+and every variable a bid carries adds a value neuron beside them (D45), so the frontier above an activation can
+hold more neurons than the cells the bid covered. Nothing caps `m`; what bounds it is that each extra child is
+another line and another call, and the election stops buying the moment one does not pay. The compression is in
+what the frontier costs to write, not in how many activations stand on it (T11). The reach does not rest on
+thinning (D4), so what this costs is the size of the neighborhoods above: a neighborhood is the frontier within
+reach, and it is as full as that frontier is fine. **Diagnostic:** bought bids per activation and frontier
+neurons per frame, against neighbors per activation at each span.
 
 **Far placement is lossy, and the loss compounds with height.** An offset is kept to one significant binary
 digit (D6), so a neighbor 11 frames back is written as 8 and expanded to 8 (R28). Each level down adds its own
@@ -191,9 +188,9 @@ a round is one pattern taken (D28). Cost is `O(|cover| · |table| · |O|)`, and 
 quantity the multi-child risk above says is unbounded. **Diagnostic:** cover-pass scans per activation against
 cover size, per level.
 
-**Routing cost at the base.** `|O|` is held constant across levels by construction (D4), but its value is set
-by the reach and the base density, and the cover pass prices every pattern against it every frame.
-**Diagnostic:** scan volume per level, against `|O|`.
+**Routing cost.** `|O|` is set by the reach and by how fine the frontier is within it (D4, D5), and the cover
+pass prices every pattern against it every frame. A long chunk standing among uncovered base neurons sees every
+one of them within twice its span. **Diagnostic:** scan volume against `|O|`, by span.
 
 **An early partition can freeze.** A pattern never acquires a neighbor another pattern of the same cover already
 holds — the neighbor's population excludes those activations entirely (D27) — so patterns grow into the residual and
@@ -228,58 +225,67 @@ pay first.
 — no pass blocks on it and no decision is deferred by it. **The only consumer is measurement**: when `L` or
 apex-neurons-per-frame is read, the settled frames are the ones whose numbers are final.
 
-**Frontier membership settles one level, in `reach_t` frames.** Whether an activation at frame `h` is covered
-is decided by bids firing no later than `h + reach_t`, since a bid reaches `reach_t` back and no further.
+**Frontier membership settles within the longest reach.** Whether an activation at frame `h` is covered is
+decided by bids firing no later than `h` plus the longest reach in time among the neurons the machine holds,
+since no bid reaches further back (D24).
 
 **A frame's encoding settles at the top of whatever stack reached it.** A neuron one level up, firing later,
 can name a lower neuron that names frame `g`. **Frame `g` is settled when no level holds an open activation that could
 still join or leave that set** — a closure over the levels, evaluated upward.
 
 **`D` is reached, not known.** The walk stops where a level accepts no bids and therefore produces none above
-it, so `Σ_(k<D) reach_t(k)` bounds a condition rather than counting out a delay.
+it, so the reaches summed up the stack bound a condition rather than counting out a delay.
 
 ---
 
 # 3. Open questions
 
-**Patterns and variables (D37–D47) — what stands between the model and an implementation.** There is one kind of
-pattern above the base, its body naming events and actions together (D5), and one kind of connection (D25). A
-pattern is of one of three kinds, a constant, a class or a parameter, each a set of cells (D38), and no pattern
-names another. Every level is explained as a set of function calls with their arguments: an accepted bid is a call,
-its child the function, and a variable's call carries its value neuron with what it held (§7.1, D45); a function
-and its argument meet one level up, as a constant over their children. Base actions take no arguments and act at a
-focus the environment holds; the variables are built first, each by its own collapse and priced on its own uses,
-and the constants over what they leave (D27, D33); an inferred pattern runs its actions and expects its events,
-weakly (R30). Seven cases are worked by hand on it ([algorithm.md](algorithm.md), Part V). What is still open, in
-the order it bites:
+**Patterns and variables (D37–D47) — what stands between the model and an implementation.** A pattern above the
+base names events and actions together (D5), and there is one kind of connection (D25). A pattern is of one of
+two kinds, a function or a variable (D38). A variable is one or more positions holding one and the same neuron,
+with the members that have paid to stand in it: a class at one position, a parameter at several. A function is
+its fixed cells and the variables of its table that it names: classes are its local variables and parameters
+its arguments. Every level
+is explained as a set of function calls with their arguments: an accepted bid is a call, a function's child
+with one value neuron per variable beside it, or a lone variable's value neuron, all at the bidder's coordinate
+(§7.1, D45). Every bid covers its bidder (D31). Base actions take no arguments and act at a focus the
+environment holds; the variables are built first, each by its own collapse and priced on its own uses, and the
+functions over the rows as the variables rewrite them (D27, D33); an inferred pattern runs its actions and
+expects its events, weakly (R30). Seven cases are worked by hand on it ([algorithm.md](algorithm.md), Part V).
+What is still open, in the order it bites:
 
-- **Frequent variants stay specific.** A variant that recurs keeps its own constant, and a class is built only
-  over the residual the constants leave (D33). While a variant is frequent that is the shorter file, so the class
-  never takes it over; it does when the variant turns rare, its constant retires and its cells fall to the
-  residual. What is open is whether a few variants, each frequent, should ever share one general form. The level
-  above holds both forms side by side, a constant over the variable's child and one over the child and its value
-  neuron (D45); the arithmetic of when each pays has not been done.
-- **Prices move.** Every price is `log₂` of an alphabet (D13), and the alphabets move: `n` as the level fills
-  and is pruned, a table as entries come and go, a class with its members, a parameter with the values it has
-  passed. So a pattern can cross zero with no change in its rows. **Diagnostic:** retirements whose cause was a
-  change in an alphabet alone.
-- **Every relation is tried in every call.** Keeping the relations counted (D47) costs `c²` per row entering
-  or leaving for the two kinds within a row, `c` its cells, and `c · d` for class relations, `d ≤ H` the distinct
-  neurons seen at an offset. Each relation tried costs a collapse over its uses, `O(H · c)`, and the greedy pick
-  tries every one in every call (D33). How to try fewer without passing over one that would pay is open.
-- **A class is found only where one neuron saw the variants.** The collapse reads one table (D27). Two neurons
-  that each saw one variant never share a class; a class is a variable of one neuron's tables and nothing joins
-  classes across neurons.
+- **Depth on input that repeats.** A stretch that repeats exactly gains a level each time round, with a neuron
+  per level, and nothing caps it (T13). The reach stays in proportion, twice the span (D4), so what grows is the
+  count of neurons and the height of the stack, not how far they see. **Diagnostic:** the highest level reached
+  per frame against run length; it should rise and flatten on input that varies, and rise with the run only
+  where the input repeats.
+- **Prices move.** Every price is `log₂` of an alphabet (D13), and the alphabets move: `n` as the level fills and
+  is pruned, a table as entries come and go, a variable with its members. So a pattern can cross zero with no
+  change in its rows. **Diagnostic:** retirements whose cause was a change in an alphabet alone.
+- **Every relation is tried in every call.** Keeping the relations counted (D47) costs `c²` per row entering or
+  leaving for the relations within a row, `c` its cells, and `c · d` for the offsets that vary, `d ≤ H` the
+  distinct neurons seen at an offset. Each relation tried costs a collapse over its uses, `O(H · c)`, and the
+  greedy pick tries every one in every call (D33). How to try fewer without passing over one that would pay is
+  open.
+- **A variable is found only where one neuron saw the variants.** The collapse reads one table (D27). Two
+  neurons that each saw one variant never share a variable; it belongs to one neuron's table and nothing joins
+  variables across neurons.
 - **Near-duplicates stay apart, and nothing merges children.** A child is reused only on a tie over the same
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
   that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
   bids cover mostly the same activations, per level.
-- **Membership lags.** A class fits only a member (D38); a non-member at its offset is a failed cell, and it
-  joins when its occurrences there pay for its entry (D27). Until then a new variant is written with a failed
-  cell. **Diagnostic:** occurrences of a general pattern written with a class correction, per class.
+- **Membership lags.** A variable fits only a member (D38); a non-member at its positions is a failed cell, and
+  it joins when it pays for its entry (D27): after it has recurred, at one position, and usually on first sight
+  at several, though not where a few members hold most of the uses. Until then a new variant is written with
+  failed cells. **Diagnostic:** occurrences of a function written with a variable's failed cells, per variable,
+  split by its number of positions.
+- **A variable's two tests run once per call.** Its members decide its uses and its uses decide its positions
+  (D27), and each call runs the member test and then the position test once. Nothing shows that the two settle
+  rather than trade places from call to call. **Diagnostic:** member and position changes per variable per call
+  on stationary input; they should die out.
 - **Reach bounds what a parameter can carry.** A parameter binds from offsets within its owner's reach (D4). A
   value needed from further back than that is out of sight, and a value carried forward is carried only as far
-  as the pattern's reach.
+  as its owner's reach.
 - **A function is callable only from a situation whose window holds it.** A voter can start a program only
   from an offset at least as far out as the program is long (R36), and an activation is open for `reach_t`
   frames (D9). Below that height the same behavior is dispatched a step at a time, each step inferred by the
@@ -296,21 +302,21 @@ the order it bites:
   and it is not decided. An expected event that recreates the situation that inferred it is a loop with no
   world in it, and nothing breaks it but reward.
 - **Crossing kinds.** A parameter holds an event as an event. "Write the digit you see" needs the action that
-  corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. Copy (algorithm-copy.md) expects the event it was given and does not need one; writing it does.
+  corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. The
+  write case ([algorithm-copy.md](algorithm-copy.md)) learns that connection once per digit, from each digit's
+  own lessons, so a digit never asked has none. Nothing generalizes the crossing itself.
 - **A call inferred by several situations** fires at each of their coordinates (D37). That is taken to be right
   and has not been worked through against "one call per dimension per frame".
 - **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
-  member fires (H2, H5). Under D41 a class is a variable with no neuron of its own,
-  and what fires is a value neuron beside its variable's child (D45), so the moment has to be restated.
+  member fires (H2, H5). Under D41 a class is a variable with no neuron of its own, and what fires is a value
+  neuron for the member that stood (D45), so the moment has to be restated.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
   base actions that move it.
 
-**Neighborhood space at higher levels.** Above level 0 the neighbors are patterns, and the per-dimension alphabet
-grows as patterns are created, so the space expands with the structure. What no longer expands is `|O|`:
-adjacency is a reach at every level (D5), and D4 sets that reach precisely to hold the expected neighbor count
-fixed as the level thins. So the open measurement is whether the invariant holds in practice, since it rests
-on T11's halving being close to what contraction actually achieves. **Diagnostic:** neighbors per activation, per
-level, against the constant the invariant predicts.
+**Neighborhood size above the base.** A neighborhood is the frontier within reach (D5), and the reach is twice
+the neuron's span (D4). Among neighbors of about its own size that is a handful in each direction; among finer
+ones it is many, and the alphabet a cell is chosen from grows as neurons are created. Nothing holds `|O|` fixed.
+**Diagnostic:** neighbors per activation, against span.
 
 **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering makes
 them slightly less independent, and D11 makes the neuron population smaller and each neuron busier — every
@@ -321,14 +327,12 @@ constraint is that a level's bills and offers must all be in before its election
 one frame (T14). With nothing reported back, no bill waits on an election. On much larger inputs than MNIST all
 of this needs revisiting.
 
-**Asymmetric reach, and isotropic growth.** Backward reach emerges from the vote, and the forward window is
+**Asymmetric reach.** Backward reach emerges from the vote, and the forward window is
 the same reach (D9). Whether one reach is right — "how much do I need to recognize myself" and "how far ahead do
 I need to act" are different questions — is unresolved, and the connections are the whole of what the machine
 does with the forward half. One reach is the committed choice; separate reaches are the fallback if diagnostics
-show patterns consistently reaching the bound in one direction only. **The same doubt applies across
-activation dimensions**: D4 grows every one of them by the same factor, which holds only if contraction thins
-them equally, and a channel whose patterns chunk harder in time than in space would want otherwise.
-**Diagnostic:** mean spacing per activation dimension, per level, against the isotropic prediction.
+show patterns consistently reaching the bound in one direction only. Across activation dimensions nothing is
+assumed: each has the reach its own span gives it (D4).
 
 **Whether a coarse voter should count as one.** The vote at the base gives every apex activation one vote per
 dimension whatever level it stands at (R36). A level-4 neuron whose program expanded to forty base actions and a
@@ -365,6 +369,8 @@ never collapsed, with the estimate the exact running mean and the walk wiring th
 negative mean (R31, R37); and the vote at the base normalizes each voter to one vote per dimension and takes
 actions by the share-weighted mean estimate, with no level in it (R36). What differs beyond the cut: the code
 wires the declared default at birth at strength 1, where R35 lets it run and be learned; the code connects to
-base actions instead of the apex (D25), and so needs no expansion (R28, R30); covered activations keep learning in the code, where D10
-stops them; and it shapes no reward (above).
+base actions instead of the apex (D25), and so needs no expansion (R28, R30); covered activations keep learning
+in the code, where D10 stops them the frame after they are covered; the code places a recognized pattern's
+activation back at the frame its age names, where the spec fires everything at the bidder's coordinate; and it
+shapes no reward (above).
 [algorithm-implementation.md](algorithm-implementation.md) lists the changes.

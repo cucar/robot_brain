@@ -1,79 +1,83 @@
-# Copy, as a machine that could be built
+# Write the digit you were shown, as a machine that could be built
 
-A worked case for [algorithm.md](algorithm.md): a machine that gives back whatever digit it was just shown,
-`a => a`, written out neuron by neuron. Nothing here is normative, and the machine is shown running: its tables
-and connections are as listed, and its histories already hold moments like this one. It shows a value carried
-forward in time by a parameter, with nothing deciding anything per value: a cue puts the machine in a state,
-the state infers the copy program, and the program's parameter takes its value from what stands now and places
-it two frames on.
+A worked case for [algorithm.md](algorithm.md): a machine that is shown a digit, is asked, and writes that
+digit, written out neuron by neuron. Nothing here is normative, and the machine is shown running: its tables and
+connections are as listed, and its histories already hold moments like this one. It shows how the machine
+crosses from what it sees to what it does. Nothing relates an event to an action but a connection, so the
+crossing is learned, one connection per digit, and what the action brings is expected before it is reported.
 
 ---
 
 # 1. The environment
 
-**In.** A digit is shown in event dimension `d`, ten buckets, `0` to `9`. Every showing is announced in event
-dimension `cue`: `ready` fires the frame before the digit, `show` fires with it, and `again` fires two frames
-after it. While the machine is being taught, the world shows the same digit again with `again`. Afterwards it
-shows `again` alone, and the digit is the machine's to supply.
+**In.** A digit is shown in event dimension `d`, ten buckets, `0` to `9`. Beside it, in event dimension `cue`,
+the world may fire `ask`: write this digit.
 
-**Out.** Nothing. The machine acts only on itself.
+**Out.** One action dimension, `write`, with ten base actions, `write-0` to `write-9`. A write that runs
+produces its digit: in the frame after `write-7` runs, the world shows a `7` in `d`.
+
+**Teaching.** While the machine is being taught, the world executes the right write itself, in the frame after
+each ask, and rewards it (§3.5). Afterwards the machine outputs the write, and the reward says whether it wrote
+what was shown.
 
 # 2. The neurons
 
 | Kind | Neurons |
 |---|---|
-| base events | `ready`, `show`, `again`, and the ten digits |
-| the cue state | `show`'s constant, `(show, 0)`, `(ready, one frame ago)`, and its child `shown`, at level 1 |
-| the cue pair | `again`'s constant, `(again, 0)`, `(show, two frames ago)`, and its child `asked`, at level 1 |
-| the parameter | `P`, in `again`'s table, over the digit now and the digit two frames ago; its child and its value neurons `P:0` to `P:9`, at level 1 (D45) |
-| the copy program | a constant at level 1 over `asked` and `P`'s child, both at `again`'s coordinate; its child `copy`, at level 2 |
+| base events | `ask`, and the ten digits |
+| base actions | `write-0` to `write-9` |
+| the asked digits | ten functions in `ask`'s table, each with one fixed cell, a digit beside it; their children `asked-0` to `asked-9` |
+| the steps | ten functions, one in the table of each write, each with one fixed cell: its `asked` child a frame before; their children `wrote-0` to `wrote-9` |
+| the echoes | ten functions, one in the table of each digit, each with one fixed cell: its `wrote` child a frame before |
 
 # 3. How it was learned
 
-1. **The cue becomes a state.** `ready` then `show` recurs on every showing, so `show` holds a constant for it,
-   and its child `shown` fires at level 1 whenever the cues appear. `shown` standing on the apex is the state
-   "a copy has been asked for".
-2. **The cue pair becomes a constant.** `show` two frames before `again` recurs on every showing, so `again`
-   holds a constant for it, and its child `asked` fires at `again`'s coordinate.
-3. **The digit becomes a parameter.** At the frame `again` fires, the digit beside it is always the digit shown
-   two frames before, whatever that digit is. So in `again`'s history the digit's place now and its place two
-   frames back hold one neuron in every row: a parameter, found by its own collapse (D27, D44). It pays, one value
-   covering two cells, and when its bid is accepted its child and its value neuron for that digit fire at
-   `again`'s coordinate, beside `asked`.
-4. **The copy becomes a pattern, one level up.** `asked` and `P`'s child stand together at `again`'s coordinate
-   on every showing, and the value neuron beside them varies. A constant over the two is built in `asked`'s table,
-   and its child `copy` stands at level 2 (D2). It names no digit and no value neuron.
-5. **The state learns to call the program.** `shown` is still open two frames later, uncovered, and `copy`
-   stands on the apex then. So `shown` connects to `copy` at offset two (D25, R31), and every taught showing
-   strengthens it.
+1. **The ask and the digit become one neuron.** `ask` sees the digit beside it, at offset zero (D26). A bid
+   covers its bidder (D31), so a function in `ask`'s table with the one fixed cell `(7, beside)` writes two
+   activations as one call. Each digit that is asked often enough gets one, and its child `asked-7` fires at
+   `ask`'s coordinate. A digit asked too seldom to pay for a line of its own is held by a class at that offset
+   instead, and what fires for it is the class's value neuron for that digit (D41, D45). Either way one neuron
+   per digit stands there: this digit, asked.
+2. **The situation learns the write.** In the taught frames `write-7` ran one frame after `asked-7` and was
+   rewarded. `asked-7` was open and uncovered, so it connected to `write-7` at offset one, with the reward
+   (R31). That connection is the crossing from the event to the action, and there are ten of them, each learned
+   from its own digit's lessons.
+3. **The write gets its step.** In `write-7`'s history `asked-7` stands one back in every row, so its table
+   holds the function `(asked-7, one back)`, and its child `wrote-7` fires at `write-7`'s coordinate, covering
+   both. From then on `asked-7` is covered in the frame the write runs, and in that frame it connects to
+   `wrote-7`, the neuron that covered it, with that frame's reward (D10). So it goes on learning what writing a
+   `7` earns.
+4. **The digit gets its echo.** The frame after, the world shows the `7` that was written. In `7`'s history
+   `wrote-7` stands one back on every such frame, so `7`'s table holds `(wrote-7, one back)`, and `wrote-7`
+   connects to its child the same way.
 
-# 4. One showing, frame by frame, after teaching
+# 4. One ask, frame by frame, after teaching
 
 | Frame | input | on the apex | what happens |
 |---|---|---|---|
-| 1 | `ready` | `ready` | |
-| 2 | `show`, `7` | `shown`, `7` | `shown` infers `copy` two frames ahead (R36) |
-| 3 | | | |
-| 4 | `again` | `copy`, over `asked` and `P`'s child; `P:7` beside them | the `7` fires weakly beside `again`, as expected |
+| 1 | `7`, `ask` | `asked-7` | `asked-7` infers `wrote-7` one frame ahead; expanded, that is `write-7`, which is output (R36, R28) |
+| 2 | `write-7` reported as run | `wrote-7`, over `asked-7` and `write-7` | `wrote-7` infers the echo; expanded, that is a `7` at frame 3, expected |
+| 3 | `7` | the echo's child, over `wrote-7` and the `7` | the `7` was already there, weak, when the world reported it |
 
-In frame 2 the inference places `copy` at its completion, frame 4, and expands it back from there (R28). `copy`'s
-cells are `asked` and `P`'s child, both at frame 4. `asked` expands to `again` at frame 4 and `show` at frame 2,
-where `show` stands. `P`'s child expands to the parameter, the digit at frame 2 and at frame 4: frame 2 has
-happened, so `P` takes its value from what stands there, the `7`; frame 4 has not, so expansion places the `7`
-there, weakly, as an expected event (D44, R40). In frame 4 the world shows `again` and no digit, the expected `7`
-stands beside it, `again`'s constant and `P` both fit, their children fire with `P:7`, and `copy` is recognized
-over them.
+In frame 1 `asked-7` reads its connection at offset one and places `wrote-7` at frame 2. Expanding `wrote-7`
+places its bidder, `write-7`, at frame 2, and its one cell, `asked-7`, at frame 1, where it stands (R28).
+`write-7` is a base action at the frame ahead, so it is output. In frame 2 the world reports it as run,
+`write-7`'s function holds, and `wrote-7` fires strong. It infers the echo's child one frame ahead, whose
+expansion places a `7` at frame 3: a base event, so it fires there weakly, as what the write is expected to
+bring (R30, D40). In frame 3 the world shows the `7`, and the report replaces the expectation.
 
-Show a `3` instead and nothing in the machine is different: the same state infers the same program, and the
-same parameter carries a `3`. One program serves every digit, because nothing in it names a digit.
+Show a `3` instead and a different neuron stands in frame 1, `asked-3`, with a connection of its own to
+`write-3`. Nothing carries the digit across: each digit's write was learned from that digit's own lessons, and a
+digit never asked before has no connection yet. That is the difference between this case and a parameter, which
+carries whatever stands in it: a parameter holds an event as an event, and only a connection reaches from an
+event to an action.
 
 # 5. The same thing as code
 
 | in the code | in the machine |
 |---|---|
-| calling `copy` | `shown` inferring `copy` two frames ahead |
-| the function `a => a` | `copy`, a constant over the cue pair's child and the parameter's |
-| the parameter `a` | `P`, in `again`'s table, over the digit now and two frames back |
-| binding `a` to the argument | `P` taking its value from the `7` standing at frame 2 |
-| `return a` | expansion placing the same value at frame 4 |
-| the value | the digit `7`, expected and fired weakly two frames after it was shown |
+| `switch (digit)` | which `asked` neuron stands on the apex |
+| `case 7: write(7)` | `asked-7`'s connection to `write-7`, and to `wrote-7` once the step exists |
+| the ten cases | ten connections, each learned from its own lessons |
+| the return value appearing on the screen | the `7` the world shows in frame 3 |
+| knowing what the call will print | the echo, expected a frame before it is reported |
