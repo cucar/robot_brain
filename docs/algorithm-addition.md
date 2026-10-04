@@ -13,7 +13,7 @@ a carry that the world shows while it teaches and the machine expects afterwards
 **In.** Each frame the world presents one column of the sum, the two numbers read from the right: the event
 `add`, which is the request, the digit of the first number in event dimension `a`, and the digit of the second
 in event dimension `b`. Each digit dimension has two buckets, `0` and `1`. When the numbers run out the world
-fires `add` once more with no digits, asking for the last digit.
+fires `add` once more with the event `end` beside it in place of digits, asking for the last digit.
 
 **Out.** One action dimension, `out`, with two base actions, `out-0` and `out-1`. What runs there, in the frame
 after a request, is the next digit of the result, from the right.
@@ -36,10 +36,10 @@ it; reading it is seeing it beside the next request.
 
 | Kind | Neurons |
 |---|---|
-| base events | `add`, `a0`, `a1`, `b0`, `b1`, `carry` |
+| base events | `add`, `a0`, `a1`, `b0`, `b1`, `end`, `carry` |
 | base actions | `out-0`, `out-1` |
-| the cases | nine functions in `add`'s table, each naming what stands beside the request: the two digits, and `carry` where one came in; each with a child |
-| the steps | nine functions, in the tables of `out-0` and `out-1`, each naming its case's child a frame before, and `carry` beside it where the case carries; each with a child |
+| the cases | ten functions in `add`'s table, each naming what stands beside the request: the two digits or `end`, and `carry` where one came in; each with a child |
+| the steps | ten functions, in the tables of `out-0` and `out-1`, each naming its case's child a frame before, and `carry` beside it where the case carries; each with a child |
 
 # 4. How it was learned
 
@@ -47,7 +47,7 @@ it; reading it is seeing it beside the next request.
    every time, so `add`'s table holds a function that names them outright (D47, D27), and its child is that
    case: `1 + 1` asked, or `0 + 1` asked with a carry. Nothing varied while it was learned, so no variable
    formed, and what a function names is not open to a variable afterwards (D19). Eight columns give eight
-   cases, and the request with no digits and a carry is the ninth.
+   cases, and the last request gives two more: `end` with a carry, and `end` without.
 2. **A carry tells two cases apart.** `1 + 1` with a carry and `1 + 1` without are two functions. Where `carry`
    stands, the one that names it covers more and is taken; where it does not, the one that names it would be
    written with a failed neighbor, and the other is taken (D28).
@@ -68,13 +68,14 @@ it; reading it is seeing it beside the next request.
 | `0`, `1`, `carry` | `out-0` | `carry` |
 | `1`, `0`, `carry` | `out-0` | `carry` |
 | `1`, `1`, `carry` | `out-1` | `carry` |
-| `carry` alone | `out-1` | |
+| `end` | `out-0` | |
+| `end`, `carry` | `out-1` | |
 
 Inferred, a step is expanded (R28): its bidder, the digit, is output, and `carry` is placed beside it where the
 step names it, as what the machine expects to see.
 
-A last request with no digits and no carry has nothing beside it to name. `add` then stands uncovered and
-speaks from its own connections, most of them written in exactly those frames, and they say `out-0`.
+The last request always has something beside it to name, `end`, so the end of the numbers is a situation like
+any column. Without a carry its answer is a leading `0`.
 
 # 5. One sum, frame by frame, after teaching
 
@@ -86,11 +87,11 @@ the next (R29).
 | 1 | `add`, `1`, `1` | | `1, 1` | the step `1, 1 → out-0, carry` |
 | 2 | `add`, `0`, `1` | `out-0`; `carry` expected | `0, 1, carry` | the step `0, 1, carry → out-0, carry` |
 | 3 | `add`, `1`, `1` | `out-0`; `carry` expected | `1, 1, carry` | the step `1, 1, carry → out-1, carry` |
-| 4 | `add` | `out-1`; `carry` expected | `carry` alone | the step `carry → out-1` |
+| 4 | `add`, `end` | `out-1`; `carry` expected | `end, carry` | the step `end, carry → out-1` |
 | 5 | | `out-1` | | |
 
 The digits that ran in `out`, from the right: `0`, `0`, `1`, `1`. The result is `1100`, a sum the machine need
-never have seen: every column is one of the nine cases, and the carry takes each column's outcome into the
+never have seen: every request is one of the ten cases, and the carry takes each column's outcome into the
 next.
 
 # 6. Taught in another order
@@ -111,8 +112,8 @@ parts has a place here:
 | in the code                           | in the machine                                                |
 |---------------------------------------|---------------------------------------------------------------|
 | calling the function                  | `add`, fired with each column                                 |
-| `addDigits(d1, d2)`, a table of cases | the nine cases, and the step each has learned                 |
+| `addDigits(d1, d2)`, a table of cases | the ten cases, and the step each has learned                  |
 | `getDigit(num, pos)`                  | the world presenting the next column                          |
 | the `carry` parameter                 | `carry`, shown while teaching and expected afterwards         |
 | recursion over `pos`                  | the frame: each request is one of the same cases              |
-| the base case: no digits, no carry    | the frame in which nothing is asked, so nothing runs          |
+| the base case: no digits left         | `end` beside the request, answered by the last carry or a `0` |
