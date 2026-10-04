@@ -1670,7 +1670,10 @@ nothing needs it in advance.
 > activation at a time is as deep as it is long, and a tree of equal halves is as deep as the logarithm of what
 > it covers. On a layout of `B` positions with one event dimension, a single frame holds at most `B` base
 > activations (D8), so a stack built within one frame is at most `B − 1` deep, and far shallower wherever
-> children join. MNIST's 28×28 frame is this case, and about a fifth of it is ever active.
+> children join. MNIST's 28×28 frame is this case, and about a fifth of it is ever active. **It does not hold
+> for a bid over neurons that one earlier bid fired together**, a child and the value neurons beside it: they
+> stand for the same ground, and a level built over them adds height and no extent
+> ([algorithm-evaluation.md](algorithm-evaluation.md)).
 
 > **T13 — Depth is bounded by what has recurred.** A function is added only on a relation counted at least twice
 > in its owner's history (D33), so a child exists only for a chunk that came round twice within `H` of its
@@ -1681,7 +1684,8 @@ nothing needs it in advance.
 > round. On input that repeats exactly, it grows with the run, a level each time round, and nothing caps it.
 > What it does not do is widen the reach out of proportion: a deep chain sees twice what it stands for (D4), not
 > two to the power of its level. A variable loosens "the same stretch" to "the same function, with any value",
-> which is what it is for; the value neuron above it is specific again.
+> which is what it is for; the value neuron above it is specific again. The bound rests on T12, and fails
+> where T12 does.
 
 **What contraction builds.** Each surviving bid contributes one neuron above. The reduction is set by the data,
 not the topology: a neighborhood the patterns describe well collapses hard; one full of surprise barely

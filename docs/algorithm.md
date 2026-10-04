@@ -520,9 +520,11 @@ residual. Every price in the design (D13) is counted off them.
 > coverage(p, O)  =  log₂ n · the neighbors of O that p covers, and the activation where nothing was credited it first
 > price(p, O)     =  a neuron + which pattern                          its owner, and which of its patterns
 >                 +  which member, per variable                        what each variable it carries held
->                 +  failed · log₂ |p|                               which of its neighbors did not hold
+>                 +  failed · log₂ |p|                                 which of the things it names did not hold
 > saving(p, O)    =  coverage(p, O)  −  price(p, O)
 > ```
+> `|p|` is the count of what the bid names: a function's neighbors and the positions of the variables it carries,
+> or a lone variable's positions.
 > What a pattern names holds or fails: a neighbor fails when its neuron is absent, and a variable fails at each
 > position where what stands differs from its value, the member at most of its positions (D41). A member is paid
 > once however many positions its variable has, so its first position saves `log₂ n − log₂|K|` and every further one
@@ -533,8 +535,10 @@ residual. Every price in the design (D13) is counted off them.
 >
 > **A variable's part** is what it saves wherever it holds, alone or inside a function, the call left out:
 > ```
-> part(x, O)      =  log₂ n · the neighbors of O that x holds  −  which member  −  failed · log₂ |p|
+> part(x, O)      =  log₂ n · the neighbors of O that x holds  −  which member  −  failed · log₂ |x|
 > ```
+> `|x|` is the variable's own positions, whether or not a function names it: its part does not change with the
+> function it stands in.
 >
 > **This is the only valuation in the design**, and it is read over two different sets — the neuron's own
 > activations (D30, D28) and the machine's board (R22, R24) — so the two numbers differ, and are meant to.
@@ -698,10 +702,10 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 > variable's value, and each is decided on its own, since the member is paid once however many positions hold
 > it:
 > ```
-> δ is a position when   count(δ) · log₂ n   >   (uses − count(δ)) · log₂ |p|   +   an offset
+> δ is a position when   count(δ) · log₂ n   >   (uses − count(δ)) · log₂ |x|   +   an offset
 > ```
-> An offset that comes to repeat the value joins, and one that stops leaves. For a variable, `|p|` counts its
-> positions.
+> An offset that comes to repeat the value joins, and one that stops leaves. `|x|` counts the variable's own
+> positions (D22).
 >
 > A variable of one position that gains a second has become a parameter, and one that loses all but one carries
 > on as a class, with the members that still pay there. A variable left with one position and one member is an
@@ -1694,7 +1698,7 @@ definitions through one small job.
 | Case | File | What it shows |
 |---|---|---|
 | Alternation | [algorithm-xy.md](algorithm-xy.md) | A neuron that keeps seeing a different pair of letters holds two parameters and one function that names both: its child is the alternation, one neuron for every pair, and the value neurons beside it say which pair. |
-| Addition | [algorithm-addition.md](algorithm-addition.md) | A step per case, and a carry that is an action nothing outside the machine sees, fed back weak and read by the next step. |
+| Addition | [algorithm-addition.md](algorithm-addition.md) | A request with each column, a neuron for each case that can be asked, a step per case, and a carry the world shows while it teaches and the machine expects afterwards. |
 | Copy | [algorithm-copy.md](algorithm-copy.md) | Shown a digit and asked, the machine writes it: a class in the ask's table gives each digit a value neuron, each value neuron learns the action that writes its digit, and the written digit is expected before it is reported. Crossing from what is seen to what is done is ten learned connections. |
 | Hit | [algorithm-hit.md](algorithm-hit.md) | Offsets from where the world reports something approaching as the reference frame, a parameter that takes whatever comes, a value neuron and a lesson per thing, and a thing never seen answered by the habit of the event the world reports in common. |
 | MNIST | [algorithm-mnist.md](algorithm-mnist.md) | An image channel with two spatial dimensions and a binary pixel dimension, 256 buckets or three channels for color later; patches at the base, odd shapes closed on the frontier, a digit action taught by demonstration. |
