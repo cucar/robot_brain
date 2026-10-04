@@ -98,10 +98,10 @@ next.
 Had the columns been mixed from the first lesson, the digits beside `add` would have varied before any case
 recurred, and variables are built first (D33): `add`'s table would hold a variable for each digit and for the
 carry, and one function over them. What fires then is one child for every column, with a value neuron for each
-digit beside it, and no neuron for the column as a whole. The answer digit depends on the three taken together,
-so no one of those value neurons has a lesson of its own to learn. What that needs is open
-([algorithm-evaluation.md](algorithm-evaluation.md)). Taught a case at a time, the machine has a neuron per
-case, and the question does not arise.
+digit beside it. A neuron for the column as a whole still forms, above them: each value neuron's own table names
+what always stands beside it, and a level at a time the values are put back together into one neuron
+([algorithm-evaluation.md](algorithm-evaluation.md)). The machine then learns the same lessons on that neuron,
+several levels up and later. Taught a case at a time, it has a neuron per case at the first level.
 
 # 7. The same algorithm as code
 

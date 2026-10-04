@@ -254,21 +254,24 @@ functions over the rows as the variables rewrite them (D27, D33); an inferred pa
 expects its events, weakly (R30). Seven cases are worked by hand on it ([algorithm.md](algorithm.md), Part V).
 What is still open, in the order it bites:
 
-- **Values under one function are relabeled, level after level.** A function over two or more variables fires
-  its child with a value neuron per variable beside it (D45). The child sees those value neurons vary at offset
-  zero, so its own table builds variables over them and a function over those, which fires the same shape one
-  level up; and so on, a level for as long as the case keeps occurring. Nothing multiplies on the way, so
-  recurrence does not stop it, and the depth bounds do not hold for it (T12, T13). The alternating pair has this
-  shape. What should stand above a set of value neurons, a neuron for their combination or nothing, is not
-  decided. **Diagnostic:** levels whose activations cover only neurons fired together by one bid.
-- **A lesson that depends on values together.** Where several variables hold under one function, each value
-  neuron learns what followed it, and the vote adds their tendencies. That is right where the answer follows a
-  majority of them, and it says nothing where the answer depends only on the combination, as the answer digit
-  of a sum does: each value alone is followed by either digit equally. The value neurons would agree on one
-  step if the steps were specific to a combination, but the vote is counted on base actions, where that
-  agreement is lost (R36), and the positions the steps would name are variables again (D27). The addition case
-  ([algorithm-addition.md](algorithm-addition.md)) is taught one case at a time and so has a neuron per
-  combination; taught mixed it would not.
+- **Values under one function are put back together above, a level at a time.** A function over two or more
+  variables fires its child with a value neuron per variable beside it (D45), and at the next level each of
+  them bids. The child sees the value neurons vary, so its table builds variables over them and a function over
+  those: the same shape again, relabeled. A value neuron sees the child beside it every time, so its own table
+  names the child outright and holds the other value neurons as variables: one variable fewer, a cheaper bid,
+  and it wins the election (R24). Each level so settles one more value, and after about as many levels as there
+  were variables one neuron stands for the combination, alone, and the stack ends there. Two things are not
+  established. The child fires on every occurrence and a value neuron only on its own, so the child's table
+  forms first, and for a stretch its relabeling bid is the only one: levels get built that stop firing once the
+  value neurons' functions exist, and how many, and what clears them, has not been worked out. And where two
+  value neurons' bids tie, their functions share a child (R43), which blurs what that child stands for.
+  **Diagnostic:** levels built over neurons that one bid fired together, how many levels it takes to reach one
+  neuron, and how many of the neurons built on the way still fire.
+- **A lesson that depends on values together waits for that neuron.** Until the combination has a neuron of its
+  own, the separate value neurons vote. That is right where the answer follows a majority of them, and it says
+  nothing where the answer depends only on the combination, as the answer digit of a sum does. The addition
+  case ([algorithm-addition.md](algorithm-addition.md)) is taught one case at a time and has a neuron per
+  combination from the first level; taught mixed it gets one several levels up, and later.
 - **Depth on input that repeats.** A stretch that repeats exactly gains a level each time round, with a neuron
   per level, and nothing caps it (T13). The reach stays in proportion, twice the span (D4), so what grows is the
   count of neurons and the height of the stack, not how far they see. **Diagnostic:** the highest level reached
