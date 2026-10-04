@@ -62,9 +62,8 @@ thing are written as `approaching`, which of its patterns, and one member, a cho
 
 **How `T` came to be.** Whatever came at the body stood in `approaching`'s residual at `(0, +2)` and, a frame
 earlier, at `(0, +4)`: a pair of offsets that hold one and the same neuron in each neighborhood, whatever it
-was (D47). The variable's collapse made them one parameter, `T` (D27). A thing that comes often enough can also
-earn a function of its own, with that thing fixed at both offsets, once the choice it stops writing pays for
-the line (D30); when the thing turns rare and its function retires, it is written through `T` again.
+was (D47). The variable's collapse made them one parameter, `T` (D27). No function names a thing at those
+offsets: once `T` holds them they are `T`'s, and a thing that comes often is `T`'s value neuron for it (D27).
 
 **The habit.** Before `T` existed, `approaching` stood uncovered while things came and `hit` ran, so it holds a
 connection of its own: after `approaching`, `hit`, with what those hits earned. Once `T` holds, `approaching`

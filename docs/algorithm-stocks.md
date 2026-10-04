@@ -26,7 +26,7 @@ frame it closed in the most.
 
 | What stands | its reach | what forms |
 |---|---|---|
-| a bar's move | 1 | A move sees the move before. The owner with its one cell is the relation (D47); recurring pairs of moves get a function and a child. |
+| a bar's move | 1 | A move sees the move before. The owner with its one neighbor is the relation (D47); recurring pairs of moves get a function and a child. |
 | a pair of bars | 2 | A pair child sees the frontier two bars back: other children and the bars nothing covered. A run of three bars forms as a pair beside the bar it left out (D5). |
 | a longer shape | twice what it spans (D4) | Longer shapes, and shapes across instruments: a child in one channel standing beside a child in another at offset zero. |
 

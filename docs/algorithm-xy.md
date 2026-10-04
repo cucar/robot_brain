@@ -30,8 +30,8 @@ P:  (1 back, 3 back)        Q:  (2 back, 4 back)
 
 `P` says that one back and three back hold the same letter, and `Q` the same for two and four back (D38). Each
 writes two letters as one member, and its members are the letters that have stood at both its offsets; neither
-keeps a list of the pairs. They form as soon as
-alternating pairs have come round twice, the same pair or two different ones.
+keeps a list of the pairs. They form as soon as alternating pairs have come round twice, the same pair or two
+different ones.
 
 # 3. The function over them
 
@@ -40,7 +40,7 @@ every row, which is a relation between two variables, and the collapse grows it 
 
 | Question | Answer |
 |---|---|
-| Does any letter pay as a fixed cell? | No. Over all the rows, no letter stands at any offset often enough. |
+| Is anything left for the function to name as a neighbor? | No. `P` and `Q` hold all four offsets, and a position a variable holds is that variable's (D27). |
 | Which variables hold in those rows? | `P`, over one and three back; `Q`, over two and four back. |
 | So what does the function name? | The two parameters, and nothing else. |
 
@@ -51,44 +51,30 @@ alternation:  P, Q
 The function fixes no letter. It says that `P` and `Q` held together, which is the alternation, whatever the
 pair was.
 
-# 4. A function per recurring pair
+# 4. The recurring pairs
 
-Three pairs recur. In the rows of `x, y` the same letters stand at all four offsets every time, and there a
-fixed cell saves more on each than a parameter does, since a parameter pays for which member on every occurrence.
-So on those rows the pick also builds a function with four fixed cells, which takes the cells from `P` and `Q`
-there (D27):
-
-| in `p`'s table | fixed cells | its child |
-|---|---|---|
-| for `x, y` | `(y, 1 back)`, `(x, 2 back)`, `(y, 3 back)`, `(x, 4 back)` | `XY` |
-| for `a, b` | `(b, 1 back)`, `(a, 2 back)`, `(b, 3 back)`, `(a, 4 back)` | `AB` |
-| for `m, n` | `(n, 1 back)`, `(m, 2 back)`, `(n, 3 back)`, `(m, 4 back)` | `MN` |
-
-Each is taken once its pair has recurred enough that the two members it stops writing pay for its line (D30).
-The pairs seen once are covered by `alternation`.
+Three pairs recur, and they are written by the same function as every other pair. Once `P` and `Q` hold those
+offsets, the letters there are theirs, and no function fixes a letter in their place (D27). What is particular
+to a recurring pair is already on the level above: `x, y` fires `alternation` with `P:y` and `Q:x` beside it,
+the same three neurons every time, and a function there over the three is that pair as one neuron.
 
 # 5. The price
 
-Say the machine holds thirty-two neurons, so a neuron costs 5 bits; `P` and `Q` each hold eight letters as members,
-so which member costs 3; and `p` holds six patterns, `P`, `Q`, `alternation`, `XY`, `AB` and `MN`, so which of them
-costs `log₂ 6`, about 2.6 (D13).
+Say the machine holds thirty-two neurons, so a neuron costs 5 bits; `P` and `Q` each hold eight letters as
+members, so which member costs 3; and `p` holds three patterns, `P`, `Q` and `alternation`, so which of them
+costs `log₂ 3`, about 1.6 (D13).
 
 | written as | bits |
 |---|---|
-| a once-seen pair, flat: `p` and four letters | 5 × 5 = 25 |
-| by `P` alone, the other two letters flat: `p`, which pattern, one member, two letters | 5 + 2.6 + 3 + 5 + 5 = 20.6 |
-| by `alternation`: `p`, which pattern, and two members | 5 + 2.6 + 3 + 3 = 13.6 |
-| a recurring pair, by its own function: `p` and which pattern | 5 + 2.6 = 7.6 |
+| a pair, flat: `p` and four letters | 5 × 5 = 25 |
+| by `P` alone, the other two letters flat: `p`, which pattern, one member, two letters | 5 + 1.6 + 3 + 5 + 5 = 19.6 |
+| by `alternation`: `p`, which pattern, and two members | 5 + 1.6 + 3 + 3 = 12.6 |
 
-A second parameter bidding alone does not pay here: it would write `p` and which pattern again, 10.6 bits, for
-two letters worth 10. So without the function a once-seen pair costs 20.6 bits, and `alternation` saves 7 on
-every one (D30). Its line is two references, which pattern each, 5.2 bits, so it pays at its first occurrence.
-Each parameter's line, an offset per position and a neuron per member, `2 · 2 + 8 · 5 = 44` bits, is paid once,
-and a letter new to `P` joins the first time it passes, since standing at both offsets pays for its entry
-(D27). A recurring pair's own function saves a further 6 bits on each occurrence, the two members, for a line
-of four fixed cells, `4 · (5 + 2) = 28` bits, so it is built once its pair has come round five times within the
-history. `XY`, `AB` and `MN` stand while their pairs are frequent; when one becomes rare its function retires
-(R18) and `alternation` writes that pair too, with nothing to learn first.
+A second parameter bidding alone would write `p` and which pattern again, 9.6 bits, for two letters worth 10,
+so it barely pays. Without the function a pair costs about 19.6 bits, and `alternation` saves 7 on every one
+(D30). Its line is two references, which pattern each, 3.2 bits, so it pays at its first occurrence. Each
+parameter's line, an offset per position and a neuron per member, `2 · 2 + 8 · 5 = 44` bits, is paid once, and
+a letter new to `P` joins the first time it passes, since standing at both offsets pays for its entry (D27).
 
 # 6. The return and the election
 
@@ -103,15 +89,15 @@ Nothing has a neuron yet. The first time the bid is accepted the machine gives t
 
 | Stage | what happens |
 |---|---|
-| `process functions`, in `p` | No function with fixed cells fits. `P` holds `t` at one and three back and `Q` holds `s` at two and four, so `alternation` holds. `p` sends one bid: the function, with `P = t` and `Q = s`. |
-| the election | The bid covers `p` and the four letters, 25 bits, for a price of 13.6, and is accepted. |
+| `process functions`, in `p` | `P` holds `t` at one and three back and `Q` holds `s` at two and four, so `alternation` holds. `p` sends one bid: the function, with `P = t` and `Q = s`. |
+| the election | The bid covers `p` and the four letters, 25 bits, for a price of 12.6, and is accepted. |
 | activate children | One level up, at `p`'s coordinate: `alternation`, `P:t` and `Q:s` (§7.4). |
 
 The level above reads three neurons at one coordinate: which function ran, and what it was given. Nothing about
 `s` or `t` had to be learned first: each joined its parameter in this row, and only their value neurons are new.
 
 `s, t, u, t, p` does not fit fully: `P` holds `t` at both its offsets, but `Q` holds `s` at two back and `u` at
-four back. `Q`'s value is the nearer, `s`, and four back is a failed cell (D41, D22).
+four back. `Q`'s value is the nearer, `s`, and four back is a failed neighbor (D41, D22).
 
 # 8. What the one child buys
 
@@ -125,9 +111,9 @@ where that matters, by a function over `alternation` and `P:t` together.
 
 | in the code | in the machine |
 |---|---|
-| three copies of one block with different names in them | `XY`, `AB` and `MN` in `p`'s table |
+| three copies of one block with different names in them | `x, y, x, y`, `a, b, a, b` and `m, n, m, n` in the stream |
 | noticing they are one block with two names that vary | four offsets that agree in pairs: the two parameter relations |
 | the parameters | `P` and `Q`, in `p`'s table |
 | the extracted function | `alternation`, a function that names `P` and `Q`, held once in `p`'s table |
 | a call with its arguments | `alternation` firing, with `P:t` and `Q:s` beside it |
-| keeping the hot path inlined | `XY` staying in the table while `x, y` is frequent |
+| keeping the hot path inlined | a function one level up over `alternation`, `P:y` and `Q:x`, while `x, y` is frequent |

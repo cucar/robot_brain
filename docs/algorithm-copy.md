@@ -26,25 +26,25 @@ what was shown.
 |---|---|
 | base events | `ask`, and the ten digits |
 | base actions | `write-0` to `write-9` |
-| the asked digits | ten functions in `ask`'s table, each with one fixed cell, a digit beside it; their children `asked-0` to `asked-9` |
-| the steps | ten functions, one in the table of each write, each with one fixed cell: its `asked` child a frame before; their children `wrote-0` to `wrote-9` |
-| the echoes | ten functions, one in the table of each digit, each with one fixed cell: its `wrote` child a frame before |
+| the asked digit | a variable in `ask`'s table, a class of one position beside it whose members are the digits; its value neurons `ask:0` to `ask:9` (D41, D45) |
+| the steps | ten functions, one in the table of each write, each with one neighbor: its digit's value neuron a frame before; their children `wrote-0` to `wrote-9` |
+| the echoes | ten functions, one in the table of each digit, each with one neighbor: its `wrote` child a frame before |
 
 # 3. How it was learned
 
-1. **The ask and the digit become one neuron.** `ask` sees the digit beside it, at offset zero (D26). A bid
-   covers its bidder (D31), so a function in `ask`'s table with the one fixed cell `(7, beside)` writes two
-   activations as one call. Each digit that is asked often enough gets one, and its child `asked-7` fires at
-   `ask`'s coordinate. A digit asked too seldom to pay for a line of its own is held by a class at that offset
-   instead, and what fires for it is the class's value neuron for that digit (D41, D45). Either way one neuron
-   per digit stands there: this digit, asked.
-2. **The situation learns the write.** In the taught frames `write-7` ran one frame after `asked-7` and was
-   rewarded. `asked-7` was open and uncovered, so it connected to `write-7` at offset one, with the reward
+1. **The ask and the digit become one neuron.** `ask` sees a digit beside it, at offset zero (D26), and a
+   different one each time. An offset that varies is what a variable is seeded on (D47), so `ask`'s table holds
+   one there: a class whose members are the digits (D41). A bid covers its bidder (D31), so where the class
+   holds, `ask` and the digit are written as one call, and the class's value neuron for that digit, `ask:7`,
+   fires at `ask`'s coordinate (D45). No function names a digit there: the position is the variable's (D27). One
+   neuron per digit stands on the apex: this digit, asked.
+2. **The situation learns the write.** In the taught frames `write-7` ran one frame after `ask:7` and was
+   rewarded. `ask:7` was open and uncovered, so it connected to `write-7` at offset one, with the reward
    (R31). That connection is the crossing from the event to the action, and there are ten of them, each learned
    from its own digit's lessons.
-3. **The write gets its step.** In `write-7`'s history `asked-7` stands one back in every row, so its table
-   holds the function `(asked-7, one back)`, and its child `wrote-7` fires at `write-7`'s coordinate, covering
-   both. From then on `asked-7` is covered in the frame the write runs, and in that frame it connects to
+3. **The write gets its step.** In `write-7`'s history `ask:7` stands one back in every row, so its table
+   holds the function `(ask:7, one back)`, and its child `wrote-7` fires at `write-7`'s coordinate, covering
+   both. From then on `ask:7` is covered in the frame the write runs, and in that frame it connects to
    `wrote-7`, the neuron that covered it, with that frame's reward (D10). So it goes on learning what writing a
    `7` earns.
 4. **The digit gets its echo.** The frame after, the world shows the `7` that was written. In `7`'s history
@@ -55,18 +55,18 @@ what was shown.
 
 | Frame | input | on the apex | what happens |
 |---|---|---|---|
-| 1 | `7`, `ask` | `asked-7` | `asked-7` infers `wrote-7` one frame ahead; expanded, that is `write-7`, which is output (R36, R28) |
-| 2 | `write-7` reported as run | `wrote-7`, over `asked-7` and `write-7` | `wrote-7` infers the echo; expanded, that is a `7` at frame 3, expected |
+| 1 | `7`, `ask` | `ask:7` | `ask:7` infers `wrote-7` one frame ahead; expanded, that is `write-7`, which is output (R36, R28) |
+| 2 | `write-7` reported as run | `wrote-7`, over `ask:7` and `write-7` | `wrote-7` infers the echo; expanded, that is a `7` at frame 3, expected |
 | 3 | `7` | the echo's child, over `wrote-7` and the `7` | the `7` was already there, weak, when the world reported it |
 
-In frame 1 `asked-7` reads its connection at offset one and places `wrote-7` at frame 2. Expanding `wrote-7`
-places its bidder, `write-7`, at frame 2, and its one cell, `asked-7`, at frame 1, where it stands (R28).
+In frame 1 `ask:7` reads its connection at offset one and places `wrote-7` at frame 2. Expanding `wrote-7`
+places its bidder, `write-7`, at frame 2, and its one neighbor, `ask:7`, at frame 1, where it stands (R28).
 `write-7` is a base action at the frame ahead, so it is output. In frame 2 the world reports it as run,
 `write-7`'s function holds, and `wrote-7` fires strong. It infers the echo's child one frame ahead, whose
 expansion places a `7` at frame 3: a base event, so it fires there weakly, as what the write is expected to
 bring (R30, D40). In frame 3 the world shows the `7`, and the report replaces the expectation.
 
-Show a `3` instead and a different neuron stands in frame 1, `asked-3`, with a connection of its own to
+Show a `3` instead and a different neuron stands in frame 1, `ask:3`, with a connection of its own to
 `write-3`. Nothing carries the digit across: each digit's write was learned from that digit's own lessons, and a
 digit never asked before has no connection yet. That is the difference between this case and a parameter, which
 carries whatever stands in it: a parameter holds an event as an event, and only a connection reaches from an
@@ -76,8 +76,8 @@ event to an action.
 
 | in the code | in the machine |
 |---|---|
-| `switch (digit)` | which `asked` neuron stands on the apex |
-| `case 7: write(7)` | `asked-7`'s connection to `write-7`, and to `wrote-7` once the step exists |
+| `switch (digit)` | which of the class's value neurons stands on the apex |
+| `case 7: write(7)` | `ask:7`'s connection to `write-7`, and to `wrote-7` once the step exists |
 | the ten cases | ten connections, each learned from its own lessons |
 | the return value appearing on the screen | the `7` the world shows in frame 3 |
 | knowing what the call will print | the echo, expected a frame before it is reported |

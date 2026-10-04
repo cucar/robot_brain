@@ -98,7 +98,7 @@ compression side is where to look.
 
 **The frontier need not thin.** A cover of `m` functions promotes up to `m` children at one coordinate (D8, D28),
 and every variable a bid carries adds a value neuron beside them (D45), so the frontier above an activation can
-hold more neurons than the cells the bid covered. Nothing caps `m`; what bounds it is that each extra child is
+hold more neurons than the neighbors the bid covered. Nothing caps `m`; what bounds it is that each extra child is
 another line and another call, and the election stops buying the moment one does not pay. The compression is in
 what the frontier costs to write, not in how many activations stand on it (T11). The reach does not rest on
 thinning (D4), so what this costs is the size of the neighborhoods above: a neighborhood is the frontier within
@@ -166,7 +166,7 @@ is absent, that can drop the pattern out of a cover, and the smaller population 
 The claim is that on stationary input this is flicker around a fixed point, confined to boundary neighbors, with an
 amplitude that does not grow with run length — a claim about noise, which nothing in the rules proves. **This is
 the standing test.** Per pattern per bill: neighbor flips against the neighbor's distance from the boundary,
-`count · worth − (s − count) · log₂ cells − reference` (D27), and cover changes per bill for the cascade. Expected: flips concentrated within a step or
+`count · worth − (s − count) · log₂ |p| − reference` (D27), and cover changes per bill for the cascade. Expected: flips concentrated within a step or
 two of the boundary, at a rate that settles once the ring is full and does not drift. A flip rate that rises with
 run length, or flips far from the boundary, is the churn engine and a bug. Early tests are also decided by very
 little evidence, so read the same numbers over the first thousand frames and again in steady state.
@@ -244,7 +244,7 @@ it, so the reaches summed up the stack bound a condition rather than counting ou
 base names events and actions together (D5), and there is one kind of connection (D25). A pattern is of one of
 two kinds, a function or a variable (D38). A variable is one or more positions holding one and the same neuron,
 with the members that have paid to stand in it: a class at one position, a parameter at several. A function is
-its fixed cells and the variables of its table that it names: classes are its local variables and parameters
+the neighbors it names and the variables of its table that it names: classes are its local variables and parameters
 its arguments. Every level
 is explained as a set of function calls with their arguments: an accepted bid is a call, a function's child
 with one value neuron per variable beside it, or a lone variable's value neuron, all at the bidder's coordinate
@@ -263,7 +263,7 @@ What is still open, in the order it bites:
   is pruned, a table as entries come and go, a variable with its members. So a pattern can cross zero with no
   change in its rows. **Diagnostic:** retirements whose cause was a change in an alphabet alone.
 - **Every relation is tried in every call.** Keeping the relations counted (D47) costs `c²` per row entering or
-  leaving for the relations within a row, `c` its cells, and `c · d` for the offsets that vary, `d ≤ H` the
+  leaving for the relations within a row, `c` its neighbors, and `c · d` for the offsets that vary, `d ≤ H` the
   distinct neurons seen at an offset. Each relation tried costs a collapse over its uses, `O(H · c)`, and the
   greedy pick tries every one in every call (D33). How to try fewer without passing over one that would pay is
   open.
@@ -274,10 +274,10 @@ What is still open, in the order it bites:
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
   that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
   bids cover mostly the same activations, per level.
-- **Membership lags.** A variable fits only a member (D38); a non-member at its positions is a failed cell, and
-  it joins when it pays for its entry (D27): after it has recurred, at one position, and usually on first sight
-  at several, though not where a few members hold most of the uses. Until then a new variant is written with
-  failed cells. **Diagnostic:** occurrences of a function written with a variable's failed cells, per variable,
+- **Membership lags.** A variable fits only a member (D38); a non-member at its positions is a failed neighbor, and
+  it joins when it pays for its entry (D27): after it has recurred, at one position, and usually on first sight at
+  several, though not where a few members hold most of the uses. Until then a new variant is written with failed
+  neighbors. **Diagnostic:** occurrences of a function written with a variable's failed neighbors, per variable,
   split by its number of positions.
 - **A variable's two tests run once per call.** Its members decide its uses and its uses decide its positions
   (D27), and each call runs the member test and then the position test once. Nothing shows that the two settle
@@ -296,11 +296,11 @@ What is still open, in the order it bites:
 - **Loops have no member.** A constant repeat is unrolled, and nothing can say "down, three times". A run-length
   neighbor would be decided like any other and would pay in the file; a repeat whose count depends on the world
   stays with the frame.
-- **Connections fan out over the apex.** R31 connects every uncovered activation to everything on the apex of
-  every frame it is open through, which on a dense layout with little compression is every cell. It has not been
-  measured. Limiting connections to the highest levels, or to apex activations above the base, is the fallback,
-  and it is not decided. An expected event that recreates the situation that inferred it is a loop with no
-  world in it, and nothing breaks it but reward.
+- **Connections fan out over the apex.** R31 connects every uncovered activation to everything on the apex of every
+  frame it is open through, which on a dense layout with little compression is every point of the layout. It has
+  not been measured. Limiting connections to the highest levels, or to apex activations above the base, is the
+  fallback, and it is not decided. An expected event that recreates the situation that inferred it is a loop with
+  no world in it, and nothing breaks it but reward.
 - **Crossing kinds.** A parameter holds an event as an event. "Write the digit you see" needs the action that
   corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. The
   write case ([algorithm-copy.md](algorithm-copy.md)) learns that connection once per digit, from each digit's
@@ -315,7 +315,7 @@ What is still open, in the order it bites:
 
 **Neighborhood size above the base.** A neighborhood is the frontier within reach (D5), and the reach is twice
 the neuron's span (D4). Among neighbors of about its own size that is a handful in each direction; among finer
-ones it is many, and the alphabet a cell is chosen from grows as neurons are created. Nothing holds `|O|` fixed.
+ones it is many, and the alphabet a neighbor is chosen from grows as neurons are created. Nothing holds `|O|` fixed.
 **Diagnostic:** neighbors per activation, against span.
 
 **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering makes
