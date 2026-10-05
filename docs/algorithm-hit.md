@@ -21,9 +21,10 @@ straight ahead of the body, `turn-left` and `turn-right`.
 
 # 2. What stands under them
 
-What stands under `approaching`, `ball` and `fist` is stated, not drawn: each is taken to reach four steps (D4),
-and within that reach they are each other's neighbors on the frontier (D5). Offsets are bucketed by powers of
-two (D6), so the distances that matter here are `2` and `4`.
+The field declares a radius of `4` in each of its two spatial dimensions and `1` in time (D1), so `approaching`,
+`ball` and `fist`, base events all, see four steps in every direction and one frame back (D4), and within that
+reach they are each other's neighbors on the frontier (D5). Within the radius every distance is exact (D6); the
+distances this case uses are `2` and `4`.
 
 # 3. The neurons
 
@@ -111,7 +112,8 @@ answers exactly once per new thing.
 That costs a parameter per direction. A ball coming from the left gives `(−2, 0)` and `(−4, 0)`, which is `T′`,
 and `T′:ball` has learned the step that turns left. After the turn the ball is ahead, `T:ball` fires, and `hit`
 follows. The frame of reference is never transformed: the body turns, the field is reported again, and the
-machine subtracts again. D6's bucketing is what keeps the directions and distances to a handful.
+machine subtracts again. The radius is what keeps the directions and distances to a handful: four steps each
+way, exact, and nothing beyond (D1, D6).
 
 A thing never seen that comes from the side is answered by the same habit, and `approaching` has seen hits and
 turns follow it alike, so it says whichever has paid best. Where that is wrong the reward says so, the new value

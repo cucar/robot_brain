@@ -12,8 +12,10 @@ a carry that the world shows while it teaches and the machine expects afterwards
 
 **In.** Each frame the world presents one column of the sum, the two numbers read from the right: the event
 `add`, which is the request, the digit of the first number in event dimension `a`, and the digit of the second
-in event dimension `b`. Each digit dimension has two buckets, `0` and `1`. When the numbers run out the world
-fires `add` once more with the event `end` beside it in place of digits, asking for the last digit.
+in event dimension `b`. Each digit dimension has two buckets, `0` and `1`. Every dimension is laid out over
+time alone, with radius `R = 1` (D1): a neuron at the base sees the frame before it, which is all this case
+needs. When the numbers run out the world fires `add` once more with the event `end` beside it in place of
+digits, asking for the last digit.
 
 **Out.** One action dimension, `out`, with two base actions, `out-0` and `out-1`. What runs there, in the frame
 after a request, is the next digit of the result, from the right.

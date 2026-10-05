@@ -36,7 +36,7 @@ This substitution is the whole mechanism for compression.
 
 | Loss      | Description                                                                                                                                       | Reference |
 |-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
-| placement | An offset is kept to one significant digit in base 2, so a far neighbor is placed only to within the power of two it rounds to.                   | D6        |
+| placement | An offset is exact within the radius its dimension declares and beyond it kept to one significant digit in base 2, so a far neighbor is placed only to within the group it rounds to. | D1, D6    |
 | evidence  | A neuron decides its structure over its last `H` activations and the history slides, so the structure that would restate a frame long past is neither held nor recoverable. | D18       |
 
 Both losses are why the file is a yardstick and not an artifact (D12). Imagine the run written out under the
@@ -90,6 +90,13 @@ infers (§8). The reward for that action arrives with the next frame (R29).
 > one more. Which kind a dimension is follows from the side of the input it sits on: the input is *laid out
 > over* its activation dimensions and *reports* its neuron dimensions at each point of that layout.
 >
+> **Each activation dimension is declared with its radius `R`**, a count of positions, `1` or more: how far a
+> base neuron sees in it (D4), and the unit in which every distance in it is written (D6). It is the resolution
+> of the layout, as the bucket count is the resolution of what is reported on it, and like the bucket count it
+> states the problem: an image whose pixel is to be told from the next declares `R = 1` in `x` and `y`; a stream
+> in which the fourth frame back matters as exactly as the first declares `R = 4` in time. Where this document
+> writes a distance with no radius given, `R = 1`.
+>
 > **A channel declares its neighborhood policy**: whether its base actions are neighbors of its events (D5). A
 > channel whose actions do not move its events, a price and the decision to hold it, declares that they are not,
 > and its patterns name events alone; every other channel lets a body name both.
@@ -137,31 +144,37 @@ what the dictionary writes is a pattern.
 
 ## 3.2 Space
 
-> **D4 — Reach.** The farthest a neuron sees, either way, in each activation dimension (D1). It is **1** at the
-> base, and for a higher neuron **twice its span** in that dimension:
+> **D4 — Reach.** The farthest a neuron sees, either way, in each activation dimension (D1). It is **the
+> radius `R`** of that dimension at the base, and for a higher neuron **twice its span**, in units of `R`:
 > ```
 > span(base neuron)     =   0
 > span(higher neuron)   =   the largest, over the activations the bid it was created for covered,
 >                           of that activation's distance from the bidder plus its own neuron's span
-> reach                 =   2 · span,   and 1 where the span is 0               per activation dimension
+> reach                 =   2 · span · R,   and R where the span is 0           per activation dimension
 > ```
 > The span is how far the farthest base activation under the neuron lies from the neuron's own coordinate, and
 > twice that is room for as much again: a neuron that joins two equal halves doubles its reach, and one that adds
-> a frame to a long chunk adds two. **The level plays no part in it** (D2): a child one letter longer than its
-> parent stands a level higher and sees two frames further, not twice as far. The reach is a bound, not a
-> distance: a neuron sees every distance up to it, bucketed by powers of two (D6). `reach_t` is this reach in the
-> time dimension, the neuron's window.
+> a frame to a long chunk adds `2R`. A base neuron sees `R` positions, and a pair sees `2R`, twice what either
+> letter did. **The level plays no part in it** (D2): a child one letter longer than its
+> parent stands a level higher and sees `2R` frames further, not twice as far. The reach is a bound, not a
+> distance: a neuron sees every distance up to it, exact within `R` and bucketed by powers of two beyond (D6).
+> `reach_t` is this reach in the time dimension, the neuron's window.
 
 > **D6 — Offsets.** The offset between two activations is the difference of their coordinates, one component per
-> activation dimension they share (D1, D2), each with its magnitude **rounded down to a power of two**:
+> activation dimension they share (D1, D2), each written in units of that dimension's radius `R` (D1): **exact
+> within `R`, and beyond it rounded down to a power of two times `R`**:
 > ```
-> offset(x)   =   sign(x) · 2^floor(log2 |x|)          x ≠ 0
+> offset(x)   =   x                                          |x| ≤ R
+> offset(x)   =   sign(x) · R · 2^floor(log2 (|x| / R))      |x| > R
 > offset(0)   =   0
 > ```
-> So 5 and 7 become 4, and −13 becomes −8. The reachable offsets are `0, ±1, ±2, ±4, ±8, …` up to the largest
-> power of two not above the reach, and the last group is cut off at the reach: a reach of 38 names 1, 2, 4, 8,
-> 16 and 32, the last standing for 32 through 38. A reach of `r` gives `⌊log₂ r⌋ + 2` offsets in time, zero and
-> the past, and `2⌊log₂ r⌋ + 3` in any other dimension.
+> At `R = 1`, 5 and 7 become 4, and −13 becomes −8; at `R = 4`, 3 stays 3, 5 and 7 become 4, and −13 becomes −8.
+> The reachable offsets are `0`, every distance up to `±R`, then `±2R, ±4R, ±8R, …` up to the largest not above
+> the reach, and the last group is cut off at the reach: at `R = 1` a reach of 38 names 1, 2, 4, 8, 16 and 32, the
+> last standing for 32 through 38; at `R = 4` it names 1, 2, 3, 4, 8, 16 and 32. A reach of `r` gives
+> `R + ⌊log₂ (r / R)⌋ + 1` offsets in time, zero and the past, and `2R + 2⌊log₂ (r / R)⌋ + 1` in any other
+> dimension; at `R = 1` those are `⌊log₂ r⌋ + 2` and `2⌊log₂ r⌋ + 3`. Within the radius nothing is lost; beyond
+> it, distance is kept to one significant digit, in units of `R`.
 
 > **D5 — Adjacency.** Two activations are adjacent when **the second stands on the apex (R27) as the first
 > fires, within reach in every activation dimension they share** (D4), **and the second is not later than the
@@ -195,8 +208,8 @@ what the dictionary writes is a pattern.
 > O = { (i, −1) }                                        text stream:  time
 > O = { (k, 0, −1, 0), (k, 0, +1, 0), (m, 0, 0, −1) }    image stream:  time, x and y
 > ```
-> the first could be for a neuron `s` in a stream reading `p a r i s`: at the base the reach is 1 (D4), so `i` is its one
-> neighbor and `p a r` are out of reach.
+> the first could be for a neuron `s` in a stream reading `p a r i s`: at the base the reach is the radius, here
+> 1 (D4), so `i` is its one neighbor and `p a r` are out of reach.
 >
 > **A neighborhood is the frame around the fired neuron**, since adjacency admits nothing later (D5), and every
 > structural decision is made on it. The activation itself is not in it: its own instance is what a pattern
@@ -331,8 +344,9 @@ assumes for anything the file does not state.
 > a base symbol             log₂ B                                   among the B base neurons the machine declares (D1):
 >                                                                    every bucket of every event and action dimension
 > a neuron, named in a line log₂ n                                   among the n neurons the machine holds
-> an offset                 Σ over its dimensions  log₂ b            b the buckets of that dimension at the owner's reach r (D6):
->                                                                    ⌊log₂ r⌋ + 2 in time and 2⌊log₂ r⌋ + 3 in any other
+> an offset                 Σ over its dimensions  log₂ b            b the buckets of that dimension at the owner's reach r and
+>                                                                    its radius R (D6): R + ⌊log₂ (r / R)⌋ + 1 in time and
+>                                                                    2R + 2⌊log₂ (r / R)⌋ + 1 in any other
 > which pattern             log₂ |patterns|                          which of the owner's patterns, of any kind
 > which member              log₂ |K|                                 among the members of the variable K
 > which combination         log₂ |C|                                 among the combinations the class has stored (D41)
@@ -479,11 +493,11 @@ value neuron.
 > offset from the activation the pattern stands on (D26), and variables. A variable names positions, offsets whose
 > neuron is left open, and is a class or a parameter:
 >
-> | Kind | Fixed | Open | Covers | Written once, in the table | Left open on each occurrence |
-> |------|-------|------|--------|----------------------------|------------------------------|
-> | a function | the neighbors it names, and which variables it names | what its variables hold | its neighbors, and what stands at its variables' positions | a neuron and an offset per neighbor, and which pattern per variable | what each variable held |
-> | a class (D41) | its positions, one or more, and its members | which member at each position | what stands at its positions | an offset per position, a neuron per member, and the combinations it has stored | which combination, `log₂|C|` |
-> | a parameter (D44) | its positions, two or more | which neuron, the same at all of them | what stands at its positions | an offset per position, and a neuron per member | which member, `log₂|K|` |
+> | Kind | Fixed | Open | Covers | Written once, in the table | Left open on each occurrence    |
+> |------|-------|------|--------|----------------------------|---------------------------------|
+> | a function | the neighbors it names, and which variables it names | what its variables hold | its neighbors, and what stands at its variables' positions | a neuron and an offset per neighbor, and which pattern per variable | what each variable held         |
+> | a class (D41) | its positions, one or more, and its members | which member at each position | what stands at its positions | an offset per position, a neuron per member, and the combinations it has stored | which combination, `log₂ \|C\|` |
+> | a parameter (D44) | its positions, two or more | which neuron, the same at all of them | what stands at its positions | an offset per position, and a neuron per member | which member, `log₂ \|K\|`      |
 >
 > A function says which neurons and where, and which of its owner's variables stand around them. A class says
 > where, and which set each neuron is from. A parameter says where, and that the neuron is the same at all of them.
@@ -666,10 +680,12 @@ Part IV covers the `process actions` call, where a neuron learns what action fol
 >
 > **Every activation is recorded, covered or not.** An arriving activation evicts the oldest, and only then.
 
-> **R4 — `H` is the only free parameter.** The alphabet (D1) states the problem and is not a knob. The reach
-> (D4), adjacency (D5) and the offsets (D6) are derived, not declared; the `n` every price reads is the
-> machine's count of its neurons (D13). **No rule introduces a constant, a
-> threshold, a window or a cap of its own.**
+> **R4 — `H` and the radii are the only free parameters.** The alphabet (D1) states the problem and is not a
+> knob, and the radius `R` of each activation dimension is declared beside it (D1): it is the resolution of the
+> layout, and it states the problem too. `H` is the one parameter of the algorithm itself. The reach (D4),
+> adjacency (D5) and the offsets (D6) are derived from the radii, not declared; the `n` every price reads is the
+> machine's count of its neurons (D13). **No rule introduces a constant, a threshold, a window or a cap of its
+> own.**
 
 ## 5.4 The relations and the collapse
 
@@ -1462,8 +1478,9 @@ stop the writing — there is no second call and nothing is saved twice.
 >
 > **One activation connects to the apex of every frame it is open through, and one strong apex activation is
 > connected to by every uncovered activation open when it stood.** The offset is the age — the distance from the frame the
-> activation opened to the frame the call ran — rounded as every offset is (D6), so a neuron open at ages 1, 2
-> and 3 holds the same neuron at two offsets, `1` and `2`, and the exposure at age 3 strengthens the second.
+> activation opened to the frame the call ran — rounded as every offset is (D6), so at `R = 1` a neuron open at
+> ages 1, 2 and 3 holds the same neuron at two offsets, `1` and `2`, and the exposure at age 3 strengthens the
+> second; at `R = 4` it holds it at three.
 > **A coarse offset takes one exposure per frame of its group**, so the outer offsets pool the apexes of many
 > frames, each at its own strength, as a coarse offset carries several neighbors (D6). A neuron that stood twice
 > inside one group over one activation is two exposures: each frame has its own reward, and the connection keeps
@@ -1473,7 +1490,7 @@ stop the writing — there is no second call and nothing is saved twice.
 > back at the age from which that offset places a completion one frame ahead (R28, R36), so what a replay earns
 > lands on the connection it was learned from. Fan-out is the apex: a neuron connects to what stood uncovered
 > in the frames after it and to nothing beneath that, and one exposure per apex activation per frame means a
-> neuron of reach `r` holds at most `⌊log₂ r⌋ + 1` offsets per neuron it has seen.
+> neuron of reach `r` holds at most `R + ⌊log₂ (r / R)⌋` offsets per neuron it has seen.
 >
 > **Making and strengthening are one operation.** A neuron's connection at `(neuron, offset)` has a
 > **strength**, the number of its exposures — the times an activation of the neuron saw that neuron on the apex
@@ -1564,9 +1581,9 @@ stop the writing — there is no second call and nothing is saved twice.
 > P placed at f+4:    P's line, in b's table, is {(C, −2)},
 >                     C's line, in c's table, is {(d, −1)}                  → b at f+4, c at f+2, d at f+1
 > ```
-> **A coarse offset expands to its rounded coordinate.** A neighbor named at `sign · 2^g` is placed at exactly
-> that distance whatever distance in the group it fired at, and several neighbors at one coarse offset (D6) are
-> each placed there. **The rounding composes.** Each step down adds its own group's slack, so a neuron
+> **A coarse offset expands to its rounded coordinate.** A neighbor named within the radius is placed where it
+> fired. One named at `sign · R · 2^g` is placed at exactly that distance whatever distance in the group it
+> fired at, and several neighbors at one coarse offset (D6) are each placed there. **The rounding composes.** Each step down adds its own group's slack, so a neuron
 > places the base symbols of its farthest neighbors to within the sum of the groups along the path: the longer
 > its span, the coarser its far placements. That is the loss the file carries (§1), and expansion reports it
 > faithfully rather than hiding it.
@@ -1764,7 +1781,7 @@ definitions through one small job.
 
 | Case | File | What it shows |
 |---|---|---|
-| Alternation | [algorithm-xy.md](algorithm-xy.md) | A neuron that keeps seeing a different pair of letters holds two parameters and one function that names both: its child is the alternation, one neuron for every pair, and the value neurons beside it say which pair. |
+| Alternation | [algorithm-xy.md](algorithm-xy.md) | A stream at radius 4. A neuron that keeps seeing a different pair of letters holds two parameters and one function that names both, learned from the pairs that go by once: its child is the alternation, one neuron for every such pair, and the value neurons beside it say which pair. A pair that comes often is chunked by its own letters first, and stands in a class instead. |
 | Addition | [algorithm-addition.md](algorithm-addition.md) | A request with each column, a neuron for each case that can be asked, a step per case, and a carry the world shows while it teaches and the machine expects afterwards. |
 | Copy | [algorithm-copy.md](algorithm-copy.md) | Shown a digit and asked, the machine writes it: a class in the ask's table gives each digit a value neuron, each value neuron learns the action that writes its digit, and the written digit is expected before it is reported. Crossing from what is seen to what is done is ten learned connections. |
 | Hit | [algorithm-hit.md](algorithm-hit.md) | Offsets from where the world reports something approaching as the reference frame, a parameter that takes whatever comes, a value neuron and a lesson per thing, and a thing never seen answered by the habit of the event the world reports in common. |

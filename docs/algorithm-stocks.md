@@ -8,7 +8,8 @@ through what a price neuron sees, what forms over frames, and how a position com
 
 # 1. The environment
 
-**In.** One channel per instrument, laid out over time alone. Each declares one event dimension, `move`, whose
+**In.** One channel per instrument, laid out over time alone, with radius `R = 1` (D1): a bar sees the bar
+before it. Each declares one event dimension, `move`, whose
 buckets are the bar's return quantized at the channel's resolution: a handful of buckets from a sharp fall to a
 sharp rise. One frame is one bar. Channels share only time, so a neuron of one instrument sees the frontier of
 another within reach in time (D5), and a pattern may name both.

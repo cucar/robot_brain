@@ -8,7 +8,8 @@ how the frontier closes the shapes the levels leave open, and how the digit is t
 
 # 1. The environment
 
-**In.** One channel, `image`, laid out over two spatial activation dimensions, `x` and `y`, and time. It
+**In.** One channel, `image`, laid out over two spatial activation dimensions, `x` and `y`, and time, each
+with radius `1` (D1): a pixel sees the pixels beside it, and nothing further needs to be exact. It
 declares one event dimension, `pixel`, with two buckets, ink and no ink. A pixel with no ink reports nothing:
 there is no rest value (D10), so a blank region costs nothing and holds no activation. Each image is one frame,
 and consecutive images are unrelated.

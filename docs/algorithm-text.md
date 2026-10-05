@@ -8,12 +8,14 @@ only the letter before it, to the level at which a word stands as one neuron.
 
 # 1. The environment
 
-One channel, `text`, laid out over time alone. It declares one event dimension, `letter`, with a bucket per
-letter and one for the space. One frame is one letter. There is no action dimension: this machine reads.
+One channel, `text`, laid out over time alone, with radius `R = 1` (D1): a letter sees the letter before it
+and nothing further. It declares one event dimension, `letter`, with a bucket per letter and one for the space.
+One frame is one letter. There is no action dimension: this machine reads.
 
 # 2. The base: one letter back
 
-At the base the reach is 1 (D4), so a letter's neighborhood is one neighbor, the letter before it. A row of one
+At the base the reach is the radius, here 1 (D4), so a letter's neighborhood is one neighbor, the letter before
+it. A row of one
 neighbor carries two relations (D47): the owner with that one neighbor, and, across rows, the different letters
 that have stood there.
 
@@ -41,6 +43,10 @@ A word of any length forms this way: a letter at a time, one level per letter, o
 of two long, because a stranded letter is never stranded; it is on the frontier, and whatever fires next within
 reach can name it. And a long word does not see far for standing high: `strengths`, built a letter at a time,
 stands eight levels up, spans eight frames and sees sixteen back.
+
+The radius sets how much of this happens at the base. At `R = 4` a letter sees four letters back, each at its
+own offset (D6), so a word of up to five letters is one function in its last letter's table and one level up,
+and the chain above starts from there; [algorithm-xy.md](algorithm-xy.md) is a stream declared that way.
 
 # 4. A doubled letter
 

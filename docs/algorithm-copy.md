@@ -11,7 +11,7 @@ crossing is learned, one connection per digit, and what the action brings is exp
 # 1. The environment
 
 **In.** A digit is shown in event dimension `d`, ten buckets, `0` to `9`. Beside it, in event dimension `cue`,
-the world may fire `ask`: write this digit.
+the world may fire `ask`: write this digit. Both are laid out over time alone, with radius `R = 1` (D1).
 
 **Out.** One action dimension, `write`, with ten base actions, `write-0` to `write-9`. A write that runs
 produces its digit: in the frame after `write-7` runs, the world shows a `7` in `d`.
