@@ -31,7 +31,7 @@ digit and negative when it did not.
 | a stroke, a part | twice what it spans (D4) | Strokes join into parts of digits, and parts into a digit's whole shape, each a level above the highest thing it covers (D2). |
 
 Variables form where the shapes vary. An offset where different children have stood, the end of a stroke that
-curves either way, is a class (D41); the same patch at two offsets, a symmetric digit, is a parameter (D41).
+curves either way, is a class (D41); the same patch at two offsets, a symmetric digit, is a parameter (D44).
 Time offsets recur in nothing, since the images are unrelated, so no pattern comes to name one: a part of the
 previous image is a neighbor like any other, and it never pays.
 

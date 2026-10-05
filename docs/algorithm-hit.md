@@ -30,7 +30,7 @@ two (D6), so the distances that matter here are `2` and `4`.
 | Kind | Neurons |
 |---|---|
 | events | `approaching`, `ball`, `fist`, and whatever else the field holds |
-| parameters | `T`, `T′` and `T″`, in `approaching`'s table: variables of two positions, the same thing at both, one per direction (D41) |
+| parameters | `T`, `T′` and `T″`, in `approaching`'s table: two positions that hold one and the same thing, one per direction (D44) |
 | value neurons | `T:ball`, `T:fist` and so on: one per parameter and thing it has held (D45) |
 | base actions | `hit`, `turn-left`, `turn-right` |
 | the steps | in the table of each base action, what stood a frame before it: a function for a value neuron that comes often, a class for the rest |
@@ -62,7 +62,7 @@ thing are written as `approaching`, which of its patterns, and one member, a cho
 
 **How `T` came to be.** Whatever came at the body stood in `approaching`'s residual at `(0, +2)` and, a frame
 earlier, at `(0, +4)`: a pair of offsets that hold one and the same neuron in each neighborhood, whatever it
-was (D47). The variable's collapse made them one parameter, `T` (D27). No function names a thing at those
+was (D47). The parameter's collapse made them one parameter, `T` (D27). No function names a thing at those
 offsets: once `T` holds them they are `T`'s, and a thing that comes often is `T`'s value neuron for it (D27).
 
 **The habit.** Before `T` existed, `approaching` stood uncovered while things came and `hit` ran, so it holds a
@@ -95,8 +95,9 @@ hits. No coordinate ever reached the pattern (D11), so where they are costs noth
 
 # 7. A thing never seen
 
-A rock comes from ahead. It stands at both of `T`'s positions, which is enough to pay for its entry, so it
-joins `T` on the spot (D27), and the machine gives it a value neuron, `T:rock` (R44). `T:rock` has never fired
+A rock comes from ahead. It stands at both of `T`'s positions, and for a parameter that is the whole test, so it
+is `T`'s value on the spot and a member from then on (D27), and the machine gives it a value neuron, `T:rock`
+(R44). `T:rock` has never fired
 and holds no connection, so it has nothing to infer. Where a neuron on the apex has nothing to say, what it
 covers speaks in its place (R36): `approaching` is under it, and `approaching`'s habit says `hit`. The rock is
 hit, the hit is rewarded, and `T:rock`, open and uncovered a frame later, connects to `hit` with that reward.
@@ -125,5 +126,5 @@ neuron's estimate for it turns negative, and the walk tries the next action (R37
 | a feature at a location | a neighbor, `(neuron, offset)` |
 | the same object at any place in the world | one pattern, since no coordinate is part of a neuron (D11) |
 | any object at that location | a class at the offset (D41) |
-| the same object at two locations | one parameter over two offsets (D41) |
+| the same object at two locations | one parameter over two offsets (D44) |
 | what to do about it | the value neuron's connection to a step, which names no location at all |

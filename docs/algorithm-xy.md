@@ -22,16 +22,16 @@ offsets are written as plain frame counts.
 Every activation of `p` recorded the four letters before it (D7). The greedy pick builds variables first (D33).
 In every row, whatever the pair, one back and three back hold one neuron, and so do two back and four back. A
 pair of offsets that agree is a relation a variable is seeded on (D47), and each is grown by its own collapse
-and kept on its own uses (D27). A variable over several positions is called a parameter (D41):
+and kept on its own uses (D27). Positions that hold one and the same neuron are a parameter (D44):
 
 ```
 P:  (1 back, 3 back)        Q:  (2 back, 4 back)
 ```
 
 `P` says that one back and three back hold the same letter, and `Q` the same for two and four back (D38). Each
-writes two letters as one member, and its members are the letters that have stood at both its offsets; neither
-keeps a list of the pairs. They form as soon as alternating pairs have come round twice, the same pair or two
-different ones.
+writes two letters as one member, and its members are the letters that have stood at both its offsets, a record of
+what has passed and no condition on what may; neither keeps a list of the pairs. They form as soon as alternating
+pairs have come round twice, the same pair or two different ones.
 
 # 3. The function over them
 
@@ -60,21 +60,26 @@ the same three neurons every time, and a function there over the three is that p
 
 # 5. The price
 
-Say the machine holds thirty-two neurons, so a neuron costs 5 bits; `P` and `Q` each hold eight letters as
-members, so which member costs 3; and `p` holds three patterns, `P`, `Q` and `alternation`, so which of them
-costs `log₂ 3`, about 1.6 (D13).
+Say the base alphabet has thirty-two symbols, so a letter costs 5 bits to write, and say `p` cost 5 as well.
+`P` and `Q` each hold eight letters as members, so which member costs 3; and `p` holds three patterns, `P`, `Q`
+and `alternation`, so which of them costs `log₂ 3`, about 1.6 (D13).
 
 | written as | bits |
 |---|---|
-| a pair, flat: `p` and four letters | 5 × 5 = 25 |
+| a pair, flat: `p` and four letters, each at what it cost | 5 × 5 = 25 |
 | by `P` alone, the other two letters flat: `p`, which pattern, one member, two letters | 5 + 1.6 + 3 + 5 + 5 = 19.6 |
 | by `alternation`: `p`, which pattern, and two members | 5 + 1.6 + 3 + 3 = 12.6 |
 
-A second parameter bidding alone would write `p` and which pattern again, 9.6 bits, for two letters worth 10,
-so it barely pays. Without the function a pair costs about 19.6 bits, and `alternation` saves 7 on every one
-(D30). Its line is two references, which pattern each, 3.2 bits, so it pays at its first occurrence. Each
-parameter's line, an offset per position and a neuron per member, `2 · 2 + 8 · 5 = 44` bits, is paid once, and
-a letter new to `P` joins the first time it passes, since standing at both offsets pays for its entry (D27).
+A second parameter bidding alone would write `p` and which pattern again, 9.6 bits, for two letters that cost
+10, so it barely pays. Without the function a pair costs about 19.6 bits, and `alternation` saves 7 on every one
+(D30). Its line is two references, which pattern each, 3.2 bits, so it pays at its first occurrence. A
+parameter's line is an offset per position and a neuron per member, and naming a neuron in a line is a choice
+among every neuron the machine holds: with two hundred and fifty-six of them, `2 · 2 + 8 · 8 = 68` bits, paid
+once. A letter new to `P` is its value the first time it passes, since agreeing at both offsets is the whole
+test (D27), and is a member from then on.
+
+What the call fires stands on the frontier at what it cost to write: `alternation` at 6.6 bits, the owner and
+which pattern, and `P:t` and `Q:s` at 3 bits each. Whatever covers them later saves that and no more (D13).
 
 # 6. The return and the election
 
@@ -97,7 +102,7 @@ The level above reads three neurons at one coordinate: which function ran, and w
 `s` or `t` had to be learned first: each joined its parameter in this row, and only their value neurons are new.
 
 `s, t, u, t, p` does not fit fully: `P` holds `t` at both its offsets, but `Q` holds `s` at two back and `u` at
-four back. `Q`'s value is the nearer, `s`, and four back is a failed neighbor (D41, D22).
+four back. `Q`'s value is the nearer, `s`, and four back is a failed neighbor (D44, D22).
 
 # 8. What the one child buys
 

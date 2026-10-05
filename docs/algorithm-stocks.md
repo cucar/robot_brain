@@ -31,7 +31,7 @@ frame it closed in the most.
 | a longer shape | twice what it spans (D4) | Longer shapes, and shapes across instruments: a child in one channel standing beside a child in another at offset zero. |
 
 Variables form where the shapes vary. An offset where moves of different size have stood is a class, "a fall of
-any size here" (D41); the same bucket at two offsets, a move that repeats, is a parameter (D41). Since no pattern
+any size here" (D41); the same bucket at two offsets, a move that repeats, is a parameter (D44). Since no pattern
 names an action, the dictionary describes the market and nothing the machine did.
 
 # 3. Taking a position

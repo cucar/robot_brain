@@ -47,7 +47,7 @@ stands eight levels up, spans eight frames and sees sixteen back.
 `ll`, `oo` and `ss` are first pairs like any other: the second `l` sees the first one back, a neuron being its
 own neighbor at any offset but zero (D26), and `l` is a member of the class before `l`. A doubled letter as
 such is caught a level up, in the table of a child that sees two frames back: where the two frames before it
-hold one and the same letter in row after row, whatever the letter, that is a parameter (D41), found by its own
+hold one and the same letter in row after row, whatever the letter, that is a parameter (D44), found by its own
 collapse (D27). Its value neuron carries which letter was doubled.
 
 # 5. What the frontier holds after a sentence

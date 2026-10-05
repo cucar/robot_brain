@@ -23,8 +23,8 @@ for reward.** Instrument both and plot them against each other. If they move tog
 mechanically. If they do not, the coupling between compression and reward is where to look, and it is the
 assumption everything else rests on.
 
-The standing metric is **apex neurons per level per frame, paired with the dictionary size that bought them**.
-It should fall with exposure on recurring data: early structure is provisional, re-centering consolidates it,
+The standing metric is **what the apex costs to write per frame (D14), paired with the dictionary size that bought
+it**. It should fall with exposure on recurring data: early structure is provisional, re-centering consolidates it,
 and R18 takes what is left.
 
 ---
@@ -207,13 +207,13 @@ says nothing about the slack on real frames, and since apex-neurons-per-frame is
 real structure are conflated in it. **Diagnostic:** solve one small window exactly (ILP) and compare, which
 locates the realized slack inside the `H(n)` ceiling.
 
-**The composition gap.** Both scopes price in one currency against their level's reading of the file (D14), and the
-neuron's prices and the machine's are meant to differ (D22). What remains is that candidates are *generated*
-locally: a demand no neuron proposes is a symbol the election never gets to consider, and no neuron proposes one
-whose value lies in what it would let a *different* neuron stop paying for. Distinct from election slack, which
-measures the election against a perfect election over the same bids; this measures propose-then-elect against
-optimizing dictionary and frames together. **Diagnostic:** over a short run on one small level, compare the file
-this design writes against the file a joint optimization over the same activations produces. That gap decides
+**The composition gap.** Both scopes price in one currency against the file (D14), and the neuron's sum and the
+machine's are taken over different sets and are meant to differ (D22). What remains is that candidates are
+*generated* locally: a demand no neuron proposes is a symbol the election never gets to consider, and no neuron
+proposes one whose value lies in what it would let a *different* neuron stop paying for. Distinct from election
+slack, which measures the election against a perfect election over the same bids; this measures propose-then-elect
+against optimizing dictionary and frames together. **Diagnostic:** over a short run on one small level, compare the
+file this design writes against the file a joint optimization over the same activations produces. That gap decides
 whether contraction should stay purely a buyer or start supplying candidates back into the tables it covered. The
 constituents of one chunk each build their own line for it; where those lines tie on the board they now share one
 child (R43), and where they are only near each other they still do not, which is where a constructive variant would
@@ -242,44 +242,51 @@ it, so the reaches summed up the stack bound a condition rather than counting ou
 
 **Patterns and variables (D37–D47) — what stands between the model and an implementation.** A pattern above the
 base names events and actions together (D5), and there is one kind of connection (D25). A pattern is of one of
-two kinds, a function or a variable (D38). A variable is one or more positions holding one and the same neuron,
-with the members that have paid to stand in it: a class at one position, a parameter at several. A function is
-the neighbors it names and the variables of its table that it names: classes are its local variables and parameters
-its arguments. Every level
-is explained as a set of function calls with their arguments: an accepted bid is a call, a function's child
-with one value neuron per variable beside it, or a lone variable's value neuron, all at the bidder's coordinate
-(§7.1, D45). Every bid covers its bidder (D31). Base actions take no arguments and act at a focus the
-environment holds; the variables are built first, each by its own collapse and priced on its own uses, and the
-functions over the rows as the variables rewrite them (D27, D33); an inferred pattern runs its actions and
-expects its events, weakly (R30). Seven cases are worked by hand on it ([algorithm.md](algorithm.md), Part V).
-What is still open, in the order it bites:
+two kinds, a function or a variable (D38). A variable is a set of positions and a set of members, of one of two
+types that mean opposite things: a class says one of its members stands at each position, and a parameter says
+one and the same neuron stands at all of them. A function is the neighbors it names and the variables of its
+table that it names: classes are its local variables and parameters its arguments. Every level is explained as
+a set of function calls with their arguments: an accepted bid is a call, a function's child with one value
+neuron per variable beside it, or a lone variable's value neuron, all at the bidder's coordinate (§7.1, D45).
+Every bid covers its bidder (D31), and every symbol is counted at what it cost to write (D13). Base actions take
+no arguments and act at a focus the environment holds; the variables are built first, each by its own collapse
+and priced on its own uses, and the functions over the rows as the variables rewrite them (D27, D33); an
+inferred pattern runs its actions and expects its events, weakly (R30). Seven cases are worked by hand on it
+([algorithm.md](algorithm.md), Part V). What is still open, in the order it bites:
 
-- **Values under one function are put back together above, a level at a time.** A function over two or more
-  variables fires its child with a value neuron per variable beside it (D45), and at the next level each of
-  them bids. The child sees the value neurons vary, so its table builds variables over them and a function over
-  those: the same shape again, relabeled. A value neuron sees the child beside it every time, so its own table
-  names the child outright and holds the other value neurons as variables: one variable fewer, a cheaper bid,
-  and it wins the election (R24). Each level so settles one more value, and after about as many levels as there
-  were variables one neuron stands for the combination, alone, and the stack ends there. Two things are not
-  established. The child fires on every occurrence and a value neuron only on its own, so the child's table
-  forms first, and for a stretch its relabeling bid is the only one: levels get built that stop firing once the
-  value neurons' functions exist, and how many, and what clears them, has not been worked out. And where two
-  value neurons' bids tie, their functions share a child (R43), which blurs what that child stands for.
-  **Diagnostic:** levels built over neurons that one bid fired together, how many levels it takes to reach one
-  neuron, and how many of the neurons built on the way still fire.
-- **A lesson that depends on values together waits for that neuron.** Until the combination has a neuron of its
-  own, the separate value neurons vote. That is right where the answer follows a majority of them, and it says
-  nothing where the answer depends only on the combination, as the answer digit of a sum does. The addition
-  case ([algorithm-addition.md](algorithm-addition.md)) is taught one case at a time and has a neuron per
-  combination from the first level; taught mixed it gets one several levels up, and later.
+- **The worked cases have not been re-priced.** Every symbol is now counted at what it cost to write, a base
+  symbol among the base alphabet and anything above it at what its bid wrote (D13). The cases were traced for
+  whether each pattern still pays, and each does, but only the alternating pair carries numbers. What the new
+  prices do to how soon a pattern forms is not measured: a table line names neurons among all the machine
+  holds, and an occurrence now saves only what its neighbors cost, so a pattern needs more repetitions within
+  the history than it did. **Diagnostic:** occurrences a pattern needed before it was added, against the size
+  of the history.
+- **Values under one function, above.** A function over two or more variables fires its child with a value
+  neuron per variable beside it (D45). A level that only renamed them would cover what it writes and save
+  nothing, so it is not built (D13). What can pay is a function in a value neuron's own table that names what
+  always stands beside it. Whether, and how fast, the separate value neurons are put back together into one
+  neuron that way has not been traced under these prices.
+- **A lesson that depends on values together.** Where several variables hold under one function, each value
+  neuron learns what followed it, and the vote adds their tendencies. That is right where the answer follows a
+  majority of them, and it says nothing where the answer depends only on the combination, as the answer digit
+  of a sum does. There the value neurons each infer the patterns that have covered them, and the one that fits
+  them all is left, since an inference that contradicts what stands proposes nothing (R36). That has been
+  reasoned on the addition case taught mixed and not run. Taught one case at a time
+  ([algorithm-addition.md](algorithm-addition.md)), the machine has a neuron per combination from the first
+  level.
+- **A class's combinations.** A class over several positions stores each combination that stands and gives it a
+  value neuron (D41). Their number is bounded by what occurs within the history, and a combination no row holds
+  is dropped, but between those a class with many members at several positions can hold many. **Diagnostic:**
+  combinations stored per class against its uses.
 - **Depth on input that repeats.** A stretch that repeats exactly gains a level each time round, with a neuron
   per level, and nothing caps it (T13). The reach stays in proportion, twice the span (D4), so what grows is the
   count of neurons and the height of the stack, not how far they see. **Diagnostic:** the highest level reached
   per frame against run length; it should rise and flatten on input that varies, and rise with the run only
   where the input repeats.
-- **Prices move.** Every price is `log₂` of an alphabet (D13), and the alphabets move: `n` as the level fills and
-  is pruned, a table as entries come and go, a variable with its members. So a pattern can cross zero with no
-  change in its rows. **Diagnostic:** retirements whose cause was a change in an alphabet alone.
+- **Prices move.** Every price is `log₂` of an alphabet (D13), and the alphabets move: `n` as the machine fills and
+  is pruned, a table as entries come and go, a variable with its members. A neighbor is counted at what it cost
+  when it stood, which is kept with it, so the same neuron can stand in two rows at two costs. So a pattern can
+  cross zero with no change in its rows. **Diagnostic:** retirements whose cause was a change in an alphabet alone.
 - **Every relation is tried in every call.** Keeping the relations counted (D47) costs `c²` per row entering or
   leaving for the relations within a row, `c` its neighbors, and `c · d` for the offsets that vary, `d ≤ H` the
   distinct neurons seen at an offset. Each relation tried costs a collapse over its uses, `O(H · c)`, and the
@@ -292,14 +299,13 @@ What is still open, in the order it bites:
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
   that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
   bids cover mostly the same activations, per level.
-- **Membership lags.** A variable fits only a member (D38); a non-member at its positions is a failed neighbor, and
-  it joins when it pays for its entry (D27): after it has recurred, at one position, and usually on first sight at
-  several, though not where a few members hold most of the uses. Until then a new variant is written with failed
-  neighbors. **Diagnostic:** occurrences of a function written with a variable's failed neighbors, per variable,
-  split by its number of positions.
-- **A variable's two tests run once per call.** Its members decide its uses and its uses decide its positions
+- **Membership lags.** A class fits only a member (D41); a non-member at its position is a failed neighbor, and it
+  joins when it has recurred enough to pay for its entry (D27). Until then a new variant is written with failed
+  neighbors. A parameter has no such lag: whatever stands at all its positions is its value. **Diagnostic:**
+  occurrences of a function written with a class's failed neighbors, per class.
+- **A class's two tests run once per call.** Its members decide its uses and its uses decide its positions
   (D27), and each call runs the member test and then the position test once. Nothing shows that the two settle
-  rather than trade places from call to call. **Diagnostic:** member and position changes per variable per call
+  rather than trade places from call to call. **Diagnostic:** member and position changes per class per call
   on stationary input; they should die out.
 - **Reach bounds what a parameter can carry.** A parameter binds from offsets within its owner's reach (D4). A
   value needed from further back than that is out of sight, and a value carried forward is carried only as far
@@ -327,7 +333,7 @@ What is still open, in the order it bites:
   and has not been worked through against "one call per dimension per frame".
 - **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
   member fires (H2, H5). Under D41 a class is a variable with no neuron of its own, and what fires is a value
-  neuron for the member that stood (D45), so the moment has to be restated.
+  neuron for what stood in it (D45), so the moment has to be restated.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
   base actions that move it.
 

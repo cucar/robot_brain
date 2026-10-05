@@ -71,9 +71,8 @@ a level-1 pattern names level-1 neighbors only, and `cat` never forms. With the 
 `t`'s own pattern names the `ca` child one frame back, and `cat` is a child one level above the highest thing it
 covered, level 2. A letter added at a time costs a level each; two children joined cost one. Lifting uncovered
 neurons to the level above would have bought the same at the price of a table per level per neuron; nothing is
-lifted here, because nothing needs to be: what is uncovered is simply visible. The price of a neighbor follows: a
-neighbor may be a neuron of any level, so `n` is the machine's count of all its neurons, one alphabet for the
-frontier.
+lifted here, because nothing needs to be: what is uncovered is simply visible. A neighbor may be a neuron of any
+level, and each is counted at what it cost to write (D13).
 
 **On D5 — why adjacency is not declared.** A conjunction over shared activation dimensions already says
 everything a visibility declaration would, and it says it without a table to maintain: what a channel is laid
@@ -192,21 +191,32 @@ nothing was ever going to write it.
 it discharges up to `reach_t + 1` frames of the run at once. That is why a wider reach is worth paying a wider
 line for, and it is why the residual is free and a child is not.
 
-**On D14 — each level its own coder.** A level knows its own tables and nothing below them, so a call is written by
-the level that made it with the narrowed choices its tables allow, and read by the level above as neurons of that
-level, each a regular choice. The two prices of one call differ, and nothing reconciles them: each level saves what
-it can see. It is what lets categories nest. A class at one level is a category, and its value neurons stand one
-level up as ordinary neurons, with nothing marking them as members of anything. A class the level above builds over
-some of them is a sub-category, and a function naming one singles one member out; the level above finds those
-groupings from its own evidence, never from the list below.
+**On D13 — a symbol costs what it took to write.** For a while a covered neuron was credited as a choice among
+every neuron the machine holds, whatever it had cost the level below to write. The two prices of one call were
+allowed to differ, on the argument that each level saves what it can see. That let a level save bits that were
+never spent. A class of two members writes its member in one bit, and its value neuron then stood on the
+frontier as a full neuron; the level above could cover it and count ten bits saved, and the level above that
+could do it again. A class holding everything that could stand at a position looked like the best saving in the
+table, and it narrowed nothing. Counting a symbol at what it cost removes all of that with one rule and no
+special case. A class of everything covers what it writes and saves nothing. A level that renames the one below
+saves nothing. And a class is credited for exactly as much as it narrows, at the base against the base alphabet
+and above it against whatever the symbol was chosen from. Categories still nest: a class the level above builds
+over some of a class's value neurons is a sub-category, and it pays where it leaves some of them out.
+
+**On D13 — why a base symbol is chosen among the whole base alphabet.** The alternative is its own dimension's
+values, and then a dimension with one value costs nothing: a request, a carry, an inked pixel. A symbol that
+costs nothing saves nothing when it is covered, so nothing would ever name it, and those are the symbols a
+situation turns on. Among the whole base alphabet every base symbol costs the same and none costs nothing. It
+is also what the frontier needs said: the frontier is a list of the symbols present, and each has to be picked
+out of everything that could have been listed, its dimension included.
 
 **On D14 — why `L` never appears in the arithmetic.** `L` is what the differences are differences *in*; it is
 the reason the arithmetic is the arithmetic, and it is never a term in it.
 
 > **T1 — The file is a fixed-length code, and its prices move.** Every field costs `log₂` of its alphabet's
 > size however often its value is written (D13). That is not what an entropy coder pays, which prices a value
-> by how often it occurs; and the alphabets themselves grow and shrink over the run: `n` with the level's
-> population, a table with its entries, a variable with its members.
+> by how often it occurs; and the alphabets themselves grow and shrink over the run: `n` with the machine's
+> population, a table with its entries, a variable with its members and a class with its combinations.
 > So one pattern priced now and later can get two answers with no change in its rows, and the evaluation
 > records it.
 >
@@ -272,8 +282,9 @@ its neuron, with the pattern or without it. The design uses the subset form ever
 cover is a set of patterns and only the subset form adds up over one.
 
 **On D22 — why `coverage` counts what turned up rather than what the pattern names.** Take a neuron `x` whose
-pattern names `{a, b, c}` backward, in a frame where `a` and `b` fired, `c` did not, and an unnamed `m` did. A
-neuron costs 8 bits, which of `x`'s four bids 2, and which of the pattern's three neighbors failed about 1.6.
+pattern names `{a, b, c}` backward, in a frame where `a` and `b` fired, `c` did not, and an unnamed `m` did. Say
+each neuron here cost 8 bits to write, which of `x`'s four bids 2, and which of the pattern's three neighbors
+failed about 1.6.
 
 ```
 without the child  state x, a, b, m                                            32 bits
@@ -381,9 +392,9 @@ That is the shortest file available to it, not a failure.
 
 ### One cover, worked
 
-**On D28.** One pass over a table of three. `O` is what this activation saw; `x`, `y`, `z` and `w` are neurons
-the patterns name that did not fire, and each is a failed neighbor its pattern pays for. A neuron costs 8 bits, which
-bid 2, and a failed neighbor of a four-neighbor pattern 2.
+**On D28.** One pass over a table of three. `O` is what this activation saw; `x`, `y`, `z` and `w` are neurons the
+patterns name that did not fire, and each is a failed neighbor its pattern pays for. Say each neuron here cost 8
+bits to write, which bid 2, and a failed neighbor of a four-neighbor pattern 2.
 
 ```
 O = { a b c d e f }
@@ -528,22 +539,24 @@ every decision a descent on the margin, which is what T7 needs, and it removes t
 grow at no gain. At equality naming saves exactly what it costs, and `x` is left out: the collapse is a
 function of its population and of nothing the pattern already names.
 
-**On D27 — a variable's members, worked at one position.** A neuron costs 8 bits. At one back, `a` stood in 5 rows
+**On D27 — a class's members, worked at one position.** Say each neighbor cost 8 bits to write, and naming a
+neuron in a line costs 8 too. At one back, `a` stood in 5 rows
 of the residual, `b` in 4, `c` in 3 and `d` in 1, and the seed is the relation between `a` and `b`. Its uses are
 the residual neighbors at one back holding a member; its candidates are the neurons that stood there in the other rows,
 in order of count.
 
 | class | uses | saves per use | entry | net |
 |---|---|---|---|---|
-| `{a, b}` | 9 | log₂(256/2) = 7 | 2 × 8 = 16 | 63 − 16 = **47** |
-| `{a, b, c}` | 12 | log₂(256/3) ≈ 6.4 | 24 | 77 − 24 = **53**: `c` joins |
-| `{a, b, c, d}` | 13 | log₂(256/4) = 6 | 32 | 78 − 32 = **46**: `d` does not, and the collapse ends |
+| `{a, b}` | 9 | 8 − log₂ 2 = 7 | 2 × 8 = 16 | 63 − 16 = **47** |
+| `{a, b, c}` | 12 | 8 − log₂ 3 ≈ 6.4 | 24 | 77 − 24 = **53**: `c` joins |
+| `{a, b, c, d}` | 13 | 8 − log₂ 4 = 6 | 32 | 78 − 32 = **46**: `d` does not, and the collapse ends |
 
 The class is `{a, b, c}`, with twelve uses, and it claims those twelve neighbors. `d`'s row stays residual. Nothing
 counts against `d` here, since no pattern has claimed the offset: it does not pay its way in. The failure appears
 later, when the class stands at one back and `d` stands there instead.
 
-**On D27 — a variable's positions, worked.** A neuron costs 8 bits and an offset 2. One back and three back
+**On D27 — a parameter's positions, worked.** Say each neighbor cost 8 bits to write, naming a neuron in a line
+costs 8, and an offset 2. One back and three back
 hold one neuron in 10 rows of the residual, with 4 different values among them; five back holds the same value
 in 7 of those rows, and two back in 1.
 
@@ -553,9 +566,8 @@ in 7 of those rows, and two back in 1.
 | five back, 7 of 10 | saves 7 × 8 = 56; costs 3 failures × log₂ 3 ≈ 4.8, and 2 for where | taken, **≈ 153** |
 | two back, 1 of 10 | saves 8; costs 9 failures × log₂ 4 = 18, and 2 | not taken |
 
-The variable spans one, three and five back, with ten uses. A member seen only once pays for itself: its entry
-costs a neuron, and the second offset it fills is saved outright, so copying something never seen before pays as
-long as it is copied at all.
+The parameter spans one, three and five back, with ten uses. A neuron seen only once is its value all the same:
+agreement at its positions is the whole test, and the entry is paid out of the second offset it fills.
 
 **On D27 — why an owned neighbor is skipped, and nothing else is.** An activation is never left out of a question
 the design is asking it; this one it has already answered, for that neighbor, by having the neighbor covered.
@@ -731,23 +743,29 @@ start. The second is what "whatever" and "one of these" needed, and the two stan
 pattern of one position with its neuron left open, a function names it beside its neighbors, and what it held
 reaches the level above as a value neuron beside the function's child (D45).
 
-**On D41 — why a class and a parameter are one kind.** They were two kinds for a while, and their lines were
-already the same: positions, and a neuron for each thing that had stood there. Their occurrences cost the same
-too, a choice among that list. What differed was how many positions, and how a neuron got in: a class admitted
-what had recurred, and a parameter anything that agreed at its offsets. The second difference is the first seen
-through one test. At one position the only evidence that a neuron belongs is that it keeps coming back. At two,
-standing at both in one row is already a recurrence, two neighbors for one entry. So one test, a neuron joins when
-it pays for its entry, admits by recurrence at one position and on first sight at several. Merging them buys
-three things. A set that repeats at several places can be said: the list is the set, and the positions are
-where it repeats. A variable moves between the two without being rebuilt: a class gains a position, a parameter
-loses one. And a parameter's list stops growing for ever: a member that no longer comes round leaves. An earlier
-draft wrote sameness as a mark on a class and gave it up, because a pair never seen then had to wait for its
-letters to join; with admission by price, nothing waits where sameness itself pays.
+**On D41 and D44 — the same structure, opposite meanings.** A class and a parameter hold the same things, a set
+of members and a set of positions, and for a while they were one construct told apart only by how many positions
+it had. That gave "several positions" one meaning, the same neuron at each, and left no way to say that one of
+a set stands at each of several places without it being the same one. They mean opposite things. A class is
+closed on its members and open on how they combine: only a listed neuron fits, and any arrangement of listed
+neurons does. A parameter is open on its members and closed on how they combine: any neuron fits, and only where
+it stands at every position. So the member list is the condition for a class and only a record for a parameter,
+and a thing never seen before is a parameter's value the first time it comes and is no member of any class until
+it has recurred. A class can record everything a parameter covers, since the same neuron at each position is
+one combination among the others, but it cannot mean it: it would turn the new thing away, and it would write a
+choice per position where the parameter writes one.
 
-**On D27 — why the two tests run once each, members first.** The members decide which rows are uses, and the
+**On D41 — why a class's value is the combination.** A class over several positions holds a member at each, and
+what stood has to be said somewhere. One value neuron per position would put several neurons on the frontier for
+one variable, and one per member would lose which stood where. One neuron for the combination says it once, as
+a parameter's value neuron does. Combinations multiply, but only the ones that occur are stored, each as an
+entry that is paid for, and the lesson that holds for every combination has its place already, on the child of
+the function that names the class. The level above would have put the separate members back together anyway.
+
+**On D27 — why a class's two tests run once each, members first.** The members decide which rows are uses, and the
 uses decide the positions, so each test's answer moves the other's question. Running them to a fixed point
 inside a call would be a loop with no bound the design counts (T4). Once each per call, in a fixed order, is
-deterministic, and the variable settles over the calls that follow, as a function's neighbors do under
+deterministic, and the class settles over the calls that follow, as a function's neighbors do under
 re-centering.
 
 **On D41 — variables are found on their own.** A variable is a fact about what stands where: this offset keeps
@@ -820,7 +838,7 @@ are equal, the two value neurons will recur together, and the level above can ma
 variable that holds `x` again fires the same value neuron, so what the level above learns about that variable
 holding `x` accumulates in one place.
 
-**On D41 — carrying a value forward is copying.** A function that names a parameter over an offset now and an
+**On D44 — carrying a value forward is copying.** A function that names a parameter over an offset now and an
 offset two frames on, inferred with no value neuron beside it and expanded, takes the value from what stands
 now and places it two frames later as an expectation. Nothing in the design copies anything else; every value
 that moves forward in time moves this way, and `a => a` is a function of one parameter over two frames.
@@ -849,19 +867,17 @@ neighbors that are left are what the examples agreed on.
 
 **On D13 — why a class costs the choice it leaves open.** A symbol that could be anything carries no information,
 and a class that admits everything should be worth nothing without anyone forbidding it. Pricing a class's
-occurrence at a whole neuron gets that case right by accident and underpays every narrow class: three letters out
-of twenty-six have done real work and would earn nothing. Pricing it at nothing gets the narrow class right and
-lets the everything-class cover the history for free; a two-pixel image collapses into "every neighbor was a pixel"
-in a couple of dozen fields, and no count of members prevents it, since the class is never wrong. The one price
-that gets both right is Shannon's: a class's occurrence costs `log₂|K|` bits, the choice among its members, where
-the neuron costs `log₂ n`, so where it holds it saves `log₂(n / |K|)`, how much narrower it is than the machine.
-The everything-class saves nothing; a class of one is an ordinary neighbor; and the specific pattern rises above
-the general one by exactly the bits it settles. Every field is priced the same way, `log₂` of its own alphabet: a
-neuron among the machine's, an offset among its buckets, a pattern among its table's entries, a member among its
-variable's. That is a fixed-length code with one alphabet per kind of field, not a variable-length one: nothing
-about how often a value occurs enters. `n` is the machine's count of its neurons, which it already keeps as it
-creates and deletes them; every neuron prices against the same number, and so does the election, so the neuron's
-books and the board price a class alike.
+occurrence at the whole of what it covers gets that case right by accident and underpays every narrow class:
+three letters out of twenty-six have done real work and would earn nothing. Pricing it at nothing gets the narrow
+class right and lets the everything-class cover the history for free; a two-pixel image collapses into "every
+neighbor was a pixel" in a couple of dozen fields, and no count of members prevents it, since the class is never
+wrong. The one price that gets both right is Shannon's: a class's occurrence costs the choice it leaves open,
+and what it covers is counted at what that cost to write (D13), so where it holds it saves the difference, how
+much narrower it is than what could have stood there. The everything-class saves nothing; a class of one is an
+ordinary neighbor; and the specific pattern rises above the general one by exactly the bits it settles. Every
+field is priced the same way, `log₂` of its own alphabet: a base symbol among the base alphabet, an offset among
+its buckets, a pattern among its table's entries, a member among its variable's. That is a fixed-length code
+with one alphabet per kind of field, not a variable-length one: nothing about how often a value occurs enters.
 
 **On D27 — what a class saves, and where the line falls.** Against a neighbor a function names, which carries the
 neuron in the function's line, a class leaves which member open on every row. Variables are built first (D33), so a
@@ -871,8 +887,8 @@ member should not pay for a choice on every occurrence. It bought nothing: every
 the choice of which pattern for all the others, so ten members split into ten functions cost what the class cost,
 and the class's value neuron for a member is already the neuron the function's child would have been. A parameter
 spanning several offsets saves a whole neuron at every offset after the first, since its member is paid once, and
-that is the alternation. Nothing about this is a rule about alphabets: in a machine of two neurons every class of
-two is the whole alphabet, saves nothing, and is never built.
+that is the alternation. Nothing about this is a rule about alphabets: where the base alphabet has two symbols,
+a class of both covers one bit and writes one bit, saves nothing, and is never built.
 
 **On D12 — the file keeps the member.** A class's occurrence pays for which member stood, `log₂|K|` bits, so
 the file holds it; a price charged for something the file then dropped would count a file shorter than the one
@@ -897,7 +913,7 @@ more of what the machine has found worth writing down is more likely to matter.
 
 **On D38 — the known mechanisms, and where each lands.** Two functions differing only in the names of their
 parameters are the same term in a programming language; here a parameter has no name to differ in, only the
-offsets it spans, so two functions naming the same offsets name the same parameter (D41). The value is carried by a
+offsets it spans, so two functions naming the same offsets name the same parameter (D44). The value is carried by a
 neuron of the level above, the indirection answer to the binding problem, never learned, which D11 requires;
 synchrony and tensor products are answers for continuous networks and do not fit a machine of discrete symbols.
 And the design has an answer of its own that the literature mostly lacks: the parameter is found by offset.
@@ -916,9 +932,9 @@ distance, and this design is place-addressed, finding it at an offset within rea
 similar things in one context blur into each other, where a parameter here holds one neuron; that is a
 difference in kind, and whether it is an advantage is not shown by anything the design has done yet.
 
-**On D38 — what a class saves.** A class's line costs its offset and a neuron per member, once, and each
-occurrence costs which member, so where it holds it saves `log₂(n / |K|)`, and it pays against the real
-alternative, one function per variant, each with a line of its own and none at all for a variant seen once. It
+**On D38 — what a class saves.** A class's line costs its offset and a neuron per member, once, and each occurrence
+costs which member, so where it holds it saves what the neighbor cost less that choice, and it pays against the
+real alternative, one function per variant, each with a line of its own and none at all for a variant seen once. It
 is born on its own uses (D33), and what stays fixed around it is a function's to say.
 
 **On D38 — how branching works.** There is no branch inside a body. The choice is dispatch: two situations are
@@ -959,8 +975,8 @@ environment that wants a behavior discovered rather than taught has to make its 
 **On §3.5 — the two functions of the loop.** A situation is a function the machine owns: it fires, and what it
 infers is an action, looked up in its connections and chosen by estimate. An action is a function the world
 owns: it is called, and what follows it is the next events. The run is the two composed over and over, and a
-program is a stretch of that alternation that recurs. A learned function is a compression first and a callable
-unit second: only a situation whose window holds its whole length can call it (R36), and below that height the
+program is a stretch of that alternation that recurs. A learned function is a compression first and something
+callable second: only a situation whose window holds its whole length can call it (R36), and below that height the
 same behavior is a chain of one-step lessons, each inferred by the situation the last step created.
 
 **On D37 — where calls come from.** A call the environment executes appears in the frame as an activation of
@@ -1203,9 +1219,9 @@ the neuron's connections so far:  one action connection, (u,+1), at estimate 0
 **Frame 10 — the neuron fires, and everything is decided.** Its neighborhood is `{(a,−2), (b,−1), (g,−1),
 (z,0)}` — whole, because backward is what an activation already has. The bill runs first.
 
-The cover pass runs over the residual, which starts as all four neighbors, and every pattern covers the
-activation itself as well, as every bid does on the board (R22). A neuron costs 8 bits and which of the two
-patterns 1.
+The cover pass runs over the residual, which starts as all four neighbors, and every pattern covers the activation
+itself as well, as every bid does on the board (R22). Say each neuron here cost 8 bits to write and which of the
+two patterns 1.
 
 ```
 K = {a,b}   covers the activation and 2 of the residual     8 · 3 = 24    price 8 + 1       =  9    ratio 2.7
@@ -1361,7 +1377,7 @@ neurons a candidate would take out of the residual and over the neurons a patter
 currency anywhere in the design.
 
 **On R14 — building a candidate, worked through.** Five activations in the ring, an empty table, so every
-neuron of every activation is in the residual. A neuron costs 8 bits and an offset 2, so a neighbor's entry
+neuron of every activation is in the residual. Say each neuron here cost 8 bits to write and an offset 2, so a neighbor's entry
 in the line costs 10; the function will name three neighbors, so a failed neighbor costs `log₂ 3 ≈ 1.6`.
 
 ```

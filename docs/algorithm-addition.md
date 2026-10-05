@@ -97,12 +97,14 @@ next.
 # 6. Taught in another order
 
 Had the columns been mixed from the first lesson, the digits beside `add` would have varied before any case
-recurred, and variables are built first (D33): `add`'s table would hold a variable for each digit and for the
-carry, and one function over them. What fires then is one child for every column, with a value neuron for each
-digit beside it. A neuron for the column as a whole still forms, above them: each value neuron's own table names
-what always stands beside it, and a level at a time the values are put back together into one neuron
-([algorithm-evaluation.md](algorithm-evaluation.md)). The machine then learns the same lessons on that neuron,
-several levels up and later. Taught a case at a time, it has a neuron per case at the first level.
+recurred, and variables are built first (D33): `add`'s table would hold a class for each digit, and one function
+over them. What fires then is one child for every column, with a value neuron for each digit beside it, and no
+neuron for the column as a whole. The cases are then told apart a frame later. Each step, in the answer digit's
+table, names the value neurons that stood one back, and each value neuron infers the steps that have covered
+it. An inferred step that contradicts what stands proposes nothing (R36), so the one step that fits every value
+neuron is the one left, and its digit runs. That route has been reasoned through and not run
+([algorithm-evaluation.md](algorithm-evaluation.md)). Taught a case at a time, the machine has a neuron per case
+at the first level.
 
 # 7. The same algorithm as code
 
