@@ -125,7 +125,7 @@ above has not made.
 **A newly minted child infers little for a while.** Its connections start forming at its first purchase and
 only in the frames it is bought in (R17, D25), so until it has been bought a few times it infers from one or
 two exposures. Until it has any, what it covers speaks in its place (R36), so the situation is answered by its
-parents' habits rather than the default; whether those habits are a good enough first guess for the more
+parents' habits rather than by nothing; whether those habits are a good enough first guess for the more
 specific situation the child names is the question. **Diagnostic:** frames from a child's mint to the first
 time its own inference wins a dimension, against how often it is bought, and how the reward under its parents'
 choices compared with the reward once it chose itself.
@@ -392,7 +392,8 @@ the design does: a connection is a lifetime total on the neuron, strengthened on
 never collapsed, with the estimate the exact running mean and the walk wiring the next untried action on a
 negative mean (R31, R37); and the vote at the base normalizes each voter to one vote per dimension and takes
 actions by the share-weighted mean estimate, with no level in it (R36). What differs beyond the cut: the code
-wires the declared default at birth at strength 1, where R35 lets it run and be learned; the code connects to
+wires a declared default at birth at strength 1 and runs it where nothing infers, where the design has no
+default and outputs nothing there (R35); the code connects to
 base actions instead of the apex (D25), and so needs no expansion (R28, R30); covered activations keep learning
 in the code, where D10 stops them the frame after they are covered; the code places a recognized pattern's
 activation back at the frame its age names, where the spec fires everything at the bidder's coordinate; and it

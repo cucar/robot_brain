@@ -278,10 +278,11 @@ reads whether it was right. What matches, and what has to change:
    justification (R14, R15), so a child is born with nothing behind it to backfill. It is born empty, is given
    an activation at the parent's coordinate in the mint frame when its bid wins, connects from that frame on, and keeps
    connecting after the parent's own activation has closed, since children outlive their parents (R17, R18).
-9. **The default is not wired at birth.** `Column::create_neurons` gives every neuron a connection to each
-   channel's default action at every voting distance, strength 1 and reward 0. That goes: a dimension no
-   inference reaches runs the declared default, which is then the apex action of the frame and is learned by
-   the ordinary path (R35).
+9. **There is no default action.** `Column::create_neurons` gives every neuron a connection to each channel's
+   default action at every voting distance, strength 1 and reward 0, and a dimension no inference reaches runs
+   the channel's default. Both go: a dimension no inference reaches outputs nothing, and the first action in it
+   is one the harness runs as a lesson, which is then the apex action of the frame and is learned by the
+   ordinary path (R35).
 
 ## The build plan
 
@@ -389,8 +390,8 @@ forward-side deltas are the numbered list in the section above and land in Stage
 **Phase 3 — the readout gate.**
 
 19. **Watch for the one expected regression:** a child's connections start empty at its mint (D25) and hold
-    one window's worth by its first purchase (R17), so a newly bought child infers from very little, or the
-    default, until it has been bought enough times to hold more.
+    one window's worth by its first purchase (R17), so a newly bought child infers from very little, or
+    nothing, until it has been bought enough times to hold more.
 
 ## The MNIST frame protocol
 

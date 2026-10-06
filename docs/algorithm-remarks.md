@@ -904,7 +904,8 @@ hold their connections whether or not they are covered. The child learns from wh
 (R32), so the fall-through lasts exactly as long as the child has nothing of its own. No walk is needed above
 the base: a high pattern with nothing to say hands the frame down, and what is genuinely new reaches the base,
 where the walk is (R37). A situation the machine has never been in at any level is one no neuron has a
-connection for, and that is the base's default, which is the one place a first action has to come from.
+connection for, and there the machine says nothing: the first action in it is the world's, a lesson, and
+the walk goes on from what that lesson earned.
 
 **On R36 — a neuron several parameters pass is heard several times.** Every value neuron is a voter,
 so an event that several accepted bids pass as a value or a member produces several voters where an event nothing
@@ -1807,15 +1808,15 @@ commitment to perform its actions and to expect its events. Connections join eve
 activation's connection can name a high pattern — a high-level situation joined to a high-level response by a
 single connection, which is how a complex sequence is learned as the answer to a complex situation.
 
-**On R35 — why the default runs rather than being wired.** An earlier draft wired the declared default on every
-neuron at birth, at strength 1 and neutral estimate, so that every apex activation had an inference from the first
-frame. It was a fiction twice over: a level-5 pattern born holding a base action it had never seen run, and a
-strength counting an exposure nobody had. Under the apex rule it is also unnecessary. A dimension no inference
-reaches runs the default, the default is then the apex action of that frame, and every uncovered activation
-connects to it with its reward exactly as it would to any other action. Nothing is lost at cold start — the base
-is not mute, it is silent for one frame and then holds what ran — and nothing pretends to have been judged. What
-stands from the earlier draft is the other lesson: connections are held on the base as well as on patterns, or
-exploration waits for the first bought pattern.
+**On R35 — why nothing is wired at birth, and nothing runs unbidden.** An earlier draft wired a declared
+default on every neuron at birth, at strength 1 and neutral estimate, so that every apex activation had an
+inference from the first frame. It was a fiction twice over: a level-5 pattern born holding a base action it had
+never seen run, and a strength counting an exposure nobody had. A later draft ran the declared default wherever
+no inference reached a dimension. That was a fiction of another kind: an action nobody chose, run every frame in
+every dimension, so a machine that should be silent, a writer with nothing asked of it or an adder between sums,
+acted anyway. The design has neither. A dimension no inference reaches outputs nothing; the first action in a
+situation is one the world runs as a lesson, and every uncovered activation connects to it with its reward
+exactly as it would to any other action. Nothing pretends to have been judged, and nothing acts unbidden.
 
 **On R35 — why a base action's vote is a habit.** An action's connections say what followed doing this, with no
 more of the situation than the action itself: a policy conditioned on the last action alone. It votes like
@@ -1830,7 +1831,7 @@ derive it from, and R37's walk is what buys the thin estimates their exposures.
 general case its members fire in, and a member's estimate is that general case: an average over every
 situation it has ever fired in, the pattern's among them. Letting the two compete puts the average the pattern
 was created to escape back into the decision it was created for. The specific situation was recognized;
-nothing general is allowed to speak into it. That a new pattern starts with only the default's estimate and
+nothing general is allowed to speak into it. That a new pattern starts with only what it covers has to say and
 explores is right — the general answer is precisely the one just judged too coarse.
 
 **On R36 — why a thin estimate displacing a worn habit is not a defect.** It is the exploration: a situation

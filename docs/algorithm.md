@@ -441,8 +441,8 @@ tried (R37).
 
 > **D34 — The apex action.** The base action reported as run this frame in an action dimension, as the highest
 > uncovered activation whose expansion placed it (R27), or the report itself where nothing placed it. An action
-> dimension no inference reaches is output its declared **default action**, a proposal like any other, and what
-> the report names there is the apex action of the frame.
+> dimension no inference reaches is output nothing: no call runs there unless the environment runs one of its
+> own, and what the report names there, if anything, is the apex action of the frame.
 
 **A pattern is matched or inferred, and both kinds of member take part in both.** Matched, a pattern says that
 its events stood and its actions ran. Inferred, it is expanded (R28): its actions are placed as the
@@ -1553,7 +1553,7 @@ stop the writing — there is no second call and nothing is saved twice.
 > reach it, and nothing coordinates one reward with another.
 >
 > **The unscoped form is the general case, and the machine sorts out the attribution itself.** An environment
-> that knows what it is paying for names it — a stock channel, and the one frame the buy or sell ran in — and
+> that knows what it is paying for names it — a stock channel, and the frames a position was held — and
 > the credit is exact. One that does not names nothing, and the reward spreads over every channel and the
 > whole window: the shares landing on a channel or a distance that had nothing to do with the outcome are
 > noise around zero and average out over exposures, while the shares landing on the ones that did accumulate.
@@ -1669,10 +1669,12 @@ stop the writing — there is no second call and nothing is saved twice.
 > and reward prices the habit like anything else. What an inference places in an event dimension is resolved
 > the same way, and the winner is expected, not output (R36, R30).
 >
-> **The default is output; it is not wired.** An action dimension no inference reaches is output the declared
-> default action. Nothing holds it in advance: where the report names it as run it is the apex action of that
-> frame, every uncovered activation connects to it with its reward by the ordinary path (R31), and from then on
-> it is an action like any other. A neuron is born holding no connection at all — a base neuron at cold start and a freshly
+> **Nothing runs where nothing infers.** An action dimension no inference reaches is output nothing: no call
+> runs, nothing fires in it, and the frame carries silence there as an event dimension with nothing to report
+> does. The first action in a dimension is the world's. An action the environment executes on its own is a
+> lesson (§3.5): it is the apex action of its frame, every uncovered activation connects to it with its reward by
+> the ordinary path (R31), and from then on it is an action the machine can infer. A neuron is born holding no
+> connection at all — a base neuron at cold start and a freshly
 > minted pattern alike say nothing about the next action until something has run under them, and what they
 > then hold is whatever was executed. R37's walk is the only thing that wires an action ahead of its running,
 > one at a time and only where the best known has been judged and found wanting.
@@ -1750,12 +1752,12 @@ stop the writing — there is no second call and nothing is saved twice.
 >
 > **Speaking falls through the cover.** A covered neuron supplies nothing while its coverer speaks (D10). Where
 > the coverer has no inference for the frame ahead, what it covers speaks in its place, and what they cover in
-> theirs, down to the base; the default is output only where nothing down to the base has anything. A newly
+> theirs, down to the base; nothing is output where nothing down to the base has anything. A newly
 > minted child therefore starts with its parents' voices: they say what usually followed them, it learns what
-> ran under it (R35), and from then on it speaks for itself. At the base a neuron with nothing outputs the
-> default, and the walk (R37) wires the next action where an estimate turns negative.
+> ran under it (R35), and from then on it speaks for itself. At the base a neuron with nothing outputs nothing,
+> and the walk (R37) wires the next action where an estimate turns negative.
 
-> **R37 — Exploration.** The default policy resolves explore–exploit without randomness: **the action alphabet
+> **R37 — Exploration.** Explore–exploit is resolved without randomness: **the action alphabet
 > is declared in order**, and **a connection whose estimate turns negative wires the next action in that
 > order** — the first one the neuron holds no connection to at that offset — at strength 1 and neutral estimate
 > (R31). The walk is over the actions a neuron can name; what a call's variables hold is never searched, it is
@@ -1798,5 +1800,5 @@ definitions through one small job.
 | Copy | [algorithm-copy.md](algorithm-copy.md) | Shown a digit and asked, the machine writes it: a class in the ask's table gives each digit a value neuron, each value neuron learns the action that writes its digit, and the written digit is expected before it is reported. Crossing from what is seen to what is done is ten learned connections. |
 | Hit | [algorithm-hit.md](algorithm-hit.md) | Offsets from where the world reports something approaching as the reference frame, a parameter that takes whatever comes, a value neuron and a lesson per thing, and a thing never seen answered by the habit of the event the world reports in common. |
 | MNIST | [algorithm-mnist.md](algorithm-mnist.md) | An image channel with two spatial dimensions and a binary pixel dimension, 256 buckets or three channels for color later; patches at the base, odd shapes closed on the frontier, a digit action taught by demonstration. |
-| Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument whose actions are not neighbors of its events, patterns over frames, and a scoped reward for a position. |
+| Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument whose actions, own or disown, are not neighbors of its events; patterns over frames; a world that runs the right action wherever the machine has none; and a scoped reward for a position. |
 | Text | [algorithm-text.md](algorithm-text.md) | A stream of letters at reach 1: at the base a class of the letters that stand before each letter, its value neurons the pairs; words of any length from children and letters on the frontier, a doubled letter as a parameter. |
