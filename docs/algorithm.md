@@ -70,8 +70,9 @@ rewards for actions already run (D35). The machine works **up one stack, a level
 calls every neuron that fired, elects over their bids, and gives the accepted bids the children and value
 neurons they need, reused or new, and the level above is built out of what the election
 accepted (§7). Once the last level has run it wires and deletes children, delivers the action that ran and its
-reward to every open activation, and resolves one action per dimension for the frame ahead from what the apex
-infers (§8). The reward for that action arrives with the next frame (R29).
+reward to every open activation, and resolves one winner per dimension for the frame ahead from what the apex
+infers (§8): an action to output in each action dimension, an event to expect in each event dimension. The
+reward for the action arrives with the next frame (R29).
 
 ---
 
@@ -1419,8 +1420,8 @@ other:
 |--------------------|------------------------------------------------------------------------------------------------------------------------------|
 | process actions    | Call every open activation with what stands on the apex this frame and any reward at its distance; collect what those on the apex infer. |
 | expand inferences  | Place each inference at its completion and expand it through the dictionary to the base symbols it names.                    |
-| resolve actions    | One winner per action dimension at the frame ahead, by estimate; it is output for that frame, and what ran arrives with that frame's report and its reward. |
-| place inferences   | The actions and events the winning inferences' expansions place at the frame ahead fire weakly there (D40). |
+| resolve            | One winner per dimension at the frame ahead: in each action dimension by estimate, and it is output for that frame, what ran arriving with that frame's report and its reward; in each event dimension by share of voters, and it is expected there. |
+| place inferences   | The winner of every dimension fires weakly at the frame ahead (D40), the action as output and the event as expectation. |
 
 > **R29 — Two frames: infer, then execute and reward.** What is chosen in one frame is output for the next, and
 > what ran, with what it earned, arrives with that frame.
@@ -1663,8 +1664,8 @@ stop the writing — there is no second call and nothing is saved twice.
 >
 > **Every apex activation votes**, base actions included. A pattern that names what was done beside what was
 > seen votes knowing the situation; a chunk of actions alone, or a base action, votes what followed it, a habit,
-> and reward prices the habit like anything else. Nothing selects an event: what an inference places in an
-> event dimension is expected, not chosen (R30).
+> and reward prices the habit like anything else. What an inference places in an event dimension is resolved
+> the same way, and the winner is expected, not output (R36, R30).
 >
 > **The default is output; it is not wired.** An action dimension no inference reaches is output the declared
 > default action. Nothing holds it in advance: where the report names it as run it is the apex action of that
@@ -1675,8 +1676,8 @@ stop the writing — there is no second call and nothing is saved twice.
 > one at a time and only where the best known has been judged and found wanting.
 
 > **R36 — The inference decides.** An inference is one connection read by one voter: it names a neuron, at
-> whatever level it stands (D25), and carries a strength and an estimate. What runs is chosen from the
-> inferences and nothing else; what its expansion places in event dimensions is expected (R30).
+> whatever level it stands (D25), and carries a strength and an estimate. What runs and what is expected are
+> chosen from the inferences and nothing else, one winner per dimension, action and event alike (R30).
 >
 > **An inference is placed at its completion, and a connection means what it recorded.** A connection at offset
 > `b` was written when that action completed `b` frames after the situation opened (R31), so a voter at age `a`
@@ -1695,7 +1696,7 @@ stop the writing — there is no second call and nothing is saved twice.
 > estimate they were selected on. **A plan holds because it keeps winning**: a better estimate displaces it, and
 > when its span ends it is simply gone. Nothing is retracted and nothing is held.
 >
-> **The electorate, explicitly.** At frame `f` the voters entitled to an inference on the actions at `f + 1`
+> **The electorate, explicitly.** At frame `f` the voters entitled to an inference on the frame ahead, `f + 1`
 > (R35) are:
 > ```
 > every standing inference that places a base action at f + 1                          R30
@@ -1726,8 +1727,7 @@ stop the writing — there is no second call and nothing is saved twice.
 > pattern that has covered them, what is left standing is the pattern that fits them all.
 >
 > **One winner per action dimension, by estimate.** For each action dimension at `f + 1`, every base action
-> some voter's expansion placed there is a candidate (D37); what the same expansions place in event dimensions
-> fires weakly there once the winners are settled, the expectation of the winning plans (R30). **A candidate's estimate is the mean of the estimates
+> some voter's expansion placed there is a candidate (D37). **A candidate's estimate is the mean of the estimates
 > its voters placed it with, each weighted by that voter's share** — one vote per voter, split across the actions
 > it placed in that dimension by strength, so a voter that hedges between two actions counts as one voter and
 > not two — and **the candidate with the largest estimate is output**. Ties go to the larger share of voters, and
@@ -1735,6 +1735,16 @@ stop the writing — there is no second call and nothing is saved twice.
 > estimate alone, and a specific situation wins over a general one only by being right about what pays, never
 > by rank. **Nothing corrects for how many exposures an estimate rests on**, so a sharp estimate on three
 > exposures outranks a coarse one on two hundred.
+>
+> **One winner per event dimension, by share of voters.** For each event dimension at `f + 1`, every base event
+> some voter's expansion placed there is a candidate, and every voter whose expansion placed one is one vote,
+> split across the events it placed in that dimension by strength, as above. **The candidate with the largest
+> share is expected** (R40). The estimate is not read here: it is the reward of the actions of those frames, and
+> an event is what followed, not what paid. Ties go to the older event, and level is not read. A dimension no
+> voter reaches expects nothing. **Each dimension is resolved on its own**: a plan that loses its action
+> dimension still counts for the events it placed, and one that wins is not favored for them, so what is
+> expected is what the most voters placed, whichever inference placed it, and an inference that places events
+> alone, a prediction (D25), is resolved like any other.
 >
 > **Speaking falls through the cover.** A covered neuron supplies nothing while its coverer speaks (D10). Where
 > the coverer has no inference for the frame ahead, what it covers speaks in its place, and what they cover in
@@ -1763,8 +1773,8 @@ stop the writing — there is no second call and nothing is saved twice.
 
 ## 8.4 Expectations
 
-> **R40 — An inference is weak until the report makes it strong.** The winning inferences' expansions place
-> events as well as actions (R30), and both fire weakly in the frame they are placed (D40): the action as the
+> **R40 — An inference is weak until the report makes it strong.** Resolution leaves one winner per dimension,
+> action and event alike (R36), and each fires weakly in the frame it was placed in (D40): the action as the
 > machine's output, the event as what it expects. Where the report names that dimension at that coordinate, the
 > report stands and the weak activation is dropped; an action nothing reports as run, or an event nothing
 > reports as seen, lasts its frame and is gone. Where the expansion reaches a parameter, what fires is its value,

@@ -61,10 +61,12 @@ what was shown.
 
 In frame 1 `ask:7` reads its connection at offset one and places `wrote-7` at frame 2. Expanding `wrote-7`
 places its bidder, `write-7`, at frame 2, and its one neighbor, `ask:7`, at frame 1, where it stands (R28).
-`write-7` is a base action at the frame ahead, so it is output. In frame 2 the world reports it as run,
-`write-7`'s function holds, and `wrote-7` fires strong. It infers the echo's child one frame ahead, whose
-expansion places a `7` at frame 3: a base event, so it fires there weakly, as what the write is expected to
-bring (R30, D40). In frame 3 the world shows the `7`, and the report replaces the expectation.
+`write-7` is the one candidate in `write` at the frame ahead, so it is output (R36). In frame 2 the world
+reports it as run, `write-7`'s function holds, and `wrote-7` fires strong. It infers the echo's child one frame
+ahead, whose expansion places a `7` at frame 3: a base event, the one candidate in `d` there, so it wins that
+dimension and fires there weakly, as what the write is expected to bring (R36, R40). The echo places no action,
+so it contends in no action dimension; its event is resolved on its own. In frame 3 the world shows the `7`,
+and the report replaces the expectation.
 
 Show a `3` instead and a different neuron stands in frame 1, `ask:3`, with a connection of its own to
 `write-3`. Nothing carries the digit across: each digit's write was learned from that digit's own lessons, and a
