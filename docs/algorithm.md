@@ -109,11 +109,11 @@ weakly in that frame, for the world's report to replace. The reward for the acti
 > | Coordinate | Components                                        | Nature                                                              |
 > |------------|---------------------------------------------------|---------------------------------------------------------------------|
 > | base neuron | `(dim_id, bucket_id)`                            | structural and defining: the alphabet                               |
-> | higher neuron | a level and an id                              | a function's child or a value neuron; no dimension and no kind |
+> | higher neuron | a level and an id                              | a child: a function's child, a function neuron (D48), or a variable's child, a value neuron (D45); no dimension and no kind |
 > | activation | frame, and one position per activation dimension  | fleeting; two activations of one neuron differ in nothing else      |
 >
 > **Neuron dimensions belong to the base alphabet and to nothing above it.** A base neuron is an event or an action
-> of one dimension of one channel. A higher neuron, whether a function's child or a value neuron, has a
+> of one dimension of one channel. A higher neuron is a child, a function neuron or a value neuron, and has a
 > level and a name and nothing else structural: it is not an event or an action, it belongs to no dimension and no
 > channel, and its body or its values may hold either kind. It sits one level above the highest activation the
 > bid it was created for covered (R24), and the level does one thing: it orders the frame's processing (R26). How
@@ -472,7 +472,8 @@ What this section defines is shared: a neuron reads it over its own history and 
 > **D15 — The pattern.** A set of neighbors that a neuron **names**, each at an offset from the activation the pattern
 > stands on (D26), spanning the same box a neighborhood does (D5) and shaped like one (D7). It is a function or a
 > variable (D38). It is the collapse of the neighborhoods it covers (D27), moves as they move (D29), and promotes a
-> neuron: a function its child (R16), a variable a value neuron for what it held (D45). Its `id` is its creation
+> child: a function promotes one, a function neuron (R16), a variable one per value it has held, a value neuron
+> (D45). Its `id` is its creation
 > order, a handle that survives re-centering and the tie-break D28 and R24 reach for.
 >
 > **A pattern is not a neighborhood.** A neighborhood is what one activation saw where it fired, saved once and
@@ -644,7 +645,7 @@ it is used.
 
 | Call                    | Description                                                                                                                                                       | References |
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------|
-| create neuron           | The machine creates it when an accepted bid needs one and none can be reused, at the child's level (D2), holding nothing: a function's child, or a value neuron for a variable's value. | R16, R43, R44 |
+| create neuron           | The machine creates it when an accepted bid needs one and none can be reused, at the child's level (D2), holding nothing: a function neuron for a function, or a value neuron for the value a variable held. | R16, R43, R44 |
 | process functions       | In its level's turn: everything structural for the activations that fired this frame.                                                                             | §6, R20    |
 | wire child to pattern   | Once the last level has run, the machine points each function at the child it created or chose for it, and each variable's value at its value neuron.                                             | R16, R17, R44 |
 | delete pattern neighbor | The machine removes a neuron that no longer exists from every pattern and saved activation that names it.                                                          | R38        |
@@ -889,7 +890,7 @@ what stood on the apex in the frames after it, event and action alike.
 > places actions is a plan; one to a neuron whose expansion places events alone is a prediction; the two are
 > not told apart.
 
-## 5.9 Variables and value neurons
+## 5.9 Variables and children
 
 > **D41 — The class.** A variable that says **one of these stands at each of these places**: one or more
 > positions, offsets from the owner's activation, and a list of neurons, its **members**. At each position one
@@ -939,11 +940,21 @@ what stood on the apex in the frames after it, event and action alike.
 > in frames to come takes its value from what stands at the first and places it at the second. That is how a
 > value is carried forward in time, and it is the whole of copying.
 
-> **D45 — The value neuron.** The neuron of a variable for one value: one per parameter and member, and one per
-> class and combination. The owner's table records what each one stands for. Two variables that hold the same
-> neuron in one activation fire two value neurons, and one variable that holds the same value again fires the
-> same one. A value neuron has a level and an id like any higher neuron, one level above the highest activation
-> the bid it was created for covered (D2), and holds a table, a history and connections of its own.
+> **D48 — The function neuron.** A function's child, one per function: the neuron the machine gives a function
+> the first time a bid carrying it is accepted (R16), one level above the highest activation that bid covered
+> (D2), shared by every function the machine has wired to it (R43). It fires when a bid carrying the function is
+> accepted, at the bidder's coordinate, once, covering the bidder and what the function names (§7.4), and the
+> value neurons of the variables the function names fire beside it (D45). It says which function ran, and its
+> connections are one set for every value those variables have taken, so the level above learns about the
+> function regardless of its values by a pattern over it alone. It holds a table, a history and connections of
+> its own, and is expanded through the function whose bid fired it (R28).
+
+> **D45 — The value neuron.** A variable's child, one per value: per parameter and member, and per class and
+> combination, shared by every variable the machine has wired to it (R43). The owner's table records what each
+> one stands for. Two variables of one owner that hold the same neuron in one activation fire two value
+> neurons, and a variable that holds the same value again fires the same one. A value neuron has a level and an
+> id like any child, one level above the highest activation the bid it was created for covered (D2), and holds a
+> table, a history and connections of its own.
 >
 > **It is the one neuron its variable fires.** It fires when a bid carrying its variable with that value is
 > accepted (§7.4), a function's bid or the variable's own, at the bidder's coordinate, once, however many positions
@@ -1017,8 +1028,7 @@ Every pattern whose covered activations changed, by eviction or by cover, re-cen
 > Retiring is deletion from the table (D32). The pattern leaves that instant: it stops competing for a place in
 > any cover, and the neurons it held fall to the residual (D21), where the next call's recognition may re-cover
 > them (R20). A function that named a retired variable re-centers without it (D29). The retired patterns go on
-> the return (§6.6), and the machine deletes their children and value neurons (§7.5). The neuron keeps no
-> retired state.
+> the return (§6.6), and the machine deletes their children (§7.5). The neuron keeps no retired state.
 
 ## 6.4 Create
 
@@ -1083,10 +1093,11 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 
 > **R16 — What a child is at birth.** The neuron proposes, the election decides, and the machine creates. A
 > pattern is the neuron's own: it is added, used in covers and bid on the neuron's evidence alone. A function
-> with no child is bid as it is, and the bid asks for a child if it is accepted (D31). A variable has no child:
-> what the machine gives it is a value neuron for each value an accepted bid carries (R44). **The machine gives a
-> child only to an accepted bid**, so no neuron exists for a pattern the board never bought, and it reuses a
-> child before it creates one (R43). A new child has a level and an id and no dimension (D2), and is minted one
+> with no child is bid as it is, and the bid asks for one, a function neuron (D48), if it is accepted (D31). A variable
+> has a child per value, a value neuron, and a bid carrying a value it has no child for asks for one the same
+> way (R44). **The
+> machine gives a child only to an accepted bid**, so no neuron exists for a pattern the board never bought, and
+> it reuses a child before it creates one (R43). A new child has a level and an id and no dimension (D2), and is minted one
 > level above the highest activation its bid covered. It is created with
 > **an empty table**: its own patterns belong to its own level, which it has not observed yet. Its *existence*
 > is decided by the election, its *structure* by itself.
@@ -1094,7 +1105,8 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > **A neuron may hold many children, and they do not contend.** Each covers the part of an activation its
 > pattern owns, and several of them may be promoted at one coordinate (D8). What they share is a parent and a
 > coordinate, not a place on the board. **A child may have many parents**: every pattern wired to it promotes
-> it, each from its own neuron's position (R43).
+> it, each from its own neuron's position, a function's child every function wired to it and a value neuron
+> every variable (R43).
 >
 > **Release is the reverse**: the parent retires, the machine reclaims. The retired patterns go on the return
 > (R20). A retired pattern that never had a child leaves nothing to reclaim, and one whose child other patterns
@@ -1125,10 +1137,11 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > neighbor, and a parameter when fewer than two positions remain: it leaves the table.
 
 > **R44 — The life of a value neuron.** **Given** when an accepted bid first carries the variable with that value,
-> a function's bid or the variable's own: the bid carries it with no value neuron, as a function new to the board
-> carries no child, and the machine creates one (R16) and wires it to the variable's entry for that value (§5.1).
-> **Fired** by the election and by nothing else (§7.4). **Dead** when its variable is deleted, when its member
-> leaves the variable or its combination leaves the class (D27), or when the neuron it stands for is deleted: it
+> a function's bid or the variable's own: the bid carries the value with no child, as a function new to the board
+> carries none, and the machine creates one (R16) and wires it to the variable's entry for that value (§5.1).
+> **Fired** by the election and by nothing else (§7.4). **Dead** when the last variable wired to it is deleted or
+> drops the value, its member leaving the parameter or its combination the class (D27), or when the neuron it
+> stands for is deleted: it
 > goes on the death ledger and is deleted like any neuron nothing can fire again (R38).
 
 ## 6.5 Merge
@@ -1137,8 +1150,8 @@ Recognition re-centers, and creation adds, so either can leave two patterns in t
 functions with the same neighbors and the same variables, two classes with the same positions and the same
 members, two parameters with the same positions.
 Merging compares everything added or re-centered this call against its own table, exactly (D43), and keeps
-the oldest of each identical group, the lowest creation order, and with it the oldest child and value neurons
-the group holds, because those have accumulated histories, connections and estimates that a newer one has not.
+the oldest of each identical group, the lowest creation order, and with it the oldest children the group
+holds, because those have accumulated histories, connections and estimates that a newer one has not.
 A newer neuron with a history is never dropped for an older pattern with none. The rest are retired:
 
 | identical | kept | retired |
@@ -1148,7 +1161,7 @@ A newer neuron with a history is never dropped for an older pattern with none. T
 | parameters | the oldest, taking the others' place in the functions that named them, and, for each member both held, its value neuron | the newer parameters and their value neurons for members the oldest also held; a member only a newer one held moves to the oldest with its value neuron |
 
 What merging retires goes on the return with everything else retired this call (§6.6), so the machine deletes
-the children and value neurons on its ordinary pass.
+the children on its ordinary pass.
 
 ## 6.6 Return
 
@@ -1185,7 +1198,7 @@ some level at or above it holds an activation this frame, a level with none bein
 |-------------------|---------------------------------------------------------------------------------------------------------------|
 | process functions | Call every neuron with an activation at this level, value neurons included (§6).                              |
 | elect bids        | Cover the frontier's activations that this level's bids name, by the greedy cover over the board.            |
-| create children   | Give every function of an accepted bid that has no child one, and every value the bid carries that has no value neuron one: a child reused where another bid of the election tied it, created otherwise (R43). |
+| create children   | Give every function of an accepted bid that has no child one, and every value the bid carries that has no value neuron one: a child and the value neurons reused where another bid of the election tied it, created otherwise (R43). |
 | activate children | Every accepted bid activates, at the bidder's coordinate, the child of each function it carries and the value neuron of each variable, each at its own level (D2); the uncovered stand on the apex. |
 
 Then, once the last level has run:
@@ -1333,8 +1346,14 @@ value neuron is given one. A bid that lost is given nothing.
 > it (D28), so reuse is only ever a tie; a bid that does better than every bid carrying a child states a
 > different chunk, and gets a child of its own.
 >
-> **A value neuron is its variable's.** It is reused whenever the variable passes that value again, and never
-> shared with another variable (D45).
+> **A variable's children are reused with the function's.** The two bids name the same ground, so the machine
+> also has what each variable of either covered on the board. Where a variable of the accepted bid covered the
+> same activations as a variable of the other bid, and is of the same kind, it is the same variable seen from
+> another owner: the accepted bid's variable is wired to the other variable's value neurons, as one set, and
+> every value either passes from then on has one value neuron, created by whichever passes it first (D45). Each
+> variable stays in its own table, with its own positions and members. A variable with no counterpart in the
+> other bid keeps value neurons of its own, and a class and a parameter are never one. A value neuron is reused
+> whenever a variable wired to it passes that value again.
 >
 > **Otherwise the machine creates one**: an id, its parent, its level, the coordinate it inherits (D2) and an
 > empty table (R16); a value neuron the same way, with no dimension (D45, R44).
@@ -1350,8 +1369,9 @@ variable's value at its value neuron, by the wire call (§5.1).
 
 Every accepted bid activates what it carries at the bidder's coordinate (D2): the child of each function, and
 one value neuron per variable for the value it held (D45), each at its own level. A variable bid alone activates
-its value neuron and nothing else. A child's activation records the function whose bid fired it, since a child
-may have several (R43), and is expanded through that function (R28). Every activation no accepted bid covers
+its value neuron and nothing else. A child's activation records the function whose bid fired it, and a value
+neuron's the variable, since either may have several (R43), and each is expanded through that one (R28). Every
+activation no accepted bid covers
 stands as itself.
 
 > **R27 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** — the
@@ -1614,7 +1634,8 @@ stop the writing — there is no second call and nothing is saved twice.
 > a parameter is bound from what stands at those of its positions that have happened (D44) and placed at the rest:
 > that is how a value is carried forward. Where none of its positions has happened it places its most frequent
 > member, and a class with no value neuron places its most frequent combination, the oldest on a tie. A value
-> neuron standing alone expands to its bidder and to its value at every position of its variable. A function of the
+> neuron standing alone expands to its bidder and to its value at every position of the variable whose bid fired
+> it. A function of the
 > level above that holds a child alone expands to the call with its arguments left to be bound, and one that holds
 > a value neuron beside the child expands to the call with that value. A neighbor that is itself a higher neuron is
 > expanded the same way from where it is placed. Recognition is this substitution run backward: a parameter is fit

@@ -292,9 +292,6 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   distinct neurons seen at an offset. Each relation tried costs a collapse over its uses, `O(H · c)`, and the
   greedy pick tries every one in every call (D33). How to try fewer without passing over one that would pay is
   open.
-- **A variable is found only where one neuron saw the variants.** The collapse reads one table (D27). Two
-  neurons that each saw one variant never share a variable; it belongs to one neuron's table and nothing joins
-  variables across neurons.
 - **Near-duplicates stay apart, and nothing merges children.** A child is reused only on a tie over the same
   ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
   that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
