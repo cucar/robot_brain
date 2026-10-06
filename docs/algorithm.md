@@ -1132,13 +1132,14 @@ Recognition re-centers, and creation adds, so either can leave two patterns in t
 functions with the same neighbors and the same variables, two classes with the same positions and the same
 members, two parameters with the same positions.
 Merging compares everything added or re-centered this call against its own table, exactly (D43), and keeps
-the oldest of each identical group, the lowest creation order, because the oldest has already accumulated its
-children's histories, connections and estimates. The rest are retired:
+the oldest of each identical group, the lowest creation order, and with it the oldest child and value neurons
+the group holds, because those have accumulated histories, connections and estimates that a newer one has not.
+A newer neuron with a history is never dropped for an older pattern with none. The rest are retired:
 
 | identical | kept | retired |
 |---|---|---|
-| functions | the oldest, taking the others' covered activations | the newer functions; each child dies when nothing points to it and its last open activation closes (R38) |
-| classes | the oldest, taking the others' covered activations and their place in the functions that named them, and, for each combination, its value neuron | the newer classes and their value neurons |
+| functions | the oldest, taking the others' covered activations, and, where it has no child, the child of the oldest of them that has one | the newer functions; a child no kept function points to dies when its last open activation closes (R38) |
+| classes | the oldest, taking the others' covered activations and their place in the functions that named them, and, for each combination any of them stored, the oldest value neuron among them | the newer classes and their value neurons for combinations the oldest holds one for; a combination only a newer one stored moves to the oldest with its value neuron |
 | parameters | the oldest, taking the others' place in the functions that named them, and, for each member both held, its value neuron | the newer parameters and their value neurons for members the oldest also held; a member only a newer one held moves to the oldest with its value neuron |
 
 What merging retires goes on the return with everything else retired this call (§6.6), so the machine deletes
