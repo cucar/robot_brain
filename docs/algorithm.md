@@ -450,7 +450,7 @@ machine's output and its events as what the actions are expected to bring, both 
 strong what ran and what was seen (D40). What follows any activation is held on its neuron as
 connections (D25), one kind, and an inference is a connection read.
 
-Eight cases are worked by hand on these definitions, listed in Part V.
+Nine cases are worked by hand on these definitions, listed in Part V.
 
 ## 3.6 Rewards
 
@@ -1796,7 +1796,7 @@ stop the writing — there is no second call and nothing is saved twice.
 
 # Part V — The examples
 
-Eight cases, each worked by hand in a file of its own. Nothing in them is normative; each follows the
+Nine cases, each worked by hand in a file of its own. Nothing in them is normative; each follows the
 definitions through one small job.
 
 | Case | File | What it shows |
@@ -1806,6 +1806,7 @@ definitions through one small job.
 | Copy | [algorithm-copy.md](algorithm-copy.md) | Shown a digit and asked, the machine writes it: a class in the ask's table gives each digit a value neuron, each value neuron learns the action that writes its digit, and the written digit is expected before it is reported. Crossing from what is seen to what is done is ten learned connections. |
 | Equal | [algorithm-equal.md](algorithm-equal.md) | Shown four digits and asked, the machine writes the third where the first two are the same and the fourth where they differ: equality is a parameter over two frames of one dimension, the branch is two children of the ask's table, each answer's step names the request's child as a class beside the digit's value neuron, and the request answers by a vote the branch's voters win. |
 | Hit | [algorithm-hit.md](algorithm-hit.md) | Offsets from where the world reports something approaching as the reference frame, a parameter that takes whatever comes, a value neuron and a lesson per thing, and a thing never seen answered by the habit of the event the world reports in common. |
+| Loop | [algorithm-loop.md](algorithm-loop.md) | Shown a cue, the machine taps in each of the next three frames and then stops. There is no counter: each tap's table names what stood a frame back, so the states of the loop are three chunks a level apart, each connected to the one after it and the last to the event the world shows at the end. Stopping is a thing that follows and not an absence, since speaking falls through the cover; taught to stop on a cue instead of a count, the same machine is a while loop. |
 | MNIST | [algorithm-mnist.md](algorithm-mnist.md) | An image channel with two spatial dimensions and a binary pixel dimension, 256 buckets or three channels for color later; patches at the base, odd shapes closed on the frontier, a digit action taught by demonstration. |
 | Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument whose actions, own or disown, are not neighbors of its events; patterns over frames; a world that runs the right action wherever the machine has none; and a scoped reward for a position. |
 | Text | [algorithm-text.md](algorithm-text.md) | A stream of letters at reach 1: at the base a class of the letters that stand before each letter, its value neurons the pairs; words of any length from children and letters on the frontier, a doubled letter as a parameter. |
