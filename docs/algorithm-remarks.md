@@ -1013,17 +1013,6 @@ arrived when the neuron must decide. What preceded it is a set, whole and pricea
 dictionary line. What follows it arrives a frame at a time and is never complete, so what is kept of it is kept
 as a distribution instead, on the neuron.
 
-**On D25 — why only the action is kept.** An earlier draft kept everything that followed: every neuron of the
-level below that fired while an activation was open, as event connections beside the action connections, read
-from the apex as what the machine expected next and handed out as a second output. It was the larger half of
-the forward side, and nothing read it. No test priced an expectation (D12), no reward reached one, and nothing
-downstream scored it. What the machine is for is acting well, and acting reads one thing: what action a
-situation was followed by, and what it earned. The event connections also set the memory — every neuron of the
-level below that fired in a window — where an action connection takes one exposure per frame per action
-dimension. What is given up is a machine that says what it expects to observe. That was never its purpose, and
-where an expectation is needed — in replay, to ask what an action leads to — it is read from what an action was
-followed by, which is the hippocampus's object and not the machine's ([hippocampus.md](hippocampus.md)).
-
 **On D25 — the connections are the child's, not the parent pattern's.** An earlier draft kept the forward half
 on the pattern: the collapse over what followed every activation the pattern covered, read by the child when the
 child stood on the apex. Three things argued for moving it to the child's own connections. The child exists in
@@ -1213,7 +1202,7 @@ Take `R_t = 3` and a neuron whose table holds two patterns, `K` and `M`:
 ```
 K names  {(a,−2), (b,−1)}
 M names  {(g,−1), (h,0)}
-the neuron's connections so far:  one action connection, (u,+1), at estimate 0
+the neuron's connections so far:  one connection, (u,+1), at estimate 0
 ```
 
 **Frame 10 — the neuron fires, and everything is decided.** Its neighborhood is `{(a,−2), (b,−1), (g,−1),
@@ -1759,7 +1748,7 @@ it was formed after every level had settled. With nothing else forward, every on
 connection is. What it has beyond a count is an estimate, one more number, and the neuron holds one set.
 
 **On R31 — why the frontier is not enough.** Structure is recoverable by expansion, which is what lets the
-file record the frontier alone; policy is not. Holding action connections at every level is also what makes the
+file record the frontier alone; policy is not. Holding connections at every level is also what makes the
 ladder work: a level-1 pattern fires in many contexts and averages coarsely across all of them, a level-4
 pattern fires rarely and averages sharply over one, and the estimate is waiting at whichever level ends up
 uncovered.
@@ -1828,11 +1817,11 @@ is not mute, it is silent for one frame and then holds what ran — and nothing 
 stands from the earlier draft is the other lesson: connections are held on the base as well as on patterns, or
 exploration waits for the first bought pattern.
 
-**On R35 — why action neurons do not choose.** An action's own-kind connections would say what the machine did
-next after doing this: a policy conditioned on the last action and on nothing that was happening. That is either
-a habit loop that reinforces itself without perception, or a chunk — and if A-then-B recurs the action hierarchy
-writes it as a pattern, which the event that selects it runs whole. So an action neuron holds no connections at
-all, and every inference is an event's.
+**On R35 — why a base action's vote is a habit.** An action's connections say what followed doing this, with no
+more of the situation than the action itself: a policy conditioned on the last action alone. It votes like
+any apex activation, since the action did run and what followed it was seen, and reward prices what it says.
+Where the situation mattered, a pattern that names the action beside what was seen has a sharper estimate and
+covers it; where it is right on its own, it is a habit that pays.
 
 **On R36 — why there is no confidence correction.** The correction would be a parameter with nothing to
 derive it from, and R37's walk is what buys the thin estimates their exposures.
@@ -1848,7 +1837,7 @@ explores is right — the general answer is precisely the one just judged too co
 only gets sampled by something being tried in it.
 
 **On R36 — why level is not read.** An earlier draft resolved inferences by level first and estimate second,
-on the argument that a higher action pattern decides more of the timeline. That let compression override
+on the argument that a higher pattern decides more of the timeline. That let compression override
 reward outright: a level-4 connection at a small negative estimate beat a level-1 connection at a large positive one,
 which is a second place where the two objectives meet and the wrong one wins there (R34). The base-level vote
 reads the estimate alone. A specific situation still tends to win, because a child's estimate is over one
@@ -1864,7 +1853,7 @@ actions at one estimate, and any frame's fresh inference that beats it at one of
 frame.
 
 **On R37 — why always executing the best-known action is a problem.** An action that merely scores acceptably
-can hold a situation forever. Thompson sampling over the action connections is the obvious probabilistic
+can hold a situation forever. Thompson sampling over the connections is the obvious probabilistic
 alternative, and it drops into the same place.
 
 **On R37 — what the walk buys, and what it does not.** It is deterministic, so a run reproduces and a

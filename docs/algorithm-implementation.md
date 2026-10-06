@@ -212,8 +212,9 @@ every offset beyond `age`, each with its strength and estimate.
 The temporal side of the current brain (`neuron.rs`, `thalamus.rs`, `brain.rs`) is the older model: a neuron
 active at age `k` learns a distance-`k` connection toward every current active, event and action alike,
 predicts the next frame's events from those connections, scores the prediction, and mints on the misses. The
-design keeps one piece of that — the action connection — and none of the rest. What matches, and what has to
-change:
+design keeps the connection and the per-dimension vote, pointed at the apex rather than the level below, and
+drops the scoring and the minting on misses: an expected event is placed and replaced by the report, and nothing
+reads whether it was right. What matches, and what has to change:
 
 **Already the design.**
 
@@ -231,26 +232,28 @@ change:
 - `aggregate_votes` normalizes each voter to one vote per `(dimension, distance)` split by strength;
   `determine_dimension_winners` takes actions by the share-weighted mean of the voters' rewards, ties to larger
   strength then lower id, and level appears nowhere in it. That is R36's base-level vote for actions. Its event
-  half, the `Nb` consensus mode and the supervised `Brain.learn` wiring are not in the design and go: MNIST runs
-  on three frames with ordinary rewards (below), and nothing wires a voter to an action but an action running.
+  half, which takes an event dimension by share of voters, is R36's event rule and stays. The `Nb` consensus
+  mode and the supervised `Brain.learn` wiring are not in the design and go: MNIST runs on three frames with
+  ordinary rewards (below), and nothing wires a voter to an action but an action running.
 
 **Deltas.**
 
-1. **Event connections go.** `learn_temporal_connections` learns a connection toward every active neuron of the
-   level below. It learns toward the apex action only (D25), and the event targets, the event vote,
-   `track_inference_performance`, MAPE and the continuous-error path go with them. The design has no
-   expectation output.
-2. **Targets are the apex action, not the base set.** `process_temporal_levels` hands every level the level-0
-   active set. Each open activation is handed the apex action of each action dimension instead — the highest
-   action pattern that fired there this frame — so a connection may target a pattern neuron, and the panic on
-   a pattern target in `aggregate_votes` goes.
+1. **Nothing scores a prediction.** `learn_temporal_connections` learns toward events and actions alike, and the
+   design keeps that (D25). What goes is everything that reads the prediction back: `track_inference_performance`,
+   MAPE and the continuous-error path. An expected event fires weakly at the frame ahead and the report replaces
+   it (R40); no error is measured and nothing is minted on one.
+2. **Targets are the apex, not the base set.** `process_temporal_levels` hands every level the level-0 active
+   set. Each open activation is handed the apex of the frame instead — every strong activation no accepted bid
+   covers, event and action, at whatever level it stands (R27, R31) — so a connection may target a pattern
+   neuron or a value neuron, and the panic on a pattern target in `aggregate_votes` goes.
 3. **Read every offset beyond the age, and expand before resolution.** `vote(age)` reads one distance; R36
    reads every offset beyond the age and places each connection's completion `offset − age` frames ahead
    (R28). A new pass between `collect_votes` and `infer_neurons` expands every vote whose target is a pattern
-   neuron through dictionary lines to base actions at composed offsets, carrying the vote's strength and reward
-   unchanged; what lands at the frame ahead is resolved, and the rest of a winning pattern's placements stand
-   as standing inferences (R36). The expansion exists for spatial patterns already and is reused.
-   `aggregate_votes` then runs on base targets only, as it does today.
+   neuron through dictionary lines to base symbols at composed offsets, events and actions both, carrying the
+   vote's strength and reward unchanged; what lands at the frame ahead is resolved, one winner per dimension,
+   an action dimension by estimate and an event dimension by share of voters, and the rest of a winning
+   pattern's placements stand as standing inferences (R36). The expansion exists for spatial patterns already
+   and is reused. `aggregate_votes` then runs on base targets only, as it does today.
 4. **Coverage stops learning, not only speech.** `get_suppressed_ages` silences a covered age's vote and lets it
    keep learning. Under D10 a covered activation writes nothing from the frame coverage arrived; the open
    activation carries the age it was covered at, and a reward share for an earlier frame still lands on the
@@ -422,16 +425,19 @@ which is silent. So every neighbor a base event neuron names
 sits at temporal offset `0`. The temporal neighbors are voted out for want of a majority (D27) and cost
 nothing in `|p|`.
 
-**No action patterns form.** An action neuron's own backward neighbors land on frames carrying no actions, so the action hierarchy stays flat. R32's apex active action is therefore always the base action,
-which R32 states explicitly holds before any action pattern exists.
+**No pattern names the digit call.** The call runs at `f + 1`, a frame with no events, and its one backward
+neighbor at `−1` is the image's frame, where the events are already covered or stand as themselves; a pattern
+over the call and what stood a frame before it would be a step, as in the copy case, and forms only where the
+same thing recurs before the same digit. Until one does, the apex action of `f + 1` is the base action itself
+(D34), and every event activation open from `f` connects to it as such (R31).
 
 **Connections are written per frame, never at the bill.** R31 writes one at every age a neuron is open at,
 and the reward lands a frame later. Neither is gated on anything completing, so the reward path does not wait
 on the window and does not vary with level.
 
 **This is why `infer` is a second call.** `process functions` reaches a neuron at age 0 only, so the
-forward half cannot ride on it — an activation at age 3 of a reach-8 span would never be reached. `process
-actions` walks every open activation the machine holds and hands each one what landed. It also runs after the
+forward half cannot ride on it — an activation at age 3 of a reach-8 span would never be reached. `infer`
+walks every open activation the machine holds and hands each one what landed. It also runs after the
 stack has settled rather than during a level, because what ran is not known until then.
 
 **Classification is selection at the base.** The digit call is an action chosen by R35 and R36: every apex

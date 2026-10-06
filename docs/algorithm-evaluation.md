@@ -8,8 +8,8 @@ risk states what would be done about it, so measurement has a decision attached.
 # 1. The falsifiable claim
 
 Nothing in the design optimizes for reward structurally, and nothing structural reads one. A pattern is charged
-for the neurons it names beside the activation and never for what followed (D25); what action followed, and what
-it earned, strengthens its connections, enters no test, and is not in the file (D12). Reward is therefore read
+for the neurons it names beside the activation and never for what followed (D25); what followed, and what the
+actions earned, strengthens its connections, enters no test, and is not in the file (D12). Reward is therefore read
 off structure the compression built for its own reasons: a situation acquires an estimate of its own exactly
 when a pattern is minted for it (R35), so the machine gets better at acting by compressing better — richer chunks
 are bought, and each child's connections are the distribution of what its situation was actually followed by,
@@ -84,7 +84,7 @@ and never again (R37); an action that was unlucky on its first samples keeps tha
 if it becomes the least bad of a channel where everything has been tried. In a stationary world nothing is
 lost. In a world where an action's worth changes, the connection cannot notice — the design's answer is that a new
 child with fresh connections notices instead (R34), which holds only where structure is actually being minted
-over that situation. **Diagnostic:** per channel, the share of action connections whose estimate is negative on
+over that situation. **Diagnostic:** per channel, the share of connections to actions whose estimate is negative on
 fewer than three exposures and which are never selected again; and, on data where an action's worth is known
 to change, how many frames pass before the apex voter for that situation is a neuron minted after the change.
 
@@ -108,7 +108,7 @@ neurons per frame, against neighbors per activation at each span.
 **Far placement is lossy, and the loss compounds with height.** An offset is kept to one significant binary
 digit (D6), so a neighbor 11 frames back is written as 8 and expanded to 8 (R28). Each level down adds its own
 group's slack, so a high neuron places the base symbols of its farthest neighbors only to within the sum of the
-groups along the path — its connections can say what action came next but not, above a few levels, exactly
+groups along the path — its connections can say what came next but not, above a few levels, exactly
 when. The file says so (§1); what it does not say is how deep the stack stays useful before its far placements
 are too coarse for a program (R30) to act on, which is a cap on useful depth that nothing declares.
 **Diagnostic:** per level, the placement error of expanded base actions against where they ran, split by
@@ -376,7 +376,7 @@ never credited for, over its life.
 
 **R33's shaping is ahead of the implementation; the cycle and the arithmetic are not.** The spec says a reward
 carries an optional channel set and an optional frame span, dissipates linearly over that span, and enters the
-estimate of the action connection at the age each distance names. The current brain runs the two-frame cycle
+estimate of the connection at the age each distance names. The current brain runs the two-frame cycle
 as R29 says — the action inferred at one frame fires at the next with its reward attached — and folds rewards
 into the estimate exactly as R31 says, one exposure, one share, weighted `1 / strength`. What it does not do is
 shape them: it attaches the frame's reward whole to the action that ran in that frame, on every open age, which

@@ -328,8 +328,8 @@ assumes for anything the file does not state.
 > **Both types are in it.** An action the machine executed is a neuron that fired (D8), and it stands in the
 > file exactly as an observed event does, compressed by the same patterns (§3.5).
 >
-> **It holds nothing about the future.** A neuron's connections — what actions followed its activations, and what
-> they earned — are in no
+> **It holds nothing about the future.** A neuron's connections — what followed its activations, event and
+> action alike, and what the actions earned — are in no
 > dictionary line and not in the body (D25), and neither is an inference that did not run (R32).
 >
 > **It holds nothing about the search either.** Populations, estimates and margins are the machine's and
@@ -477,8 +477,8 @@ What this section defines is shared: a neuron reads it over its own history and 
 >
 > **A pattern is not a neighborhood.** A neighborhood is what one activation saw where it fired, saved once and
 > evicted `H` activations later; a pattern is what the neuron claims. A neighborhood is a fact, a pattern a claim.
-> Neither is a frame: a frame is one column, either of these the whole window. What action followed is in
-> neither, and is held as the neuron's connections (D25).
+> Neither is a frame: a frame is one column, either of these the whole window. What followed is in neither, and
+> is held as the neuron's connections (D25).
 
 **A pattern is one of two kinds: a function or a variable.** A variable is a set of positions and a set of
 members, and what stands in it changes from one occurrence to the next. It is of one of two types, which hold
@@ -1032,7 +1032,7 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > The seed is what the table is failing on most, and the collapse settles every other neighbor at once — the seed
 > chooses the neighborhoods, and the neighborhoods decide every neighbor.
 >
-> **Only what a pattern names is built, because that is all a pattern is.** What actions the child will be followed by
+> **Only what a pattern names is built, because that is all a pattern is.** What the child will be followed by
 > is the child's own connections, formed by the child's own activations once it exists (D25). Nothing about it is
 > decided here and nothing about it is priced.
 >
@@ -1710,7 +1710,7 @@ stop the writing — there is no second call and nothing is saved twice.
 >   read as (neuron, age)                             position carries no connection          (D11)
 > ```
 > Each reads its neuron's connections at **every offset beyond its age**, out to its reach. Every
-> connection there is one inference, naming an action neuron and carrying a strength and an estimate, and it
+> connection there is one inference, naming a neuron and carrying a strength and an estimate, and it
 > expands as above; what its expansion puts at `f + 1` is what it proposes, and a connection whose expansion puts
 > nothing there proposes nothing this frame. A base action is proposed by the one offset the age places one frame
 > ahead (R29); a pattern's first step by a farther one.
