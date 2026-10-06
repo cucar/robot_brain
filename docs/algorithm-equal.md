@@ -15,8 +15,8 @@ the digit it takes, the voters that know a digit name their own, and there are m
 
 **In.** One channel, laid out over time alone, with radius `R = 4` (D1). It declares one event dimension,
 `digit`, with ten buckets, `0` to `9`, and one event dimension, `cue`, with one bucket, `ask`. A request is five
-frames: `a`, `b`, `c` and `d` one per frame in `digit`, then `ask` alone. Requests follow one another with
-nothing between them.
+frames: `a`, `b`, `c` and `d` one per frame in `digit`, then `ask` alone. Requests follow one another with the
+answer's frame between them: the answer runs in a frame of its own, and the next request's `a` comes after it.
 
 **Out.** One action dimension, `out`, with ten base actions, `out-0` to `out-9`, in the same channel, so an
 action is a neighbor of the events it ran beside (D1). What runs there in the frame after `ask` is the answer.
@@ -99,9 +99,9 @@ stood, is struck (R36).
 
 | Voter | its connections at offset one, from the taught rows | what each places at frame 5 | proposes |
 |---|---|---|---|
-| `same` | `k-from-c` for every `k`: the neuron that covered it each time | `C:k`, and `asked`; only `C:8` stands | `out-8`, alone |
-| `P:3` | `k-if-same` for every `k`, from the equal requests of threes it stood uncovered in | `C:k` and `same`; only `C:8` stands | `out-8`, alone |
-| `C:8` | `8-from-c`, its coverer in every equal request with `c = 8`; `k-if-differ` for assorted `k`, from unequal requests with `c = 8` | `8-from-c` places `C:8` and `asked`, which `same` satisfies; `k-if-differ` places `differ`, which did not stand | `out-8`, alone |
+| `same` | `k-from-c` for every `k`: the neuron that covered it each time | `C:k`, and `asked`; only `C:8` stands | `out-8` |
+| `P:3` | `k-if-same` for every `k`, from the equal requests of threes it stood uncovered in | `C:k` and `same`; only `C:8` stands | `out-8` |
+| `C:8` | `8-from-c`, its coverer in every equal request with `c = 8`; `k-if-differ` for assorted `k`, from unequal requests with `c = 8` | `8-from-c` places `C:8` and `asked`, which `same` satisfies; `k-if-differ` places `differ`, which did not stand | `out-8` |
 | `D:5` | `5-from-d`, its coverer in every unequal request with `d = 5`; `k-if-same` for assorted `k`, from equal requests with `d = 5` | `5-from-d` places `D:5` and `asked`, which `same` satisfies too; `k-if-same` places `C:k` and `same`, which only `k = 8` fits | `out-5`, by about ten to one over `out-8` |
 
 Every estimate is the teacher's reward, so the candidates tie on estimate and the larger share of voters wins
@@ -110,6 +110,11 @@ Every estimate is the teacher's reward, so the candidates tie on estimate and th
 `asked`, which either branch satisfies, so it names its digit whatever the pair was. `same` names nothing
 but the digit `c` held, because every step it is connected to names `C:k` outright, and `P:3` the same. What
 decides is that the request fires two voters that know the branch beside one that knows the wrong digit.
+
+Each voter also keeps what it wrote before the steps and the level above existed: connections to `out-k`
+outright, for every `k` the early lessons ran, since nothing leaves a connection (R31). Those still place their
+digits and are not struck, a base action placing nothing in the past. They are spread over the ten digits and
+thin beside what came after, so they hedge every voter a little and move no result here.
 
 `3, 4, 8, 5` is the mirror. `differ` fires with `A:3`, `B:4`, `C:8`, `D:5`: `differ` and the two classes name
 `D:k` outright or are bound to `differ`, so they propose `out-5`; `C:8` proposes `out-8` through `8-from-c`;

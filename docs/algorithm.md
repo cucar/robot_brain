@@ -450,7 +450,7 @@ machine's output and its events as what the actions are expected to bring, both 
 strong what ran and what was seen (D40). What follows any activation is held on its neuron as
 connections (D25), one kind, and an inference is a connection read.
 
-Seven cases are worked by hand on these definitions, listed in Part V.
+Eight cases are worked by hand on these definitions, listed in Part V.
 
 ## 3.6 Rewards
 
@@ -985,8 +985,13 @@ activations then join the history, whole (D7) and wholly residual (D21).
 
 ## 6.2 Recognize
 
-Recognition is the procedure that chooses a cover for a new activation/neighborhood (D17): the greedy cover
-(D28) over the residual of the history (D21).
+Recognition is the procedure that chooses a cover for an activation's neighborhood (D17): the greedy cover
+(D28) over the residual of the history (D21). It covers the whole residual, not the frame's activations alone:
+every activation of the history whose residual changed since the last call is covered again, the frame's new
+ones and those a retired or evicted pattern left neighbors uncovered in, and an activation nothing touched
+keeps its cover, so the call's work is in what changed and not in `H`. The frame's own activations are always
+among them, and their covers matter beyond the history: they are what the call returns as bids (§6.6), so what
+recognition decides for them this call is what the election sees.
 
 **A function fits where its neighbors stand and its variables hold; a class where a member stands at each of its
 positions; a parameter where one neuron stands at all of its positions.** A parameter takes whatever neuron
@@ -1791,7 +1796,7 @@ stop the writing — there is no second call and nothing is saved twice.
 
 # Part V — The examples
 
-Seven cases, each worked by hand in a file of its own. Nothing in them is normative; each follows the
+Eight cases, each worked by hand in a file of its own. Nothing in them is normative; each follows the
 definitions through one small job.
 
 | Case | File | What it shows |
@@ -1799,6 +1804,7 @@ definitions through one small job.
 | Alternation | [algorithm-xy.md](algorithm-xy.md) | A stream at radius 4. A neuron that keeps seeing a different pair of letters holds two parameters and one function that names both, learned from the pairs that go by once: its child is the alternation, one neuron for every such pair, and the value neurons beside it say which pair. A pair that comes often is chunked by its own letters first, and stands in a class instead. |
 | Addition | [algorithm-addition.md](algorithm-addition.md) | A request with each column, a neuron for each case that can be asked, a step per case, and a carry the world shows while it teaches and the machine expects afterwards. |
 | Copy | [algorithm-copy.md](algorithm-copy.md) | Shown a digit and asked, the machine writes it: a class in the ask's table gives each digit a value neuron, each value neuron learns the action that writes its digit, and the written digit is expected before it is reported. Crossing from what is seen to what is done is ten learned connections. |
+| Equal | [algorithm-equal.md](algorithm-equal.md) | Shown four digits and asked, the machine writes the third where the first two are the same and the fourth where they differ: equality is a parameter over two frames of one dimension, the branch is two children of the ask's table, each answer's step names the request's child as a class beside the digit's value neuron, and the request answers by a vote the branch's voters win. |
 | Hit | [algorithm-hit.md](algorithm-hit.md) | Offsets from where the world reports something approaching as the reference frame, a parameter that takes whatever comes, a value neuron and a lesson per thing, and a thing never seen answered by the habit of the event the world reports in common. |
 | MNIST | [algorithm-mnist.md](algorithm-mnist.md) | An image channel with two spatial dimensions and a binary pixel dimension, 256 buckets or three channels for color later; patches at the base, odd shapes closed on the frontier, a digit action taught by demonstration. |
 | Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument whose actions, own or disown, are not neighbors of its events; patterns over frames; a world that runs the right action wherever the machine has none; and a scoped reward for a position. |

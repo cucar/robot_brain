@@ -251,7 +251,7 @@ neuron per variable beside it, or a lone variable's value neuron, all at the bid
 Every bid covers its bidder (D31), and every symbol is counted at what it cost to write (D13). Base actions take
 no arguments and act at a focus the environment holds; the variables are built first, each by its own collapse
 and priced on its own uses, and the functions over the rows as the variables rewrite them (D27, D33); an
-inferred pattern runs its actions and expects its events, weakly (R30). Seven cases are worked by hand on it
+inferred pattern runs its actions and expects its events, weakly (R30). Eight cases are worked by hand on it
 ([algorithm.md](algorithm.md), Part V). What is still open, in the order it bites:
 
 - **The worked cases have not been re-priced.** Every symbol is now counted at what it cost to write, a base
