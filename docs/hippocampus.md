@@ -499,7 +499,7 @@ neuron.
 > **H4 — Action neurons hold event connections.** An uncovered action activation connects to the apex events
 > that follow it, apex to apex, at the offset its age names, exactly as an uncovered event activation connects
 > to the apex action (D25, R31): per `(event neuron, offset > 0)`, a strength — the times an activation of the
-> action saw that event follow at that offset — and no estimate. It is written in the `process actions` call
+> action saw that event follow at that offset — and no estimate. It is written in the `infer` call
 > beside the action connections (§8.1), one exposure per frame per event dimension, at the offset the age rounds
 > to; a coarse offset pools the events of every frame in its group (D6). It is never in the file and enters no
 > test (D12), nothing collapses it (D27), nothing weakens it (R31), and nothing in the machine reads it: it is not
@@ -635,7 +635,7 @@ Trajectories share a visited-moments structure so that exploration doesn't redun
 
 ### One imagined frame — an event step and an action step
 
-An experiment advances by imagined frames, and an imagined frame is the machine's own two-frame cycle run over connections instead of input: infer, then execute, then read the consequence ([algorithm.md](algorithm.md), R29). Every read is a connection, and every connection was written the same way — while a neuron's activation is open and uncovered it connects to what follows it, an event neuron to the action that ran with its reward (D25, R31) and an action neuron to the events that followed (H4), in the one `process actions` call (§8.1). Nothing is built for replay that the neuron did not already hold.
+An experiment advances by imagined frames, and an imagined frame is the machine's own two-frame cycle run over connections instead of input: infer, then execute, then read the consequence ([algorithm.md](algorithm.md), R29). Every read is a connection, and every connection was written the same way — while a neuron's activation is open and uncovered it connects to what follows it, an event neuron to the action that ran with its reward (D25, R31) and an action neuron to the events that followed (H4), in the one `infer` call (§8.1). Nothing is built for replay that the neuron did not already hold.
 
 1. **Active set.** Read the currently active set — moments and patterns — from the top of the experiment stack.
 2. **Event step: what should I do next?** Read the action connections of every member of the active set at the offset ahead, place and expand them to base actions carrying their estimates, and resolve one action per action dimension by largest estimate — the same vote selection runs on a real frame (R36). A trajectory running as-original takes that winner; a counterfactual trajectory takes its substituted alternative instead. **Score** the step: the winner's estimate is what this step is expected to earn, and it is added to the trajectory's running total. This is the event→action direction of the record, read as a question.
@@ -841,7 +841,7 @@ ForecastQueue:       channel<MomentSet>       // involuntary, low priority
 // cortex thread (1 frame per tick)
 loop:
     frame = read_frame()
-    cortex.process_frame(frame)              // every level, the election, process actions (§2);
+    cortex.process_frame(frame)              // every level, the election, infer (§2);
                                               //   moments fire on their own majority (H2);
                                               //   every apex activation votes (R36)
     actions = cortex.resolve()               // may include think-actions
@@ -921,7 +921,7 @@ Built on the substrate [algorithm-implementation.md](algorithm-implementation.md
 
 ### Phase 3 — Event connections on action neurons
 
-- In the `process actions` call, every uncovered action activation connects to the apex events that follow it,
+- In the `infer` call, every uncovered action activation connects to the apex events that follow it,
   at the offset its age names, beside the action connections the event activations write (H4, §8.1).
 - Reading them by id without firing.
 - Prediction error from them (H3): what the action that ran said would follow, against what arrived.

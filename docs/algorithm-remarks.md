@@ -1248,7 +1248,7 @@ so it is declined. The neuron is told none of this. `K`'s child is promoted at f
 **That is the whole of the neuron's frame.** Nothing is held open, nothing is committed for later, nothing will
 be asked again about frame 10.
 
-**Frames 11 through 13 — `process actions`.** This activation was covered at age 0 — `K`'s child was bought
+**Frames 11 through 13 — `infer`.** This activation was covered at age 0 — `K`'s child was bought
 over it — so it writes nothing and speaks nothing for the rest of its window (D10): the sample it would have
 taken is its coverer's. `K`'s child, on the apex at level 1, is the one called. At 11 the action `u` runs; the
 machine calls the child at age 1 with `u`, and the child strengthens its connection at `(u, +1)`, creating it at
@@ -1289,7 +1289,7 @@ flowchart TD
     P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free activations<br/>they name, until the best left does not pay — R24"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §7.1"]
     O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §6.3"]
-    Z --> W["PROCESS ACTIONS, every open activation at its own age<br/>the apex action and rewards in; from the apex, inferences out — §8.1"]
+    Z --> W["INFER, every open activation at its own age<br/>the apex action and rewards in; from the apex, inferences out — §8.1"]
     W --> S["SELECT — expand the inferences to base actions,<br/>one winner per action dimension per thing-binding by estimate; it executes at f+1 — §8.3"]
 ```
 
@@ -1719,7 +1719,7 @@ frame wider in time than the longest reach it holds and one box wide in every ot
 D24), and nothing global
 is held for an inference, which is one frame's output and not a map.
 
-# 8. The process actions call
+# 8. The infer call
 
 **On §8.1 — why the call carries no decision.** Its jobs are transcription: the action that ran into the
 neuron's connections, a reward into the estimate of the connection it paid for. Neither feeds a test that is

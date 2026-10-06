@@ -146,7 +146,7 @@ process functions   — made at age 0 only, once per neuron per frame, with ever
                 out: per activation, a bid for every pattern of its cover (R20)
                      plus the patterns added and the patterns retired (R20)
 
-process actions — made once per frame after every level has run, with every open activation the machine holds
+infer — made once per frame after every level has run, with every open activation the machine holds
                 in:  per activation still uncovered, the apex action that ran this frame in each action
                      dimension, at offset = age; per activation, any reward share for a frame it already
                      wrote (R33)
@@ -161,7 +161,7 @@ when such a bid is accepted, reused or new (R43), and wires its identity to the 
 run (R16); the pattern
 is in the table in the call that built it (R17).
 
-**`process actions` is age-blind by construction.** It walks every open activation the machine holds and hands
+**`infer` is age-blind by construction.** It walks every open activation the machine holds and hands
 each what landed. A neuron with reach `r` is therefore reached `r + 1` times per activation on the forward
 side — once per frame it is open — and each visit, while the activation is uncovered, is a write into the
 connections plus a read of them. Reads move nothing (T8).
@@ -200,7 +200,7 @@ what it owns, the residual it was priced on (R15, D19). The machine, for its par
 child at the parent's coordinate at age 0 when its bid wins, and it is called with its level like any
 activation (R17).
 
-**`accrue(age, apex_action, reward)`** — the `process actions` call. If the activation is uncovered, increment
+**`accrue(age, apex_action, reward)`** — the `infer` call. If the activation is uncovered, increment
 the connection at `(apex action, age)` for each action dimension, creating it at strength 1. Fold each reward
 share into the estimate of the connection it names, weighted `1 / strength`, whether or not the activation is
 still uncovered; if an estimate is now negative, create the next untried action of that channel at that offset
@@ -399,11 +399,11 @@ spans the frame before and the frame after its own.
 frame     carries              what happens
 -----     -------              ------------
 f         events only          base event neurons fire, bill, and offer (D28, R20); contraction
-                               runs; process actions delivers nothing new and collects the
+                               runs; the infer call delivers nothing new and collects the
                                apex's inferences; the vote at the base commits the digit call
                                for f + 1 (R36)
 f + 1     the action only      the digit call executes and its neuron fires; events are
-                               silent. Process actions runs and every uncovered event activation
+                               silent. The infer call runs and every uncovered event activation
                                open here increments its neuron's connection to the action at
                                its own age (R31)
 f + 2     the reward only      the label arrives as input, not as a symbol (§3.6), and is
@@ -429,7 +429,7 @@ which R32 states explicitly holds before any action pattern exists.
 and the reward lands a frame later. Neither is gated on anything completing, so the reward path does not wait
 on the window and does not vary with level.
 
-**This is why `process actions` is a second call.** `process functions` reaches a neuron at age 0 only, so the
+**This is why `infer` is a second call.** `process functions` reaches a neuron at age 0 only, so the
 forward half cannot ride on it — an activation at age 3 of a reach-8 span would never be reached. `process
 actions` walks every open activation the machine holds and hands each one what landed. It also runs after the
 stack has settled rather than during a level, because what ran is not known until then.
