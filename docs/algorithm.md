@@ -723,7 +723,8 @@ Part IV covers the `infer` call, where a neuron learns what followed and infers 
 > (D44). The seed is a pair of offsets that agree, and gives it those two positions. Its members are the neurons
 > that have stood at all its positions within the history: **agreement is the whole test**, so a neuron never
 > seen before is its value the first time it stands there, becomes a member, and pays its entry from then on. A
-> member that no row of the history holds any longer leaves. Its positions are decided one by one. Every offset
+> member that no row of the history holds any longer leaves. Its positions are decided one by one, at the seed and
+> at every call after; a seed position that fails leaves one, which is no parameter (R41). Every offset
 > `δ` is counted by the uses in which it holds the parameter's value, and it is a position while what it covers
 > there beats the failures where it disagrees and its place in the line:
 > ```
@@ -734,8 +735,9 @@ Part IV covers the `infer` call, where a neuron learns what followed and infers 
 >
 > **A class.** A row is a **use** of it when a member stands at each of its positions; a position where no member
 > stands is a failed neighbor (D41). The seed is an offset that varies, and gives it that one position and the
-> two neurons that have stood there most and never together. Two tests decide it from then on, and every call
-> runs each once, in this order.
+> two neurons that have stood there most and never together. Two tests decide it, at the seed and at every call
+> after, each run once, in this order; a seed member that fails leaves the seed one member, which is no class
+> (R41), so the seed builds nothing and the pick names that neuron outright in its next stage (D33).
 >
 > *Its members, over all its positions.* A candidate is a neuron that has stood at one of the class's positions
 > and never in a row together with a member at that position: members stand in place of one another. It is
@@ -839,7 +841,9 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 > 1. **Variables.** Of the two variable relations, the offsets that vary and the pairs of offsets that agree
 >    (D47), the one that would save most as it stands is taken first; ties go to the higher count, then to
 >    declaration order (D1), then to the nearer offset. The collapse of its type grows it into a class or a
->    parameter, and it is kept if its margin is positive (D30). A variable of that type already in the table with
+>    parameter, its own tests run on the seed's members and positions before anything else (D27), and it is
+>    kept if what survives is a variable and its margin is positive (D30); a seed whose members do not pay seeds
+>    nothing, and its neurons are named outright in the next stage. A variable of that type already in the table with
 >    those positions, and for a class those members, is used rather than a new one. A variable that is kept
 >    **claims** the neighbors of its uses, and every relation from then on counts only unclaimed neighbors, so no
 >    neighbor is evidence for two variables. Then the next relation.
