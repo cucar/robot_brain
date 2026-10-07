@@ -44,21 +44,21 @@ structure as it now stands, and read the objective as: make that shorter.
 
 ## 1.2 Execution: the best estimate for the situation
 
-**There is no return, no horizon and no value function.** What the machine holds is one number per situation,
-distance and action: the mean reward that action received when it ran at that distance from that situation
-(R31). It is an exact mean over every exposure the connection has ever had, never discounted, never decayed and
-never windowed. Every frame, each action dimension runs the action with the largest such mean among the
-situations then standing on the apex (R36). That is the whole of it — **act on the best estimate you hold, for
-the situation you are actually in.**
+**There is no return, no horizon and no value function.** What the machine holds is one number per neuron,
+distance and action: the mean reward that action received when it ran at that distance from an activation of
+that neuron (R31). It is an exact mean over every exposure the connection has ever had, never discounted, never
+decayed and never windowed. Every frame, each action dimension runs the action with the largest such mean among
+the neurons then standing on the apex, which is the situation (D49, R36). That is the whole of it — **act on
+the best estimate you hold, for the situation you are actually in.**
 
 **Credit is attributed, never propagated.** A reward names the frames it pays for and reaches each of them at a
 strength falling with distance (R33). No estimate is ever computed from another estimate, so nothing bootstraps
 and nothing has to converge before anything else can be read.
 
-**The two objectives meet in the neuron, and nowhere else.** An estimate is held by a neuron, so which
-situations can hold an estimate at all is settled entirely by the compression objective: a situation acquires an
-estimate of its own exactly when a pattern is minted for it, and until then only the coarser situations
-containing it have anything to say (R35). Compression is not preprocessing for control; it is what defines the
+**The two objectives meet in the neuron, and nowhere else.** An estimate is held by a neuron, so which parts of
+a situation can hold an estimate at all is settled entirely by the compression objective: a recurring chunk of
+the apex acquires an estimate of its own exactly when a pattern is minted for it, and until then only the
+neurons under it have anything to say (R35). Compression is not preprocessing for control; it is what defines the
 space control acts over.
 
 ---
@@ -276,6 +276,16 @@ the environment does not have, the action the machine inferred there, weak (D40)
 > was covered at, and nothing else, because everything else it was going to decide was decided at age 0 (R1).
 > What it does for the rest of its life is connect to what ran and speak from its connections while it is on
 > the apex, and that is Part IV.
+
+> **D49 — The apex.** The activations of a frame that no accepted bid covers, at every level at once: a base
+> neuron nothing found worth chunking stands in it beside a level-4 child. It is the machine's whole state at
+> that frame, and it has four names for the four things it is. It is the **frontier**, looking back: everything
+> underneath it is recovered by expanding it, so it is what the file's body writes. It is the **situation**: what
+> every neuron sees as its neighborhood (D5), what connects to what ran, and what votes. It is the
+> **wavefront**, looking ahead: the set that infers the frame to come, each activation of it reading its own
+> connections forward, which it can do only because it is also the frontier, the neighborhood every neuron was
+> built on. And it is the apex, the top of the stack as it stands. The four are one set, and coverage takes a
+> neuron out of it in every role at once.
 
 > **D10 — Inhibition.** A neuron an accepted bid covers does not stand in the file, does not infer, and, from
 > the frame after it is covered, does not connect to what follows. **A neuron is covered only after it has
@@ -1378,9 +1388,9 @@ neuron's the variable, since either may have several (R43), and each is expanded
 activation no accepted bid covers
 stands as itself.
 
-> **R27 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** — the
+> **R27 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** (D49) — the
 > uncovered set, at every level at once — so a base neuron nothing found worth chunking stands in it beside a
-> level-4 pattern. This is the frontier the file's body writes, **the one every neuron sees as its neighborhood**
+> level-4 child. This is the frontier the file's body writes, **the one every neuron sees as its neighborhood**
 > (D5), **the one that learns what ran** (D25), and **the one that votes** (§8.3): the uncovered set does all four,
 > and coverage silences a neuron in every one of them at once, its one last connection aside (D10). A reward for a
 > frame already written reaches its connection regardless (R33). Everything underneath the current frontier is
@@ -1683,13 +1693,13 @@ stop the writing — there is no second call and nothing is saved twice.
 > Choosing comes from the connections of the neurons standing on the apex, each carrying the reward that
 > arrived averaged over its exposures, and **the machine outputs the best. Nothing else decides it.**
 >
-> **A situation is a set of active neurons** — any one of them, and any subset of them. Situations
-> intersect, and **nothing ever materializes one**: a situation is what a voter fires in, never an object the
-> machine holds.
+> **A situation is the apex** (D49): what stands uncovered at the frame, at every level. No neuron stands for
+> it whole unless a pattern has chunked it, so it is read a neuron at a time: a voter is one activation of it,
+> and what it holds is its own neuron's record of what followed.
 >
 > **A voter is one apex activation at one age**, reading its own neuron's connections at the offset ahead
-> (R36). A base neuron's estimate is a marginal over every situation it fires in; a child's is
-> over the one situation its parent's pattern names; so the same frame reads differently to a base neuron, to
+> (R36). A base neuron's estimate is a marginal over every situation it has stood in; a child's is over those
+> its parent's pattern recurs in, one situation; so the same frame reads differently to a base neuron, to
 > the level-1 child covering a chunk of it and to the level-4 child covering the whole, and differently again to
 > any of them two ages later. **A minted pattern is how one recurring situation acquires an estimate of its own**
 > — which is why a covered neuron is silenced (D10) and its coverer speaks instead, and the only reason a base

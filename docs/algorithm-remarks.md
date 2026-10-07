@@ -133,6 +133,15 @@ action's reward arrives in the frame the action runs in (R29), so nothing can la
 is no frame to hold open for. An earlier draft paid the reward one frame after the action and had to keep every
 activation open one frame longer for that single arrival; the two-frame cycle removes the frame and the reason.
 
+**On D49 — why the apex is a wavefront.** An earlier draft drew every neighborhood from one level: a neuron saw
+the neurons of its own level around it, and inferred from them. The uncovered set was then a level, and a
+level is the wrong set to look ahead from: a base neuron under a chunk still spoke beside the chunk, and a
+chunk saw nothing beneath it. Drawing the neighborhood from the apex instead, the uncovered set at every level
+at once, makes the same set do both directions. Looking back it is the frontier, the one the file writes and
+every pattern was built on; looking ahead it is the wavefront, every activation of it reading its connections
+into the frames to come, with coverage silencing a neuron in both directions at once. That one switch, from
+the level to the apex, is the wavefront architecture, and it is why the two are one set and not two.
+
 **On D10 — why a covered activation connects once more.** Take a situation and the action that follows it a
 frame later. The first few times, nothing covers the situation in the action's frame, so it connects to the
 action with the reward. Then the action's table notices that the situation always stands one back, and builds a
