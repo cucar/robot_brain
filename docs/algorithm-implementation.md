@@ -226,13 +226,13 @@ reads whether it was right. What matches, and what has to change:
   declared order that has no connection at that distance, at strength 1 and reward 0
   (`upsert_connection` → `find_alternative_action`), which is R37.
 - `vote(age)` returns every connection with strength above zero — the whole distribution, no majority. That is
-  D27's "connections are never collapsed", read at one offset where R36 reads every offset beyond the age.
+  D27's "connections are never collapsed", read at one offset where R46 reads every offset beyond the age.
 - Ages that activated a child pattern are suppressed and do not vote (`get_suppressed_ages`), which is D10's
   silencing of speech.
 - `aggregate_votes` normalizes each voter to one vote per `(dimension, distance)` split by strength;
   `determine_dimension_winners` takes actions by the share-weighted mean of the voters' rewards, ties to larger
-  strength then lower id, and level appears nowhere in it. That is R36's base-level vote for actions. Its event
-  half, which takes an event dimension by share of voters, is R36's event rule and stays. The `Nb` consensus
+  strength then lower id, and level appears nowhere in it. That is R47's base-level vote for actions. Its event
+  half, which takes an event dimension by share of voters, is R47's event rule and stays. The `Nb` consensus
   mode and the supervised `Brain.learn` wiring are not in the design and go: MNIST runs on three frames with
   ordinary rewards (below), and nothing wires a voter to an action but an action running.
 
@@ -246,13 +246,13 @@ reads whether it was right. What matches, and what has to change:
    set. Each open activation is handed the apex of the frame instead — every strong activation no accepted bid
    covers, event and action, at whatever level it stands (R27, R31) — so a connection may target a pattern
    neuron or a value neuron, and the panic on a pattern target in `aggregate_votes` goes.
-3. **Read every offset beyond the age, and expand before resolution.** `vote(age)` reads one distance; R36
+3. **Read every offset beyond the age, and expand before resolution.** `vote(age)` reads one distance; R46
    reads every offset beyond the age and places each connection's completion `offset − age` frames ahead
    (R28). A new pass between `collect_votes` and `infer_neurons` expands every vote whose target is a pattern
    neuron through dictionary lines to base symbols at composed offsets, events and actions both, carrying the
    vote's strength and reward unchanged; what lands at the frame ahead is resolved, one winner per dimension,
    an action dimension by estimate and an event dimension by share of voters, and the rest of a winning
-   pattern's placements stand as standing inferences (R36). The expansion exists for spatial patterns already
+   pattern's placements stand as standing inferences (R45). The expansion exists for spatial patterns already
    and is reused. `aggregate_votes` then runs on base targets only, as it does today.
 4. **Coverage stops learning, not only speech.** `get_suppressed_ages` silences a covered age's vote and lets it
    keep learning. Under D10 a covered activation writes nothing from the frame coverage arrived; the open
@@ -404,9 +404,9 @@ frame     carries              what happens
 -----     -------              ------------
 f         events only          base event neurons fire, bill, and offer (D28, R20); contraction
                                runs; the infer call delivers nothing new and collects the
-                               apex's inferences; the vote at the base commits the digit call
-                               for f + 1 (R36)
-f + 1     the action only      the digit call executes and its neuron fires; events are
+                               apex's inferences; the vote at the base commits the digit action
+                               for f + 1 (R47)
+f + 1     the action only      the digit action executes and its neuron fires; events are
                                silent. The infer call runs and every uncovered event activation
                                open here increments its neuron's connection to the action at
                                its own age (R31)
@@ -426,11 +426,11 @@ which is silent. So every neighbor a base event neuron names
 sits at temporal offset `0`. The temporal neighbors are voted out for want of a majority (D27) and cost
 nothing in `|p|`.
 
-**No pattern names the digit call.** The call runs at `f + 1`, a frame with no events, and its one backward
+**No pattern names the digit action.** The call runs at `f + 1`, a frame with no events, and its one backward
 neighbor at `−1` is the image's frame, where the events are already covered or stand as themselves; a pattern
 over the call and what stood a frame before it would be a step, as in the copy case, and forms only where the
-same thing recurs before the same digit. Until one does, the apex action of `f + 1` is the base action itself
-(D34), and every event activation open from `f` connects to it as such (R31).
+same thing recurs before the same digit. Until one does, what stands on the apex at `f + 1` is the base action itself
+(D49), and every event activation open from `f` connects to it as such (R31).
 
 **Connections are written per frame, never at the bill.** R31 writes one at every age a neuron is open at,
 and the reward lands a frame later. Neither is gated on anything completing, so the reward path does not wait
@@ -441,7 +441,7 @@ forward half cannot ride on it — an activation at age 3 of a reach-8 span woul
 walks every open activation the machine holds and hands each one what landed. It also runs after the
 stack has settled rather than during a level, because what ran is not known until then.
 
-**Classification is selection at the base.** The digit call is an action chosen by R35 and R36: every apex
+**Classification is selection at the base.** The digit action is chosen by R35 and R47: every apex
 activation's connections at every offset beyond its age, placed and expanded to base actions, resolved per action
 dimension by
 largest estimate with the code's per-voter normalization breaking ties. The current brain's per-dimension
@@ -452,5 +452,5 @@ counterpart in [algorithm.md](algorithm.md) and is retired, not ported.
 
 - Emit the image on one frame only; emit nothing on the action and reward frames.
 - Sparse emission: an off pixel supplies no symbol (D5). No neuron is emitted for it.
-- Declare the digit calls as an action dimension, in a fixed order — R37 walks that order for exploration, so
+- Declare the digit actions as an action dimension, in a fixed order — R37 walks that order for exploration, so
   it is part of the problem statement.

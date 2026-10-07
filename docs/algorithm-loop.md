@@ -16,8 +16,8 @@ design runs natively.
 It declares one event dimension, `cue`, with two buckets, `go` and `done`.
 
 **Out.** One action dimension, `tap`, with one base action, `tap`, in the same channel, so a tap is a neighbor
-of the cue and of the tap before it (D1). One call per dimension runs in a frame (D37), so a tap is one per
-frame: what the loop counts is frames.
+of the cue and of the tap before it (D1). One base action runs per action dimension per position in a frame (D8), and `tap` has time alone, so a tap is
+one per frame: what the loop counts is frames.
 
 **Teaching.** The world shows `go`, runs `tap` itself in each of the next three frames and rewards each
 (§3.5), shows `done` in the fourth, and shows nothing for a while. Then again. A dozen runs are enough for every
@@ -78,7 +78,7 @@ silent (D10). The loop variable is which of the three chunks is standing; the te
 whether that chunk has ever been followed by a tap; the exit is the chunk that was followed by `done`.
 
 A fourth tap, if one ever ran, is paid negatively and lands on whatever connected to it (R32), so the state that
-proposed it stops proposing it (R36). With one action in the alphabet the walk (R37) has nothing else to try,
+proposed it stops proposing it (R47). With one action in the alphabet the walk (R37) has nothing else to try,
 which is right: the answer at frame 3 is not another action but none.
 
 # 5. The stop
@@ -86,13 +86,13 @@ which is right: the answer at frame 3 is not another action but none.
 **The stop is a thing that follows, not an absence.** A connection is to what stood on the apex (D25), and
 nothing stands in silence: there is no rest value (D10). Had the world shown nothing after the third tap,
 `go·tap³` would hold no connection at all, and a neuron with nothing to say does not keep the floor:
-**speaking falls through the cover**, so the taps under it speak in its place, down to the base (R36). The
+**speaking falls through the cover**, so the taps under it speak in its place, down to the base (R48). The
 base `tap` holds the marginal over every tap it ever fired in, and after a tap a tap followed two times in three,
 so the fourth tap would run. The `done` the world shows is what gives `go·tap³` something to infer, and while
 the coverer speaks, what it covers is silent. The user's event cue is not optional here; it is how the design
 learns to stop.
 
-**Which reading of R36.** `go·tap³` infers an event and no action. R36 lets a covered activation speak where
+**Which reading of R48.** `go·tap³` infers an event and no action. R48 lets a covered activation speak where
 its coverer "infers nothing for `f + 1`", read per frame: the coverer inferred `done`, so the taps stay covered,
 and the action dimension is output nothing (R35). Read per dimension, the coverer would have nothing for `tap`
 and the base tap would speak there, and a fourth tap would run. The spec's wording is the per-frame one, and
@@ -109,7 +109,7 @@ it is a while loop, which is the loop the design runs on its own.
   [algorithm-remarks.md](algorithm-remarks.md); "depth on input that repeats" in
   [algorithm-evaluation.md](algorithm-evaluation.md)). At a length no run has reached before, the chunk on the
   apex is new and holds no connection, and speaking falls through it to the first chunk below that has one, or
-  to the base tap, whose marginal says tap (R36). A newly minted child starts with its parents' voices, and
+  to the base tap, whose marginal says tap (R48). A newly minted child starts with its parents' voices, and
   here the voice says keep going.
 - **Stop.** `done` is a neuron that nothing has ever followed with a tap. In the frame it shows, it stands on
   the apex and, with the chunk beside it, is what the next frame is inferred from; neither infers a tap, and
@@ -132,7 +132,7 @@ has no arithmetic. A count is a length, and a length is learned by seeing it.
 # 8. Three in a frame
 
 Inside a frame nothing is back to back. Activations of one frame are at temporal offset zero from one another
-and co-occur, with no order among them (D5, D26), and one call runs per action dimension per frame (D37). Three
+and co-occur, with no order among them (D5, D26), and one base action runs per action dimension per position in a frame (D8). Three
 taps in one frame are therefore three action dimensions, one channel each (D1): three tappers, `tap-a`,
 `tap-b`, `tap-c`, run together. In `tap-a`'s table the other two stand at offset zero in every row, so a function
 names them and its child, `triple`, covers the three (§7.1); the loop of §4 then runs over triples, `go·triple`,

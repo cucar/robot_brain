@@ -8,8 +8,8 @@ how the frontier closes the shapes the levels leave open, and how the digit is t
 
 # 1. The environment
 
-**In.** One channel, `image`, laid out over two spatial activation dimensions, `x` and `y`, and time, each
-with radius `1` (D1): a pixel sees the pixels beside it, and nothing further needs to be exact. It
+**In.** Two channels. The first, `image`, is laid out over two spatial activation dimensions, `x` and `y`, and
+time, each with radius `1` (D1): a pixel sees the pixels beside it, and nothing further needs to be exact. It
 declares one event dimension, `pixel`, with two buckets, ink and no ink. A pixel with no ink reports nothing:
 there is no rest value (D10), so a blank region costs nothing and holds no activation. Each image is one frame,
 and consecutive images are unrelated.
@@ -19,9 +19,10 @@ With three channels sharing the layout, each with one event dimension, it report
 the three channels are neighbors at offset zero in `x`, `y` and time (D5), so a pattern names across them like
 anything else.
 
-**Out.** One action dimension, `digit`, with ten base actions, `digit-0` to `digit-9`. It runs in the frame after
-the image (R29), and the reward that arrives with that frame is positive when the action named the image's
-digit and negative when it did not.
+**Out.** The second channel, `digit`, has time as its only activation dimension and declares one action dimension,
+`digit`, with ten base actions, `digit-0` to `digit-9`: a digit is said once per frame, at no place in the image,
+so it has no `x` and no `y` (D1). The action runs in the frame after the image (R29), and the reward that arrives
+with that frame is positive when the action named the image's digit and negative when it did not.
 
 # 2. What forms over an image
 
@@ -45,7 +46,7 @@ to `digit-7` at offset `+1`, with the reward it earned. The shapes that recur ov
 to `digit-7` and nothing else, so their estimates for it climb; a pixel's connections are a marginal over every
 digit it has stood in (R35).
 
-**Inferred.** When the environment stops moving first, the frontier of the image's frame votes (R36). A child
+**Inferred.** When the environment stops moving first, the frontier of the image's frame votes (R46). A child
 standing for a shape seen only in sevens infers `digit-7` at a high estimate; a bare pixel infers the digit
 that most often followed it, at a low one. The largest estimate is output, the environment executes it and
 reports it with its reward, and the frontier connects to what ran. A wrong answer lowers the estimates that

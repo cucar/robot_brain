@@ -90,7 +90,7 @@ machine answers without it, as the next section shows.
 | Frame | input | on the apex | what happens |
 |---|---|---|---|
 | 1–4 | `3`, `3`, `8`, `5` | the digits | Each stands bare: nothing in a digit's table pays for the digits around it (§6). |
-| 5 | `ask` | `same`, `P:3`, `C:8`, `D:5` | `same` covers `ask` and the four digits. The four vote on frame 6 (R36); `out-8` takes about three voters' shares and `out-5` most of one. |
+| 5 | `ask` | `same`, `P:3`, `C:8`, `D:5` | `same` covers `ask` and the four digits. The four vote on frame 6 (R47); `out-8` takes about three voters' shares and `out-5` most of one. |
 | 6 | `out-8` reported as run | `8-if-same`, over `8-from-c` and `asked:same`, over `out-8`, `same`, `C:8`; `P:3` and `D:5` still | Everything open and uncovered connects to `8-if-same` with the reward; `same` and `C:8`, covered, connect to `8-from-c` (D10). |
 
 **The vote at frame 5**, voter by voter. Each reads its connections at offset one and expands what it finds
@@ -105,7 +105,7 @@ stood, is struck (R36).
 | `D:5` | `5-from-d`, its coverer in every unequal request with `d = 5`; `k-if-same` for assorted `k`, from equal requests with `d = 5` | `5-from-d` places `D:5` and `asked`, which `same` satisfies too; `k-if-same` places `C:k` and `same`, which only `k = 8` fits | `out-5`, by about ten to one over `out-8` |
 
 Every estimate is the teacher's reward, so the candidates tie on estimate and the larger share of voters wins
-(R36): `out-8`, by about three to one. The voter that would have been wrong is not silenced; it is outvoted.
+(R47): `out-8`, by about three to one. The voter that would have been wrong is not silenced; it is outvoted.
 `D:5` knows as much about `5` as `C:8` knows about `8`, but its own step holds the branch only as the class
 `asked`, which either branch satisfies, so it names its digit whatever the pair was. `same` names nothing
 but the digit `c` held, because every step it is connected to names `C:k` outright, and `P:3` the same. What
@@ -150,7 +150,7 @@ the last thing to form.
 
 - **A majority with tied estimates.** The branch is read at the request by nothing but the vote, and the vote
   is right because the branch's voters outnumber the wrong digit's. Estimates do not separate them while the
-  teacher pays every lesson the same; they tie, and the share decides (R36). A teacher whose rewards varied in
+  teacher pays every lesson the same; they tie, and the share decides (R47). A teacher whose rewards varied in
   size would hand the choice to noise in the estimates, since nothing weighs exposures. What pulls the wrong
   step down afterwards is the machine's own errors: `out-5` run in an equal request is paid negatively, `D:5`
   connects to `5-from-d` with that, and the mean falls (R31, R32). This is the route
@@ -177,5 +177,5 @@ the last thing to form.
 | the two arms of the conditional | `same` and `differ`, two children of `ask`'s table |
 | `c` and `d` as values | `C:k` and `D:k`, value neurons beside whichever child fired |
 | `return c` | `from-c`, in each `out-k`'s table: the step that wrote `k` from `C:k` |
-| choosing the arm | no neuron: the arm's child and its value neurons name the digit the arm takes, the other digit's voter names its own, and the arm has the votes (R36) |
+| choosing the arm | no neuron: the arm's child and its value neurons name the digit the arm takes, the other digit's voter names its own, and the arm has the votes (R47) |
 | the call site that knows the whole | `k-if-same` and `k-if-differ`, one frame after the answer, where the branch and the digit first stand together |

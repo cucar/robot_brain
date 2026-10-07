@@ -124,7 +124,7 @@ above has not made.
 
 **A newly minted child infers little for a while.** Its connections start forming at its first purchase and
 only in the frames it is bought in (R17, D25), so until it has been bought a few times it infers from one or
-two exposures. Until it has any, what it covers speaks in its place (R36), so the situation is answered by its
+two exposures. Until it has any, what it covers speaks in its place (R48), so the situation is answered by its
 parents' habits rather than by nothing; whether those habits are a good enough first guess for the more
 specific situation the child names is the question. **Diagnostic:** frames from a child's mint to the first
 time its own inference wins a dimension, against how often it is bought, and how the reward under its parents'
@@ -249,7 +249,7 @@ table that it names: classes are its local variables and parameters its argument
 a set of function calls with their arguments: an accepted bid is a call, a function's child with one value
 neuron per variable beside it, or a lone variable's value neuron, all at the bidder's coordinate (§7.1, D45).
 Every bid covers its bidder (D31), and every symbol is counted at what it cost to write (D13). Base actions take
-no arguments and act at a focus the environment holds; the variables are built first, each by its own collapse
+no arguments, and one whose channel has no layout acts at a focus the environment holds; the variables are built first, each by its own collapse
 and priced on its own uses, and the functions over the rows as the variables rewrite them (D27, D33); an
 inferred pattern runs its actions and expects its events, weakly (R30). Nine cases are worked by hand on it
 ([algorithm.md](algorithm.md), Part V). What is still open, in the order it bites:
@@ -326,8 +326,10 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. The
   write case ([algorithm-copy.md](algorithm-copy.md)) learns that connection once per digit, from each digit's
   own lessons, so a digit never asked has none. Nothing generalizes the crossing itself.
-- **A call inferred by several situations** fires at each of their coordinates (D37). That is taken to be right
-  and has not been worked through against "one call per dimension per frame".
+- **A call inferred by several situations** is placed at each of their coordinates plus the connection's offset
+  (R36) and resolved per position (R47): in a channel with time alone those placements fall on one position and
+  are one proposal several times, and in a channel with a layout they fall on several. No worked case has an
+  action with a layout.
 - **The hippocampus document predates D41.** Its moment is written as a class neuron that fires wherever a
   member fires (H2, H5). Under D41 a class is a variable with no neuron of its own, and what fires is a value
   neuron for what stood in it (D45), so the moment has to be restated.
@@ -356,7 +358,7 @@ show patterns consistently reaching the bound in one direction only. Across acti
 assumed: each has the reach its own span gives it (D4).
 
 **Whether a coarse voter should count as one.** The vote at the base gives every apex activation one vote per
-dimension whatever level it stands at (R36). A level-4 neuron whose program expanded to forty base actions and a
+dimension whatever level it stands at (R47). A level-4 neuron whose program expanded to forty base actions and a
 base neuron that infers one action are then equal voters in the dimension they share, and the level-4 neuron's
 estimate rests on a situation the base neuron's does not. Level was taken out of the vote because ranking by
 level let compression override reward; whether some other reading of the voter — the strength behind its connection,
@@ -388,7 +390,7 @@ connections only (D25), scores nothing forward, and mints on the bill alone (R14
 the design does: a connection is a lifetime total on the neuron, strengthened on observation, never weakened,
 never collapsed, with the estimate the exact running mean and the walk wiring the next untried action on a
 negative mean (R31, R37); and the vote at the base normalizes each voter to one vote per dimension and takes
-actions by the share-weighted mean estimate, with no level in it (R36). What differs beyond the cut: the code
+actions by the share-weighted mean estimate, with no level in it (R47). What differs beyond the cut: the code
 wires a declared default at birth at strength 1 and runs it where nothing infers, where the design has no
 default and outputs nothing there (R35); the code connects to
 base actions instead of the apex (D25), and so needs no expansion (R28, R30); covered activations keep learning

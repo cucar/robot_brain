@@ -513,7 +513,7 @@ neuron has decided over that evidence. The cover and owners an activation carrie
 over those two, call by call, and they are held rather than recomputed because nothing ever re-derives a cover
 (§6.2).
 
-## 5.4 The collapse
+## 5.5 The collapse
 
 > **T5 — The collapse minimizes the pattern's margin over its population, one name at a time.** Over the
 > activations a pattern covers, naming a neighbor or a variable moves the summed margin by its worth wherever it
@@ -594,10 +594,10 @@ fire at one coordinate, so several can hold in one row and the pattern names eac
 — which is D6's coarse-offset case arriving for a second reason. `|p|` counts them, and nothing else in the
 design had to change for it.
 
-**On §5.4 — why a set and not a distribution.** Covering needs a set. So does the file: every offset it states
+**On §5.5 — why a set and not a distribution.** Covering needs a set. So does the file: every offset it states
 holds one symbol or nothing.
 
-## 5.5 Re-centering
+## 5.6 Re-centering
 
 **On D29 — three consequences, and they are the point of the design.**
 
@@ -615,7 +615,7 @@ Retirement re-centers nothing: the retired pattern's neighbors drop into the res
 recognition is what re-covers them with the patterns that remain. A re-center is one round because
 what it does to covers is a cover question, and recognition is the only place covers are decided.
 
-## 5.6 The margin
+## 5.7 The margin
 
 **On D30 — `coverage` is what nothing else would have covered.** A pattern is worth what it saves over what
 would account for those neurons if it were gone: the residual, where each stands as its own line (D21). A saving
@@ -713,7 +713,7 @@ answers that used to sit between the two ages.
 
 ---
 
-## 5.7 The greedy pick
+## 5.8 The greedy pick
 
 **On D33 — variables before functions.** A variable is a fact of its own — these neurons stand in for one
 another, these offsets hold one neuron — and it is priced on its own uses. A function is what
@@ -736,15 +736,16 @@ The table grows faster early than it did, since every pair of
 co-occurring neighborhoods becomes a pattern in the frame it repeats; each of those adds is a strict descent,
 and retirement prunes what the sliding history stops supporting.
 
-## 5.8 Connections
+## 5.9 Connections
 
 **On §3.5 — why a base action takes no arguments.** An earlier draft declared a shape for every action, an
 ordered list of arguments, and bound a thing as a relation from the voter. It brought four problems with it: a
 search over arguments that no walk could enumerate, contention among calls with different targets, a reward that
 could not tell two calls in one frame apart, and the resolution of every binding against the frame at call time.
 All four come from one decision, that a base action says where it acts, and all four go when it does not. Where
-a base action acts is a focus the environment holds and the machine sees, which is the head of the Turing
-machine the design already is, and a fovea. Nothing is declared about an action but its place in the alphabet.
+a base action acts is its activation's position, where its channel has a layout, or else a focus the environment
+holds and the machine sees, which is the head of the Turing machine the design already is, and a fovea. Nothing
+is declared about an action but its place in the alphabet and, on its channel, the layout it fires in.
 
 **On D41 — the second axis.** A pattern says "these things happened together": an AND, part to whole. A class
 inside it says "one of these happened here": an OR, instance to class. The design had the first axis from the
@@ -798,7 +799,7 @@ nothing; two in one call save a call.
 
 **On D41 — what speaks for a member never seen.** A variable that stands alone fires its value neuron and
 nothing else, and a member never seen before brings a value neuron with no connections. Nothing is built to
-speak for "this variable held, whatever it held". What speaks is what the bid covered (R36): the owner, and with
+speak for "this variable held, whatever it held". What speaks is what the bid covered (R46): the owner, and with
 it whatever the world reports in common across the cases, which holds the habit it formed before the variable
 existed. The new value neuron learns from what then runs, and speaks for itself from there on.
 
@@ -906,7 +907,7 @@ every member, and the value neuron beside it is where a member's own lesson live
 the member the value neuron names. An inferred call brings no value neuron, since nothing has stood yet, and
 there expansion places the class's most frequent member, the oldest on a tie.
 
-**On R36 — why speaking falls through, and why nothing explores at height.** A child is minted for a situation
+**On R48 — why speaking falls through, and why nothing explores at height.** A child is minted for a situation
 its parents were already in; it is that situation, named more finely. So until it has seen anything follow it,
 the best guess for what to do is what its parents saw follow them, and letting them speak costs nothing: they
 hold their connections whether or not they are covered. The child learns from what ran under it either way
@@ -916,7 +917,7 @@ where the walk is (R37). A situation the machine has never been in at any level 
 connection for, and there the machine says nothing: the first action in it is the world's, a lesson, and
 the walk goes on from what that lesson earned.
 
-**On R36 — a neuron several parameters pass is heard several times.** Every value neuron is a voter,
+**On R46 — a neuron several parameters pass is heard several times.** Every value neuron is a voter,
 so an event that several accepted bids pass as a value or a member produces several voters where an event nothing
 passed produces one, and a candidate's estimate is a mean over voters. This is accepted: a thing that takes part in
 more of what the machine has found worth writing down is more likely to matter.
@@ -982,16 +983,16 @@ of the alphabet, never by chance. That is the design, not a limitation of it: th
 it looks for something better when what it has hurts, which is what people do whatever they say they do. An
 environment that wants a behavior discovered rather than taught has to make its absence cost something.
 
-**On §3.5 — the two functions of the loop.** A situation is a function the machine owns: it fires, and what it
-infers is an action, looked up in its connections and chosen by estimate. An action is a function the world
-owns: it is called, and what follows it is the next events. The run is the two composed over and over, and a
+**On §3.5 — the two halves of the loop.** A situation is the machine's: it fires, and what it infers is an
+action, looked up in its connections and chosen by estimate. An action is the world's: it runs, and what
+follows it is the next events. The run is the two composed over and over, and a
 program is a stretch of that alternation that recurs. A learned function is a compression first and something
 callable second: only a situation whose window holds its whole length can call it (R36), and below that height the
 same behavior is a chain of one-step lessons, each inferred by the situation the last step created.
 
-**On D37 — where calls come from.** A call the environment executes appears in the frame as an activation of
-that action (D37), and sits in the action neuron's history as a pixel sits in an event neuron's. So a
-demonstration is a population of calls, the patterns chunk them with the events they ran beside, the collapse
+**On §3.5 — where lessons come from.** An action the environment executes appears in the frame as an activation
+of that action (D8), and sits in the action neuron's history as a pixel sits in an event neuron's. So a
+demonstration is a population of actions, the patterns chunk them with the events they ran beside, the collapse
 abstracts what varied into variables, and what stood on the apex connects to what followed.
 
 **On D25 — connections are measured, never chosen.** A connection is not in the bid (D31), not in any dictionary
@@ -1059,7 +1060,7 @@ ring is what the test is taken over. The forward side is never written anywhere 
 What a neuron keeps forward is every action that ever followed it, at every offset, with how often — the
 empirical distribution of what action follows the symbol — and the sample mean of what each earned. That is the
 maximum-likelihood statistic for a thing that is only ever read, and the vote at the base is a mixture of those
-distributions with one vote per voter (R36). A majority would throw the minority away for no reason the file
+distributions with one vote per voter (R47). A majority would throw the minority away for no reason the file
 gives, and a window would forget for no reason the file gives.
 
 An earlier draft kept the connections as a majority over the ring, on the argument that a weight that only
@@ -1288,7 +1289,7 @@ flowchart TD
     P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free activations<br/>they name, until the best left does not pay — R24"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §7.1"]
     O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §6.3"]
-    Z --> W["INFER, every open activation at its own age<br/>the apex action and rewards in; from the apex, inferences out — §8.1"]
+    Z --> W["INFER, every open activation at its own age<br/>the apex and rewards in; from the apex, inferences out — §8.1"]
     W --> S["SELECT — expand the inferences to base actions,<br/>one winner per action dimension per thing-binding by estimate; it executes at f+1 — §8.3"]
 ```
 
@@ -1787,8 +1788,8 @@ ladder work: a level-1 pattern fires in many contexts and averages coarsely acro
 pattern fires rarely and averages sharply over one, and the estimate is waiting at whichever level ends up
 uncovered.
 
-**On R32 — why the apex action and not the base.** A completed higher action holds the dimension and subsumes
-its constituents, so connecting to the base would reward subsumed subordinates and calcify primitive-level policy.
+**On R32 — why the apex and not the base.** A completed higher action stands on the apex and subsumes its
+constituents, so connecting to the base would reward subsumed subordinates and calcify primitive-level policy.
 
 **On R32 — why a pattern fires when its program completes and not when it starts.** Firing at the start would
 give it a neighborhood not yet in hand (D25); firing at completion puts it where recognition would. What the
@@ -1857,20 +1858,20 @@ any apex activation, since the action did run and what followed it was seen, and
 Where the situation mattered, a pattern that names the action beside what was seen has a sharper estimate and
 covers it; where it is right on its own, it is a habit that pays.
 
-**On R36 — why there is no confidence correction.** The correction would be a parameter with nothing to
+**On R47 — why there is no confidence correction.** The correction would be a parameter with nothing to
 derive it from, and R37's walk is what buys the thin estimates their exposures.
 
-**On R36 — why a covered neuron supplies nothing.** A pattern exists to tell one situation apart from the
+**On R48 — why a covered neuron supplies nothing.** A pattern exists to tell one situation apart from the
 general case its members fire in, and a member's estimate is that general case: an average over every
 situation it has ever fired in, the pattern's among them. Letting the two compete puts the average the pattern
 was created to escape back into the decision it was created for. The specific situation was recognized;
 nothing general is allowed to speak into it. That a new pattern starts with only what it covers has to say and
 explores is right — the general answer is precisely the one just judged too coarse.
 
-**On R36 — why a thin estimate displacing a worn habit is not a defect.** It is the exploration: a situation
+**On R47 — why a thin estimate displacing a worn habit is not a defect.** It is the exploration: a situation
 only gets sampled by something being tried in it.
 
-**On R36 — why level is not read.** An earlier draft resolved inferences by level first and estimate second,
+**On R47 — why level is not read.** An earlier draft resolved inferences by level first and estimate second,
 on the argument that a higher pattern decides more of the timeline. That let compression override
 reward outright: a level-4 connection at a small negative estimate beat a level-1 connection at a large positive one,
 which is a second place where the two objectives meet and the wrong one wins there (R34). The base-level vote

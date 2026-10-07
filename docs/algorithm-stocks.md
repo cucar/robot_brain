@@ -59,7 +59,7 @@ lost, and the connection whose estimate turned negative wires the other action, 
 neutral estimate. It outranks the negative one and is output; what it earns moves the estimate.
 
 **Selection.** Each frame, every voter on the frontier reads its connections at the offset ahead, and the
-action with the largest estimate is output for each channel (R36). A child standing for a shape that has paid
+action with the largest estimate is output for each channel (R47). A child standing for a shape that has paid
 under `own` outvotes the bare bar's marginal, since its estimate rests on the one situation its pattern names
 (R35). The environment executes it, buying, selling or doing nothing by the difference from the state it is in,
 reports it, and the frontier connects to what ran. Where no voter has anything for a channel, the world's

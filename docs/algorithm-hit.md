@@ -100,7 +100,7 @@ A rock comes from ahead. It stands at both of `T`'s positions, and for a paramet
 is `T`'s value on the spot and a member from then on (D27), and the machine gives it a value neuron, `T:rock`
 (R44). `T:rock` has never fired
 and holds no connection, so it has nothing to infer. Where a neuron on the apex has nothing to say, what it
-covers speaks in its place (R36): `approaching` is under it, and `approaching`'s habit says `hit`. The rock is
+covers speaks in its place (R48): `approaching` is under it, and `approaching`'s habit says `hit`. The rock is
 hit, the hit is rewarded, and `T:rock`, open and uncovered a frame later, connects to `hit` with that reward.
 From then on a rock is hit on its own lesson.
 

@@ -61,10 +61,10 @@ what was shown.
 
 In frame 1 `ask:7` reads its connection at offset one and places `wrote-7` at frame 2. Expanding `wrote-7`
 places its bidder, `write-7`, at frame 2, and its one neighbor, `ask:7`, at frame 1, where it stands (R28).
-`write-7` is the one candidate in `write` at the frame ahead, so it is output (R36). In frame 2 the world
+`write-7` is the one candidate in `write` at the frame ahead, so it is output (R47). In frame 2 the world
 reports it as run, `write-7`'s function holds, and `wrote-7` fires strong. It infers the echo's child one frame
 ahead, whose expansion places a `7` at frame 3: a base event, the one candidate in `d` there, so it wins that
-dimension and fires there weakly, as what the write is expected to bring (R36, R40). The echo places no action,
+dimension and fires there weakly, as what the write is expected to bring (R47, R40). The echo places no action,
 so it contends in no action dimension; its event is resolved on its own. In frame 3 the world shows the `7`,
 and the report replaces the expectation.
 
