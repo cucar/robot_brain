@@ -1484,6 +1484,30 @@ chunk may stand one position over depending on who won, and the level above sees
 thing. That is accepted. A child was never renamed when its one line re-centered (D29); several lines that
 drift apart are the same thing across parents.
 
+**On R43 — reuse beyond the tie, priced.** Exact reuse is what the design does; a priced reuse of a near match
+is plausible and is kept here. It is the machine's decision and must be priced from the machine's side, since
+the neuron is never told what the board did. Take a bid accepted on the board whose function has no child, and
+another bid of the same election, carrying a child, whose pattern names one neighbor more or one fewer. The
+machine has two choices: create a child and wire it, or wire the existing child as if it were the one asked
+for. What it saves by not creating is a neuron, and a neuron costs the dictionary: every name in every line is
+a choice among `n`, so one more widens each by `log₂((n + 1) / n)`, and the price of a neuron is the number of
+names in the dictionary times that, paid once and carried. What reuse costs is a correction each time the
+pattern fires the borrowed child: a neighbor the child's line names and the pattern does not is a failed
+neighbor at `log₂ |p|`, and one the pattern names and the child's line does not is written flat at its own
+cost. Both sides over the same span, the history:
+```
+corrections per use · uses within H   <   names in the dictionary · log₂((n + 1) / n)   →  reuse
+```
+A frequent pattern earns its own neuron; a rare one rides on a near match and pays the odd correction. It is
+the shape of every other decision in the design, a saving over the history against a line, and nothing in it is
+a constant. What it would need: a bid carrying its pattern's count of uses within the history, which the owner
+knows; and a child standing for the one line it was created for, so that a correction has something to be
+measured against, where under exact reuse a child expands through whichever parent fired it and needs no line
+of its own. That second change is what a child is, and it is why this stays a remark until neuron count bites.
+The file would stay exact either way, since corrections are recorded on the activation and expanded
+faithfully; what the borrowed child blurs is inference, where a placed child carries no corrections, and the
+vote and the strike are what handle a proposal that is off.
+
 # 7. Contraction
 
 **On the objective — the machine executes it, it does not evaluate it.** The file over one frame is the neurons
