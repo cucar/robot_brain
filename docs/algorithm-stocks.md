@@ -32,10 +32,11 @@ itself, `own` where the bar rose and `disown` where it fell, and rewards it (§3
 beside the trading: a situation is taught until the machine speaks in it, and from then on what the machine
 says is what runs.
 
-**Reward.** When a position closes, the environment reports its return as a reward scoped to that channel and
-to the frames the position was held, `{ reward, channels: [this one], frames: the span }` (D35). The reward
-dissipates linearly back over the span (R33), so the frame the position was opened in takes the least and the
-frame it closed in the most.
+**Reward.** Every frame, for every instrument, the environment reports the change in price since the last
+frame, signed by the action that stood over it, positive for `own` where the price rose and for `disown` where
+it fell, as a reward scoped to that channel and to that one frame, `{ reward, channels: [this one], frames: 1 }`
+(D35). It arrives with the next frame's prices and with the report of the action that ran, so the connection to
+the action is strengthened and takes the reward in one write (R29, R31).
 
 # 2. What forms over frames
 
@@ -53,8 +54,8 @@ names an action, the dictionary describes the market and nothing the machine did
 
 Every uncovered activation of a frame, the children standing for the shape of the last bars and the bars
 nothing covered, is open through its reach, and it connects to the action that ran in each later frame it is
-open through (R31). The reward of a position reaches those connections over the frames it names, so a child's
-estimate for `own` is the mean return of the frames owned under it, at each distance.
+open through (R31). Each frame's reward reaches the connections strengthened in that frame, so a child's
+estimate for `own` at a distance is the mean price change of the frames owned under it at that distance.
 
 **The first lessons.** Nothing has run yet and nothing infers, so the world runs the right action in every
 channel, and the frontier connects to what ran with what it earned (R35). A shape that stood before a rise

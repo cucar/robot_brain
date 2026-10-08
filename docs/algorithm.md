@@ -288,8 +288,8 @@ the environment does not have, the action the machine inferred there, weak (D40)
 > fired** (R27), and **in the frame it is covered it still connects, once: to the neuron that covered it**, the
 > function's child, or the value neuron of a variable that bid alone, with that frame's reward (R31). So a
 > situation whose next step has been chunked with it goes on learning what that step earns: what it learns is
-> the chunk. Coverage acquired at a later age revokes nothing before it: the exposures the activation wrote
-> while uncovered stand, and a reward for one of those frames still reaches the connection it wrote (R33). An
+> the chunk. Coverage acquired at a later age revokes nothing before it: the connections the activation
+> strengthened while uncovered stand, and a reward for one of those frames still reaches them (R33). An
 > activation covered already at age 0 writes nothing, ever: a connection is to what comes after (D25), and by
 > then it is inhibited. **One exception, on inferring alone:** a covered activation speaks when its coverer has
 > nothing to infer for the frame ahead (R48). It still writes nothing and connects to nothing; only its coverer
@@ -311,7 +311,7 @@ assumes for anything the file does not state.
 > **A weak activation is an input of its frame like a strong one.** It is in the neighborhood of everything that
 > fires within reach of it, at whatever offset, so it enters histories, and patterns name it and price it like any
 > neighbor; its neuron is called with it, it may be covered, and it may stand on the apex and vote once (R46), with
-> the connections its neuron's strong activations wrote. **It differs in one thing: it lasts its one frame.** It
+> the connections its neuron's strong activations strengthened. **It differs in one thing: it lasts its one frame.** It
 > is not open afterward: it writes no connection, nothing connects to it, and no reward reaches it (R31). **The
 > report replaces it**: where a strong activation of the same neuron stands at the same coordinate, at any level,
 > the weak one is dropped. Where nothing reports, the inference peeks through: an inferred action nothing reports
@@ -1306,7 +1306,9 @@ one: a bid arrives as a definition, and everything it is worth this frame the ma
 > **An activation is named by its full coordinate**, dimension and position together, so two activations of one
 > neuron at two positions never contend. The coverage set spans one frame more than the longest reach in time
 > among the neurons the machine holds — no bid reaches further back — and the box every other activation
-> dimension gives, and ages out with it. **The machine holds nothing on the scale of the run.**
+> dimension gives, and ages out with it, and over the same span the machine keeps the action that ran at each
+> frame in each action channel, for the shares a reward sends back (R33). **The machine holds nothing on the
+> scale of the run.**
 >
 > Ownership is about **credit**: a neuron is a fact that needs paying for exactly once, so it is settled
 > once and never revisited (R23). It is not about naming: a neuron expands to everything its pattern names,
@@ -1508,14 +1510,16 @@ the apex          every activation standing on the apex this frame within the
                    frame is handed the neuron that covered it and nothing else; one covered
                    earlier writes nothing more                                            D10, D25, R31
 the reward         any reward that arrived, for the actions of this frame and for any earlier
-                   frame the reward spans, at the distance each one names                       R33
+                   frame the reward spans, at the distance each one names, with the action
+                   that ran at that frame in each channel it pays (D24)                        R33
 ```
 
 The neuron strengthens a connection per apex activation and saves nothing: the connection at `(neuron, age)`,
 created at strength 1 or incremented (R31), and for each reward share the estimate of the connections it names
-(R33) — for this frame, the connections just strengthened, in the same write. A share for an earlier frame
-reaches the connection the activation wrote to at that frame, whether or not coverage has arrived since. Nothing
-is written into the activation. **Nothing is decided, priced or compared here**, and no test is waiting on any of
+(R33) — for this frame, the connections just strengthened, in the same write. A share for an earlier frame,
+at distance `d`, goes into the connection at the offset the activation's age less `d` rounds to, to the action
+the machine hands it for that frame, where the activation was uncovered then (D9). The activation keeps nothing
+of it. **Nothing is decided, priced or compared here**, and no test is waiting on any of
 it.
 
 **If the activation is uncovered, the call returns what it speaks.** It reads its own neuron's connections at
@@ -1604,10 +1608,14 @@ stop the writing — there is no second call and nothing is saved twice.
 > **Nothing is being divided up.** Every distance in the span is paid, and the shares are not a partition of
 > the reward — a reward is not in short supply, and the point of spreading it is not to conserve it but to say
 > how likely each frame is to have earned it. What is genuinely responsible recurs and accumulates; what is not
-> is sampled once and averaged away. Each share is delivered, in the `infer` call (§8.1), to every open
-> activation that wrote an exposure at the frame that distance names — one uncovered at that frame (D25) — into
-> the connection it wrote to then, whether or not coverage has arrived since: at distance `0` the connection this call
-> strengthens, further back one strengthened `d` frames ago (R31).
+> is sampled once and averaged away. **Each share is delivered, in the `infer` call (§8.1), to every open
+> activation, and the activation picks the connection from its age and the reward's channels.** The machine hands
+> it, for the frame each distance names, the action that ran there in each channel the reward pays, from the
+> window it keeps (D24). An activation at age `a` takes the share at distance `d`, `d` at most `a`, into its
+> neuron's connection at the offset `a − d` rounds to, to that action, where it was uncovered at that frame (D9):
+> at distance `0` the connection this call strengthens, in the same write; further back one strengthened `d`
+> frames ago (R31). An activation that has closed is not called, so a share reaches no further back than the
+> open activations that would take it.
 >
 > **A scoped reward reaches base actions of the channels it names, and nothing else.** A connection names a
 > neuron (D25). A share of a reward that names channels is delivered only to a connection whose neuron is a base
@@ -1879,5 +1887,5 @@ definitions through one small job.
 | Hit | [algorithm-hit.md](algorithm-hit.md) | Offsets from where the world reports something approaching as the reference frame, a parameter that takes whatever comes, a value neuron and a lesson per thing, and a thing never seen answered by the habit of the event the world reports in common. |
 | Loop | [algorithm-loop.md](algorithm-loop.md) | Shown a cue, the machine taps in each of the next three frames and then stops. There is no counter: each tap's table names what stood a frame back, so the states of the loop are three chunks a level apart, each connected to the one after it and the last to the event the world shows at the end. Stopping is a thing that follows and not an absence, since speaking falls through the cover; taught to stop on a cue instead of a count, the same machine is a while loop. |
 | MNIST | [algorithm-mnist.md](algorithm-mnist.md) | An image channel with two spatial dimensions and a binary pixel dimension, 256 buckets or three channels for color later; patches at the base, odd shapes closed on the frontier, a digit action taught by demonstration. |
-| Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument with own and disown as its actions, under a policy where an action is no one's neighbor and only events and patterns connect, to actions alone; patterns over frames; a world that runs the right action wherever the machine has none; and a scoped reward for a position. |
+| Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument with own and disown as its actions, under a policy where an action is no one's neighbor and only events and patterns connect, to actions alone; patterns over frames; a world that runs the right action wherever the machine has none; and a reward scoped to the channel and the frame, each frame. |
 | Text | [algorithm-text.md](algorithm-text.md) | A stream of letters at reach 1: at the base a class of the letters that stand before each letter, its value neurons the pairs; words of any length from children and letters on the frontier, a doubled letter as a parameter. |
