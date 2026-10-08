@@ -100,9 +100,19 @@ weakly in that frame, for the world's report to replace. The reward for the acti
 > in which the fourth frame back matters as exactly as the first declares `R = 4` in time. Where this document
 > writes a distance with no radius given, `R = 1`.
 >
-> **A channel declares its neighborhood policy**: whether its base actions are neighbors of its events (D5). A
-> channel whose actions do not move its events, a price and the decision to hold it, declares that they are not,
-> and its patterns name events alone; every other channel lets a body name both.
+> **The machine declares its neighborhood policy**, once, as it declares the alphabet. For the policy a neuron is
+> of one of three kinds: an **event**, an **action**, or a **pattern**, every higher neuron being a pattern
+> whatever its body or its values hold. The policy is two tables of booleans, the kind of the holder by the kind
+> of the target, nine entries each:
+>
+> | Table  | An entry on says                                                          | And so decides            |
+> |--------|---------------------------------------------------------------------------|---------------------------|
+> | past   | a target of that kind may stand in a holder of that kind's neighborhood (D5) | what patterns are built from |
+> | future | a holder of that kind may hold a connection to a target of that kind (D25)   | what inference reads      |
+>
+> With every entry on, anything may be a neighbor of anything and anything may connect to anything. An entry
+> off removes that kind of target from that kind of holder's neighborhoods or connections, and nothing else:
+> what stands on the apex infers in every setting (D49), and the policy restricts only what it reaches.
 
 > **D2 — Type and instance.** A **neuron is a type** and an **activation is an instance of it**.
 >
@@ -182,11 +192,11 @@ what the dictionary writes is a pattern.
 > **D5 — Adjacency.** Two activations are adjacent when **the second stands on the apex (R27) as the first
 > fires, within reach in every activation dimension they share** (D4), **and the second is not later than the
 > first**. The level is no condition: a neighbor is whatever nothing has covered, at whatever level it stands,
-> so a base neuron sees a high child one frame back beside the base neurons around it. What has not yet been
-> created in the frame is not there to be seen, so a same-frame neighbor is never above the first's own level.
-> Events and actions are adjacent to one another like
-> anything else, unless their channel declares otherwise (D1): what was done a frame ago is context as much as
-> what was seen. In space both directions count — an activation three positions to the right arrives in the same
+> so a base neuron sees a high child one frame back beside the base neurons around it. What has not yet fired in
+> the frame is not there to be seen, and a child fires at its own level's turn (§7.4), so a same-frame neighbor
+> is never above the first's own level. **The second's kind must be admitted beside the first's kind by the past
+> table of the policy** (D1); where it is, events and actions are adjacent to one another like anything else, and
+> what was done a frame ago is context as much as what was seen. In space both directions count — an activation three positions to the right arrives in the same
 > frame as one three positions to the left. In time only the past does, because compression only reads the
 > past. **What fires after an activation is not adjacent to it.** What the machine keeps about it is recorded
 > on the neuron as a connection (D25), and it is never in a neighborhood and never in a pattern.
@@ -257,7 +267,7 @@ the environment does not have, the action the machine inferred there, weak (D40)
 >
 > | Input           | Description                                                                                                 | References |
 > |-----------------|-------------------------------------------------------------------------------------------------------------|------------|
-> | the apex       | What stands on the apex of that frame (R27), while the activation is uncovered; in the frame it is covered, the neuron that covered it (D10). | D25, R31   |
+> | the apex       | What stands on the apex of that frame within reach (R27, D25), while the activation is uncovered; in the frame it is covered, the neuron that covered it (D10). | D25, R31   |
 > | the rewards     | For the actions of that frame, and of earlier frames the reward spans, each at the distance its frame names. | R29, R33   |
 >
 > The machine holds the activation open, not the neuron:
@@ -461,7 +471,8 @@ Nine cases are worked by hand on these definitions, listed in Part V.
 > ```
 > `reward` is signed: strictly greater than zero is good, strictly less is bad, and zero is neither.
 > `channels` is the set of action channels it pays and `frames` the span of frames it pays over, counted back
-> from the frame it arrives in. Both are optional, and an omitted one means all of them.
+> from the frame it arrives in. Both are optional, and an omitted one means all of them. A reward that names
+> channels reaches connections to base actions of those channels and nothing else (R33).
 
 # 4. The pattern and the cover
 
@@ -688,8 +699,9 @@ Part IV covers the `infer` call, where a neuron learns what followed and infers 
 > knob, and the radius `R` of each activation dimension is declared beside it (D1): it is the resolution of the
 > layout, and it states the problem too. `H` is the one parameter of the algorithm itself. The reach (D4),
 > adjacency (D5) and the offsets (D6) are derived from the radii, not declared; the `n` every price reads is the
-> machine's count of its neurons (D13). **No rule introduces a constant, a threshold, a window or a cap of its
-> own.**
+> machine's count of its neurons (D13). The neighborhood policy (D1) is a declaration like the alphabet: it
+> states the kind of world the machine is in, and is not a knob. **No rule introduces a constant, a threshold,
+> a window or a cap of its own.**
 
 ## 5.4 Variables and children
 
@@ -967,7 +979,11 @@ what stood on the apex in the frames after it, event and action alike.
 > of times an activation of the neuron saw that neuron stand on the apex at that offset, and an **estimate**, the
 > mean reward the actions of those frames received. The offset is a full D6 offset from the holder's activation:
 > positive in time, because what is connected to comes after, and signed in every other activation dimension.
-> A coarse offset pools the exposures of every frame in its group. The neuron connected to may be a value
+> **A connection reaches as far as a neighbor does** (D5): an activation connects to what stands on the apex
+> within its neuron's reach in every activation dimension the two share (D4), the window in time (D9) and the
+> same reach in every other, and to nothing beyond it. **A connection is written only where the future table of
+> the policy admits the target's kind among the holder's kind's connections** (D1). A coarse offset pools the
+> exposures of every frame in its group. The neuron connected to may be a value
 > neuron, and what an inference of it places is its value, at the positions of its variable (D45, R28).
 > Nothing about any one activation is kept.
 >
@@ -1207,14 +1223,15 @@ or its value neurons, if it has any, when they are due (R18).
 > spacetime. Spatial contraction is the case where every offset is zero.
 
 **The machine compresses a frame in this order and no other.** For each level, from the base up, for as long as
-some level at or above it holds an activation this frame, a level with none being passed over:
+some level at or above it holds an activation this frame or a child bought this frame that has not fired yet, a
+level with neither being passed over:
 
 | Step              | Description                                                                                                   |
 |-------------------|---------------------------------------------------------------------------------------------------------------|
+| activate children | Fire every child and value neuron a lower level's election bought this frame at this level, each at its bidder's coordinate (D2); the uncovered stand on the apex. |
 | process functions | Call every neuron with an activation at this level, value neurons included (§6).                              |
 | elect bids        | Cover the frontier's activations that this level's bids name, by the greedy cover over the board.            |
-| create children   | Give every function of an accepted bid that has no child one, and every value the bid carries that has no value neuron one: a child and the value neurons reused where another bid of the election tied it, created otherwise (R43). |
-| activate children | Every accepted bid activates, at the bidder's coordinate, the child of each function it carries and the value neuron of each variable, each at its own level (D2); the uncovered stand on the apex. |
+| create children   | Give every function of an accepted bid that has no child one, and every value the bid carries that has no value neuron one: a child and the value neurons reused where another bid of the election tied it, created otherwise (R43). Each waits for its level's turn to fire. |
 
 Then, once the last level has run:
 
@@ -1232,12 +1249,12 @@ child and a value neuron holds for that one value.
 
 > **R26 — One stack.** Base neurons run `process functions` and offer; the election settles
 > which bids are bought, and each child stands one level above the highest activation its bid covered (D2). Then
-> the next level that holds an activation runs, and so on upward. **When no level above has an activation this
-> frame, the stack ends there.** Nothing declares the depth and nothing caps it.
+> the next level that holds an activation, or a child bought and not yet fired, runs, and so on upward. **When no
+> level above has either this frame, the stack ends there.** Nothing declares the depth and nothing caps it.
 >
-> **Within a level the order is call, elect, create, activate**, and it cannot be otherwise: the bids are what
-> the election is over, a child is created only for a bid the election accepted (R16), and what is activated is
-> what was elected.
+> **Within a level the order is activate, call, elect, create**, and it cannot be otherwise: what fires is what a
+> lower level's election bought, the bids are what the election is over, and a child is created only for a bid
+> the election accepted (R16).
 > Nothing in that order leaves the level or the frame.
 >
 > Every neuron runs the same rule at its own reach (D4). **Compression is spatio-temporal
@@ -1382,12 +1399,12 @@ variable's value at its value neuron, by the wire call (§5.1).
 
 ## 7.4 Activate children
 
-Every accepted bid activates what it carries at the bidder's coordinate (D2): the child of each function, and
-one value neuron per variable for the value it held (D45), each at its own level. A variable bid alone activates
-its value neuron and nothing else. A child's activation records the function whose bid fired it, and a value
-neuron's the variable, since either may have several (R43), and each is expanded through that one (R28). Every
-activation no accepted bid covers
-stands as itself.
+A child fires at its own level's turn, before that level is called. What an accepted bid carries fires then at
+the bidder's coordinate (D2): the child of each function, and one value neuron per variable for the value it
+held (D45). A variable bid alone fires its value neuron and nothing else. A child bought at a level far below
+its own waits through the levels between, and nothing sees it until it fires (D5). A child's activation records
+the function whose bid fired it, and a value neuron's the variable, since either may have several (R43), and
+each is expanded through that one (R28). Every activation no accepted bid covers stands as itself.
 
 > **R27 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** (D49) — the
 > uncovered set, at every level at once — so a base neuron nothing found worth chunking stands in it beside a
@@ -1485,7 +1502,8 @@ other:
 **The machine calls every open activation once more**, at whatever age it stands at, with two things:
 
 ```
-the apex          every activation standing on the apex this frame (R27). **Only if the
+the apex          every activation standing on the apex this frame within the
+                   activation's reach in every dimension but time (R27, D25). **Only if the
                    activation is uncovered at this frame.** One an accepted bid covered this
                    frame is handed the neuron that covered it and nothing else; one covered
                    earlier writes nothing more                                            D10, D25, R31
@@ -1514,7 +1532,8 @@ stop the writing — there is no second call and nothing is saved twice.
 > **R31 — A connection carries an estimate.** What stands on the apex at `f + 1` is not known at `f`: the action is
 > settled only when the report names what ran, and the events only when the environment reports them (D40). So at
 > `f + 1`, once the last level has run, **every uncovered activation open at that frame connects to every strong
-> activation standing on the apex of that frame** (R27) at its own age (D25, §8.1), and the reward of that frame's
+> activation standing on the apex of that frame within its reach that the policy admits** (R27, D25, D1) at its
+> own age (§8.1), and the reward of that frame's
 > actions goes into each. An activation covered in that frame connects once more, to the neuron that covered it
 > where that is strong, and to nothing else (D10). A weak activation is connected to by nothing: it is a proposal,
 > not a fact. That connection binds what the neuron stands for to what followed — formed against what actually
@@ -1532,8 +1551,8 @@ stop the writing — there is no second call and nothing is saved twice.
 >
 > **Strengthening and reading are inverses**: an exposure is written at the offset its age rounds to, and read
 > back at the age from which that offset places a completion one frame ahead (R28, R36), so what a replay earns
-> lands on the connection it was learned from. Fan-out is the apex: a neuron connects to what stood uncovered
-> in the frames after it and to nothing beneath that, and one exposure per apex activation per frame means a
+> lands on the connection it was learned from. Fan-out is the apex within reach: a neuron connects to what stood
+> uncovered in the frames after it, as far as it sees in every other dimension, and to nothing beneath that, and one exposure per apex activation per frame means a
 > neuron of reach `r` holds at most `R + ⌊log₂ (r / R)⌋` offsets per neuron it has seen.
 >
 > **Making and strengthening are one operation.** A neuron's connection at `(neuron, offset)` has a
@@ -1590,7 +1609,15 @@ stop the writing — there is no second call and nothing is saved twice.
 > the connection it wrote to then, whether or not coverage has arrived since: at distance `0` the connection this call
 > strengthens, further back one strengthened `d` frames ago (R31).
 >
-> **Rewards in one frame are independent.** A connection at one `(channel, offset)` takes the sum of the shares that
+> **A scoped reward reaches base actions of the channels it names, and nothing else.** A connection names a
+> neuron (D25). A share of a reward that names channels is delivered only to a connection whose neuron is a base
+> action of one of them; a connection to an event or to a pattern takes none of it. A pattern belongs to no
+> channel (D2), and a share placed through its expansion would give a call spanning two channels one estimate,
+> read in both at resolution (R47). An unscoped reward reaches every connection written at the frames it pays. A
+> machine whose policy lets patterns be connected to (D1) and whose rewards name channels leaves those
+> connections unpriced by them; the two are not declared together.
+>
+> **Rewards in one frame are independent.** A connection at one `(neuron, offset)` takes the sum of the shares that
 > reach it, and nothing coordinates one reward with another.
 >
 > **The unscoped form is the general case, and the machine sorts out the attribution itself.** An environment
@@ -1852,5 +1879,5 @@ definitions through one small job.
 | Hit | [algorithm-hit.md](algorithm-hit.md) | Offsets from where the world reports something approaching as the reference frame, a parameter that takes whatever comes, a value neuron and a lesson per thing, and a thing never seen answered by the habit of the event the world reports in common. |
 | Loop | [algorithm-loop.md](algorithm-loop.md) | Shown a cue, the machine taps in each of the next three frames and then stops. There is no counter: each tap's table names what stood a frame back, so the states of the loop are three chunks a level apart, each connected to the one after it and the last to the event the world shows at the end. Stopping is a thing that follows and not an absence, since speaking falls through the cover; taught to stop on a cue instead of a count, the same machine is a while loop. |
 | MNIST | [algorithm-mnist.md](algorithm-mnist.md) | An image channel with two spatial dimensions and a binary pixel dimension, 256 buckets or three channels for color later; patches at the base, odd shapes closed on the frontier, a digit action taught by demonstration. |
-| Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument whose actions, own or disown, are not neighbors of its events; patterns over frames; a world that runs the right action wherever the machine has none; and a scoped reward for a position. |
+| Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument with own and disown as its actions, under a policy where an action is no one's neighbor and only events and patterns connect, to actions alone; patterns over frames; a world that runs the right action wherever the machine has none; and a scoped reward for a position. |
 | Text | [algorithm-text.md](algorithm-text.md) | A stream of letters at reach 1: at the base a class of the letters that stand before each letter, its value neurons the pairs; words of any length from children and letters on the frontier, a doubled letter as a parameter. |

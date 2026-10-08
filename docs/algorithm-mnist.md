@@ -24,6 +24,12 @@ anything else.
 so it has no `x` and no `y` (D1). The action runs in the frame after the image (R29), and the reward that arrives
 with that frame is positive when the action named the image's digit and negative when it did not.
 
+**Policy.** The machine declares the neighborhood policy the stocks case declares (D1): no action is anyone's
+neighbor, and only an event or a pattern connects, to an action alone. Consecutive images are unrelated, so an
+apex connecting to the next image's apex would learn nothing, and a digit chunked into a pattern would scatter
+its estimate over whatever covered it. Under this policy every connection is to a digit action, and a reward
+scoped to the digit channel reaches exactly those (R33).
+
 # 2. What forms over an image
 
 | What stands | its reach | what it sees, and what forms |

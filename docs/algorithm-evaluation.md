@@ -317,11 +317,17 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
 - **Loops have no member.** A constant repeat is unrolled, and nothing can say "down, three times". A run-length
   neighbor would be decided like any other and would pay in the file; a repeat whose count depends on the world
   stays with the frame.
-- **Connections fan out over the apex.** R31 connects every uncovered activation to everything on the apex of every
-  frame it is open through, which on a dense layout with little compression is every point of the layout. It has
-  not been measured. Limiting connections to the highest levels, or to apex activations above the base, is the
+- **Connections fan out over the apex within reach.** R31 connects every uncovered activation to everything on
+  the apex of every frame it is open through, within its reach in every other dimension (D25). On a dense layout
+  with little compression that is every point of the box, per open activation, and the box grows with the span
+  (D4). It has not been measured, and under a policy whose future table reaches actions alone (D1) it never
+  exists. Limiting connections to the highest levels, or to apex activations above the base, is the
   fallback, and it is not decided. An expected event that recreates the situation that inferred it is a loop with
   no world in it, and nothing breaks it but reward.
+- **A plan spanning channels is never priced per channel.** A scoped reward reaches base actions of its channels
+  and nothing else (R33), so a pattern whose call runs actions in two channels takes no scoped reward: its
+  connections are priced only by unscoped rewards. A machine that pays per channel and lets patterns be
+  connected to has no estimate for such a plan beyond what its base actions hold.
 - **Crossing kinds.** A parameter holds an event as an event. "Write the digit you see" needs the action that
   corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. The
   write case ([algorithm-copy.md](algorithm-copy.md)) learns that connection once per digit, from each digit's

@@ -17,8 +17,15 @@ another within reach in time (D5), and a pattern may name both.
 
 **Out.** One action dimension per channel, with two base actions, `own` and `disown`: the state the machine
 wants to be in for that instrument. The environment holds the state it is in, compares the two, and buys, sells
-or does nothing; the machine never names a trade. The channel declares that its actions are not neighbors of
-its events (D1): the price does not move because the machine owns, so its patterns name events alone.
+or does nothing; the machine never names a trade.
+
+**Policy.** The machine declares its neighborhood policy (D1) with every entry that has an action off in the
+past table, since the price does not move because the machine owns, and in the future table only event to
+action and pattern to action on. Everything below follows from that and nothing is declared for it: no action
+is anyone's neighbor, so no pattern names one, so no action is ever covered and every action on the apex is
+base; a connection reaches base actions only, so an inference expands to nothing and contradicts nothing; actions
+write no connections and never vote; and every exposure of one action after one situation pools on one
+connection, which is the connection a reward scoped to that channel pays (R33).
 
 **Teaching.** Where the machine says nothing for an instrument, the world runs the right action for that frame
 itself, `own` where the bar rose and `disown` where it fell, and rewards it (§3.5). That runs all the time,

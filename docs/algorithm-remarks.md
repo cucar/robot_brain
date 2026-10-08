@@ -54,6 +54,17 @@ sees, or how long it stays open.
 The neighborhood is read at the newest edge and never again; the buffer's only other job is to be the
 frames the next activations read their own neighborhoods from.
 
+**On D1 — the neighborhood policy, and the two settings in use.** The policy exists because two kinds of world
+need different machines. In a world the machine acts in step by step, a program world, what it did a frame ago
+is as much context as what it saw, and what follows a situation may be a whole pattern, so every entry of both
+tables is on: that is the design as the program cases work it. In a world that pays per channel and does not
+move because the machine acted, a market, an action is no one's neighbor, so no pattern names one and the
+actions on the apex are base; and the forward entries reach actions alone, so every exposure of one action
+after one situation pools on one connection, which is the one a scoped reward can find. Under apex-to-apex
+inference with actions in patterns that machine cannot run: an action's estimate fragments over whatever chunk
+covered it, and the apex of one image connects to the apex of the next, unrelated one. The policy is not a
+second inference mode. Apex infers apex in every setting; the tables only say what a kind of holder reaches.
+
 **On D5 — a neighborhood is a box.** Adjacency is a conjunction, so something far away in one dimension is not
 a neighbor however close it is in another, and no dimension can rescue what another has ruled out.
 
@@ -74,9 +85,10 @@ neurons to the level above would have bought the same at the price of a table pe
 lifted here, because nothing needs to be: what is uncovered is simply visible. A neighbor may be a neuron of any
 level, and each is counted at what it cost to write (D13).
 
-**On D5 — why adjacency is not declared.** A conjunction over shared activation dimensions already says
-everything a visibility declaration would, and it says it without a table to maintain: what a channel is laid
-out over settles which channels it can be adjacent to.
+**On D5 — why adjacency across channels is not declared.** A conjunction over shared activation dimensions
+already says everything a visibility declaration per channel would, and it says it without a table to
+maintain: what a channel is laid out over settles which channels it can be adjacent to. The one table there is
+says which kinds of neuron see which (D1), and it is one for the whole machine.
 
 **On D6 — what made coarse offsets safe.** One neighbor per offset was a consequence of atomic offsets,
 never a rule. Logarithmic offsets make reach exponential in the alphabet, which is what makes the reaches D4
@@ -1016,8 +1028,10 @@ everything; a habit that pays is a program.
 **On D25 — why the fan-out is the apex.** Every uncovered activation connects to everything that stood on the
 apex of the frames after it, event and action alike. That is more than the earlier draft's one apex action per
 dimension, and it is what a prediction needs: an expected event is inferred only because it was once seen to
-follow. The bound is the apex itself, which compression is meant to keep to a handful per frame. Whether the
-lower apex, base symbols nothing chunked, should connect at all is open (algorithm-evaluation.md).
+follow. The bound is the box adjacency draws (D5), filled forward in time instead of back: a neuron learns what
+followed within the same reach it recognizes in, and the apex inside that box is what compression is meant to
+keep to a handful. Whether the lower apex, base symbols nothing chunked, should connect at all is open
+(algorithm-evaluation.md).
 
 **On D25 — why what follows is a different object.** An activation sees both directions; only one of them has
 arrived when the neuron must decide. What preceded it is a set, whole and priceable, so it can be named in a
@@ -1288,9 +1302,9 @@ flowchart TD
     M --> P["RETURN PATTERNS<br/>the bids, the patterns added, the patterns retired — R20"]
     P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free activations<br/>they name, until the best left does not pay — R24"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §7.1"]
-    O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §6.3"]
+    O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §7.5"]
     Z --> W["INFER, every open activation at its own age<br/>the apex and rewards in; from the apex, inferences out — §8.1"]
-    W --> S["SELECT — expand the inferences to base actions,<br/>one winner per action dimension per thing-binding by estimate; it executes at f+1 — §8.3"]
+    W --> S["SELECT — expand the inferences to base actions,<br/>one winner per dimension per position, actions by estimate and events by share; it fires at f+1 — R47"]
 ```
 
 ## 6.2 Recognition
