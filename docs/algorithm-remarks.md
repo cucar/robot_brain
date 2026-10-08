@@ -54,7 +54,7 @@ sees, or how long it stays open.
 The neighborhood is read at the newest edge and never again; the buffer's only other job is to be the
 frames the next activations read their own neighborhoods from.
 
-**On D1 — the neighborhood policy, and the two settings in use.** The policy exists because two kinds of world
+**On D50 — the neighborhood policy, and the two settings in use.** The policy exists because two kinds of world
 need different machines. In a world the machine acts in step by step, a program world, what it did a frame ago
 is as much context as what it saw, and what follows a situation may be a whole pattern, so every entry of both
 tables is on: that is the design as the program cases work it. In a world that pays per channel and does not
@@ -88,7 +88,7 @@ level, and each is counted at what it cost to write (D13).
 **On D5 — why adjacency across channels is not declared.** A conjunction over shared activation dimensions
 already says everything a visibility declaration per channel would, and it says it without a table to
 maintain: what a channel is laid out over settles which channels it can be adjacent to. The one table there is
-says which kinds of neuron see which (D1), and it is one for the whole machine.
+says which kinds of neuron see which (D50), and it is one for the whole machine.
 
 **On D6 — what made coarse offsets safe.** One neighbor per offset was a consequence of atomic offsets,
 never a rule. Logarithmic offsets make reach exponential in the alphabet, which is what makes the reaches D4

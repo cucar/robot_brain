@@ -19,7 +19,7 @@ another within reach in time (D5), and a pattern may name both.
 wants to be in for that instrument. The environment holds the state it is in, compares the two, and buys, sells
 or does nothing; the machine never names a trade.
 
-**Policy.** The machine declares its neighborhood policy (D1) with every entry that has an action off in the
+**Policy.** The machine declares its neighborhood policy (D50) with every entry that has an action off in the
 past table, since the price does not move because the machine owns, and in the future table only event to
 action and pattern to action on. Everything below follows from that and nothing is declared for it: no action
 is anyone's neighbor, so no pattern names one, so no action is ever covered and every action on the apex is

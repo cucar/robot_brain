@@ -320,7 +320,7 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
 - **Connections fan out over the apex within reach.** R31 connects every uncovered activation to everything on
   the apex of every frame it is open through, within its reach in every other dimension (D25). On a dense layout
   with little compression that is every point of the box, per open activation, and the box grows with the span
-  (D4). It has not been measured, and under a policy whose future table reaches actions alone (D1) it never
+  (D4). It has not been measured, and under a policy whose future table reaches actions alone (D50) it never
   exists. Limiting connections to the highest levels, or to apex activations above the base, is the
   fallback, and it is not decided. An expected event that recreates the situation that inferred it is a loop with
   no world in it, and nothing breaks it but reward.

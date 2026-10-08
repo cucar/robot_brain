@@ -99,20 +99,6 @@ weakly in that frame, for the world's report to replace. The reward for the acti
 > states the problem: an image whose pixel is to be told from the next declares `R = 1` in `x` and `y`; a stream
 > in which the fourth frame back matters as exactly as the first declares `R = 4` in time. Where this document
 > writes a distance with no radius given, `R = 1`.
->
-> **The machine declares its neighborhood policy**, once, as it declares the alphabet. For the policy a neuron is
-> of one of three kinds: an **event**, an **action**, or a **pattern**, every higher neuron being a pattern
-> whatever its body or its values hold. The policy is two tables of booleans, the kind of the holder by the kind
-> of the target, nine entries each:
->
-> | Table  | An entry on says                                                          | And so decides            |
-> |--------|---------------------------------------------------------------------------|---------------------------|
-> | past   | a target of that kind may stand in a holder of that kind's neighborhood (D5) | what patterns are built from |
-> | future | a holder of that kind may hold a connection to a target of that kind (D25)   | what inference reads      |
->
-> With every entry on, anything may be a neighbor of anything and anything may connect to anything. An entry
-> off removes that kind of target from that kind of holder's neighborhoods or connections, and nothing else:
-> what stands on the apex infers in every setting (D49), and the policy restricts only what it reaches.
 
 > **D2 — Type and instance.** A **neuron is a type** and an **activation is an instance of it**.
 >
@@ -195,7 +181,7 @@ what the dictionary writes is a pattern.
 > so a base neuron sees a high child one frame back beside the base neurons around it. What has not yet fired in
 > the frame is not there to be seen, and a child fires at its own level's turn (§7.4), so a same-frame neighbor
 > is never above the first's own level. **The second's kind must be admitted beside the first's kind by the past
-> table of the policy** (D1); where it is, events and actions are adjacent to one another like anything else, and
+> table of the policy** (D50); where it is, events and actions are adjacent to one another like anything else, and
 > what was done a frame ago is context as much as what was seen. In space both directions count — an activation three positions to the right arrives in the same
 > frame as one three positions to the left. In time only the past does, because compression only reads the
 > past. **What fires after an activation is not adjacent to it.** What the machine keeps about it is recorded
@@ -460,6 +446,20 @@ machine's output and its events as what the actions are expected to bring, both 
 strong what ran and what was seen (D40). What follows any activation is held on its neuron as
 connections (D25), one kind, and an inference is a connection read.
 
+> **D50 — The neighborhood policy.** Declared once for the machine, as the alphabet is (D1). For it a neuron is of
+> one of three kinds: an **event** or an **action**, a base neuron of that kind of dimension (D1), or a
+> **pattern**, a higher neuron, whatever its body or its values hold (D2). The policy is two tables of booleans,
+> the kind of the holder by the kind of the target, nine entries each:
+>
+> | Table  | An entry on says                                                          | And so decides            |
+> |--------|---------------------------------------------------------------------------|---------------------------|
+> | past   | a target of that kind may stand in a holder of that kind's neighborhood (D5) | what patterns are built from |
+> | future | a holder of that kind may hold a connection to a target of that kind (D25)   | what inference reads      |
+>
+> With every entry on, anything may be a neighbor of anything and anything may connect to anything. An entry
+> off removes that kind of target from that kind of holder's neighborhoods or connections, and nothing else:
+> what stands on the apex infers in every setting (D49), and the policy restricts only what it reaches.
+
 Nine cases are worked by hand on these definitions, listed in Part V.
 
 ## 3.6 Rewards
@@ -699,7 +699,7 @@ Part IV covers the `infer` call, where a neuron learns what followed and infers 
 > knob, and the radius `R` of each activation dimension is declared beside it (D1): it is the resolution of the
 > layout, and it states the problem too. `H` is the one parameter of the algorithm itself. The reach (D4),
 > adjacency (D5) and the offsets (D6) are derived from the radii, not declared; the `n` every price reads is the
-> machine's count of its neurons (D13). The neighborhood policy (D1) is a declaration like the alphabet: it
+> machine's count of its neurons (D13). The neighborhood policy (D50) is a declaration like the alphabet: it
 > states the kind of world the machine is in, and is not a knob. **No rule introduces a constant, a threshold,
 > a window or a cap of its own.**
 
@@ -982,7 +982,7 @@ what stood on the apex in the frames after it, event and action alike.
 > **A connection reaches as far as a neighbor does** (D5): an activation connects to what stands on the apex
 > within its neuron's reach in every activation dimension the two share (D4), the window in time (D9) and the
 > same reach in every other, and to nothing beyond it. **A connection is written only where the future table of
-> the policy admits the target's kind among the holder's kind's connections** (D1). A coarse offset pools the
+> the policy admits the target's kind among the holder's kind's connections** (D50). A coarse offset pools the
 > exposures of every frame in its group. The neuron connected to may be a value
 > neuron, and what an inference of it places is its value, at the positions of its variable (D45, R28).
 > Nothing about any one activation is kept.
@@ -1532,7 +1532,7 @@ stop the writing — there is no second call and nothing is saved twice.
 > **R31 — A connection carries an estimate.** What stands on the apex at `f + 1` is not known at `f`: the action is
 > settled only when the report names what ran, and the events only when the environment reports them (D40). So at
 > `f + 1`, once the last level has run, **every uncovered activation open at that frame connects to every strong
-> activation standing on the apex of that frame within its reach that the policy admits** (R27, D25, D1) at its
+> activation standing on the apex of that frame within its reach that the policy admits** (R27, D25, D50) at its
 > own age (§8.1), and the reward of that frame's
 > actions goes into each. An activation covered in that frame connects once more, to the neuron that covered it
 > where that is strong, and to nothing else (D10). A weak activation is connected to by nothing: it is a proposal,
@@ -1614,7 +1614,7 @@ stop the writing — there is no second call and nothing is saved twice.
 > action of one of them; a connection to an event or to a pattern takes none of it. A pattern belongs to no
 > channel (D2), and a share placed through its expansion would give a call spanning two channels one estimate,
 > read in both at resolution (R47). An unscoped reward reaches every connection written at the frames it pays. A
-> machine whose policy lets patterns be connected to (D1) and whose rewards name channels leaves those
+> machine whose policy lets patterns be connected to (D50) and whose rewards name channels leaves those
 > connections unpriced by them; the two are not declared together.
 >
 > **Rewards in one frame are independent.** A connection at one `(neuron, offset)` takes the sum of the shares that
