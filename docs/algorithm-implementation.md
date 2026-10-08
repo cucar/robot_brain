@@ -226,7 +226,7 @@ reads whether it was right. What matches, and what has to change:
   declared order that has no connection at that distance, at strength 1 and reward 0
   (`upsert_connection` → `find_alternative_action`), which is R37.
 - `vote(age)` returns every connection with strength above zero — the whole distribution, no majority. That is
-  D27's "connections are never collapsed", read at one offset where R46 reads every offset beyond the age.
+  D27's "connections are never collapsed", read at one offset where R36 reads every offset, once, at age 0.
 - Ages that activated a child pattern are suppressed and do not vote (`get_suppressed_ages`), which is D10's
   silencing of speech.
 - `aggregate_votes` normalizes each voter to one vote per `(dimension, distance)` split by strength;
@@ -246,8 +246,8 @@ reads whether it was right. What matches, and what has to change:
    set. Each open activation is handed the apex of the frame instead — every strong activation no accepted bid
    covers, event and action, at whatever level it stands (R27, R31) — so a connection may target a pattern
    neuron or a value neuron, and the panic on a pattern target in `aggregate_votes` goes.
-3. **Read every offset beyond the age, and expand before resolution.** `vote(age)` reads one distance; R46
-   reads every offset beyond the age and places each connection's completion `offset − age` frames ahead
+3. **Read every offset once, at age 0, and expand before resolution.** `vote(age)` reads one distance; R36
+   reads every offset once, at age 0, and R45 places each connection's completion `offset − age` frames ahead
    (R28). A new pass between `collect_votes` and `infer_neurons` expands every vote whose target is a pattern
    neuron through dictionary lines to base symbols at composed offsets, events and actions both, carrying the
    vote's strength and reward unchanged; what lands at the frame ahead is resolved, one winner per dimension,
@@ -313,7 +313,7 @@ past this phase if the answer is no.
 The temporal pattern hierarchy is Stage 1's bill run at `reach_t > 1` and is not a separate mechanism; gate it
 on the same exposure curves over the temporal dictionaries. Then the forward side, which is actions and nothing
 else: action dimensions in the channels; the connections on every event neuron, written from the frontier and
-read at every offset beyond the age; expansion before resolution and the base-level vote; R33's shaped rewards;
+read at every offset once, at age 0; expansion before resolution and the base-level vote; R33's shaped rewards;
 exploration on a negative estimate; the standing inference and top-down expansion of a selected higher action
 (R30, R36) — deltas 1 through 9 above. Gate: a closed-loop environment in which a learned action sequence
 answers a learned event sequence.
@@ -442,7 +442,7 @@ walks every open activation the machine holds and hands each one what landed. It
 stack has settled rather than during a level, because what ran is not known until then.
 
 **Classification is selection at the base.** The digit action is chosen by R35 and R47: every apex
-activation's connections at every offset beyond its age, placed and expanded to base actions, resolved per action
+activation's connections at every offset, once at age 0, placed and expanded to base actions, resolved per action
 dimension by
 largest estimate with the code's per-voter normalization breaking ties. The current brain's per-dimension
 vote in `aggregate_votes` is that resolution and stays. The naive-Bayes readout over active neurons has no

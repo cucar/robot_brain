@@ -1263,12 +1263,12 @@ so it is declined. The neuron is told none of this. `K`'s child is promoted at f
 be asked again about frame 10.
 
 **Frames 11 through 13 — `infer`.** This activation was covered at age 0 — `K`'s child was bought
-over it — so it writes nothing and speaks nothing for the rest of its window (D10): the sample it would have
+over it — so it writes nothing and is not heard for the rest of its window (D10): the sample it would have
 taken is its coverer's. `K`'s child, on the apex at level 1, is the one called. At 11 the action `u` runs; the
 machine calls the child at age 1 with `u`, and the child strengthens its connection at `(u, +1)`, creating it at
 strength 1 if it did not exist. The reward for `u` arrives with frame 11 and folds into that estimate in the same
-write (R29). The child also speaks: it reads its connections at every offset beyond 1 and returns what lands at
-`+2` as its inferences. At 12, `(u′, +2)` connects the same way. At 13 the base activation closes, having written
+write (R29). The child's inferences were read once, at its age 0 (R36), and stand (R45): the one at offset
+`+2` is what it proposes for frame 12. At 12, `(u′, +2)` connects the same way. At 13 the base activation closes, having written
 nothing since frame 10.
 
 **The neuron is not asked again, and nothing about frame 10 is revisited.** `K` was not wrong to be in the
