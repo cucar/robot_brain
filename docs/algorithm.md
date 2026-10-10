@@ -6,8 +6,9 @@ alphabet** it can observe and the **action alphabet** it can execute. Above each
 own. Every symbol, base or learned, event or action, is a **neuron**.
 
 It has two inputs and one output. Inputs: the events observed, the actions that ran, and the rewards earned.
-Output: the actions it infers, written in the base alphabet; the environment executes what it will of them and
-reports what ran.
+Output: what it places at the frame ahead, written in the base alphabet, the actions it infers and the events
+it predicts; the environment executes what it will of the actions, reads what it will of the predictions, and
+reports what ran and what was observed.
 
 This document is the specification, and nothing else. **D** is a definition and **R** a rule; together they
 are the machine. Theorems and all commentary on why the design is shaped this way live in
@@ -72,8 +73,8 @@ neurons they need, reused or new, and the level above is built out of what the e
 accepted (§7). Once the last level has run it wires and deletes children, then infers (§8): every open
 activation connects to what stands on the apex, with the reward for what ran; what the apex is connected to is
 collected and expanded to the base symbols of the frame ahead; one winner per dimension is resolved there, an
-action to output in each action dimension and an event to expect in each event dimension; and the winners fire
-weakly in that frame, for the world's report to replace. The reward for the action arrives with the next frame
+action in each action dimension and an expected event in each event dimension, and both are output; and the
+winners fire weakly in that frame, for the world's report to replace. The reward for the action arrives with the next frame
 (R29).
 
 ---
@@ -182,7 +183,8 @@ what the dictionary writes is a pattern.
 > the frame is not there to be seen, and a child fires at its own level's turn (§7.4), so a same-frame neighbor
 > is never above the first's own level. **The second's kind must be admitted beside the first's kind by the past
 > table of the policy** (D50); where it is, events and actions are adjacent to one another like anything else, and
-> what was done a frame ago is context as much as what was seen. In space both directions count — an activation three positions to the right arrives in the same
+> what was done a frame ago is context as much as what was seen. In space both directions count — an activation
+> three positions to the right arrives in the same
 > frame as one three positions to the left. In time only the past does, because compression only reads the
 > past. **What fires after an activation is not adjacent to it.** What the machine keeps about it is recorded
 > on the neuron as a connection (D25), and it is never in a neighborhood and never in a pattern.
@@ -292,7 +294,8 @@ the environment does not have, the action the machine inferred there, weak (D40)
 > strengthened while uncovered stand, and a reward for one of those frames still reaches them (R33). An
 > activation covered already at age 0 writes nothing, ever: a connection is to what comes after (D25), and by
 > then it is inhibited. **One exception, on being heard alone:** a covered activation's inferences, made at age 0
-> (R45), are heard when its coverer has nothing for the frame ahead (R48). It still writes nothing and connects to nothing; only its coverer
+> (R45), are heard when its coverer has nothing for the frame ahead (R48). It still writes nothing and connects to
+> nothing; only its coverer
 > learns what ran. That is the whole of inhibition in the design.
 
 There is no rest value. A dimension where nothing happens supplies no symbol, and silence is what the decoder
@@ -304,7 +307,7 @@ assumes for anything the file does not state.
 > serves both. A shape learned anywhere is learned everywhere, and the dictionary holds it once.
 
 > **D40 — Strength.** An activation is **strong** when the environment reported it, and **weak** when an
-> inference placed it (§8.4). That holds for events and actions alike: an event the machine expects and an action
+> inference placed it (§8.5). That holds for events and actions alike: an event the machine expects and an action
 > it infers are both weak, and the environment's report replaces both. The neuron is the same either way: a
 > weak activation is an activation of the neuron the environment would have reported.
 >
@@ -428,11 +431,12 @@ what was seen and what was done together (D5).
 **An activation of an action has a coordinate like any other activation (D2)**: its frame, and a position in
 each activation dimension its channel declares (D1).
 
-**At most one action runs per action dimension per position in a frame** (D8). The machine outputs the
-actions its inferences place at the frame ahead (R47). The environment executes what it will of them, and
-actions of its own, and reports what ran; an action has run when the report names it (D40). In a dimension
-the environment does not have, nothing is output: the machine's inference feeds back as a weak activation, as
-an expected event does, and nothing outside the machine sees it.
+**At most one action runs per action dimension per position in a frame** (D8). The machine outputs what its
+inferences place at the frame ahead, in every dimension: the actions, and the events it expects beside them
+(R47). The environment executes what it will of the actions, reads what it will of the expectations, runs
+actions of its own, and reports what ran and what it observed; an action has run when the report names it
+(D40). Where the report names nothing in a dimension, what the machine placed there stands as a weak
+activation, and is what the machine has in that frame.
 
 **An action the environment executes on its own is a lesson.** It arrives strong, with its reward, whether or not
 the machine inferred it (D40): patterns form over it beside the events it ran with, and what stood on the apex
@@ -588,8 +592,14 @@ residual. Every price in the design (D13) is counted off them.
 > Its choice is which member for a parameter and which combination for a class. `|x|` is the variable's own
 > positions, whether or not a function names it: its part does not change with the function it stands in.
 >
-> **This is the only valuation in the design**, and it is read over two different sets — the neuron's own
-> activations (D30, D28) and the machine's board (R22, R24) — so the two numbers differ, and are meant to.
+> **This is the only valuation in the design**, and it is read over three different sets, so the three numbers
+> differ, and are meant to:
+>
+> | Read by                               | Over                  | Against                                  | Settles                            |
+> |---------------------------------------|-----------------------|------------------------------------------|------------------------------------|
+> | a neuron, in recognition (D28, D30)   | its patterns          | the residual of its history              | its covers, and so its bids        |
+> | the machine, in the election (R22, R24) | this frame's bids   | the board                                | what is credited, and so the file  |
+> | the machine, in the match (R49)       | one inferred pattern  | the frames its line reaches back into    | whether the inference is proposed  |
 
 ## 4.4 The greedy cover
 
@@ -1187,7 +1197,7 @@ A newer neuron with a history is never dropped for an older pattern with none. T
 
 | identical | kept | retired |
 |---|---|---|
-| functions | the oldest, taking the others' covered activations, and, where it has no child, the child of the oldest of them that has one | the newer functions; a child no kept function points to dies when its last open activation closes (R38) |
+| functions | the oldest, taking the others' covered activations, and, where it has no child, the child of the oldest of them that has one | the newer functions; a child no kept function points to dies when its last open activation's window closes (R38) |
 | classes | the oldest, taking the others' covered activations and their place in the functions that named them, and, for each combination any of them stored, the oldest value neuron among them | the newer classes and their value neurons for combinations the oldest holds one for; a combination only a newer one stored moves to the oldest with its value neuron |
 | parameters | the oldest, taking the others' place in the functions that named them, and, for each member both held, its value neuron | the newer parameters and their value neurons for members the oldest also held; a member only a newer one held moves to the oldest with its value neuron |
 
@@ -1411,7 +1421,7 @@ each is expanded through that one (R28). Every activation no accepted bid covers
 > **R27 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** (D49) — the
 > uncovered set, at every level at once — so a base neuron nothing found worth chunking stands in it beside a
 > level-4 child. This is the frontier the file's body writes, **the one every neuron sees as its neighborhood**
-> (D5), **the one that learns what ran** (D25), and **the one that votes** (§8.3): the uncovered set does all four,
+> (D5), **the one that learns what ran** (D25), and **the one that votes** (§8.4): the uncovered set does all four,
 > and coverage silences a neuron in every one of them at once, its one last connection aside (D10). A reward for a
 > frame already written reaches its connection regardless (R33). Everything underneath the current frontier is
 > recovered by expanding it.
@@ -1444,18 +1454,18 @@ settled, so it is recorded in the `infer` call instead (R31).
 
 ## 7.5 Delete children
 
-> **R38 — A child dies when its last parent has retired and its last open activation closes.** A pattern the
+> **R38 — A child dies when its last parent has retired and its last open activation's window closes.** A pattern the
 > neuron retired (R18) names a child the machine still holds, unless no bid of it was ever accepted and there
 > is nothing to delete (R16). The machine wired every pattern that promotes the child (R43), so it knows when
 > the retired one was the last; while another remains the child lives and only the retired pattern goes. The
 > neuron says nothing about when the child should go: it sees its own open activations and not the children
 > promoted off them, while the machine sees both.
 > ```
-> death frame   =   when the child's last open activation closes
+> death frame   =   when the child's last open activation's window closes
 >               =   this frame, when none is open
 > ```
 > That set only shrinks. Once every pattern wired to the child has retired nothing can fire it again, and no level built afterward can name it either, because a level is built out of
-> what is firing (R26). An activation closes at its neuron's reach in time (D9), so the wait is at most the
+> what is firing (R26). An activation's window closes at its neuron's reach in time (D9), so the wait is at most the
 > longest reach in time among the child and the neurons built on it.
 >
 > **Deleting is on the same pass that wires** (R16): **every frame, once the last level has run**, the machine
@@ -1467,7 +1477,7 @@ settled, so it is recorded in the `infer` call instead (R31).
 >
 > **The ledger holds the pattern, not a handle to it.** A child is stated by the patterns wired to it (D12),
 > and each activation of it is expanded through the pattern whose bid fired it (R28, §7.4). Until the
-> activations a retired pattern fired have closed, neurons above them still cover them and the apex may still
+> windows of the activations a retired pattern fired have closed, neurons above them still cover them and the apex may still
 > expand them, so that pattern has to stay readable after the table stops covering with it, whether or not the
 > child lives on.
 
@@ -1482,8 +1492,9 @@ other:
 |----------|------------------------------------------------------------------------------------------------------------------------------|
 | connect  | Every open activation connects to what stands on the apex this frame, with any reward at its distance; every activation at age 0 returns what its neuron is connected to, its inferences, and the machine keeps them (R45). |
 | expand   | Expand of every standing inference what comes due: the base symbols it places at the frame ahead are what it proposes. |
+| match    | Read each standing inference's line against the frames it reaches back into; propose it where the line would pay there, strike it where it would not. |
 | resolve  | One winner per dimension at the frame ahead: in each action dimension by estimate, in each event dimension by share of voters. |
-| activate | The winner of every dimension fires weakly at the frame ahead (D40), the action as output and the event as expectation; the world's report replaces them, in part or in whole, and what ran arrives with its reward. |
+| activate | The winner of every dimension fires weakly at the frame ahead (D40), action and expected event alike, and both are output; the world's report replaces them, in part or in whole, and what ran arrives with its reward. |
 
 > **R29 — Two frames: infer, then execute and reward.** What is chosen in one frame is output for the next, and
 > what ran, with what it earned, arrives with that frame.
@@ -1529,7 +1540,7 @@ as long as the activation is open (R45); at every later age the call delivers an
 infers from its own connections like any other; what it infers is the marginal over every situation it fires
 in, and it is heard only because nothing more specific covers it.
 
-**An activation closes at age `reach_t`** (D9), once that frame's exposure is taken. Closing stops the
+**An activation's window closes at age `reach_t`** (D9), once that frame's exposure is taken. The window closing stops the
 connecting and drops its standing inferences (R45), and nothing else — there is no second call and nothing is
 saved twice.
 
@@ -1614,7 +1625,7 @@ saved twice.
 > window it keeps (D24). An activation at age `a` takes the share at distance `d`, `d` at most `a`, into its
 > neuron's connection at the offset `a − d` rounds to, to that action, where it was uncovered at that frame (D9):
 > at distance `0` the connection this call strengthens, in the same write; further back one strengthened `d`
-> frames ago (R31). An activation that has closed is not called, so a share reaches no further back than the
+> frames ago (R31). An activation whose window has closed is not called, so a share reaches no further back than the
 > open activations that would take it.
 >
 > **A scoped reward reaches base actions of the channels it names, and nothing else.** A connection names a
@@ -1649,7 +1660,46 @@ saved twice.
 > how recent its exposures are — a child's connections are over the one situation its parent's pattern names (R35),
 > and a changed situation is answered by a new child, never by forgetting.
 
-## 8.2 Expansion
+## 8.2 The inference
+
+> **R36 — The inference.** One connection read by one activation at age 0: it names a neuron, at whatever level
+> it stands (D25), and carries the strength and the estimate the connection held then. An activation reads every
+> connection its neuron holds, at every offset out to its reach, once, in the frame it fires (§8.1), and never
+> again: what the walk wires or a reward moves afterwards is read by the neuron's next activation. What runs and
+> what is expected are chosen from the inferences and nothing else (R47).
+>
+> **An inference is placed at its completion, and a connection means what it recorded.** A connection at offset
+> `b` was written when that neuron completed `b` frames after the situation opened (R31), so an inference at
+> offset `b` completes `b` frames after the activation that made it, and at the offset's components in every
+> other activation dimension from its position, as a neighbor is placed (R28). Expanded through its dictionary
+> line it places base symbols at the frames back from there (R30), every one carrying the strength and the
+> estimate of the connection it came from. A connection to a function neuron places a call (D37), weak, its
+> parameters bound from what stands at those of their positions that have happened (D44). What its expansion
+> puts at the frame ahead is what it proposes there, and the machine expands no more of it than that (R45): at
+> distance 1 a pattern's last step, at distance ten the step ten from its end, and its first step only when its
+> completion is placed its whole length ahead. An inference is proposed only where its match holds (R49), and
+> resolution runs at the base and only there (R47). **This is what launches a program**, and it is why every offset is read and not the next one alone: an activation can start
+> a program only from an offset at least as far out as the program is long, and can carry the tail of a longer
+> one to completion from any offset. A situation whose reach is shorter than a program never starts it, and
+> that is correct — it cannot see that far.
+>
+> **Two positions are two voters.** Two activations of one neuron read one set of connections (D11) and place
+> the same inference from two places: in a channel whose only activation dimension is time that is one proposal
+> twice, and in a channel with a layout it is a proposal at each of two positions, each resolved where it lands
+> (R47).
+
+> **R45 — Standing inferences.** The machine holds every inference of every open activation, from the
+> activation's age 0 until its window closes (D9), and nothing is read twice: these are the **standing inferences**, and
+> they are what votes (R46). Each is held as what its connection named, the neuron and its completion, with the
+> strength and the estimate it was read with, and the machine expands of it only what comes due: at age 0 the
+> part that falls at or before the frame, which is matched against what stood (R49), and in each frame after
+> the part that lands at the frame ahead, which is what it proposes there (R47). A program a hundred frames long
+> is one standing inference, unrolled a frame at a time. **A standing inference is dropped** when its
+> activation's window closes, and when its match fails (R49): a plan holds because it keeps being what
+> happened, and nothing is retracted. An inference stands whether its activation is covered or
+> not; coverage decides whether it is heard (R46).
+
+## 8.3 Expansion
 
 > **R28 — Expansion.** A neuron above the base is not yet anything in the base alphabet. Expanding it recovers
 > what its bid covered: the bidder, which is the pattern's owner, at the neuron's own coordinate, and the neighbors
@@ -1723,7 +1773,45 @@ saved twice.
 > it completes; the whole stands on the apex only in the frame it completes, and what the program earned reaches it through the span a
 > reward names (R33).
 
-## 8.3 Resolution
+> **R49 — The match.** The machine reads one standing inference (R45) against the frames its line reaches back
+> into, and proposes it where the line would pay there and strikes it where it would not. It runs every frame
+> the inference stands, over the part of the line that has come to lie in the past. Nothing competes in it,
+> nothing is credited and nothing is written: it is the one valuation (D22) read over its third set (§4.3).
+>
+> **What is read.** The inferred child's function, as its dictionary line stands (R28): its neighbors, each at
+> an offset, and its variables, each at its positions, placed back from the completion the inference names, one
+> level down and no deeper. The bidder, and whatever is placed at the frame ahead or beyond, is what the
+> inference proposes and is not judged. Against them stands the apex of each frame within the longest reach in
+> time, as the machine keeps it (D24).
+>
+> **What each placed thing is worth.**
+> ```
+> a neighbor standing at its offset                     credits what it cost
+> a neighbor standing within reach at another offset    credits what it cost, and charges an offset (D13)
+> a neighbor standing nowhere within reach              charges a failed neighbor, log₂ |p|
+> a variable                                            bound from what stands at its positions that have happened (D44),
+>                                                       charging its choice; a position holding nothing it could take
+>                                                       charges a failed neighbor
+> ```
+> An offset is read as D6 reads it: exact within the radius, and beyond it as its whole group, composed down the
+> expansion as the placement is, so a neighbor named at a coarse offset stands at its offset anywhere in the
+> group. A neighbor found at a different distance is a correction that says where, and it costs what an offset
+> costs to write, near or far: what makes a near miss cheap is that within the group it costs nothing.
+>
+> **The test.** The inference is proposed when what the placed things credit exceeds which pattern and what
+> they charge, and struck otherwise. That is D22's test with the bidder on neither side, since the bidder is
+> ahead.
+>
+> **What it decides.** Proposed, the inference's placements ahead contend for their positions (R46, R47).
+> Struck, it leaves the standing inferences (R45). An inference that was proposed and stops matching as its
+> placements come due is struck then, which is the whole of how a plan ends before its span does.
+>
+> **Where it stands among the three.** Recognition reads a pattern against the neighborhood its owner saw and
+> chooses covers (§6.2). The election reads bids against the board and credits them (R24). The match reads one
+> inferred pattern against the frames it points back into and admits or strikes it. The prices are the same;
+> the questions are not.
+
+## 8.4 Resolution
 
 > **R35 — Selection.** No fit says which action to take; it says only what a situation was followed by.
 > Choosing comes from the connections of the neurons standing on the apex, each carrying the reward that
@@ -1743,7 +1831,7 @@ saved twice.
 > **Every apex activation votes**, base actions included. A pattern that names what was done beside what was
 > seen votes knowing the situation; a chunk of actions alone, or a base action, votes what followed it, a habit,
 > and reward prices the habit like anything else. What an inference places in an event dimension is resolved
-> the same way, and the winner is expected, not output (R47, R30).
+> the same way, and the winner is expected, and output as an expectation (R47, R30).
 >
 > **Nothing runs where nothing infers.** An action dimension no inference reaches is output nothing: no call
 > runs, nothing fires in it, and the frame carries silence there as an event dimension with nothing to report
@@ -1754,50 +1842,6 @@ saved twice.
 > minted pattern alike say nothing about the next action until something has run under them, and what they
 > then hold is whatever was executed. R37's walk is the only thing that wires an action ahead of its running,
 > one at a time and only where the best known has been judged and found wanting.
-
-> **R36 — The inference.** One connection read by one activation at age 0: it names a neuron, at whatever level
-> it stands (D25), and carries the strength and the estimate the connection held then. An activation reads every
-> connection its neuron holds, at every offset out to its reach, once, in the frame it fires (§8.1), and never
-> again: what the walk wires or a reward moves afterwards is read by the neuron's next activation. What runs and
-> what is expected are chosen from the inferences and nothing else (R47).
->
-> **An inference is placed at its completion, and a connection means what it recorded.** A connection at offset
-> `b` was written when that neuron completed `b` frames after the situation opened (R31), so an inference at
-> offset `b` completes `b` frames after the activation that made it, and at the offset's components in every
-> other activation dimension from its position, as a neighbor is placed (R28). Expanded through its dictionary
-> line it places base symbols at the frames back from there (R30), every one carrying the strength and the
-> estimate of the connection it came from. A connection to a function neuron places a call (D37), weak, its
-> parameters bound from what stands at those of their positions that have happened (D44). What its expansion
-> puts at the frame ahead is what it proposes there, and the machine expands no more of it than that (R45): at
-> distance 1 a pattern's last step, at distance ten the step ten from its end, and its first step only when its
-> completion is placed its whole length ahead. Resolution runs at the base and only there (R47). **This is what
-> launches a program**, and it is why every offset is read and not the next one alone: an activation can start
-> a program only from an offset at least as far out as the program is long, and can carry the tail of a longer
-> one to completion from any offset. A situation whose reach is shorter than a program never starts it, and
-> that is correct — it cannot see that far.
->
-> **An inference that contradicts what stands proposes nothing.** An inferred pattern is expanded back from its
-> completion, and part of that expansion falls in frames that have already happened (R28); that part is
-> expanded once, when the inference is made. Where it places there a neighbor that did not stand, or a variable
-> at whose positions nothing it could hold stood, the pattern is not the one this situation is in, and nothing
-> it places ahead is proposed. So where several voters each infer every pattern that has covered them, what is
-> left standing is the pattern that fits them all.
->
-> **Two positions are two voters.** Two activations of one neuron read one set of connections (D11) and place
-> the same inference from two places: in a channel whose only activation dimension is time that is one proposal
-> twice, and in a channel with a layout it is a proposal at each of two positions, each resolved where it lands
-> (R47).
-
-> **R45 — Standing inferences.** The machine holds every inference of every open activation, from the
-> activation's age 0 until it closes (D9), and nothing is read twice: these are the **standing inferences**, and
-> they are what votes (R46). Each is held as what its connection named, the neuron and its completion, with the
-> strength and the estimate it was read with, and the machine expands of it only what comes due: at age 0 the
-> part that falls at or before the frame, which is tested against what stood (R36), and in each frame after the
-> part that lands at the frame ahead, which is what it proposes there (R47). A program a hundred frames long is
-> one standing inference, unrolled a frame at a time. **A standing inference is dropped** when its activation
-> closes, and when a placement of it came due and the report showed something else: a plan holds because it
-> keeps being what happened, and nothing is retracted. An inference stands whether its activation is covered or
-> not; coverage decides whether it is heard (R46).
 
 > **R46 — The electorate.** At frame `f` the voters on the frame ahead, `f + 1` (R35), are the open activations
 > the machine holds at `f` (D9), less every activation an accepted bid covers (D10), plus every covered
@@ -1855,12 +1899,12 @@ saved twice.
 > **The walk ends when the alphabet does.** Once a neuron holds a connection to every action in the channel at that
 > offset there is nothing left to wire, and selection takes the largest estimate, which is the least bad.
 
-## 8.4 Activation
+## 8.5 Activation
 
 > **R40 — An inference is weak until the report makes it strong.** Resolution leaves one winner per dimension,
-> action and event alike (R47), and each fires weakly in the frame it was placed in (D40): the action as the
-> machine's output, the event as what it expects. Where the report names that dimension at that coordinate, the
-> report stands and the weak activation is dropped; an action nothing reports as run, or an event nothing
+> action and event alike (R47), and each fires weakly in the frame it was placed in (D40), the action to run and
+> the event as what the machine expects, and both are the machine's output. Where the report names that
+> dimension at that coordinate, the report stands and the weak activation is dropped; an action nothing reports as run, or an event nothing
 > reports as seen, lasts its frame and is gone. Where the expansion reaches a parameter, what fires is its value,
 > bound from what has happened (D44). An expected event above the base is expanded in turn, one frame at a time
 > as its members come due, so what a plan expects reaches the base as expected inputs exactly as what it does

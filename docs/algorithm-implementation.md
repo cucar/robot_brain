@@ -277,7 +277,7 @@ reads whether it was right. What matches, and what has to change:
    actuals that followed and their rewards, at strength 1. The design mints at the bill, at age 0, on
    justification (R14, R15), so a child is born with nothing behind it to backfill. It is born empty, is given
    an activation at the parent's coordinate in the mint frame when its bid wins, connects from that frame on, and keeps
-   connecting after the parent's own activation has closed, since children outlive their parents (R17, R18).
+   connecting after the parent's own activation's window has closed, since children outlive their parents (R17, R18).
 9. **There is no default action.** `Column::create_neurons` gives every neuron a connection to each channel's
    default action at every voting distance, strength 1 and reward 0, and a dimension no inference reaches runs
    the channel's default. Both go: a dimension no inference reaches outputs nothing, and the first action in it
@@ -370,7 +370,7 @@ forward-side deltas are the numbered list in the section above and land in Stage
 13. **Drop the spatial recency machinery.** `activation_strength`, `last_activation_frame`, the lazy decay,
     `forget_rate` and `can_delete_child` describe nothing in the design — patterns live and die by the one
     test. Death frames stay, re-derived as R18 states them: a retired pattern's child dies when its last open
-    activation closes.
+    activation's window closes.
 14. **Backups break.** The persisted history changes shape, so old backups are unloadable. Accepted: no
     migration path, bump the format and fail loudly on an old file.
 15. **The invariants become debug assertions.** The four statements under "What must always hold", each

@@ -270,7 +270,7 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   neuron learns what followed it, and the vote adds their tendencies. That is right where the answer follows a
   majority of them, and it says nothing where the answer depends only on the combination, as the answer digit
   of a sum does. There the value neurons each infer the patterns that have covered them, and the one that fits
-  them all is left, since an inference that contradicts what stands proposes nothing (R36). That has been
+  them all is left, since an inference that does not match what stood is struck (R49). That has been
   reasoned on the addition case taught mixed and not run. Taught one case at a time
   ([algorithm-addition.md](algorithm-addition.md)), the machine has a neuron per combination from the first
   level.

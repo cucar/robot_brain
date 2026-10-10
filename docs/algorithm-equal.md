@@ -95,7 +95,7 @@ machine answers without it, as the next section shows.
 
 **The vote at frame 5**, voter by voter. Each reads its connections at offset one and expands what it finds
 (R28); an inference that places in frame 5 a neighbor that did not stand, or a variable no member of which
-stood, is struck (R36).
+stood, is struck (R49).
 
 | Voter | its connections at offset one, from the taught rows | what each places at frame 5 | proposes |
 |---|---|---|---|

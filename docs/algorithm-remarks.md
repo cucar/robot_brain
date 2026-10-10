@@ -47,7 +47,7 @@ sees, or how long it stays open.
    buffer        [ 9 10]        [10 11]
                       ▲              ▲
    activation       fires        +1 fires, with its reward
-   at frame 10   newest edge    connects, closes
+   at frame 10   newest edge    connects, window closes
                    sees −1
 ```
 
@@ -1009,7 +1009,7 @@ abstracts what varied into variables, and what stood on the apex connects to wha
 
 **On D25 — connections are measured, never chosen.** A connection is not in the bid (D31), not in any dictionary
 line (D13), and it enters no test. Connections are read in one place, when the activation stands on the apex
-(R27), and what it reads there are the inferences that choose the next action (§8.3). A child neuron fires only
+(R27), and what it reads there are the inferences that choose the next action (§8.4). A child neuron fires only
 when its parent's pattern was bought, so a child's connections are the future of that situation and nothing else,
 forming from the frame after its mint on (R17); a base neuron's are the marginal over every situation it fires
 in, and speak only where nothing more specific covers it (D10). Several children promoted at one coordinate are
@@ -1268,7 +1268,7 @@ taken is its coverer's. `K`'s child, on the apex at level 1, is the one called. 
 machine calls the child at age 1 with `u`, and the child strengthens its connection at `(u, +1)`, creating it at
 strength 1 if it did not exist. The reward for `u` arrives with frame 11 and folds into that estimate in the same
 write (R29). The child's inferences were read once, at its age 0 (R36), and stand (R45): the one at offset
-`+2` is what it proposes for frame 12. At 12, `(u′, +2)` connects the same way. At 13 the base activation closes, having written
+`+2` is what it proposes for frame 12. At 12, `(u′, +2)` connects the same way. At 13 the base activation's window closes, having written
 nothing since frame 10.
 
 **The neuron is not asked again, and nothing about frame 10 is revisited.** `K` was not wrong to be in the
@@ -1359,7 +1359,7 @@ up is a compression not taken, where a candidate priced against the flat file gi
 **On R18 — why the subtree needs no cascade.** A retired pattern's child cannot fire again, so by the death
 frame it has no open activations; if it has not fired, none of its children has fired either, so none of them
 has open activations, and so on to the bottom. **Children outlive their parents** — reach grows with the
-level, so an activation above is still open when the one that fed it has closed — and the death frame waits on
+level, so an activation above is still open when the window of the one that fed it has closed — and the death frame waits on
 the child's last activation for exactly that reason.
 
 **On R18 — nothing irreplaceable dies.** A pattern retired while its evidence is still in the ring is rebuilt by
@@ -1583,7 +1583,7 @@ that loses one counts one fewer.
 > frame. One frame later it is gone.
 
 **On R38 — a deletion takes the subtree, and takes it at once.** There is no staged cascade and nothing to wait
-on at any level: the death frame is when the child's last open activation closes, and everything under it closed
+on at any level: the death frame is when the child's last open activation's window closes, and every window under it closed
 earlier, since reach grows with the level (D4).
 
 ## 7.1 Process levels
