@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Job, runJob } from 'robot-brain';
+import { Brain, Job, runJob } from 'robot-brain';
 import { MNISTPixelChannelsEncoder } from '../encoder.js';
 import { loadImages, loadLabels } from '../loader.js';
 
@@ -20,12 +20,12 @@ const PROGRESS_EVERY = 100;
  *   - default: train on the balanced training set (learning on), then `--save-brain <label>` persists it.
  *   - `--load-brain <label>`: resume from a saved brain — train another episode and save again, which is
  *     equivalent to having trained those episodes in one run.
- *   - `--disable-learning`: freeze the brain (setLearning(false)) — no wiring, no decay, no minting. Used for evaluation.
+ *   - `--disable-learning`: construct the brain frozen — no wiring, no decay, no minting. Used for evaluation.
  *   - `--test-data`: run the pass over the held-out test set instead of the training set.
  * Training evaluation = load the trained brain, `--disable-learning`, re-run over the training data.
  * Testing evaluation  = load the trained brain, `--disable-learning --test-data`.
  *
- * Per image: resetContext → processFrame populates sensory activations → decode the winning digit. When
+ * Per image: processFrame populates sensory activations → decode the winning digit. When
  * learning is on, learn(actions, 1) then wires every active sensory neuron to every digit action neuron with
  * reward=1 on the correct digit and reward=0 on the rest; the smoothed-reward update converges each
  * connection's reward to P(d|V) — the per-voter posterior.
@@ -49,7 +49,7 @@ export default class MNISTTestJob extends Job {
 			perClass: 0,
 			maxTestImages: 0,
 			maxEpisodes: 1,
-			// disableLearning: freeze the brain for this run (setLearning(false)) — no wiring, decay, or minting.
+			// disableLearning: the brain is constructed frozen for this run — no wiring, decay, or minting.
 			// This is how evaluation is done: load a trained brain, disable learning, and run a pass.
 			disableLearning: false,
 			// testData: run the pass over the held-out test set instead of the balanced training set.
@@ -123,12 +123,41 @@ export default class MNISTTestJob extends Job {
 		const forgetIdx = process.argv.indexOf('--forget-rate');
 		if (forgetIdx !== -1 && process.argv[forgetIdx + 1] !== undefined) this.options.patternForgetRate = parseFloat(process.argv[forgetIdx + 1]);
 
+
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
+
+		// --horizon: the spatial history window in frames. The frame counter climbs monotonically for the
+		// whole run (classifyImage no longer resets it), so the sliding window must be exactly one episode
+		// long. Any shorter and a neuron forgets evidence mid-pass; any longer and a second pass over the
+		// same image counts twice, and at forget rate 0 the one test's benefit grows without bound and
+		// memorizes every configuration. Default it to the episode length; --horizon overrides.
+		const horizon = num('--horizon');
+		if (horizon !== null) this.options.horizon = horizon;
+		if (this.options.horizon == null) this.options.horizon = this.resolveEpisodeLength();
+
 		// The decode now lives in the brain — hand it the consensus rule so the winner read out of
 		// `inferences` is already the chosen rule's pick (no votes marshalled). The NB Laplace floor
 		// is a baked brain constant, no longer a knob.
 		this.options.consensus = this.config.consensus;
+	}
+
+	/**
+	 * The number of images in one training pass — the natural horizon. Joint mode runs one pass over the
+	 * balanced set (cap × 10 images); Split-MNIST trains one two-class task (2 × cap) per pass; --no-balance
+	 * trains the full natural set. cap is the per-class quota, taken from the smallest class when --per-class
+	 * is left at 0 so the operator need not know the floor, and never above that floor when it is set.
+	 * Reads only the tiny label file (the images are loaded later in configureChannels).
+	 */
+	resolveEpisodeLength() {
+		const dataDir = path.join(__dirname, '..', 'data');
+		const labels = loadLabels(this.findDataFile(dataDir, 'train-labels-idx1-ubyte'));
+		if (this.config.noBalance) return labels.length;
+		const counts = new Array(10).fill(0);
+		for (const label of labels) counts[label]++;
+		const floor = Math.min(...counts);
+		const cap = this.config.perClass > 0 ? Math.min(this.config.perClass, floor) : floor;
+		return this.config.split ? 2 * cap : 10 * cap;
 	}
 
 	/**
@@ -236,6 +265,7 @@ export default class MNISTTestJob extends Job {
 		console.log(`  Buckets: ${this.config.buckets}`);
 		console.log(`  Context length: ${this.options.contextLength}`);
 		console.log(`  Forget rate: ${this.options.patternForgetRate}`);
+		console.log(`  Horizon: ${this.options.horizon} frames (spatial history window = one episode)`);
 		console.log(`  Consensus: ${this.config.consensus}`);
 		console.log(`  Dataset: ${this.config.testData ? 'test (held-out)' : 'training (balanced)'}`);
 		console.log(`  Learning: ${this.config.disableLearning ? 'OFF (frozen — evaluation)' : 'ON'}`);
@@ -256,7 +286,6 @@ export default class MNISTTestJob extends Job {
 	async executeJob() {
 
 		// Freeze the brain up front when evaluating — no wiring, decay, or minting for the whole run.
-		if (this.config.disableLearning) this.brain.setLearning(false);
 		const learning = !this.config.disableLearning;
 
 		// Split-MNIST is a sequential class-incremental training protocol — only meaningful with
@@ -300,17 +329,15 @@ export default class MNISTTestJob extends Job {
 			// Strict sequential training: each task's data is seen once and never revisited.
 			// There are no task IDs, and the action space stays all ten digits throughout — the digit action
 			// channel is registered up front, so every learn() wires all ten (reward 1 on the true digit, 0 on the rest).
-			this.brain.setLearning(true);
 			const lo = 2 * task * cap;
 			const hi = (2 * task + 2) * cap;
 			const indices = Array.from({ length: hi - lo }, (_, k) => lo + k);
 			await this.trainTaskPass(task, indices);
 			if (this.isShuttingDown) return;
 
-			// Freeze and evaluate the FULL 10-class test set, binned by task.
+			// Evaluate the FULL 10-class test set, binned by task, on a frozen COPY of the brain.
 			// This row of the retention matrix exposes catastrophic forgetting (or its absence) across all tasks.
-			this.brain.setLearning(false);
-			const row = await this.evalTestByTask();
+			const row = await this.evalTestByTaskFrozen();
 			this.splitMatrix.push(row);
 			const rowStr = row.map((a, j) => `T${j}:${(a * 100).toFixed(1)}%`).join(' ');
 			console.log(`    ↳ after task ${task}: ${rowStr}`);
@@ -346,8 +373,25 @@ export default class MNISTTestJob extends Job {
 	}
 
 	/**
+	 * Run the per-task retention row against a frozen copy of the trained brain. Learning never changes
+	 * on a live instance: the trained state round-trips through a backup into a SEPARATE brain
+	 * constructed with learning off, and the training instance continues untouched afterwards.
+	 */
+	async evalTestByTaskFrozen() {
+		const label = 'split_frozen';
+		this.brain.save(this.getJobDir(), label);
+		const trained = this.brain;
+		this.brain = new Brain({ ...this.options, learning: false });
+		this.encoder.registerChannels(this.brain);
+		this.brain.load(this.getJobDir(), label);
+		const row = await this.evalTestByTask();
+		this.brain = trained;
+		return row;
+	}
+
+	/**
 	 * Frozen evaluation over the FULL 10-class test set, returning per-task accuracy [5]. A test image's
-	 * task is floor(label/2). setLearning(false) must already be in effect.
+	 * task is floor(label/2). Runs against the currently active brain instance.
 	 */
 	async evalTestByTask() {
 		const correct = new Array(5).fill(0);
@@ -366,7 +410,7 @@ export default class MNISTTestJob extends Job {
 
 	/**
 	 * One pass over the active dataset. For each image:
-	 *   resetContext → processFrame → decode prediction → (if learning) learn(actions, 1).
+	 *   processFrame → decode prediction → (if learning) learn(actions, 1).
 	 * When learning is on the recorded accuracy is prequential — the brain's guess *before* this image's
 	 * supervised wire lands. When learning is off it is a clean frozen evaluation with the fixed model.
 	 * `digit` restricts a split-mode training pass to one digit's slice; null walks the whole dataset.
@@ -447,20 +491,23 @@ export default class MNISTTestJob extends Job {
 			neuronCount: summary.neuronCount,
 			maxSpatialLevel: summary.maxSpatialLevel,
 			levelCounts: this.brain.spatialLevelCounts(),
+			levelPaidCounts: this.brain.spatialLevelPaidCounts(),
 			activeCorrections: this.brain.countActiveSpatialCorrections(),
 			cumulativeMinted: this.brain.getSpatialCorrectionCount(),
+			cumulativeDeleted: this.brain.getSpatialDeletionCount(),
 		};
 	}
 
 	/**
 	 * Format a spatial-diagnostics snapshot into a one-line summary.
+	 * Each level shows total and PAID counts — the difference is the unpaid hypothesis pool.
 	 */
 	formatSpatial(s) {
 		if (!s) return '';
 		const levels = s.levelCounts.length
-			? s.levelCounts.map((c, i) => `L${i + 1}:${c}`).join(' ')
+			? s.levelCounts.map((c, i) => `L${i + 1}:${c}(${s.levelPaidCounts?.[i] ?? c} paid)`).join(' ')
 			: '(no corrections)';
-		return `depth=${s.maxSpatialLevel} | ${levels} | ${s.activeCorrections} active, ${s.cumulativeMinted} minted cum | ${s.neuronCount} neurons`;
+		return `depth=${s.maxSpatialLevel} | ${levels} | ${s.activeCorrections} active, ${s.cumulativeMinted} minted / ${s.cumulativeDeleted ?? 0} deleted cum | ${s.neuronCount} neurons`;
 	}
 
 	/**
@@ -468,13 +515,18 @@ export default class MNISTTestJob extends Job {
 	 * Shared by every pass — training (pre-update prediction) and frozen evaluation.
 	 * The brain applies the configured consensus rule ('democratic' | 'nb') internally, so the
 	 * winning digit comes straight off `inferences` — no per-vote marshalling on the hot path.
+	 *
+	 * The frame counter is NOT reset per image: it climbs monotonically across the whole run so the
+	 * neuron's spatial history is a real sliding window (one horizon = one episode long), never a stack
+	 * of frame-1 records that can never age out. Spatial co-activation is wiped inside the brain each
+	 * frame regardless, and temporal is inert at context length 1, so each image is still classified
+	 * independently without a reset.
 	 */
 	classifyImage(bits) {
-		this.brain.resetContext();
 		const inputs = this.encoder.encodeImage(bits);
 		const inferResult = this.brain.processFrame(inputs, EMPTY_REWARDS);
 		// --debug-miss reaggregates votes app-side for its rank/margin breakdown; stash them when on.
-		if (this.config.debugMiss > 0) this._lastVotes = inferResult.votes;
+		if (this.config.debugMiss > 0) this.lastVotes = inferResult.votes;
 		return this.encoder.decodeDigit(inferResult.inferences);
 	}
 
@@ -542,7 +594,14 @@ export default class MNISTTestJob extends Job {
 		const ips = (done / elapsed).toFixed(0);
 		const pct = (done / total * 100).toFixed(1);
 		const acc = (tally.correct / done * 100).toFixed(1);
-		process.stdout.write(`\r    ${phase} ${done}/${total} (${pct}%) | ${acc}% acc | ${ips} img/s   `);
+		// Live neuron count, cumulative mints, and per-level active-correction counts — the consolidation
+		// and hierarchy-depth signals during a long pass. Level counts reflect the last image's active set.
+		const summary = this.brain.getFrameSummary();
+		const minted = this.brain.getSpatialCorrectionCount();
+		const lc = this.brain.spatialLevelCounts();
+		const paid = this.brain.spatialLevelPaidCounts();
+		const levels = lc.length ? lc.map((c, i) => `L${i + 1}:${c}/${paid[i] ?? c}p`).join(' ') : 'flat';
+		process.stdout.write(`\r    ${phase} ${done}/${total} (${pct}%) | ${acc}% acc | ${ips} img/s | ${summary.neuronCount} neurons (${minted} minted) | depth ${summary.maxSpatialLevel}: ${levels}   `);
 	}
 
 	/**
@@ -573,7 +632,7 @@ export default class MNISTTestJob extends Job {
 	 * voter counts for both hits and misses. Prints the first `debugMiss` misses in detail.
 	 */
 	analyzeMiss(miss, label, predicted, bits) {
-		const { logScore, voterCount } = this.scoreDigitsNB(this._lastVotes);
+		const { logScore, voterCount } = this.scoreDigitsNB(this.lastVotes);
 		if (predicted === label) { miss.voterHitSum += voterCount; miss.hits++; return; }
 		const ranked = [...logScore.entries()].sort((a, b) => b[1] - a[1]);
 		const trueRankIdx = ranked.findIndex(([d]) => d === label); // 0-based; -1 if true digit got no votes
