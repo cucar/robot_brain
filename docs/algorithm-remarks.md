@@ -1914,6 +1914,15 @@ action's worth changes, the neuron that notices is a new child with fresh connec
 
 ---
 
+**On Part V — the equal case rests on a small alphabet.** The copy in that case is a parameter over a digit's
+own slot, so the digit has to stand on the apex when the answer is said. It does, because with twelve base
+neurons a class of the ten digits saves a quarter of a bit each time it covers a digit and never pays its line
+within the history
+the case keeps. A wider alphabet makes the same class pay, the request's bid then covers the digits through it,
+and what stands at their slots is value neurons, which a parameter cannot read as the digits they stand for. So
+the case shows the copy and the branch on a demo alphabet, and a real world, whose alphabet is wide, needs the
+copy to read through a value neuron; that is open, and the case does not pretend otherwise.
+
 # 9. What is provable about compression
 
 The claim the specification can make, and the one it cannot, stated once.
