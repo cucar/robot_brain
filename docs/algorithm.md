@@ -711,8 +711,9 @@ Part IV covers the `infer` call, where a neuron learns what followed and infers 
 >
 > **`H` is declared once for the machine and is the same for every neuron.** It counts that neuron's **own
 > activations**, not a stretch of run, so a neuron that fires constantly and one that fires rarely weigh their
-> patterns against the same amount of evidence. **The ring is exactly `H` deep once filled**, and how much run
-> it spans is whatever that neuron's rate makes it. Nothing else anywhere is measured in frames.
+> patterns against the same amount of evidence. **The ring is exactly `H` deep once filled.** A neuron may fire many
+> times in one frame and not at all in the next (D8), so how many frames its `H` activations span is whatever its
+> rate makes it, from part of one frame to a long stretch of the run. Nothing else anywhere is measured in frames.
 >
 > **Every activation is recorded, covered or not.** An arriving activation evicts the oldest, and only then.
 
@@ -1052,7 +1053,10 @@ The call runs before the election (R24).
 
 The history holds `H` activations (D18). A frame bringing `A` activations evicts the `A` oldest once the history is
 full, and fewer before, as many as it takes to make room; every pattern of an evicted cover loses it. The frame's
-activations then join the history, whole (D7) and wholly residual (D21).
+activations then join the history, whole (D7) and wholly residual (D21). A frame bringing more activations of one
+neuron than `H` fills the history with the first `H` of them, in the order the input lays them out, and the rest
+are not recorded; the machine reports it. `H` is the designer's to pick (R4), and a report says it was picked
+below the most activations a neuron can have in one frame.
 
 ## 6.2 Recognize
 
