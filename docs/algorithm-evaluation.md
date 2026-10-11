@@ -328,10 +328,6 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   and nothing else (R33), so a pattern whose call runs actions in two channels takes no scoped reward: its
   connections are priced only by unscoped rewards. A machine that pays per channel and lets patterns be
   connected to has no estimate for such a plan beyond what its base actions hold.
-- **Crossing kinds.** A parameter holds an event as an event. "Write the digit you see" needs the action that
-  corresponds to a seen event, and nothing relates an event neuron to an action neuron but a connection. The
-  write case ([algorithm-copy.md](algorithm-copy.md)) learns that connection once per digit, from each digit's
-  own lessons, so a digit never asked has none. Nothing generalizes the crossing itself.
 - **A call inferred by several situations** is placed at each of their coordinates plus the connection's offset
   (R36) and resolved per position (R47): in a channel with time alone those placements fall on one position and
   are one proposal several times, and in a channel with a layout they fall on several. No worked case has an
