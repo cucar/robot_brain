@@ -81,7 +81,8 @@ recurs, patterns are not being bought where the base is voting, and the compress
 
 **An action judged bad early is not re-tried.** A connection never leaves (R31), so the walk wires each action once
 and never again (R37); an action that was unlucky on its first samples keeps that estimate and runs again only
-if it becomes the least bad of a channel where everything has been tried. In a stationary world nothing is
+if it becomes the least bad of a dimension where everything has been tried and the action policy outputs
+the least bad (D51). In a stationary world nothing is
 lost. In a world where an action's worth changes, the connection cannot notice — the design's answer is that a new
 child with fresh connections notices instead (R34), which holds only where structure is actually being minted
 over that situation. **Diagnostic:** per channel, the share of connections to actions whose estimate is negative on

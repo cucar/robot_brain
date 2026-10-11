@@ -20,7 +20,8 @@ the frame after the request, with a digit beside it in `digit`: the digit is an 
 there, and both are its output (§3.5, R40). A frame of silence follows, so nothing of one request is within
 reach of the next.
 
-**Policy.** Every entry of both tables of the neighborhood policy is on (D50).
+**Policy.** Every entry of both tables of the neighborhood policy is on (D50), and the action policy is nothing
+(D51): where every candidate in `say` is negative, the machine says nothing.
 
 **Teaching.** While the machine is being taught, the world runs `say` and shows the shown digit beside it in
 the frame after each request, and rewards it, every lesson the same (§3.5). Afterwards it runs nothing,

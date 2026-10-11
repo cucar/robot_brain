@@ -24,7 +24,8 @@ event the machine expects there, and both are its output (§3.5, R40). A frame o
 so nothing of one request is within reach of the next.
 
 **Policy.** Every entry of both tables of the neighborhood policy is on (D50): anything may be a neighbor of
-anything, and anything may connect to anything.
+anything, and anything may connect to anything. The action policy is nothing (D51): where every candidate in
+`say` is negative, the machine says nothing.
 
 **Teaching.** While the machine is being taught, the world runs `say` and shows the right digit beside it in
 the frame after each request, and rewards it, every lesson the same (§3.5). It mixes equal and unequal requests

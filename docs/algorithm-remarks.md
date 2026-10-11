@@ -919,15 +919,19 @@ every member, and the value neuron beside it is where a member's own lesson live
 the member the value neuron names. An inferred call brings no value neuron, since nothing has stood yet, and
 there expansion places the class's most frequent member, the oldest on a tie.
 
-**On R48 — why speaking falls through, and why nothing explores at height.** A child is minted for a situation
+**On R48 — why speaking falls through, and how height explores.** A child is minted for a situation
 its parents were already in; it is that situation, named more finely. So until it has seen anything follow it,
 the best guess for what to do is what its parents saw follow them, and letting them speak costs nothing: they
 hold their connections whether or not they are covered. The child learns from what ran under it either way
-(R32), so the fall-through lasts exactly as long as the child has nothing of its own. No walk is needed above
-the base: a high pattern with nothing to say hands the frame down, and what is genuinely new reaches the base,
-where the walk is (R37). A situation the machine has never been in at any level is one no neuron has a
-connection for, and there the machine says nothing: the first action in it is the world's, a lesson, and
-the walk goes on from what that lesson earned.
+(R32), so the fall-through lasts exactly as long as the child has nothing of its own. Once it has something and
+that something hurts, the fall-through does not open, since the child is not silent, and the base under it
+cannot help, since it is covered and its estimates no longer move (D10). So the child walks itself (R37): it
+wires an untried base action in each dimension its plan acted in, at that step, and tries it. The alternatives
+at height are base actions because the base is the only alphabet; a plan found that way is chunked by
+compression once it recurs, as a plan taught by lessons is, so the walk at height finds new patterns the same
+way the world's lessons do, one step at a time and then named. A situation the machine has never been in at
+any level is one no neuron has a connection for, and there the machine says nothing: the first action in it is
+the world's, a lesson, and the walk goes on from what that lesson earned.
 
 **On R46 — a neuron several parameters pass is heard several times.** Every value neuron is a voter,
 so an event that several accepted bids pass as a value or a member produces several voters where an event nothing

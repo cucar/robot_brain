@@ -468,6 +468,13 @@ connections (D25), one kind, and an inference is a connection read.
 > off removes that kind of target from that kind of holder's neighborhoods or connections, and nothing else:
 > what stands on the apex infers in every setting (D49), and the policy restricts only what it reaches.
 
+> **D51 — The action policy.** Declared once for the machine, as the alphabet and the neighborhood policy are
+> (D1, D50): what an action dimension outputs when every candidate in it carries a negative estimate (R47),
+> **the least bad, or nothing**. The first is for a world that acts whether or not the machine does, where
+> silence hands the step to the world's own action and the machine learns from that (§3.5); the second is for a
+> world in which silence is an action in its own right and costs nothing. The walk is the same under either
+> (R37); the policy decides only what runs once the walk has nothing left to wire in a dimension.
+
 Nine cases are worked by hand on these definitions, listed in Part V.
 
 ## 3.6 Rewards
@@ -713,9 +720,9 @@ Part IV covers the `infer` call, where a neuron learns what followed and infers 
 > knob, and the radius `R` of each activation dimension is declared beside it (D1): it is the resolution of the
 > layout, and it states the problem too. `H` is the one parameter of the algorithm itself. The reach (D4),
 > adjacency (D5) and the offsets (D6) are derived from the radii, not declared; the `n` every price reads is the
-> machine's count of its neurons (D13). The neighborhood policy (D50) is a declaration like the alphabet: it
-> states the kind of world the machine is in, and is not a knob. **No rule introduces a constant, a threshold,
-> a window or a cap of its own.**
+> machine's count of its neurons (D13). The neighborhood policy (D50) and the action policy (D51) are
+> declarations like the alphabet: each states the kind of world the machine is in, and neither is a knob. **No
+> rule introduces a constant, a threshold, a window or a cap of its own.**
 
 ## 5.4 Variables and children
 
@@ -1874,8 +1881,9 @@ saved twice.
 > placed there is a candidate (D8). **A candidate's estimate is the mean of the estimates its voters placed it
 > with, each weighted by that voter's share** — one vote per voter, split across the actions it placed at that
 > position by strength, so a voter that hedges between two actions counts as one voter and not two — and **the
-> candidate with the largest estimate is output**. Ties go to the larger share of voters, and then to the older
-> action. **Nothing corrects for how many exposures an estimate rests on**, so a sharp estimate on three
+> candidate with the largest estimate is output**, unless every candidate's estimate is negative, where the
+> action policy decides between the least bad and nothing (D51). Ties go to the larger share of voters, and
+> then to the older action. **Nothing corrects for how many exposures an estimate rests on**, so a sharp estimate on three
 > exposures outranks a coarse one on two hundred.
 >
 > **An event dimension resolves by share of voters.** At each position of it, every base event some voter's
@@ -1898,7 +1906,17 @@ saved twice.
 > **R37 — Exploration.** Explore–exploit is resolved without randomness: **the action alphabet
 > is declared in order**, and **a connection whose estimate turns negative wires the next action in that
 > order** — the first one the neuron holds no connection to at that offset — at strength 1 and neutral estimate
-> (R31). The walk is over the actions a neuron can name; what a call's variables hold is never searched, it is
+> (R31). **The walk runs at every level, and its dimensions are the connection's.** A neuron above the base is
+> not an alphabet: it was created when a chunk paid, it has no declared order, and nothing could name the next
+> one. The base actions are the one ordered alphabet there is, so what a negative connection wires is base
+> actions, in the dimensions its target acted in, read off the target's expansion (R28): a base action, its own
+> dimension; a pattern, every action dimension its expansion places an action in, one untried base action each;
+> an event, or a pattern that places no action, nothing. A level-five neuron whose plan hurt therefore tries,
+> at that step, one other action in each dimension the plan acted in, and nothing at any other step. **What the
+> walk finds, compression names.** The untried action is a base action under a situation at height, placed by
+> the neuron that walked; where it pays it recurs, where it recurs the activations under that situation chunk
+> it (§6.4), and the chunk is a new pattern at height with the walked action inside it, found as a lesson's
+> action is found, one step at the base and then named. What a call's variables hold is never searched, it is
 > whatever stands at their positions when the call runs (D41, D44).
 >
 > **The walk is in the same currency as everything else**: an untried action becomes a candidate by becoming a
@@ -1910,8 +1928,9 @@ saved twice.
 > created at, which is what makes the walk work: a connection at zero has not been
 > judged, so it outranks anything negative and yields to anything positive.
 >
-> **The walk ends when the alphabet does.** Once a neuron holds a connection to every action in the channel at that
-> offset there is nothing left to wire, and selection takes the largest estimate, which is the least bad.
+> **The walk ends when the alphabet does.** Once a neuron holds a connection to every action in a dimension at
+> that offset there is nothing left to wire there, and what the dimension does when every candidate in it is
+> negative is the action policy's (D51): the least bad, or nothing.
 
 ## 8.5 Activation
 
