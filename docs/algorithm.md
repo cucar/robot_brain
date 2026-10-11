@@ -96,9 +96,9 @@ winners fire weakly in that frame, for the world's report to replace. The reward
 >
 > **Each activation dimension is declared with its radius `R`**, a count of positions, `1` or more: how far a
 > base neuron sees in it (D4), and the unit in which every distance in it is written (D6). It is the resolution
-> of the layout, as the bucket count is the resolution of what is reported on it, and like the bucket count it
-> states the problem: an image whose pixel is to be told from the next declares `R = 1` in `x` and `y`; a stream
-> in which the fourth frame back matters as exactly as the first declares `R = 4` in time. Where this document
+> of the layout, as the bucket count is the resolution of what is reported on it, and with `H` it is one of
+> the two things the designer picks (R4): an image whose pixel is to be told from the next declares `R = 1` in
+> `x` and `y`; a stream in which the fourth frame back matters as exactly as the first declares `R = 4` in time. Where this document
 > writes a distance with no radius given, `R = 1`.
 
 > **D2 — Type and instance.** A **neuron is a type** and an **activation is an instance of it**.
@@ -406,8 +406,8 @@ assumes for anything the file does not state.
 > field costs the same however often its value is written.
 >
 > **`B` is declared and `n` is counted.** `B` is the size of the base alphabet and never moves (D1). `n` is the
-> machine's count of its neurons, at every level together, raised when a neuron is created and lowered when one
-> is deleted; it prices only the naming of a neuron in a table line, which points into the whole machine. The
+> machine's count of its neurons, the base neurons and every neuron above them together: it starts at `B`, is
+> raised when a neuron is created and lowered when one is deleted; it prices only the naming of a neuron in a table line, which points into the whole machine. The
 > machine hands `n` to every neuron with its call (R20). Every other alphabet is the owner's own: its table, a
 > variable's members, a class's combinations.
 
@@ -704,8 +704,8 @@ Part IV covers the `infer` call, where a neuron learns what followed and infers 
 ## 5.3 The history
 
 > **D18 — The history.** A neuron's record of its own activations: the last `H` of them, oldest first, each
-> holding the neighborhood it observed in the frame it fired (D7), each neighbor with what it cost to write
-> (D13). It is the evidence every structural decision
+> holding the neighborhood it observed in the frame it fired (D7), each neighbor with what it cost to write,
+> and the activation's own cost beside them, since a cover is credited the activation too (D13, D20). It is the evidence every structural decision
 > the neuron makes is read over, and it holds nothing else: the neuron's connections are not in the history and
 > `H` does not bound them (R31).
 >
@@ -715,12 +715,13 @@ Part IV covers the `infer` call, where a neuron learns what followed and infers 
 > times in one frame and not at all in the next (D8), so how many frames its `H` activations span is whatever its
 > rate makes it, from part of one frame to a long stretch of the run. Nothing else anywhere is measured in frames.
 >
-> **Every activation is recorded, covered or not.** An arriving activation evicts the oldest, and only then.
+> **Every activation the call hands it is recorded, covered or not** (R20). An arriving activation evicts the oldest,
+> and only then.
 
-> **R4 — `H` and the radii are the only free parameters.** The alphabet (D1) states the problem and is not a
-> knob, and the radius `R` of each activation dimension is declared beside it (D1): it is the resolution of the
-> layout, and it states the problem too. `H` is the one parameter of the algorithm itself. The reach (D4),
-> adjacency (D5) and the offsets (D6) are derived from the radii, not declared; the `n` every price reads is the
+> **R4 — `H` and `R` are the only free parameters.** Two things are the designer's to pick: `H`, the depth of
+> every neuron's history (D18), and `R`, one radius per activation dimension (D1), how far a base neuron sees in
+> it. Nothing else is. The alphabet (D1) states the problem and is not a knob. The reach (D4),
+> adjacency (D5) and the offsets (D6) are derived from `R`, not declared; the `n` every price reads is the
 > machine's count of its neurons (D13). The neighborhood policy (D50) and the action policy (D51) are
 > declarations like the alphabet: each states the kind of world the machine is in, and neither is a knob. **No
 > rule introduces a constant, a threshold, a window or a cap of its own.**
