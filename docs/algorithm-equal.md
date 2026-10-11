@@ -42,8 +42,9 @@ in time, is where a parameter holds.
 each is a class candidate in `run`'s table (D41). With twelve base neurons a class of the ten digits saves
 `log₂ 12 − log₂ 10`, about a quarter of a bit, each time it covers one, against a line that names ten neurons;
 the history is kept short of the length at which that pays (D30, R4), and no class forms. The digits are
-therefore neighbors in their own right wherever they are within reach, which is what lets `say` copy one of
-them.
+therefore neighbors in their own right wherever they are within reach, and they vote. Were the classes formed,
+the digits would be covered and silent, and `say` would read them through the classes' value neurons instead
+(D44, D45); the case shows the bare regime because it is the one a short history gives.
 
 # 2. The neurons
 
@@ -146,11 +147,12 @@ saves about `1.6`. Either saving is positive, which is all the election asks (R2
 
 # 6. What this case leans on
 
-- **The digits stand bare.** The copy is a parameter over a digit's own position, so the digit has to be on the
-  apex when `say` fires. That holds here because no class in `run`'s table pays within the history. Were the
-  alphabet wide enough for a digit class to pay, `P`'s bid would cover `c` and `d` through it, what stood at
-  their slots would be value neurons, and a parameter could not read the digit through them. The case rests on
-  the small alphabet; a real world is wider, and that is noted in the remarks.
+- **The digits stand bare.** No class in `run`'s table pays within the history, so the digits are on the apex
+  when `say` fires, the copy parameters are seeded on them directly, and they vote. Were the alphabet wide
+  enough for a digit class to pay, `P`'s bid would cover `c` and `d` through it, what stood at their slots would
+  be the classes' value neurons, and the copy parameters would read the digits through them (D44): the copy is
+  the same, the digits are silent, and the vote at the request is `P:k` or `run` alone. The case shows the
+  bare regime; the remarks say what the other looks like.
 - **One frame, so one offset.** Laid out across frames, a digit shown third would learn the answer three frames
   after it and shown fourth two frames after, and would place the answer at both distances whatever it was
   shown as now. In one frame every digit sees the answer one frame after itself, and the slot is in the

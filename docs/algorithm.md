@@ -215,6 +215,10 @@ what the dictionary writes is a pattern.
 > **A neighborhood is the frame around the fired neuron**, since adjacency admits nothing later (D5), and every
 > structural decision is made on it. The activation itself is not in it: its own instance is what a pattern
 > covering it replaces, and is counted there (D22).
+>
+> **A neighbor that is a value neuron comes as its variable with its values** (D45): the neuron at its offset,
+> and beside it, at each position its variable holds, the value that stood there. The value is what a parameter
+> compares (D44); the neuron is what a class admits, a function names, and a bid covers.
 
 A neighborhood is a set of neighbors, each at its own offset. Drawn with a row per dimension and a column per
 offset, with one activation dimension and a reach of 1:
@@ -744,8 +748,12 @@ Part IV covers the `infer` call, where a neuron learns what followed and infers 
 > its positions, and beside them its **members**, the neurons that have stood at all of them within the history,
 > each with its value neuron (D45). The list is a record and not a condition.
 >
-> **Its value** is the neuron that stood at its positions. Where they disagree, the value is the neuron at most
-> of them, the nearest on a tie, and every position that holds something else is a failed neighbor (D22).
+> **Its value** is the neuron that stood at its positions, **read through value neurons**: where a value neuron
+> stands at a position, what stands there for the parameter is that variable's value at that position (D45,
+> D7), so one digit shown bare and the same digit held in a class are one and the same neuron to it. A position
+> at which a variable's value neurons stand is recorded with that variable, so that expansion can put the value
+> neuron back there (R28). Where the positions disagree, the value is the neuron at most of them, the nearest on
+> a tie, and every position that holds something else is a failed neighbor (D22).
 >
 > **A parameter is not a neuron.** It is a pattern: found where two offsets agree (D33), named by the functions
 > of its table that hold where it does (D38), bid alone where none of them is in the cover (D31), and deleted
@@ -785,8 +793,11 @@ Part IV covers the `infer` call, where a neuron learns what followed and infers 
 
 > **D45 — The value neuron.** A variable's child, one per value: per parameter and member, and per class and
 > combination, shared by every variable the machine has wired to it (R43). The owner's table records what each
-> one stands for. Two variables of one owner that hold the same neuron in one activation fire two value
-> neurons, and a variable that holds the same value again fires the same one. A value neuron has a level and an
+> one stands for, and that is what it is as a neighbor: **its variable, with its value at each position the
+> variable holds** (D7). The value at a position is the neuron that stood there, followed through value neurons
+> to a neuron that is not one, so a value neuron standing for a value neuron stands for what that one stands
+> for. Two variables of one owner that hold the same neuron in one activation fire two value neurons, and a
+> variable that holds the same value again fires the same one. A value neuron has a level and an
 > id like any child, one level above the highest activation the bid it was created for covered (D2), and holds a
 > table, a history and connections of its own.
 >
@@ -808,7 +819,7 @@ Part IV covers the `infer` call, where a neuron learns what followed and infers 
 > ```
 > the owner with one neuron of its row        n at δ                           a function of one neighbor
 > two neurons standing together in one row    a at δ₁ and b at δ₂              a function of two neighbors
-> two offsets that agree within a row         one neuron at δ₁ and at δ₂       a parameter over δ₁ and δ₂ (D44)
+> two offsets that agree within a row         one neuron at δ₁ and at δ₂, read through value neurons (D44)   a parameter over δ₁ and δ₂
 > one offset that varies across rows          a at δ in one, b at δ in another   a class at δ, of a and b (D41)
 > ```
 > The owner stands in every row and is no neighbor of itself: every bid covers it (D31), so one neighbor that keeps
@@ -1014,7 +1025,8 @@ what stood on the apex in the frames after it, event and action alike.
 > **R20 — The call, in order.** Once per level per frame, the machine asks one neuron for everything it owes
 > that frame, handing it the count `n` of its neurons (D13) and **every activation of it that fired
 > this frame with a neighborhood that is not empty**,
-> each with its neighborhood, at age 0 (R1). They are processed together. A neuron none of whose activations
+> each with its neighborhood, at age 0 (R1), every value neuron in it carrying its variable's values (D7),
+> which the machine reads off the owner's table and the neuron could not. They are processed together. A neuron none of whose activations
 > has a neighbor is not called; such an activation is still open (D9) and on the apex (R27) like any uncovered
 > activation.
 >
@@ -1731,8 +1743,10 @@ saved twice.
 > **Expansion substitutes the arguments.** A function's child expands to its bidder, its neighbors, and what its
 > variables held, read from the value neurons beside the child: a parameter to its member at every one of its
 > positions, a class to its combination, a member at each position. Where an inferred call brought no value neuron,
-> a parameter is bound from what stands at those of its positions that have happened (D44) and placed at the rest:
-> that is how a value is carried forward. Where none of its positions has happened it places its most frequent
+> a parameter is bound from what stands at those of its positions that have happened, read through value
+> neurons (D44), and placed at the rest: that is how a value is carried forward. At a position the parameter
+> reads through a variable, what is placed is that variable's value neuron for the member (D45); elsewhere, the
+> member itself. Where none of its positions has happened it places its most frequent
 > member, and a class with no value neuron places its most frequent combination, the oldest on a tie. A value
 > neuron standing alone expands to its bidder and to its value at every position of the variable whose bid fired
 > it. A function of the
