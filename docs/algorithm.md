@@ -1721,6 +1721,12 @@ saved twice.
 > activation's window closes, and when its match fails (R49): a plan holds because it keeps being what
 > happened, and nothing is retracted. An inference stands whether its activation is covered or
 > not; coverage decides whether it is heard (R46).
+>
+> **What stands is what was read.** A reward may move an estimate after an activation's age 0, and the walk may
+> wire a connection. The neuron's next activation reads them (R36). This one does not. A situation that launched
+> a plan keeps proposing it at the estimate it read, until its window closes or its match fails. The rewards the
+> plan's actions bring as they run fold into the connection's estimate on the neuron (R31). The standing
+> inference does not read it again.
 
 ## 8.3 Expansion
 
@@ -1895,6 +1901,14 @@ saved twice.
 > events it placed at that position by strength, as above. **The candidate with the largest share is expected**
 > (R40). The estimate is not read here: it is the reward of the actions of those frames, and an event is what
 > followed, not what paid. Ties go to the older event. A position no voter reaches expects nothing.
+>
+> **A bad plan is worn down, not cut.** A standing inference carries the estimate it read at age 0 (R45). Each
+> frame it places what comes due at the frame ahead: actions in their dimensions, expected events in theirs, at
+> their positions, all at that estimate. Activations that fired after a reward moved the estimate place
+> candidates at the moved number, or the walk's untried action at zero (R37). Where the largest estimate is one
+> of those, the plan's action does not run; where the world reports an event other than the one the plan
+> expected, that event did not stand. Each such placement is a failed neighbor to the plan's match (R49). The
+> plan stands while what it found still pays for what it missed, and is dropped when it no longer does.
 >
 > **Each dimension is resolved on its own**: a plan that loses its action dimension still counts for the events it
 > placed, and one that wins is not favored for them, so what is expected is what the most voters placed, whichever

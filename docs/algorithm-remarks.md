@@ -1876,6 +1876,19 @@ any apex activation, since the action did run and what followed it was seen, and
 Where the situation mattered, a pattern that names the action beside what was seen has a sharper estimate and
 covers it; where it is right on its own, it is a habit that pays.
 
+**On R45 — why a plan is not dropped when its reward turns bad.** An activation reads its connections once, at
+age 0. What it read stands until its window closes or the match fails. A reward that arrives while the plan
+runs moves the estimate on the neuron. The neuron's next activation reads the moved number; this one does not.
+So a long-reach situation that launched a bad plan keeps proposing it to the end of its window, at the estimate
+it read. What stops the plan is attrition. Every activation that fires after the move reads the moved estimate
+and places its own candidates at the frame ahead. R47 takes the largest estimate in each dimension, so the
+plan's actions, at the old number, are outranked one by one by candidates at the moved one or by the walk's
+untried action at zero. Each action that did not run, and each expected event the world did not show, is a
+failed neighbor to the plan's match, and the plan is dropped when what it found no longer pays for what it
+missed (R49). That is deliberate. Re-reading would make
+inference a per-frame cost again, which R45 exists to avoid. And a plan judged step by step by the voters
+around it is how the design corrects everything else.
+
 **On R47 — why there is no confidence correction.** The correction would be a parameter with nothing to
 derive it from, and R37's walk is what buys the thin estimates their exposures.
 
@@ -1925,10 +1938,11 @@ within the history
 the case keeps. A wider alphabet makes the same class pay, the request's bid then covers the digits through it,
 and what stands at their slots is the classes' value neurons. The copy still holds, because a parameter reads a
 value neuron as its variable's value (D44, D45): the value neuron is what the copy step covers, and the digit
-under it is what the two positions agree on. What changes is the vote: covered digits are silent (D10), so the
-request is answered by the one voter that knows the situation, with no digits hedging beside it. The demo
-shows the bare regime because a short history gives it; a wide alphabet gives the covered one, and both say
-the right digit.
+under it is what the two positions agree on. What changes is who votes: the covered digits are silent (D10), and their
+value neurons hedge in their place, each covered by one step in one branch and standing bare beside the other
+step in the other, so the margin is the branch voters' two against one, as in the bare regime. The demo shows
+the bare regime because a short history gives it; a wide alphabet gives the covered one, and both say the
+right digit.
 
 # 9. What is provable about compression
 

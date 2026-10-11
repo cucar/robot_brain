@@ -82,8 +82,9 @@ the digits would be covered and silent, and `say` would read them through the cl
 5. **The steps are the functions over them.** `Q` and `Pc` hold together in every equal row, `Q` and `Pd` in
    every unequal one, and the collapse grows a function over each pair (D33, D27): `from-c` and `from-d`, with
    children `ANSWER-C` and `ANSWER-D`. A `from-c` bid covers `say`, what stood at slot `0`, `c` and the answer;
-   `from-d` the same with `d`. Which is taken is which parameter holds, since the other fails at both its
-   positions (D22, D28).
+   `from-d` the same with `d`. Which is taken is which parameter holds: the other's two positions disagree, so
+   it takes the nearer as its value and is charged a failed neighbor at the other (D44), and the bid that holds
+   covers more for less and is taken first (D22, D28).
 6. **The situation learns its answer.** In the taught frames `ANSWER-C` fired over `P:k` and `ANSWER-D` over
    `run`. Each is covered in the frame the answer runs, and connects once to the neuron that covered it, with
    that frame's reward (D10): `P:k` holds `ANSWER-C` at one frame ahead, `run` holds `ANSWER-D`. Before the
@@ -128,6 +129,25 @@ not silenced; they hedge, and the one voter that knows the situation decides.
 `3, 4, 8, 5` is the mirror. Nothing covers anything at frame 1, so the voters are `run`, `3`, `4`, `8` and
 `5`. `run` holds `ANSWER-D` alone and places a `5`; the `3` and the `4`, at slots `1` and `2`, hold `ANSWER-D`
 alone at those offsets and place a `5`; the `8` and the `5` split. `5` wins by four shares to one.
+
+**With the classes formed.** A wider alphabet, or a longer history, makes a digit class pay (D30). `run`'s
+table then holds `P` and four classes, `A`, `B`, `C` and `D`, one per slot (D41), and two functions over them:
+`same`, naming `P`, `C` and `D`, and `differ`, naming `A`, `B`, `C` and `D` (D38). A class bid alone never pays
+beside `P`, since a second bid on one bidder is charged the bidder it is not credited (D13, R22), so the classes
+reach the apex only inside those functions. In `say`'s table `Q` is now the class of `same` and `differ`, `Pc`
+reads `c` through `C`'s value neuron as `C`'s value at slot `3` (D44, D45), and a `from-c` bid covers that value
+neuron itself.
+
+| Frame | input | on the apex | what happens |
+|---|---|---|---|
+| 1 | `run`, `3`, `3`, `8`, `5` | `same`, `P:3`, `C:8`, `D:5`, all at slot `0` | `same` covers `run` and the four digits, and its value neurons stand beside it. Each infers at its age 0 (R36). |
+| 2 | `say` reported as run; nothing reported in `digit` | `ANSWER-C`, over `say`, `same`, `C:8` and the expected `8` | `same`, covered through `Q`, and `C:8`, covered through `Pc`, connect once to `ANSWER-C` (D10); `P:3` and `D:5`, bare, connect to it too (R31). |
+
+The vote at frame 1, voter by voter: `same` and `P:3` each hold `ANSWER-C` alone, since both stand only in
+equal requests. `C:8` holds `ANSWER-C`, which covered it after every equal request, and `ANSWER-D`, beside
+which it stood bare after every unequal one; `D:5` holds the mirror. So `8` takes two voters whole and half of
+two more, three shares, and `5` one. The digits say nothing; their value neurons hedge in their place, and the
+branch voters win, as in the bare regime.
 
 # 5. The price
 

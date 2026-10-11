@@ -270,8 +270,9 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
 - **A lesson that depends on values together.** Where several variables hold under one function, each value
   neuron learns what followed it, and the vote adds their tendencies. That is right where the answer follows a
   majority of them, and it says nothing where the answer depends only on the combination, as the answer digit
-  of a sum does. There the value neurons each infer the patterns that have covered them, and the one that fits
-  them all is left, since an inference that does not match what stood is struck (R49). That has been
+  of a sum does. There the value neurons each infer the patterns that have covered them; the match proposes them all,
+  since a neighbor found credits more than a neighbor missed charges (R49), and the pattern every value neuron
+  names takes every share where the others take one, so it wins by share (R47). That has been
   reasoned on the addition case taught mixed and not run. Taught one case at a time
   ([algorithm-addition.md](algorithm-addition.md)), the machine has a neuron per combination from the first
   level.
@@ -338,6 +339,15 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   neuron for what stood in it (D45), so the moment has to be restated.
 - **The focus is the environment's.** A channel that needs one must provide it, as events the machine sees and
   base actions that move it.
+
+- **What is said is chosen by share, never by reward.** The answer the copy and equal cases say is an expected
+  event, resolved by share of voters, and an event dimension never reads an estimate (R47). Reward moves whether
+  `say` runs and never which digit is said: a wrong digit with more voters is said for as long as those voters
+  stand. That is right for an answer a teacher's lessons fix, and it means an answer that has to be chosen by
+  what pays cannot be given as an expected event. A limit to come back to, not a fear.
+- **The reward span is untested.** Every worked case pays each frame's action in that frame, stocks included,
+  so R33's linear dissipation and its longest-open-window default have no case behind them. **Diagnostic:** a
+  world that pays after a delay, with the span named and with it left to the default.
 
 **Neighborhood size above the base.** A neighborhood is the frontier within reach (D5), and the reach is twice
 the neuron's span (D4). Among neighbors of about its own size that is a handful in each direction; among finer

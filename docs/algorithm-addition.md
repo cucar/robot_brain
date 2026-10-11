@@ -103,8 +103,10 @@ recurred, and variables are built first (D33): `add`'s table would hold a class 
 over them. What fires then is one child for every column, with a value neuron for each digit beside it, and no
 neuron for the column as a whole. The cases are then told apart a frame later. Each step, in the answer digit's
 table, names the value neurons that stood one back, and each value neuron infers the steps that have covered
-it. An inferred step that does not match what stood is struck (R49), so the one step that fits every value
-neuron is the one left, and its digit runs. That route has been reasoned through and not run
+it. Each inferred step is matched against what stood (R49), and a step naming one digit that did not stand is
+proposed all the same, since the digit it finds credits more than the one failure charges; so every step either
+digit was ever part of is proposed, the one step both digits name takes both their shares where every other
+takes one, and its digit runs by share (R47). That route has been reasoned through and not run
 ([algorithm-evaluation.md](algorithm-evaluation.md)). Taught a case at a time, the machine has a neuron per case
 at the first level.
 
