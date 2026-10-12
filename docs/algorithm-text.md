@@ -39,7 +39,7 @@ covered, at level 2 (D2). `the` spans two frames, so it sees three back, where t
 and `the` with a space before it is the word as a word.
 
 A word of any length forms this way: a letter at a time, one level per letter, or faster where two children join,
-`ca` and `ts` making `cats` in one step, `ca` a member of the class `ts` holds two back. Nothing has to be a power
+`ca` and `ts` making `cats` at once, `ca` a member of the class `ts` holds two back. Nothing has to be a power
 of two long, because a stranded letter is never stranded; it is on the frontier, and whatever fires next within
 reach can name it. And a long word does not see far for standing high: `strengths`, built a letter at a time,
 stands eight levels up, spans eight frames and sees nine back.

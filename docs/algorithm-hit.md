@@ -22,7 +22,7 @@ straight ahead of the body, `turn-left` and `turn-right`.
 # 2. What stands under them
 
 The field declares a radius of `4` in each of its two spatial dimensions and `1` in time (D1), so `approaching`,
-`ball` and `fist`, base events all, see four steps in every direction and one frame back (D4), and within that
+`ball` and `fist`, base events all, see four positions in every direction and one frame back (D4), and within that
 reach they are each other's neighbors on the frontier (D5). Within the radius every distance is exact (D6); the
 distances this case uses are `2` and `4`.
 
@@ -34,7 +34,7 @@ distances this case uses are `2` and `4`.
 | parameters | `T`, `T′` and `T″`, in `approaching`'s table: two positions that hold one and the same thing, one per direction (D44) |
 | value neurons | `T:ball`, `T:fist` and so on: one per parameter and thing it has held (D45) |
 | base actions | `hit`, `turn-left`, `turn-right` |
-| the steps | in the table of each base action, what stood a frame before it: a function for a value neuron that comes often, a class for the rest |
+| the functions | in the table of each base action, what stood a frame before it: a function for a value neuron that comes often, a class for the rest |
 
 # 4. The parameters, and what each thing learns
 
@@ -53,9 +53,9 @@ covers `approaching` and both activations of the thing, and `T`'s value neuron f
 `approaching`'s coordinate. A value neuron is one thing coming from one direction, `T:ball` a ball from ahead,
 and each holds a lesson of its own: `T:ball` connects to what follows it, `hit`, with what the hit earned (R31).
 
-A step is the same seen from the action: in `hit`'s table, the value neuron that stood a frame before (D5).
+The function in `hit`'s table is the same thing seen from the action: it names the value neuron that stood a frame before (D5).
 Once it exists its bid covers that value neuron in the frame `hit` runs, and in that frame the value neuron
-connects to the step, with that frame's reward (D10). Inferred, the step expands to its bidder, `hit`, which is
+connects to its child, with that frame's reward (D10). Inferred, that child expands to its bidder, `hit`, which is
 output (R28, R30).
 
 `T` pays because it has two positions and its member is paid once: `approaching` and two activations of the
@@ -82,16 +82,16 @@ at `(10, 10)`.
 2. **The parameter holds.** `T` has exactly those two positions, and the same member stands at both.
    `approaching` sends `T` with `ball` (D31). The bid is accepted, covering `approaching` and both activations
    of the ball, and one level up, at the body's coordinate, `T:ball` fires (§7.4).
-3. **The value neuron speaks.** Its connection names the step, one frame on (D25). That is the entire record:
+3. **The value neuron speaks.** Its connection names the function's child, one frame on (D25). That is the entire record:
    no position is in it, and none is needed, because `hit` strikes what is ahead of the body and `T` only holds
    when something is.
-4. **Next frame the step is expanded and `hit` runs** (R28, R30). The step's bid covers `T:ball`, which connects
-   to the step once more, with what the hit earned (D10).
+4. **Next frame the child is expanded and `hit` runs** (R28, R30). Its bid covers `T:ball`, which connects
+   to it once more, with what the hit earned (D10).
 
 # 6. Wherever the two of them are
 
 Put the body at `(50, 3)` and a ball at `(50, 5)` that was at `(50, 7)`. The subtraction gives the same two
-offsets, the same parameter holds, the same value neuron fires, and the same connection infers the step that
+offsets, the same parameter holds, the same value neuron fires, and the same connection infers the child that
 hits. No coordinate ever reached the pattern (D11), so where they are costs nothing.
 
 # 7. A thing never seen
@@ -110,9 +110,9 @@ answers exactly once per new thing.
 # 8. Wherever it is relative to the body
 
 That costs a parameter per direction. A ball coming from the left gives `(−2, 0)` and `(−4, 0)`, which is `T′`,
-and `T′:ball` has learned the step that turns left. After the turn the ball is ahead, `T:ball` fires, and `hit`
+and `T′:ball` has learned the child that turns left. After the turn the ball is ahead, `T:ball` fires, and `hit`
 follows. The frame of reference is never transformed: the body turns, the field is reported again, and the
-machine subtracts again. The radius is what keeps the directions and distances to a handful: four steps each
+machine subtracts again. The radius is what keeps the directions and distances to a handful: four positions each
 way, exact, and nothing beyond (D1, D6).
 
 A thing never seen that comes from the side is answered by the same habit, and `approaching` has seen hits and
@@ -129,4 +129,4 @@ neuron's estimate for it turns negative, and the walk tries the next action (R37
 | the same object at any place in the world | one pattern, since no coordinate is part of a neuron (D11) |
 | any object at that location | a class at the offset (D41) |
 | the same object at two locations | one parameter over two offsets (D44) |
-| what to do about it | the value neuron's connection to a step, which names no location at all |
+| what to do about it | the value neuron's connection to a function's child, which names no location at all |

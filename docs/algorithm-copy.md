@@ -34,7 +34,7 @@ executes what the machine outputs, and pays what was right and what was wrong.
 | base events | `run`, and the ten digits |
 | base action | `say` |
 | the copy | `W`, a parameter in `say`'s table over the frame before and its own: the digit said is the digit shown (D44); value neurons `W:0` to `W:9`, "said k" |
-| the step | `write`, a function in `say`'s table naming `run` a frame before and `W`; its child `WROTE` (D48) |
+| the function | `write`, in `say`'s table, naming `run` a frame before and `W`; its child `WROTE` (D48) |
 | the shown digit, once it pays | `C`, a class in `run`'s table at offset zero, members the digits (D41); value neurons `C:0` to `C:9`, "shown k" |
 
 # 3. How it was learned
@@ -49,13 +49,13 @@ executes what the machine outputs, and pays what was right and what was wrong.
    `−1` and at `0`: a pair of offsets that agree is the relation a parameter is seeded on (D47), and its
    collapse makes it `W` (D27). It writes which member once and covers the said digit in full. It is open on
    its members, so a digit never shown before is its value the first time, and a member from then on (D44).
-3. **The step is the function over it.** `run` stands at `−1` in every row, and `W` holds in every row, so the
+3. **The function is grown over it.** `run` stands at `−1` in every row, and `W` holds in every row, so the
    collapse grows one function over both, `write` (D33, D27): a function over `W` alone would write what `W`
    writes alone and is never built (D38). Its child `WROTE` fires at `say`'s coordinate, covering `say`, `run`,
    the shown digit and the said one (§7.4).
 4. **The request learns its answer.** `run` is covered in the frame the answer runs and connects once to the
    neuron that covered it, `WROTE`, one frame ahead, with that frame's reward (D10). So does the shown digit,
-   covered through `W`. Before the step existed, `say` and the digit stood bare at the answer frame and both
+   covered through `W`. Before `write` existed, `say` and the digit stood bare at the answer frame and both
    connected to them directly; those connections stay (R31).
 5. **The class forms, and the copy reads through it.** Once the history is long enough, `C` pays (D30). From
    then on `C`'s bid covers `run` and the digit, and what stands on the apex at the request is `C:k`, "shown

@@ -56,7 +56,7 @@ the digits would be covered and silent, and `say` would read them through the cl
 | the test | `P`, a parameter in `run`'s table over slots `1` and `2` of its own frame: `a` and `b` are one and the same digit (D44); value neurons `P:0` to `P:9`, "the pair was k" |
 | the situation, seen from the answer | `Q`, a class in `say`'s table at slot `0` a frame back, members `run` and `P:0` to `P:9` (D41); value neurons `Q:run` and `Q:P:0` to `Q:P:9` |
 | the copies | `Pc`, a parameter in `say`'s table over slot `3` a frame back and slot `0` now: the answer is `c`; `Pd`, over slot `4` a frame back and slot `0` now: the answer is `d` (D44); value neurons `Pc:0` to `Pc:9` and `Pd:0` to `Pd:9` |
-| the steps | two functions in `say`'s table: `from-c`, naming `Q` and `Pc`; `from-d`, naming `Q` and `Pd`; their children `ANSWER-C` and `ANSWER-D` (D48) |
+| the functions | two, in `say`'s table: `from-c`, naming `Q` and `Pc`; `from-d`, naming `Q` and `Pd`; their children `ANSWER-C` and `ANSWER-D` (D48) |
 
 # 3. How it was learned
 
@@ -79,7 +79,7 @@ the digits would be covered and silent, and `say` would read them through the cl
    beside `say` now, and in every unequal one the digit at slot `4` is: two pairs of offsets that agree, and
    two parameters, `Pc` and `Pd` (D47, D27). Each writes which member once and covers the answer in full. A
    parameter is open on its members, so a digit never answered before is copied the first time it is shown.
-5. **The steps are the functions over them.** `Q` and `Pc` hold together in every equal row, `Q` and `Pd` in
+5. **The functions are grown over them.** `Q` and `Pc` hold together in every equal row, `Q` and `Pd` in
    every unequal one, and the collapse grows a function over each pair (D33, D27): `from-c` and `from-d`, with
    children `ANSWER-C` and `ANSWER-D`. A `from-c` bid covers `say`, what stood at slot `0`, `c` and the answer;
    `from-d` the same with `d`. Which is taken is which parameter holds: the other's two positions disagree, so
@@ -88,7 +88,7 @@ the digits would be covered and silent, and `say` would read them through the cl
 6. **The situation learns its answer.** In the taught frames `ANSWER-C` fired over `P:k` and `ANSWER-D` over
    `run`. Each is covered in the frame the answer runs, and connects once to the neuron that covered it, with
    that frame's reward (D10): `P:k` holds `ANSWER-C` at one frame ahead, `run` holds `ANSWER-D`. Before the
-   steps existed, `say` and the digit stood bare at the answer frame and both connected to them directly; those
+   functions existed, `say` and the digit stood bare at the answer frame and both connected to them directly; those
    connections stay (R31) and place the same things.
 7. **The digits learn both.** A digit at slot `3` is covered by `ANSWER-C` after an equal request and stands
    bare beside `ANSWER-D` after an unequal one, and connects to each at the offset of its own slot (D25,
@@ -181,7 +181,7 @@ saves about `1.6`. Either saving is positive, which is all the election asks (R2
   else (D25, R28).
 - **A majority with tied estimates.** The branch is read at the request by nothing but the vote, and the vote
   is right because `P:k` or `run` names one answer while each digit names both. Estimates do not separate them
-  while the teacher pays every lesson the same (R47). What pulls the wrong step down afterwards is the
+  while the teacher pays every lesson the same (R47). What pulls the wrong function's child down afterwards is the
   machine's own errors: a `5` said in an equal request is paid negatively, the connections that placed it take
   the share, and the mean falls (R31, R32).
 - **Teaching is mixed.** Taught equal requests first, `run` would hold functions naming `a` and `b` outright
@@ -195,5 +195,5 @@ saves about `1.6`. Either saving is positive, which is all the election asks (R2
 | `a == b` | `P` holding at slots `1` and `2`: one neuron at both |
 | the two arms of the conditional | `from-c` and `from-d`, two functions in `say`'s table, taken by which copy holds |
 | `return c` | `Pc`, bound from slot `3` and placed beside `say` |
-| choosing the arm | no neuron: `P:k` or `run` names the step it was followed by, the digits name both, and the share decides (R47) |
+| choosing the arm | no neuron: `P:k` or `run` names the child it was followed by, the digits name both, and the share decides (R47) |
 | the call site that knows the whole | `ANSWER-C` and `ANSWER-D`, one frame after the request, each with the value neurons of `Q` and its copy beside it |

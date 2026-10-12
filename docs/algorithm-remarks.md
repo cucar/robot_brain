@@ -164,7 +164,7 @@ the level to the apex, is the wavefront architecture, and it is why the two are 
 frame later. The first few times, nothing covers the situation in the action's frame, so it connects to the
 action with the reward. Then the action's table notices that the situation always stands one back, and builds a
 function for the pair; from then on the action's bid covers the situation in the very frame its lesson arrives.
-If coverage silenced it at once, the situation would stop learning the moment its next step was named beside
+If coverage silenced it at once, the situation would stop learning the moment what followed it was named beside
 it, its estimate frozen at its first few rewards. So the inhibition on connecting starts a frame late: in the
 frame it is covered, the activation writes one connection, to the neuron that covered it. What it learns from
 then on is the child, and inferring the child expands to the action, so nothing is lost.
@@ -1944,10 +1944,10 @@ neurons a class of the ten digits saves a quarter of a bit each time it covers a
 within the history
 the case keeps. A wider alphabet makes the same class pay, the request's bid then covers the digits through it,
 and what stands at their slots is the classes' value neurons. The copy still holds, because a parameter reads a
-value neuron as its variable's value (D44, D45): the value neuron is what the copy step covers, and the digit
+value neuron as its variable's value (D44, D45): the value neuron is what the copy function's child covers, and the digit
 under it is what the two positions agree on. What changes is who votes: the covered digits are silent (D10), and their
-value neurons hedge in their place, each covered by one step in one branch and standing bare beside the other
-step in the other, so the margin is the branch voters' two against one, as in the bare regime. The demo shows
+value neurons hedge in their place, each covered by one function's child in one branch and standing bare
+beside the other's in the other, so the margin is the branch voters' two against one, as in the bare regime. The demo shows
 the bare regime because a short history gives it; a wide alphabet gives the covered one, and both say the
 right digit.
 

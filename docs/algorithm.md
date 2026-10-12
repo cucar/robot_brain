@@ -118,9 +118,9 @@ replace. The reward for the action arrives with the next frame
 > level and a name and nothing else structural: it is not an event or an action, it belongs to no dimension and no
 > channel, and its body or its values may hold either kind. It sits one level above the highest activation the
 > bid it was created for covered (R24), and the level does one thing: it orders the frame's processing (R26). How
-> far the neuron sees is its reach, read off its patterns' lines as they stand and not off its level (D4). Other functions may come
-> to share a child (R43), and its parents may be of either kind. Only activation dimensions exist above the base,
-> and an activation of a higher neuron has exactly the coordinate it inherits.
+> far the neuron sees is its reach, read off its patterns' lines as they stand and not off its level (D4). Other
+> functions may come to share a child (R43), and its parents may be of either kind. Only activation dimensions
+> exist above the base, and an activation of a higher neuron has exactly the coordinate it inherits.
 >
 > **A child's activation inherits the parent activation's coordinate** — the frame, and the position in every
 > activation dimension — and never an average over what it covers.
@@ -296,18 +296,30 @@ the environment does not have, the action the machine inferred there, weak (D40)
 > built on. And it is the apex, the top of the stack as it stands. The four are one set, and coverage takes a
 > neuron out of it in every role at once.
 
-> **D10 — Inhibition.** A neuron an accepted bid covers does not stand in the file, is not heard (R46), and, from
-> the frame after it is covered, does not connect to what follows. **A neuron is covered only after it has
-> fired** (R27), and **in the frame it is covered it still connects, once: to the neuron that covered it**, the
-> function's child, or the value neuron of a variable that bid alone, with that frame's reward (R31). So a
-> situation whose next step a pattern has named beside it goes on learning what that step earns: what it learns
-> is the child. Coverage acquired at a later age revokes nothing before it: the connections the activation
-> strengthened while uncovered stand, and a reward for one of those frames still reaches them (R33). An
-> activation covered already at age 0 writes nothing, ever: a connection is to what comes after (D25), and by
-> then it is inhibited. **One exception, on being heard alone:** a covered activation's inferences, made at age 0
-> (R45), are heard when its coverer has nothing for the frame ahead (R48). It still writes nothing and connects to
-> nothing; only its coverer
-> learns what ran. That is the whole of inhibition in the design.
+> **D10 — Inhibition.** Coverage does three things to an activation, all from the frame it is covered in. It
+> leaves the file: the body writes its coverer's call, not it. It is not heard: resolution reads its coverer's
+> standing inferences, not its own (R46). And it stops connecting: from the frame after it is covered it writes
+> nothing about what follows.
+>
+> **The last connection.** In the frame it is covered, the activation connects once more, to the neuron that
+> covered it: the function's child, or the value neuron of a variable that bid alone. The connection is at the
+> offset from the activation to its coverer, its age in time and the distance to the bidder's coordinate in
+> every other activation dimension, as every connection is (D25), and it takes that frame's reward (R31). Then
+> the activation is silent. Without this connection the activation could never learn the neuron built over it:
+> the child did not exist in the frames it was uncovered, and it is inhibited from the frame the child first
+> fires. So a situation beside which a pattern has named what followed it learns that one neuron, the child, and
+> from then on infers it; the child learns what follows.
+>
+> **What stands before coverage stands.** A neuron is covered only after it has fired (R27). Coverage acquired at
+> a later age revokes nothing before it: the connections the activation strengthened while uncovered stand, and
+> a reward for one of those frames still reaches them (R33). An activation covered already at age 0 writes
+> nothing, ever: a connection is to what comes after (D25), and by then it is inhibited.
+>
+> **One exception, on being heard alone.** Every activation infers at its age 0, covered or not, and the machine
+> keeps what it inferred (R45). A covered activation's inferences are heard only where its coverer has nothing
+> for the frame ahead (R48), as a newly minted child has nothing until something has run under it. The covered
+> activation still writes nothing and connects to nothing; only its coverer learns what ran. That is the whole
+> of inhibition in the design.
 
 There is no rest value. A dimension where nothing happens supplies no symbol, and silence is what the decoder
 assumes for anything the file does not state.
@@ -478,7 +490,7 @@ connections (D25), one kind, and an inference is a connection read.
 > **D51 — The action policy.** Declared once for the machine, as the alphabet and the neighborhood policy are
 > (D1, D50): what an action dimension outputs when every candidate in it carries a negative estimate (R47),
 > **the least bad, or nothing**. The first is for a world that acts whether or not the machine does, where
-> silence hands the step to the world's own action and the machine learns from that (§3.5); the second is for a
+> silence hands the frame to the world's own action and the machine learns from that (§3.5); the second is for a
 > world in which silence is an action in its own right and costs nothing. The walk is the same under either
 > (R37); the policy decides only what runs once the walk has nothing left to wire in a dimension.
 
@@ -1730,7 +1742,7 @@ saved twice.
 > estimate of the connection it came from. A connection to a function neuron places a call (D37), weak, its
 > parameters bound from what stands at those of their positions that have happened (D44). What its expansion
 > puts at the frame ahead is what it proposes there, and the machine expands no more of it than that (R45): at
-> distance 1 a pattern's last step, at distance ten the step ten from its end, and its first step only when its
+> distance 1 the last thing a pattern places, at distance ten the one ten from its end, and the first only when its
 > completion is placed its whole length ahead. An inference is proposed only where its match holds (R49), and
 > resolution runs at the base and only there (R47). **This is what launches a program**, and it is why every offset is read and not the next one alone: an activation can start
 > a program only from an offset at least as far out as the program is long, and can carry the tail of a longer
@@ -1793,7 +1805,7 @@ only what happened (R32).
 > ```
 > **A coarse offset expands to its rounded coordinate.** A neighbor named within the radius is placed where it
 > fired. One named at `sign · R · 2^g` is placed at exactly that distance whatever distance in the group it
-> fired at, and several neighbors at one coarse offset (D6) are each placed there. **The rounding composes.** Each step down adds its own group's slack, so a neuron
+> fired at, and several neighbors at one coarse offset (D6) are each placed there. **The rounding composes.** Each level down adds its own group's slack, so a neuron
 > places the base symbols of its farthest neighbors to within the sum of the groups along the path: the longer
 > its span, the coarser its far placements. That is the loss the file carries (§1), and expansion reports it
 > faithfully rather than hiding it.
@@ -1832,7 +1844,7 @@ only what happened (R32).
 > from there, its base symbols at the frames back from it. **A coarse
 > offset is not a window.** Its action completes at
 > `b`, not somewhere in the group `b` stands for, exactly as a neighbor named at `−b` is placed at `−b` and nowhere
-> else. So the steps of a long program reach the frame ahead one at a time, in order, each at exactly one age,
+> else. So the base symbols of a long program reach the frame ahead one at a time, in order, each at exactly one age,
 > from one connection and with nothing held: what an activation places beyond the frame ahead it places again
 > next frame, one frame nearer.
 
@@ -1932,7 +1944,7 @@ only what happened (R32).
 > the machine holds at `f` (D9), less every activation an accepted bid covers (D10), plus every covered
 > activation whose coverer has nothing for `f + 1`, and so on down through the covers to the base (R48). What
 > each voter proposes is what its standing inferences place at `f + 1` (R45): a base action by the inference at
-> the offset one ahead of its age (R29), a pattern's step by a farther one, and nothing where none of them lands
+> the offset one ahead of its age (R29), a base symbol a pattern places by a farther one, and nothing where none of them lands
 > there. A voter is read as `(neuron, position)`: the inferences are its neuron's (D11), and the placement is
 > from its position (R36).
 
@@ -1984,11 +1996,11 @@ only what happened (R32).
 > actions, in the dimensions its target acted in, read off the target's expansion (R28): a base action, its own
 > dimension; a pattern, every action dimension its expansion places an action in, one untried base action each;
 > an event, or a pattern that places no action, nothing. A level-five neuron whose plan hurt therefore tries,
-> at that step, one other action in each dimension the plan acted in, and nothing at any other step. **What the
+> at that offset, one other action in each dimension the plan acted in, and nothing at any other offset. **What the
 > walk finds, compression names.** The untried action is a base action under a situation at height, placed by
 > the neuron that walked; where it pays it recurs, where it recurs the activations under that situation name
 > it in a pattern (§6.4), and that pattern is a new one at height with the walked action inside it, found as a lesson's
-> action is found, one step at the base and then named. What a call's variables hold is never searched, it is
+> action is found, one base action at a time and then named. What a call's variables hold is never searched, it is
 > whatever stands at their positions when the call runs (D41, D44).
 >
 > **The walk is in the same currency as everything else**: an untried action becomes a candidate by becoming a
@@ -2025,7 +2037,7 @@ definitions through one small job.
 | Case | File | What it shows |
 |---|---|---|
 | Alternation | [algorithm-xy.md](algorithm-xy.md) | A stream at radius 4. A neuron that keeps seeing a different pair of letters holds two parameters and one function that names both, learned from the pairs that go by once: its child is the alternation, one neuron for every such pair, and the value neurons beside it say which pair. A pair that comes often is named by its own letters' patterns first, and stands in a class instead. |
-| Addition | [algorithm-addition.md](algorithm-addition.md) | A request with each column, a neuron for each case that can be asked, a step per case, and a carry the world shows while it teaches and the machine expects afterwards. |
+| Addition | [algorithm-addition.md](algorithm-addition.md) | A request with each column, a neuron for each case that can be asked, a function per case, and a carry the world shows while it teaches and the machine expects afterwards. |
 | Copy | [algorithm-copy.md](algorithm-copy.md) | Shown a digit and asked, the machine says it: one parameter in the answer's table over the digit shown and the digit said, bound from what was shown, so a digit never said before is said the first time; once a class covers the shown digit the same parameter reads it through the class's value neuron. |
 | Equal | [algorithm-equal.md](algorithm-equal.md) | Shown four digits in one frame and asked, the machine says the third where the first two are the same and the fourth where they differ: equality is a parameter over two slots of the request, the answer is a copy by a parameter over a slot of the request and the slot of the answer, bound from what was shown, and the request answers by a vote the one voter that knows the situation decides. |
 | Hit | [algorithm-hit.md](algorithm-hit.md) | Offsets from where the world reports something approaching as the reference frame, a parameter that takes whatever comes, a value neuron and a lesson per thing, and a thing never seen answered by the habit of the event the world reports in common. |

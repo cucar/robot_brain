@@ -98,7 +98,7 @@ and the action dimension is output nothing (R35). Read per dimension, the covere
 and the base tap would speak there, and a fourth tap would run. The spec's wording is the per-frame one, and
 this case rests on it. A machine that wanted not to rest on it would declare a second action, `halt`, and have
 the world run it in the fourth frame: `go·tap³` would then infer an action, the stop would be chosen by
-estimate like any step, and both readings agree.
+estimate like any action, and both readings agree.
 
 # 6. The same loop, uncounted
 
