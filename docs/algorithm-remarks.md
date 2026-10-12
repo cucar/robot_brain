@@ -1382,7 +1382,7 @@ pattern is never charged for what came after, only for what it names that did no
 
 **On R18 — duplicates die in the table, not the market.** Two patterns with the same neighbors are taken into a
 cover older first, so the younger holds nothing anywhere and retires. The market would kill the younger too —
-the election ties to the older symbol (R24) — but the neuron never hears the election's verdict, so the table
+the election breaks a tie by the older child or bidder (R24) — but the neuron never hears the election's verdict, so the table
 has to be able to do it alone, and it can.
 
 ## 6.4 Add — creating a child

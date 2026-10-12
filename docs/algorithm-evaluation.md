@@ -294,9 +294,9 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   distinct neurons seen at an offset. Each relation tried costs a collapse over its uses, `O(H · c)`, and the
   greedy pick tries every one in every call (D33). How to try fewer without passing over one that would pay is
   open.
-- **Near-duplicates stay apart, and nothing merges children.** A child is reused only on a tie over the same
-  ground (R43). A pattern one neighbor off that does worse on the board gets a child of its own, and two children
-  that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
+- **Near-duplicates stay apart.** Children are merged only for identical bids, two lines naming exactly the
+  same activations at the same price (R43). A pattern one neighbor off that does worse on the board gets a
+  child of its own, and two children that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
   bids cover mostly the same activations, per level.
 - **Membership lags.** A class fits only a member (D41); a non-member at its position is a failed neighbor, and it
   joins when it has recurred enough to pay for its entry (D27). Until then a new variant is written with failed

@@ -99,8 +99,8 @@ replace. The reward for the action arrives with the next frame
 > base neuron sees in it (D4), and the unit in which every distance in it is written (D6). It is the resolution
 > of the layout, as the bucket count is the resolution of what is reported on it, and with `H` it is one of
 > the two things the designer picks (R4): an image whose pixel is to be told from the next declares `R = 1` in
-> `x` and `y`; a stream in which the fourth frame back matters as exactly as the first declares `R = 4` in time. Where this document
-> writes a distance with no radius given, `R = 1`.
+> `x` and `y`; a stream in which the fourth frame back matters as exactly as the first declares `R = 4` in time.
+> Where this document writes a distance with no radius given, `R = 1`.
 
 > **D2 — Type and instance.** A **neuron is a type** and an **activation is an instance of it**.
 >
@@ -108,6 +108,9 @@ replace. The reward for the action arrives with the next frame
 > |------------|---------------------------------------------------|---------------------------------------------------------------------|
 > | base neuron | `(dim_id, bucket_id)`                            | structural and defining: the alphabet                               |
 > | higher neuron | a level and an id                              | a child: a function's child, a function neuron (D48), or a variable's child, a value neuron (D45); no dimension and no kind |
+>
+> **Neuron ids are handed out in sequence**, the base neurons first in declaration order (D1) and every neuron
+> above them as it is created, so a smaller id is an older neuron, and that is what every tie on age reads.
 > | activation | frame, and one position per activation dimension  | fleeting; two activations of one neuron differ in nothing else      |
 >
 > **Neuron dimensions belong to the base alphabet and to nothing above it.** A base neuron is an event or an action
@@ -501,7 +504,8 @@ What this section defines is shared: a neuron reads it over its own history and 
 > variable (D38). It is the collapse of the neighborhoods it covers (D27), moves as they move (D29), and promotes a
 > child: a function promotes one, a function neuron (R16), a variable one per value it has held, a value neuron
 > (D45). Its `id` is its creation
-> order, a handle that survives re-centering and the tie-break D28 and R24 reach for.
+> order within its owner's table, a handle that survives re-centering. It breaks one tie: where two of the
+> owner's patterns measure the same in recognition (D28), the older `id` is taken. The election never reads it.
 >
 > **A pattern is not a neighborhood.** A neighborhood is what one activation saw where it fired, saved once and
 > evicted `H` activations later; a pattern is what the neuron claims. A neighborhood is a fact, a pattern a claim.
@@ -636,12 +640,13 @@ machine, over a frame's bids. It is stated here and cited from both.
 > no round took is the residual (D21). `price` is fixed by what fired and cannot change between rounds;
 > `coverage` only falls.
 
-**The two callers differ in what they cover and in tie-break, in nothing else.**
+**The two callers differ in what they cover and in how they break ties, in nothing else.** Each states its
+tie-break where it runs (D15, R24).
 
-| caller                     | claimants | to cover                      | ties                                               |
-|----------------------------|---|-------------------------------|----------------------------------------------------|
-| neuron - recognition (§6.2) | each function with its variables, then each variable alone, against each activation | the residual of the history (D21) | the older `pattern id`                             |
-| machine - election (R24)  | bids | the board (§7.2) | the older `neuron id`, then the earlier coordinate |
+| caller                     | claimants | to cover                      |
+|----------------------------|---|-------------------------------|
+| neuron - recognition (§6.2) | each function with its variables, then each variable alone, against each activation | the residual of the history (D21) |
+| machine - election (R24)  | bids | the board (§7.2) |
 
 ## 4.5 The bid
 
@@ -971,8 +976,10 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 > it (D27).
 >
 > 1. **Variables.** Of the two variable relations, the offsets that vary and the pairs of offsets that agree
->    (D47), the one that would save most as it stands is taken first; ties go to the higher count, then to
->    declaration order (D1), then to the nearer offset. The collapse of its type grows it into a class or a
+>    (D47), the one that would save most as it stands is taken first. What a relation would save as it stands
+>    is the seed taken as if it were the whole pattern: D22's saving of it, what it covers less what it writes,
+>    summed over the rows that hold it. Ties go to the higher count, then to the older neuron, declaration order
+>    at the base and creation order above it, then to the nearer offset. The collapse of its type grows it into a class or a
 >    parameter, its own tests run on the seed's members and positions before anything else (D27), and it is
 >    kept if what survives is a variable and its margin is positive (D30); a seed whose members do not pay seeds
 >    nothing, and its neurons are named outright in the next stage. A variable of that type already in the table with
@@ -981,7 +988,8 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 >    neighbor is evidence for two variables. Then the next relation.
 > 2. **Functions.** Each residual row is now read in **things**: a position a variable holds as that variable, and
 >    any other neighbor as the neuron at its offset. Of the relations of the owner with one neuron, and of two
->    things standing together in a row, the one that would save most is taken first, with the same ties. The
+>    things standing together in a row, the one that would save most is taken first, read the same way as a
+>    variable relation, with the same ties. The
 >    collapse grows it into a function over the neighborhoods that hold it, and it is priced by its margin (D30):
 >    over each activation, what the cover saves with the candidate in it less what it saves as it stands, where
 >    that is positive. A candidate that pays
@@ -1377,9 +1385,11 @@ bid**, which is what stops a chunk being paid for twice.
 > some bid names and no earlier election has credited (R23).
 >
 > Bids arrive naming relative offsets, so each is resolved against its own coordinate before the first round.
-> `price` is R22's. **Ties go to the older symbol, then to the earlier coordinate** — creation
-> order for a pattern and declaration order (D1) for a base neuron, then frame, then position. Then D28 runs,
-> and what it takes are the accepted bids.
+> `price` is R22's. **Two bids that measure the same are told apart in this order**: a bid carrying a child
+> before one carrying none; between two with children, the older child; between two with none, the older
+> bidder; and between two activations of one neuron, the earlier coordinate, the earlier frame first and then
+> the smaller position, the dimensions in the order the machine declares them (D1). Older is the smaller id
+> (D2). Then D28 runs, and what it takes are the accepted bids.
 >
 > **The bound is structural.** A bid's price includes what its bidder cost, so a bid is taken only when it
 > covers more than its bidder: at least one neighbor beside it. Each round takes one bid, so the rounds are never
@@ -1410,12 +1420,18 @@ value neuron is given one. A bid that lost is given nothing.
 > from another of its neurons is among this election's bids, measured on the same board at the same prices
 > (R22).
 >
-> **A child is reused on a tie.** If another bid of this election carries a child, and names, its bidder
-> included, exactly the activations the accepted bid was credited, at the same price, the two lines state one
-> chunk from two of its neurons, and the accepted bid's function is wired to that child. Between several such
-> bids the older child is taken. A bid that measured better than the accepted one would have been taken before
-> it (D28), so reuse is only ever a tie; a bid that does better than every bid carrying a child states a
-> different chunk, and gets a child of its own.
+> **Identical bids share one child.** Two bids are identical when each names, its bidder included, exactly the
+> activations the other names, at the same price: two lines stating one chunk from two of its neurons. There
+> are three cases, and each ends with one child.
+>
+> - One carries a child and the other none: the one with none is wired to that child.
+> - Neither carries a child: the first accepted is given one (R16), and the other is wired to it.
+> - Both carry children: the younger child's patterns are rewired to the older child, every one of them, and
+>   the younger, with no pattern wired to it, dies when its last open activation's window closes (R38).
+>
+> A bid that measured better than the accepted one would have been taken before it (D28), so reuse is only
+> ever a tie; a bid that does better than every bid carrying a child states a different chunk, and gets a child
+> of its own.
 >
 > **A variable's children are reused with the function's.** The two bids name the same ground, so the machine
 > also has what each variable of either covered on the board. Where a variable of the accepted bid covered the
