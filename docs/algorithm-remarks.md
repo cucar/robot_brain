@@ -1312,8 +1312,8 @@ flowchart TD
     M --> P["RETURN PATTERNS<br/>the bids, the patterns added, the patterns retired — R20"]
     P -.->|"bids: child id + pattern"| X["THE ELECTION<br/>take bids by covers per line, credited the free activations<br/>they name, until the best left does not pay — R24"]
     X --> O["THE NEXT LEVEL UP, built out of what the election<br/>bought, at the reach D4 gives it — §7.1"]
-    O --> Z["LEDGER PASS, after the last level has run<br/>delete everything due, subtree and all — §7.5"]
-    Z --> W["INFER, every open activation at its own age<br/>the apex and rewards in; from the apex, inferences out — §8.1"]
+    O --> W["CONNECT and INFER, every open activation at its own age<br/>the apex and rewards in; at age 0, inferences out — §8"]
+    W --> Z["LEDGER PASS, after the calls<br/>delete everything due, subtree and all — §7.5"]
     W --> S["SELECT — expand the inferences to base actions,<br/>one winner per dimension per position, actions by estimate and events by share; it fires at f+1 — R47"]
 ```
 

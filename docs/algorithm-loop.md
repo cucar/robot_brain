@@ -93,7 +93,7 @@ the coverer speaks, what it covers is silent. The user's event cue is not option
 learns to stop.
 
 **Which reading of R48.** `go·tap³` infers an event and no action. R48 lets a covered activation speak where
-its coverer "infers nothing for `f + 1`", read per frame: the coverer inferred `done`, so the taps stay covered,
+its coverer "has no inference for the frame ahead", read per frame: the coverer inferred `done`, so the taps stay covered,
 and the action dimension is output nothing (R35). Read per dimension, the coverer would have nothing for `tap`
 and the base tap would speak there, and a fourth tap would run. The spec's wording is the per-frame one, and
 this case rests on it. A machine that wanted not to rest on it would declare a second action, `halt`, and have

@@ -45,11 +45,13 @@ structure as it now stands, and read the objective as: make that shorter.
 
 ## 1.2 Execution: the best estimate for the situation
 
-**There is no return, no horizon and no value function.** What the machine holds is one number per neuron,
-distance and action: the mean reward that action received when it ran at that distance from an activation of
-that neuron (R31). It is an exact mean over every exposure the connection has ever had, never discounted, never
-decayed and never windowed. Every frame, each action dimension runs the action with the largest such mean among
-the neurons then standing on the apex, which is the situation (D49, R47). That is the whole of it — **act on
+**There is no return, no horizon and no value function.** What the machine holds is one number per connection:
+a neuron, an offset, and the neuron that stood on the apex there after it, an action, an event or a pattern
+alike (D25), with the mean reward the frames it stood in paid (R31). It is an exact mean over every exposure the
+connection has ever had, never discounted, never decayed and never windowed. Every frame, each action dimension
+runs the action with the largest such mean among what the neurons then standing on the apex, which is the
+situation, place there (D49, R47); an event dimension expects what the most of them place, and reads no
+estimate. That is the whole of it — **act on
 the best estimate you hold, for the situation you are actually in.**
 
 **Credit is attributed, never propagated.** A reward names the frames it pays for and reaches each of them at a
@@ -70,7 +72,8 @@ A frame arrives carrying what each event dimension observed, what each action di
 rewards for actions already run (D35). The machine works **up one stack, a level at a time**: at each level it
 calls every neuron that fired, elects over their bids, and gives the accepted bids the children and value
 neurons they need, reused or new, and the level above is built out of what the election
-accepted (§7). Once the last level has run it wires and deletes children, then infers (§8): every open
+accepted (§7). Once the last level has run it wires children, calls every open activation (§8), and then deletes the
+children that are due (§7.5): every open
 activation connects to what stands on the apex, with the reward for what ran, and returns what its neuron is
 connected to. Then it selects (§9): what the apex returned is expanded to the base symbols of the frame ahead;
 one winner per dimension is resolved there, an action in each action dimension and an expected event in each
@@ -1206,8 +1209,9 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > **Creating and wiring are separate, and only wiring waits.** The machine creates or chooses the child the
 > moment the bid is accepted — an id, its parent, its level, the coordinate it inherits (D2) and an empty table — which
 > is all the frame needs to activate it and call it (R17). Once the last level has run it points every pattern
-> at the child created or chosen for it and reclaims every retired pattern's child now due (R18), in one pass over its
-> own alphabet. Nothing in the frame reads that pointer except a later bid, so **the wait costs nothing**.
+> at the child created or chosen for it, in one pass over its own alphabet, and after the frame's connect and
+> infer calls it reclaims every retired pattern's child now due (R38). Nothing in the frame reads that pointer
+> except a later bid, so **the wait costs nothing**.
 
 > **R17 — A pattern added in a call is bid in it.** The candidate joins the parent's table and the covers
 > it was priced on in the call (R15), so every activation of the frame whose cover it joined bids it (R20), with
@@ -1297,7 +1301,8 @@ Then, once the last level has run:
 
 | Step              | Description                                                                                                   |
 |-------------------|---------------------------------------------------------------------------------------------------------------|
-| delete children   | Wire every child created this frame to its pattern, and delete every child that is due.                       |
+| wire children     | Point every child created this frame at its pattern, and every variable's value at its value neuron (R16).    |
+| delete children   | After the frame's connect and infer calls (§8), delete every child that is due (R38).                        |
 
 ## 7.1 Process levels
 
@@ -1512,23 +1517,26 @@ settled, so it is recorded in the `connect` call instead (R31).
 
 ## 7.5 Delete children
 
-> **R38 — A child dies when its last parent has retired and its last open activation's window closes.** A pattern the
+> **R38 — A child dies when its last parent has retired and the last window over it closes.** A pattern the
 > neuron retired (R18) names a child the machine still holds, unless no bid of it was ever accepted and there
 > is nothing to delete (R16). The machine wired every pattern that promotes the child (R43), so it knows when
 > the retired one was the last; while another remains the child lives and only the retired pattern goes. The
 > neuron says nothing about when the child should go: it sees its own open activations and not the children
 > promoted off them, while the machine sees both.
 > ```
-> death frame   =   when the child's last open activation's window closes
+> death frame   =   when the last open activation of the child, or of any neuron in its subtree, closes its window
 >               =   this frame, when none is open
 > ```
 > That set only shrinks. Once every pattern wired to the child has retired nothing can fire it again, and no level built afterward can name it either, because a level is built out of
 > what is firing (R26). An activation's window closes at its neuron's reach in time (D9), so the wait is at most the
 > longest reach in time among the child and the neurons built on it.
 >
-> **Deleting is on the same pass that wires** (R16): **every frame, once the last level has run**, the machine
-> reads the **death ledger** and takes everything due — the pattern, its child neuron and that neuron's subtree
-> together, at once, and what named them scrubbed with them by the delete call (§5.1). A pattern retired this frame with nothing open dies on
+> **Deleting is after the frame's connect and infer calls** (§8), so the last exposure an activation writes at
+> age `reach_t` is taken before its neuron goes: every frame, after those calls, the machine reads the **death
+> ledger** and takes everything due — the pattern, its child neuron and that neuron's **subtree** together, at
+> once, and what named them scrubbed with them by the delete call (§5.1). The subtree is every pattern in the
+> child's table, every child of those patterns that has no parent outside the subtree, and so on down; a child
+> with a parent outside it stays, and only the pattern wired to it from inside goes. A pattern retired this frame with nothing open dies on
 > this frame's pass; one whose child is still open waits exactly as long as the stack above it needs, and not
 > a frame longer. **Nothing traces who is naming what**: the machine settles the question off the board it
 > already keeps.
@@ -1857,9 +1865,12 @@ only what happened (R32).
 > expansion read as a prediction. A weak pattern's expansion places no action: what is output is chosen by
 > estimate, never by expecting itself to act.
 >
-> **Execution activates what it expands.** The base actions fire weakly in the frames they are placed, and every
-> pattern the expansion passed through fires weakly when its expansion completes, at the coordinate the
-> expansion placed it — the last frame of what it covers, which is the coordinate recognition would have given it.
+> **Execution activates what it expands, where it won.** A base action fires weakly in the frame R47 selected
+> it, a base event where R47 expected it, and a pattern the expansion passed through fires weakly when its
+> expansion completes, at the coordinate the expansion placed it — the last frame of what it covers, which is the
+> coordinate recognition would have given it — provided the standing inference that placed it still stands
+> (R45) and what it placed at that frame was selected (R47). An inference that lost its dimensions, or whose
+> match failed on the way, fires nothing.
 > Where the report makes its actions strong, recognition builds the strong activation of the same pattern at
 > the same coordinate, and it replaces the weak one (D40). An executed pattern is therefore on its level's frame
 > like a bought one: it runs `process functions`, is covered by the level above (§7.1), and every uncovered activation open
