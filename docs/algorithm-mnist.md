@@ -28,7 +28,7 @@ with that frame is positive when the action named the image's digit and negative
 estimates say, and where the machine is silent the world names it. It declares the neighborhood policy the
 stocks case declares (D50): no action is anyone's
 neighbor, and only an event or a pattern connects, to an action alone. Consecutive images are unrelated, so an
-apex connecting to the next image's apex would learn nothing, and a digit chunked into a pattern would scatter
+apex connecting to the next image's apex would learn nothing, and a digit named inside a pattern would scatter
 its estimate over whatever covered it. Under this policy every connection is to a digit action, and a reward
 scoped to the digit channel reaches exactly those (R33).
 
@@ -38,7 +38,7 @@ scoped to the digit channel reaches exactly those (R33).
 |---|---|---|
 | a pixel | 1 | An inked pixel sees the inked pixels at `±1` in `x` and `y`. The relations are the owner with one neighbor and two neighbors standing together (D47); the functions are pairs and corners, a child each. |
 | a pair or a corner | 2 along what it spans, 1 across | A child sees the frontier within its reach: other children, and the pixels the base left uncovered. Strokes form, and a stroke of three pixels forms as a pair child beside the pixel it did not cover (D5). |
-| a stroke, a part | twice what it spans (D4) | Strokes join into parts of digits, and parts into a digit's whole shape, each a level above the highest thing it covers (D2). |
+| a stroke, a part | what it spans, plus one (D4) | Strokes join into parts of digits, and parts into a digit's whole shape, each a level above the highest thing it covers (D2). |
 
 Variables form where the shapes vary. An offset where different children have stood, the end of a stroke that
 curves either way, is a class (D41); the same patch at two offsets, a symmetric digit, is a parameter (D44).

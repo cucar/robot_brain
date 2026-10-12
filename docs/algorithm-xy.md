@@ -3,7 +3,7 @@
 A worked case for [algorithm.md](algorithm.md): how `x, y, x, y`, `a, b, a, b` and `m, n, m, n` are seen by a
 neuron that keeps seeing a different pair in the same places, and what it comes to hold for them. Two things, in
 one table: a general form, two parameters and one function, learned from the pairs that go by once or twice; and
-a memorized chunk, named by a class, for each pair that comes often. Nothing here is normative. It follows the
+a memorized pair, named by a class, for each pair that comes often. Nothing here is normative. It follows the
 letters' own tables first, then one neuron's table through the greedy pick, the collapse of its residual, the
 price and the election.
 
@@ -26,10 +26,10 @@ both be written at `−2` (D6), and nothing could say that one back and three ba
 The letters are called in the same level as `p` and before it in the stream, and what they build decides what
 `p` sees, since a neighbor is whatever stands uncovered on the frontier (D5).
 
-**A pair that comes often is chunked.** `y` keeps seeing `x` one back, so its table holds a function naming `x`
+**A pair that comes often is named outright.** `y` keeps seeing `x` one back, so its table holds a function naming `x`
 at `−1`, with whatever else recurs around it (D47, D27), and its child, `xy`, fires at `y`'s frame covering both
 letters. The second `x` of the alternation then sees `xy` one back, not `y`, and comes to name it in turn; the
-second `y` sees that child, and names it. So a frequent alternation is chunked whole, a letter at a time, into
+second `y` sees that child, and names it. So a frequent alternation is covered whole, a letter at a time, into
 one neuron, `xyxy`, standing at the frame of the last `y`, as a word is ([algorithm-text.md](algorithm-text.md)).
 `abab` and `mnmn` form the same way, each in its own letters' tables. What `p` then sees one back is one neuron,
 and the letters under it are covered and not in its neighborhood.
@@ -42,7 +42,8 @@ is learned from: `p` sees them flat, at `−1` through `−4`.
 
 # 3. Variables first: two parameters
 
-Every activation of `p` records what stood within four frames (D7): for a chunked alternation, one neuron at
+Every activation of `p` records what stood within four frames (D7): for an alternation its letters have covered, one
+neuron at
 `−1`; for a bare one, four letters. The greedy pick builds variables first (D33), and the bare rows are where it
 finds them. In every one of them, whatever the pair, one back and three back hold one neuron, and so do two back
 and four back. A pair of offsets that agree is a relation a variable is seeded on (D47), and each is grown by its
@@ -81,11 +82,11 @@ The three pairs that recur are not written by `alternation`. By the time `p` fir
 `xyxy`, `abab` or `mnmn`, standing one back (§2), and the letters under them are covered (D5). One offset where
 different neurons stand is what a class is seeded on (D47), so `p`'s table holds a class at `−1` whose members
 are the alternations that have recurred there (D41), and a value neuron for each, `p:xyxy` (D45). A class is
-closed on its members: a chunk that has not stood there before is a failed neighbor until it has recurred (D27).
+closed on its members: a child that has not stood there before is a failed neighbor until it has recurred (D27).
 
-So the two forms stand in one table and never meet in one row. What comes often is memorized as a chunk by its
+So the two forms stand in one table and never meet in one row. What comes often is memorized as children by its
 own letters and named here by the class; what comes rarely is described by the general form. A pair that becomes
-frequent moves from the one to the other as its letters chunk it, and nothing in `p`'s table is told: its rows
+frequent moves from the one to the other as its letters' patterns cover it, and nothing in `p`'s table is told: its rows
 simply stop holding four letters and start holding one neuron.
 
 # 6. The price

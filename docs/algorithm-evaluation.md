@@ -11,7 +11,7 @@ Nothing in the design optimizes for reward structurally, and nothing structural 
 for the neurons it names beside the activation and never for what followed (D25); what followed, and what the
 actions earned, strengthens its connections, enters no test, and is not in the file (D12). Reward is therefore read
 off structure the compression built for its own reasons: a situation acquires an estimate of its own exactly
-when a pattern is minted for it (R35), so the machine gets better at acting by compressing better — richer chunks
+when a pattern is minted for it (R35), so the machine gets better at acting by compressing better — richer patterns
 are bought, and each child's connections are the distribution of what its situation was actually followed by,
 with what each run earned.
 
@@ -50,7 +50,8 @@ and let R18 read benefit over bought activations only. That is far cheaper than 
 adjustment the design used to run, and it closes the case without touching what a pattern learns.
 
 **Earlier bidders win shared past neurons.** A bid at `f` keeps a neuron at `f − 2` against a better bid at
-`f + 1` (R23). The bias is on boundary neurons between chunks and it is stated as a cost. **Diagnostic:** how
+`f + 1` (R23). The bias is on the neurons at the boundary between what two children cover and it is stated as a cost.
+**Diagnostic:** how
 often an accepted bid's tally lost exactly one activation to an earlier frame's credit, and how often that activation
 would have flipped the acceptance. If the second number is not small, the alternative is re-electing the past
 within the coverage set's window, which is bounded and has been rejected so far for the ripple it sends up the
@@ -154,7 +155,7 @@ pairs. A regression here will look like the compression was wrong when it was th
 **History size and reach sensitivity.** Every decision is exact with respect to the last `H` activations and blind
 beyond them. `H` too small and patterns form on coincidences and the stack deepens faster than the evidence
 warrants; too large and a neuron follows a moving situation slowly and keeps more structure than earns its
-keep. Reach too small and no chunk spans what recurs; too large and every neighborhood is mostly noise at
+keep. Reach too small and no pattern spans what recurs; too large and every neighborhood is mostly noise at
 build time. Measure both early and jointly — they interact through `|p|`, not through D27, whose denominator is
 the same at every offset (D27). **Diagnostic:** how often the outermost offset is named against offset 0, swept
 over `H`. If the outer reaches stay empty at every `H`, the reach is bigger than the data supports and
@@ -190,13 +191,13 @@ quantity the multi-child risk above says is unbounded. **Diagnostic:** cover-pas
 cover size, per level.
 
 **Routing cost.** `|O|` is set by the reach and by how fine the frontier is within it (D4, D5), and the cover
-pass prices every pattern against it every frame. A long chunk standing among uncovered base neurons sees every
-one of them within twice its span. **Diagnostic:** scan volume against `|O|`, by span.
+pass prices every pattern against it every frame. A child of long span standing among uncovered base neurons sees every
+one of them within its span plus `R`. **Diagnostic:** scan volume against `|O|`, by span.
 
 **An early partition can freeze.** A pattern never acquires a neighbor another pattern of the same cover already
 holds — the neighbor's population excludes those activations entirely (D27) — so patterns grow into the residual and
 never into each other. That is what stops two patterns converging, and T7 rests on it, and it also means a bad
-early split of one chunk across two patterns is not repaired by re-centering. It can only be repaired by one
+early split of one stretch of the run across two patterns is not repaired by re-centering. It can only be repaired by one
 of them retiring and the other growing into what it left, one per bill. **Diagnostic:** how often a retirement
 is followed within `H` activations by a surviving pattern growing into the vacated neighbors. If it is rare, the
 partition is sticky and R14 is carrying more of the load than intended.
@@ -216,7 +217,8 @@ slack, which measures the election against a perfect election over the same bids
 against optimizing dictionary and frames together. **Diagnostic:** over a short run on one small level, compare the
 file this design writes against the file a joint optimization over the same activations produces. That gap decides
 whether contraction should stay purely a buyer or start supplying candidates back into the tables it covered. The
-constituents of one chunk each build their own line for it; where those lines tie on the board they now share one
+the neurons under one stretch of the run each build their own line for it; where those lines tie on the board they
+now share one
 child (R43), and where they are only near each other they still do not, which is where a constructive variant would
 pay first.
 
@@ -281,7 +283,7 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   is dropped, but between those a class with many members at several positions can hold many. **Diagnostic:**
   combinations stored per class against its uses.
 - **Depth on input that repeats.** A stretch that repeats exactly gains a level each time round, with a neuron
-  per level, and nothing caps it (T13). The reach stays in proportion, twice the span (D4), so what grows is the
+  per level, and nothing caps it (T13). The reach stays in proportion, the span plus `R` (D4), so what grows is the
   count of neurons and the height of the stack, not how far they see. **Diagnostic:** the highest level reached
   per frame against run length; it should rise and flatten on input that varies, and rise with the run only
   where the input repeats.
@@ -349,8 +351,8 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   so R33's linear dissipation and its longest-open-window default have no case behind them. **Diagnostic:** a
   world that pays after a delay, with the span named and with it left to the default.
 
-**Neighborhood size above the base.** A neighborhood is the frontier within reach (D5), and the reach is twice
-the neuron's span (D4). Among neighbors of about its own size that is a handful in each direction; among finer
+**Neighborhood size above the base.** A neighborhood is the frontier within reach (D5), and the reach is the
+neuron's span plus `R` (D4). Among neighbors of about its own size that is a handful in each direction; among finer
 ones it is many, and the alphabet a neighbor is chosen from grows as neurons are created. Nothing holds `|O|` fixed.
 **Diagnostic:** neighbors per activation, against span.
 

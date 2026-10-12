@@ -30,19 +30,19 @@ that have stood there.
 # 3. Words, on the frontier
 
 A child sees the frontier as far back as its reach: other children, and the letters the base left uncovered
-(D5). Its reach is twice what it spans (D4).
+(D5). Its reach is what it spans plus the radius, one (D4).
 
 Take `the`. `th` fires at `h`'s frame, and the bid that fired it covers `t` and `h`. `e` is uncovered. `e`'s own
 neighborhood at reach 1 holds `th` one frame back, one of the things that stand before `e`, so it is a member of
 `e`'s class there, and the class's value neuron for it is `the`, one level above the highest thing its bid
-covered, at level 2 (D2). `the` spans two frames, so it sees four back, where the space before the word stands,
+covered, at level 2 (D2). `the` spans two frames, so it sees three back, where the space before the word stands,
 and `the` with a space before it is the word as a word.
 
 A word of any length forms this way: a letter at a time, one level per letter, or faster where two children join,
 `ca` and `ts` making `cats` in one step, `ca` a member of the class `ts` holds two back. Nothing has to be a power
 of two long, because a stranded letter is never stranded; it is on the frontier, and whatever fires next within
 reach can name it. And a long word does not see far for standing high: `strengths`, built a letter at a time,
-stands eight levels up, spans eight frames and sees sixteen back.
+stands eight levels up, spans eight frames and sees nine back.
 
 The radius sets how much of this happens at the base. At `R = 4` a letter sees four letters back, each at its
 own offset (D6), so a word of up to five letters is one function in its last letter's table and one level up,

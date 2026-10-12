@@ -45,7 +45,7 @@ the action is strengthened and takes the reward in one write (R29, R31).
 |---|---|---|
 | a bar's move | 1 | A move sees the move before. The owner with its one neighbor is the relation (D47); recurring pairs of moves get a function and a child. |
 | a pair of bars | 2 | A pair child sees the frontier two bars back: other children and the bars nothing covered. A run of three bars forms as a pair beside the bar it left out (D5). |
-| a longer shape | twice what it spans (D4) | Longer shapes, and shapes across instruments: a child in one channel standing beside a child in another at offset zero. |
+| a longer shape | what it spans, plus one (D4) | Longer shapes, and shapes across instruments: a child in one channel standing beside a child in another at offset zero. |
 
 Variables form where the shapes vary. An offset where moves of different size have stood is a class, "a fall of
 any size here" (D41); the same bucket at two offsets, a move that repeats, is a parameter (D44). Since no pattern

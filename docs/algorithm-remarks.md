@@ -22,14 +22,20 @@ differencing coordinates from origins its neighbors were never measured against.
 
 **On D4 — why the reach follows the span.** An earlier rule doubled the reach with every level, on the argument
 that each level holds half the activations of the one below. Once a neighborhood became the frontier (D5), the
-level stopped saying anything about extent: a letter added to a long chunk makes a child one level higher that
+level stopped saying anything about extent: a letter added to a long stretch makes a child one level higher that
 stands for one more frame. Twenty such steps made a level-20 neuron that stood for twenty letters and reached a
 million frames. What a neuron stands for is its span, so the reach is read off that. Two equal halves joined
 still double, so nothing changes where the old argument held.
 
-**On D4 — why twice.** Twice the span is what it takes to see a neighbor of the neuron's own size standing next
-to it: that neighbor's coordinate lies one more than a span away. A reach equal to the span would let a neuron
-join only with things smaller than itself.
+**On D4 — why the span plus `R`.** A neuron whose coverage ends where another's begins has that neuron's
+coordinate one position past its span, so a reach equal to the span would let a neuron join only with things
+that overlap it, and anything beyond the span is the room the hierarchy grows in. `R` is the one unit of
+distance the design has: it is what a base neuron sees, and it is the distance within which an offset is
+exact (D6), so a neuron sees `R` past what it stands for and no arbitrary multiple of it. An earlier rule
+doubled the span, which gave the same joins with more room than they need and measured the span in units of
+`R` to do it. The span is read off the lines as they stand rather than fixed at the child's birth, so the
+reach is recoverable from the dictionary, which holds nothing about the search (D12), and moves with the
+pattern it belongs to.
 
 **On D4 — why each dimension has its own.** The span is measured in each activation dimension separately, so a
 neuron long in time and narrow in space reaches far in time and near in space. Nothing assumes the dimensions
@@ -61,7 +67,7 @@ tables is on: that is the design as the program cases work it. In a world that p
 move because the machine acted, a market, an action is no one's neighbor, so no pattern names one and the
 actions on the apex are base; and the forward entries reach actions alone, so every exposure of one action
 after one situation pools on one connection, which is the one a scoped reward can find. Under apex-to-apex
-inference with actions in patterns that machine cannot run: an action's estimate fragments over whatever chunk
+inference with actions in patterns that machine cannot run: an action's estimate fragments over whatever child
 covered it, and the apex of one image connects to the apex of the next, unrelated one. The policy is not a
 second inference mode. Apex infers apex in every setting; the tables only say what a kind of holder reaches.
 
@@ -69,13 +75,13 @@ second inference mode. Apex infers apex in every setting; the tables only say wh
 a neighbor however close it is in another, and no dimension can rescue what another has ruled out.
 
 **On D5 — receptive fields grow with depth two ways at once.** Through composition, because a neighbor is itself
-a chunk. And through the reach, because a neuron that stands for more sees further. Neither is declared per
+a child. And through the reach, because a neuron that stands for more sees further. Neither is declared per
 level: the first is what a pattern *is*, and D4 reads the second off the first.
 
 **On D5 — the frontier is what the machine sees.** Adjacency reads the apex, not a level: a neighbor is whatever
 nothing has covered within reach, at whatever level it stands. The apex was already what the file writes, what
 learns what ran and what votes; this makes it what is seen as well, and the four say one thing. What it buys is
-every chunk whose length is not a power of two. Take `cat`: `a`'s pattern naming `c` one back is bought at `a`'s
+every stretch whose length is not a power of two. Take `cat`: `a`'s pattern naming `c` one back is bought at `a`'s
 frame and covers `c` and `a`; at `t`'s frame, `t`'s pattern naming `a` covers nothing but `t`, since `a` is
 credited, and a bid covering only its bidder never pays. With adjacency tied to levels `t` stays stranded, since
 a level-1 pattern names level-1 neighbors only, and `cat` never forms. With the frontier as the neighborhood,
@@ -105,7 +111,7 @@ group — and that is the placement loss of §1.1.
 **On D6 — how the decay plays out.** A level whose neurons stand one position apart uses the exact end and
 votes the coarse offsets away for want of a saving; a level whose neurons stand twenty apart does the reverse.
 
-**On D7 — a pattern is a name for a chunk of spacetime.** One pattern-learning algorithm and one kind of
+**On D7 — a pattern is a name for a stretch of spacetime.** One pattern-learning algorithm and one kind of
 pattern. There are four types only in the sense that two declarations cross: an **offset** may be zero or
 spanning in any activation dimension, which is spatial against temporal, and a **neuron dimension** is event or
 action. Neither is a separate mechanism. Spatial is a setting of the reach, and an offset does not know which
@@ -117,7 +123,7 @@ event is only observed (R35).
 
 **On D7 — siblings at offset zero.** Several children promoted at one coordinate are activations of different
 neurons at the same place, and above the base they see each other at offset zero in every component. That is
-what lets the level above chunk them: two patterns of one neuron that keep being bought together are, one
+what lets the level above cover them: two patterns of one neuron that keep being bought together are, one
 level up, two neighbors that keep co-occurring, and a pattern over the pair is the merge the neuron itself
 cannot build (R14).
 
@@ -147,8 +153,8 @@ activation open one frame longer for that single arrival; the two-frame cycle re
 
 **On D49 — why the apex is a wavefront.** An earlier draft drew every neighborhood from one level: a neuron saw
 the neurons of its own level around it, and inferred from them. The uncovered set was then a level, and a
-level is the wrong set to look ahead from: a base neuron under a chunk still spoke beside the chunk, and a
-chunk saw nothing beneath it. Drawing the neighborhood from the apex instead, the uncovered set at every level
+level is the wrong set to look ahead from: a base neuron under a child still spoke beside the child, and a
+child saw nothing beneath it. Drawing the neighborhood from the apex instead, the uncovered set at every level
 at once, makes the same set do both directions. Looking back it is the frontier, the one the file writes and
 every pattern was built on; looking ahead it is the wavefront, every activation of it reading its connections
 into the frames to come, with coverage silencing a neuron in both directions at once. That one switch, from
@@ -158,10 +164,10 @@ the level to the apex, is the wavefront architecture, and it is why the two are 
 frame later. The first few times, nothing covers the situation in the action's frame, so it connects to the
 action with the reward. Then the action's table notices that the situation always stands one back, and builds a
 function for the pair; from then on the action's bid covers the situation in the very frame its lesson arrives.
-If coverage silenced it at once, the situation would stop learning the moment its next step was chunked with
+If coverage silenced it at once, the situation would stop learning the moment its next step was named beside
 it, its estimate frozen at its first few rewards. So the inhibition on connecting starts a frame late: in the
 frame it is covered, the activation writes one connection, to the neuron that covered it. What it learns from
-then on is the chunk, and inferring the chunk expands to the action, so nothing is lost.
+then on is the child, and inferring the child expands to the action, so nothing is lost.
 
 **On D10 — three consequences of having no rest value.**
 
@@ -274,7 +280,7 @@ is a sum over activations either way (T2).
 stands in the file as itself, at a neuron's price (D13), exactly as it would if no pattern existed, so it is charged
 to no pattern and credited to none. There is no default pattern, no fallback and no empty pattern: a table may
 be empty, and an activation it covers nothing of costs a neuron for itself and one for each of its neighbors, which
-is what an uncompressed chunk costs (D22).
+is what an uncovered stretch costs (D22).
 
 **On D21 — the residual is not an error.** A reader used to reconstruction loss will read the residual as the
 part of the input the model failed to explain, and expect something to be minimized over it. Nothing is. A
@@ -481,7 +487,7 @@ apex until its window ends or coverage arrives, whether or not its neuron still 
 **On D18 — `H` does three jobs.** It is the structural memory — connections are outside it (R31) — it
 is D30's selectivity — double it and every pattern's
 benefit roughly doubles against an unchanged line, so more survive — and it is the stretch within which a
-chunk has to come round twice to be built at all, which bounds how deep the stack goes (T13). One number, three effects, all monotone in it, and it should be tuned knowing that.
+pattern has to come round twice to be built at all, which bounds how deep the stack goes (T13). One number, three effects, all monotone in it, and it should be tuned knowing that.
 
 > **T2 — Counts are sums over activations, and nothing reads an activation whole but eviction.** Re-centering
 > counts the population and the namers per neighbor over the activations a pattern covers (D27), both tests sum margins
@@ -927,7 +933,7 @@ hold their connections whether or not they are covered. The child learns from wh
 that something hurts, the fall-through does not open, since the child is not silent, and the base under it
 cannot help, since it is covered and its estimates no longer move (D10). So the child walks itself (R37): it
 wires an untried base action in each dimension its plan acted in, at that step, and tries it. The alternatives
-at height are base actions because the base is the only alphabet; a plan found that way is chunked by
+at height are base actions because the base is the only alphabet; a plan found that way is named in a pattern by
 compression once it recurs, as a plan taught by lessons is, so the walk at height finds new patterns the same
 way the world's lessons do, one step at a time and then named. A situation the machine has never been in at
 any level is one no neuron has a connection for, and there the machine says nothing: the first action in it is
@@ -1008,7 +1014,7 @@ same behavior is a chain of one-step lessons, each inferred by the situation the
 
 **On §3.5 — where lessons come from.** An action the environment executes appears in the frame as an activation
 of that action (D8), and sits in the action neuron's history as a pixel sits in an event neuron's. So a
-demonstration is a population of actions, the patterns chunk them with the events they ran beside, the collapse
+demonstration is a population of actions, the patterns name them with the events they ran beside, the collapse
 abstracts what varied into variables, and what stood on the apex connects to what followed.
 
 **On D25 — connections are measured, never chosen.** A connection is not in the bid (D31), not in any dictionary
@@ -1026,7 +1032,7 @@ followed it, with none; only events voted, so that a neuron knowing only the las
 habit. Once a body may name both kinds (D5) the split has nothing to stand on: a pattern that names what was
 done beside what was seen is a situation and knows it, and a connection to a pattern whose expansion places
 actions is a plan while one to a pattern of events alone is a prediction, the same object read the same way. A
-chunk of actions alone still votes what followed it, which is a habit, and reward prices it as it prices
+child over actions alone still votes what followed it, which is a habit, and reward prices it as it prices
 everything; a habit that pays is a program.
 
 **On D25 — why the fan-out is the apex.** Every uncovered activation connects to everything that stood on the
@@ -1034,7 +1040,7 @@ apex of the frames after it, event and action alike. That is more than the earli
 dimension, and it is what a prediction needs: an expected event is inferred only because it was once seen to
 follow. The bound is the box adjacency draws (D5), filled forward in time instead of back: a neuron learns what
 followed within the same reach it recognizes in, and the apex inside that box is what compression is meant to
-keep to a handful. Whether the lower apex, base symbols nothing chunked, should connect at all is open
+keep to a handful. Whether the lower apex, base symbols nothing covered, should connect at all is open
 (algorithm-evaluation.md).
 
 **On D25 — why what follows is a different object.** An activation sees both directions; only one of them has
@@ -1050,7 +1056,7 @@ what that situation was followed by, with no pattern needed to condition it. The
 own reach, so the top of a stack infers at the widest reach the stack has, where reading the parent's pattern
 would have it infer at the reach of the level below. And the pattern's population was looser: it summed every
 activation where the pattern applied in the parent's own cover, bought or not, and applied-but-not-bought
-usually means something else described the chunk better, which is a different situation. What it costs is that
+usually means something else described the stretch better, which is a different situation. What it costs is that
 a newly minted child's connections start empty, where the pattern would have carried a future over from before
 the mint. The cost is nothing: the child is activated at its mint when its bid wins and its connections form
 from that frame on (R17).
@@ -1093,7 +1099,7 @@ bought with structure, not with forgetting, and the window stays where the file 
 activation uncovered in the frame it fired went on connecting to the action that ran until its window closed,
 coverage at a later age notwithstanding, on the argument that coverage takes only the frontier that speaks and
 never the population that learns. But a connection at a far offset is read only by a later activation of the
-same neuron that is still uncovered at that age — a future in which the coverer's chunk did not recur. An
+same neuron that is still uncovered at that age — a future in which what the coverer covers did not recur. An
 exposure written after coverage arrived describes the other future, the one the coverer holds and already
 samples over its narrower situation. So the far offsets were being taught by the situations they would never be
 read in. Learning at a frame iff uncovered at that frame gives each connection exposures from exactly the
@@ -1471,7 +1477,7 @@ behind it recur enough to pay for it. Re-centering then means a child that does 
 exposure rather than freezing at the shape it was cut to.
 
 **On R15 — a call builds as much as its evidence supports.** The greedy pick tries every relation (D33), so a
-frame that brings three new chunks builds three patterns in the call it arrives in, and the level above is built
+frame that brings three new stretches builds three patterns in the call it arrives in, and the level above is built
 from what the election bought of them, in the same rhythm the machine keeps: one election per frame.
 
 **On R16 — what makes release safe** is R18's condition rather than any wait: a pattern is deleted only when
@@ -1492,7 +1498,7 @@ table and no connections, and nothing could name it. So the pattern is bid with 
 mints one the first time the board buys it. Lines stay with the neuron and neurons belong to the machine.
 
 **On R43 — why the candidates are the bids already on the board.** A line can be measured against the board
-only from its owner's activation, because the owner is part of the chunk. An owner on the board was called this
+only from its owner's activation, because the owner is part of what the bid covers. An owner on the board was called this
 frame and bid every line of its cover, and a line of its table left out of the cover was displaced by a better
 one from the same table, which was bid instead. So everything a search could find is already among the
 election's bids, measured in the same currency, and no index and no further call is needed.
@@ -1500,15 +1506,15 @@ election's bids, measured in the same currency, and no index and no further call
 **On R43 — why reuse is a tie, and what that gives up.** The machine prices the window: what a bid covers on
 the board less what it costs there. In that currency an existing child's bid that did better would have won,
 and one that did worse describes the ground worse, so the only case left is the tie, which is exactly the
-duplicate: `a` holds "`b` is beside me", `b` holds "`a` is beside me", and both bid every time the chunk
+duplicate: `a` holds "`b` is beside me", `b` holds "`a` is beside me", and both bid every time the pair
 appears. What would favor reusing a near match is the dictionary line it saves, and that is on the neuron's
 books, over its history. Sending the existing line back for the neuron to price was considered and dropped: a
 line written over another neuron's history may not pay on this one's, and the design keeps the two apart, the
 neuron optimizing its history and the machine its window. The cost is that near-duplicates stay two symbols.
 
-**On R43 — a child with several parents.** Each pattern wired to a child is one neuron's view of the chunk,
+**On R43 — a child with several parents.** Each pattern wired to a child is one neuron's view of what it covers,
 with offsets from that neuron, and the child fires at the coordinate of whichever of them bid. So the same
-chunk may stand one position over depending on who won, and the level above sees two nearby offsets for one
+child may stand one position over depending on who won, and the level above sees two nearby offsets for one
 thing. That is accepted. A child was never renamed when its one line re-centered (D29); several lines that
 drift apart are the same thing across parents.
 
@@ -1568,7 +1574,8 @@ directly (D18).
 that wins a neuron at `f − 2` keeps it, and a better bid at `f + 1` for the same neuron is credited nothing
 for it. The alternative is letting the later bid take it back, which re-scores an election that has already
 promoted a child, and the child is already a neighbor at the level above. Every re-score would ripple upward. The
-bias is real and it is stated; the cases where it bites are boundary neurons between two chunks, and the bid
+bias is real and it is stated; the cases where it bites are the neurons at the boundary between what two children
+cover, and the bid
 that loses one counts one fewer.
 
 > **T9 — Coverage settles at `g + reach_t`, and nothing has to wait for it.** An activation firing at `g` names
@@ -1687,7 +1694,7 @@ is, [algorithm-evaluation.md](algorithm-evaluation.md) says what to measure.
 
 **What is given up.** Greedy is the classical approximation for weighted set cover, and its slack against the
 optimum is bounded — `H(n)`, where `n` is the largest pattern offered (§9). What it does not give is the
-optimum itself, and the case it loses is a boundary one: two chunks sharing a boundary neuron is how a stream
+optimum itself, and the case it loses is a boundary one: two children sharing a boundary neuron is how a stream
 tiles, and the bid that loses that neuron simply counts one fewer. Accepted deliberately, and cheaply —
 **contraction mints nothing that lasts**, so a marginal cover costs a bounded handful of lines and nothing
 structural.
@@ -1734,13 +1741,13 @@ nothing needs it in advance.
 > ([algorithm-evaluation.md](algorithm-evaluation.md)).
 
 > **T13 — Depth is bounded by what has recurred.** A function is added only on a relation counted at least twice
-> in its owner's history (D33), so a child exists only for a chunk that came round twice within `H` of its
+> in its owner's history (D33), so a child exists only for a stretch that came round twice within `H` of its
 > owner's activations. Unrolled down the stack with T12, a neuron at level `D` stands for a stretch of at least
 > `D + 1` base activations that has occurred at least twice. **The stack is no deeper than the longest stretch
 > that has repeated.** On input with any variety in it that length grows slowly with the run, about as its
 > logarithm, since every step that can vary multiplies the stretches there are and divides how often each comes
 > round. On input that repeats exactly, it grows with the run, a level each time round, and nothing caps it.
-> What it does not do is widen the reach out of proportion: a deep chain sees twice what it stands for (D4), not
+> What it does not do is widen the reach out of proportion: a deep chain sees `R` past what it stands for (D4), not
 > two to the power of its level. A variable loosens "the same stretch" to "the same function, with any value",
 > which is what it is for; the value neuron above it is specific again. The bound rests on T12, and fails
 > where T12 does.

@@ -3,8 +3,8 @@
 A worked case for [algorithm.md](algorithm.md): a machine that, shown a cue, runs one action in each of the
 next three frames and then runs nothing, written out neuron by neuron. Nothing here is normative, and the
 machine is shown running: its tables and connections are as listed, and its histories already hold runs like
-this one. It shows what a loop is in this design. There is no counter: the count is a chunk, the loop variable
-is which chunk stands on the apex, and the loop ends because the last chunk has never been followed by the
+this one. It shows what a loop is in this design. There is no counter: the count is a child, the loop variable
+is which child stands on the apex, and the loop ends because the last child has never been followed by the
 action. The same machine, taught to stop on a cue instead of a count, is a while loop, and that is the one the
 design runs natively.
 
@@ -43,25 +43,25 @@ That is the whole machine: three neurons for the three states of the loop, and o
    one neighbor carries the relation of the owner with that neighbor (D47). Its collapse is a function naming
    `go` at `−1` (D27); it pays at its second use against a line of one neuron and one offset (R15); its bid
    covers `go` and the tap, and the child `go·tap` fires at the tap's frame, one level up (R16, §7.4).
-2. **The second tap names the first chunk.** Once `go·tap` fires, the next tap sees it one back, since a
+2. **The second tap names the first child.** Once `go·tap` fires, the next tap sees it one back, since a
    neighbor is whatever stands uncovered within reach, at whatever level (D5). Another third of `tap`'s rows
    come to hold `go·tap` at `−1`, and the same relation gives the function and the child `go·tap²`, covering
    `go·tap` and the tap: two levels up, three frames long (D2).
-3. **The third tap names the second.** `go·tap³`, the same way, a level higher. Each chunk is one letter
+3. **The third tap names the second.** `go·tap³`, the same way, a level higher. Each child is one letter
    longer than the one below and stands one level above it, as a word does in
-   [algorithm-text.md](algorithm-text.md). The chain grows a level every couple of runs, because a chunk has to
+   [algorithm-text.md](algorithm-text.md). The chain grows a level every couple of runs, because a child has to
    exist and fire before the tap after it can see it.
-4. **The end names the last chunk.** `done` always sees `go·tap³` one back, and its table holds the function;
+4. **The end names the last child.** `done` always sees `go·tap³` one back, and its table holds the function;
    the child `go·tap³·done` covers both. Nothing ever follows it within reach but silence, so it holds no
    connection, and needs none.
-5. **Every state learns what came next.** Each chunk was open and uncovered in the frame after it fired, and in
+5. **Every state learns what came next.** Each child was open and uncovered in the frame after it fired, and in
    that frame something covered it: `go` by `go·tap`, `go·tap` by `go·tap²`, `go·tap²` by `go·tap³`, and
    `go·tap³` by `go·tap³·done`. A neuron covered in a frame connects once, to the neuron that covered it, with
    that frame's reward (D10). So each state holds exactly one connection at offset one, to the state after it,
    and the first three carry the tap's reward.
 
 Nothing in `tap`'s table says three. `tap` holds three functions because three different things have stood
-before a tap, and the chunks they build are as long as the runs the world showed.
+before a tap, and the children they build are as long as the runs the world showed.
 
 # 4. One run, frame by frame, after teaching
 
@@ -74,8 +74,8 @@ before a tap, and the chunks they build are as long as the runs the world showed
 | 4 | `done`, replacing the expectation | `go·tap³·done` | nothing: it has no connection | nothing |
 
 Each frame, one voter stands on the apex and holds one connection, and the base tap under it is covered and
-silent (D10). The loop variable is which of the three chunks is standing; the test at the top of the loop is
-whether that chunk has ever been followed by a tap; the exit is the chunk that was followed by `done`.
+silent (D10). The loop variable is which of the three children is standing; the test at the top of the loop is
+whether that child has ever been followed by a tap; the exit is the child that was followed by `done`.
 
 A fourth tap, if one ever ran, is paid negatively and lands on whatever connected to it (R32), so the state that
 proposed it stops proposing it (R47). With one action in the alphabet the walk (R37) has nothing else to try,
@@ -107,16 +107,16 @@ it is a while loop, which is the loop the design runs on its own.
 
 - **Continue.** The chain `go·tap^k` grows a neuron per frame of the run, with nothing capping it (T13 in
   [algorithm-remarks.md](algorithm-remarks.md); "depth on input that repeats" in
-  [algorithm-evaluation.md](algorithm-evaluation.md)). At a length no run has reached before, the chunk on the
-  apex is new and holds no connection, and speaking falls through it to the first chunk below that has one, or
+  [algorithm-evaluation.md](algorithm-evaluation.md)). At a length no run has reached before, the child on the
+  apex is new and holds no connection, and speaking falls through it to the first child below that has one, or
   to the base tap, whose marginal says tap (R48). A newly minted child starts with its parents' voices, and
   here the voice says keep going.
 - **Stop.** `done` is a neuron that nothing has ever followed with a tap. In the frame it shows, it stands on
-  the apex and, with the chunk beside it, is what the next frame is inferred from; neither infers a tap, and
+  the apex and, with the child beside it, is what the next frame is inferred from; neither infers a tap, and
   nothing runs.
 
 No neuron holds a count, and none is needed: `while (!done) tap()` is one connection at the base and one event
-the world controls. The counted loop of §4 is this loop after compression has folded three frames into a chunk
+the world controls. The counted loop of §4 is this loop after compression has folded three frames into a child
 that knows what came after it.
 
 # 7. The count as data
@@ -144,9 +144,9 @@ frame is the wrong tick, and the environment would declare a finer one.
 | in the code | in the machine |
 |---|---|
 | `for (i = 0; i < 3; i++) tap();` | `go·tap`, `go·tap²`, `go·tap³`: a neuron per value of `i` |
-| `i` | which chunk stands on the apex |
-| `i < 3` | whether that chunk has ever been followed by a tap |
+| `i` | which child stands on the apex |
+| `i < 3` | whether that child has ever been followed by a tap |
 | the loop exiting | `go·tap³` connected to `done` and to nothing that runs |
 | `while (!done) tap();` | the base tap's connection to itself, and `done`, which no tap has followed |
 | `tap(n)` with `n` a number | a chain per `n`, each learned from its own runs; no arithmetic anywhere |
-| three statements on one line | three action dimensions at offset zero, chunked into one neuron |
+| three statements on one line | three action dimensions at offset zero, covered by one neuron |
