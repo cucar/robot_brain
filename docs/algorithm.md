@@ -13,7 +13,7 @@ reports what ran and what was observed.
 This document is the specification, and nothing else. **D** is a definition and **R** a rule; together they
 are the machine. Theorems and all commentary on why the design is shaped this way live in
 [algorithm-remarks.md](algorithm-remarks.md), keyed by the same D and R numbers; risks, diagnostics and open
-questions live in [algorithm-evaluation.md](algorithm-evaluation.md); the worked examples are listed in Part V,
+questions live in [algorithm-evaluation.md](algorithm-evaluation.md); the worked examples are listed in Part VI,
 each in a file of its own.
 
 ---
@@ -71,10 +71,11 @@ rewards for actions already run (D35). The machine works **up one stack, a level
 calls every neuron that fired, elects over their bids, and gives the accepted bids the children and value
 neurons they need, reused or new, and the level above is built out of what the election
 accepted (§7). Once the last level has run it wires and deletes children, then infers (§8): every open
-activation connects to what stands on the apex, with the reward for what ran; what the apex is connected to is
-collected and expanded to the base symbols of the frame ahead; one winner per dimension is resolved there, an
-action in each action dimension and an expected event in each event dimension, and both are output; and the
-winners fire weakly in that frame, for the world's report to replace. The reward for the action arrives with the next frame
+activation connects to what stands on the apex, with the reward for what ran, and returns what its neuron is
+connected to. Then it selects (§9): what the apex returned is expanded to the base symbols of the frame ahead;
+one winner per dimension is resolved there, an action in each action dimension and an expected event in each
+event dimension, and both are output; and the winners fire weakly in that frame, for the world's report to
+replace. The reward for the action arrives with the next frame
 (R29).
 
 ---
@@ -311,7 +312,7 @@ assumes for anything the file does not state.
 > serves both. A shape learned anywhere is learned everywhere, and the dictionary holds it once.
 
 > **D40 — Strength.** An activation is **strong** when the environment reported it, and **weak** when an
-> inference placed it (§8.5). That holds for events and actions alike: an event the machine expects and an action
+> inference placed it (§9.5). That holds for events and actions alike: an event the machine expects and an action
 > it infers are both weak, and the environment's report replaces both. The neuron is the same either way: a
 > weak activation is an activation of the neuron the environment would have reported.
 >
@@ -475,7 +476,7 @@ connections (D25), one kind, and an inference is a connection read.
 > world in which silence is an action in its own right and costs nothing. The walk is the same under either
 > (R37); the policy decides only what runs once the walk has nothing left to wire in a dimension.
 
-Nine cases are worked by hand on these definitions, listed in Part V.
+Nine cases are worked by hand on these definitions, listed in Part VI.
 
 ## 3.6 Rewards
 
@@ -681,13 +682,14 @@ it is used.
 | process functions       | In its level's turn: everything structural for the activations that fired this frame.                                                                             | §6, R20    |
 | wire child to pattern   | Once the last level has run, the machine points each function at the child it created or chose for it, and each variable's value at its value neuron.                                             | R16, R17, R44 |
 | delete pattern neighbor | The machine removes a neuron that no longer exists from every pattern and saved activation that names it.                                                          | R38        |
-| infer                   | After every level has finished, reaching every open activation at whatever age it stands at: it delivers what stood on the apex this frame and any reward, and collects what the apex infers.                          | §8.1       |
+| infer                   | After every level has finished, reaching every open activation at whatever age it stands at: it delivers what stood on the apex this frame and any reward, and collects what the apex infers.                          | §8         |
 
 Every test the neuron runs is its own arithmetic over its own evidence, and it is never told what the board did
 with its bids (R24).
 
 Part II covers `process functions`: what a neuron does in the frame it fires.
 Part IV covers the `infer` call, where a neuron learns what followed and infers what comes next.
+Part V covers selection, where the machine chooses among those inferences what runs and what is expected.
 
 > **R1 — One decision point: the frame it fires.** A neuron is called once per frame it fires in, for every
 > activation of that frame together, each at age 0, and everything structural happens in that call: it refreshes
@@ -1445,7 +1447,7 @@ each is expanded through that one (R28). Every activation no accepted bid covers
 > **R27 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** (D49) — the
 > uncovered set, at every level at once — so a base neuron nothing found worth chunking stands in it beside a
 > level-4 child. This is the frontier the file's body writes, **the one every neuron sees as its neighborhood**
-> (D5), **the one that learns what ran** (D25), and **the one that votes** (§8.4): the uncovered set does all four,
+> (D5), **the one that learns what ran** (D25), and **the one that votes** (§9.4): the uncovered set does all four,
 > and coverage silences a neuron in every one of them at once, its one last connection aside (D10). A reward for a
 > frame already written reaches its connection regardless (R33). Everything underneath the current frontier is
 > recovered by expanding it.
@@ -1505,20 +1507,20 @@ settled, so it is recorded in the `infer` call instead (R31).
 > expand them, so that pattern has to stay readable after the table stops covering with it, whether or not the
 > child lives on.
 
-# Part IV — The future: action and reward
+# Part IV — The future: a neuron
 
 # 8. The infer call
 
-Once the last level has run, the machine works from the apex down to the base alphabet, in this order and no
-other:
+Once the last level has run, the machine calls every open activation once more (§8.1), and what the neuron does
+with that call is the whole of this part. It does two things and nothing else, in this order:
 
-| Step     | Description                                                                                                                  |
-|----------|------------------------------------------------------------------------------------------------------------------------------|
-| connect  | Every open activation connects to what stands on the apex this frame, with any reward at its distance; every activation at age 0 returns what its neuron is connected to, its inferences, and the machine keeps them (R45). |
-| expand   | Expand of every standing inference what comes due: the base symbols it places at the frame ahead are what it proposes. |
-| match    | Read each standing inference's line against the frames it reaches back into; propose it where the line would pay there, strike it where it would not. |
-| resolve  | One winner per dimension at the frame ahead: in each action dimension by estimate, in each event dimension by share of voters. |
-| activate | The winner of every dimension fires weakly at the frame ahead (D40), action and expected event alike, and both are output; the world's report replaces them, in part or in whole, and what ran arrives with its reward. |
+| Step    | Description                                                                                                                            |
+|---------|----------------------------------------------------------------------------------------------------------------------------------------|
+| connect | Every open activation connects to what stands on the apex this frame, with any reward at its distance (R31, R33).                       |
+| return  | Every activation at age 0, and only then, returns what its neuron is connected to at every offset, each with its strength and estimate: its inferences (R36). |
+
+The neuron chooses nothing in it and is told nothing of what came of its inferences. Choosing among the
+inferences of every activation is the machine's, and is Part V (§9).
 
 > **R29 — Two frames: infer, then execute and reward.** What is chosen in one frame is output for the next, and
 > what ran, with what it earned, arrives with that frame.
@@ -1556,17 +1558,6 @@ at distance `d`, goes into the connection at the offset the activation's age les
 the machine hands it for that frame, where the activation was uncovered then (D9). The activation keeps nothing
 of it. **Nothing is decided, priced or compared here**, and no test is waiting on any of
 it.
-
-**At age 0, and only then, the call returns what the activation infers.** It reads its own neuron's connections
-at every offset, out to its reach, and returns each with its strength and estimate, covered or not. Those are
-its **inferences** (R36), each naming a neuron at whatever level it stands (D25), and the machine keeps them for
-as long as the activation is open (R45); at every later age the call delivers and asks nothing. A base neuron
-infers from its own connections like any other; what it infers is the marginal over every situation it fires
-in, and it is heard only because nothing more specific covers it.
-
-**An activation's window closes at age `reach_t`** (D9), once that frame's exposure is taken. The window closing stops the
-connecting and drops its standing inferences (R45), and nothing else — there is no second call and nothing is
-saved twice.
 
 > **R31 — A connection carries an estimate.** What stands on the apex at `f + 1` is not known at `f`: the action is
 > settled only when the report names what ran, and the events only when the environment reports them (D40). So at
@@ -1686,9 +1677,20 @@ saved twice.
 
 ## 8.2 The inference
 
+**At age 0, and only then, the call returns what the activation infers.** It reads its own neuron's connections
+at every offset, out to its reach, and returns each with its strength and estimate, covered or not. Those are
+its **inferences** (R36), each naming a neuron at whatever level it stands (D25), and the machine keeps them for
+as long as the activation is open (R45); at every later age the call delivers and asks nothing. A base neuron
+infers from its own connections like any other; what it infers is the marginal over every situation it fires
+in, and it is heard only because nothing more specific covers it.
+
+**An activation's window closes at age `reach_t`** (D9), once that frame's exposure is taken. The window closing stops the
+connecting and drops its standing inferences (R45), and nothing else — there is no second call and nothing is
+saved twice.
+
 > **R36 — The inference.** One connection read by one activation at age 0: it names a neuron, at whatever level
 > it stands (D25), and carries the strength and the estimate the connection held then. An activation reads every
-> connection its neuron holds, at every offset out to its reach, once, in the frame it fires (§8.1), and never
+> connection its neuron holds, at every offset out to its reach, once, in the frame it fires (§8), and never
 > again: what the walk wires or a reward moves afterwards is read by the neuron's next activation. What runs and
 > what is expected are chosen from the inferences and nothing else (R47).
 >
@@ -1712,6 +1714,27 @@ saved twice.
 > twice, and in a channel with a layout it is a proposal at each of two positions, each resolved where it lands
 > (R47).
 
+# Part V — The future: the machine
+
+# 9. Selection
+
+Once every open activation has been called (§8), the machine holds what the apex infers, and it works from
+there down to the base alphabet, in this order and no other:
+
+| Step     | Description                                                                                                                                  |
+|----------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| keep     | Hold every inference an activation returned at age 0 as a standing inference, until that activation's window closes (R45).                     |
+| expand   | Expand of every standing inference what comes due: the base symbols it places at the frame ahead are what it proposes (R28).                   |
+| match    | Read each standing inference's line against the frames it reaches back into; propose it where the line would pay there, strike it where it would not (R49). |
+| resolve  | One winner per dimension at the frame ahead: in each action dimension by estimate, in each event dimension by share of voters (R47).           |
+| activate | The winner of every dimension fires weakly at the frame ahead (D40), action and expected event alike, and both are output; the world's report replaces them, in part or in whole, and what ran arrives with its reward (R40). |
+
+No neuron takes part in any of it. What an activation returned is kept, placed, expanded, matched, resolved
+and fired by the machine alone, as the election is the machine's alone (R24), and a neuron learns of the outcome
+only what happened (R32).
+
+## 9.1 Standing inferences
+
 > **R45 — Standing inferences.** The machine holds every inference of every open activation, from the
 > activation's age 0 until its window closes (D9), and nothing is read twice: these are the **standing inferences**, and
 > they are what votes (R46). Each is held as what its connection named, the neuron and its completion, with the
@@ -1729,7 +1752,7 @@ saved twice.
 > plan's actions bring as they run fold into the connection's estimate on the neuron (R31). The standing
 > inference does not read it again.
 
-## 8.3 Expansion
+## 9.2 Expansion
 
 > **R28 — Expansion.** A neuron above the base is not yet anything in the base alphabet. Expanding it recovers
 > what its bid covered: the bidder, which is the pattern's owner, at the neuron's own coordinate, and the neighbors
@@ -1805,6 +1828,8 @@ saved twice.
 > it completes; the whole stands on the apex only in the frame it completes, and what the program earned reaches it through the span a
 > reward names (R33).
 
+## 9.3 The match
+
 > **R49 — The match.** The machine reads one standing inference (R45) against the frames its line reaches back
 > into, and proposes it where the line would pay there and strikes it where it would not. It runs every frame
 > the inference stands, over the part of the line that has come to lie in the past. Nothing competes in it,
@@ -1843,7 +1868,7 @@ saved twice.
 > inferred pattern against the frames it points back into and admits or strikes it. The prices are the same;
 > the questions are not.
 
-## 8.4 Resolution
+## 9.4 Resolution
 
 > **R35 — Selection.** No fit says which action to take; it says only what a situation was followed by.
 > Choosing comes from the connections of the neurons standing on the apex, each carrying the reward that
@@ -1951,7 +1976,7 @@ saved twice.
 > that offset there is nothing left to wire there, and what the dimension does when every candidate in it is
 > negative is the action policy's (D51): the least bad, or nothing.
 
-## 8.5 Activation
+## 9.5 Activation
 
 > **R40 — An inference is weak until the report makes it strong.** Resolution leaves one winner per dimension,
 > action and event alike (R47), and each fires weakly in the frame it was placed in (D40), the action to run and
@@ -1964,7 +1989,7 @@ saved twice.
 > be covered or stand on the apex and vote once, and then it is gone. It carries no reward, connects to nothing,
 > and is connected to by nothing (R31).
 
-# Part V — The examples
+# Part VI — The examples
 
 Nine cases, each worked by hand in a file of its own. Nothing in them is normative; each follows the
 definitions through one small job.

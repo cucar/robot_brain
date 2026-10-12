@@ -1013,7 +1013,7 @@ abstracts what varied into variables, and what stood on the apex connects to wha
 
 **On D25 — connections are measured, never chosen.** A connection is not in the bid (D31), not in any dictionary
 line (D13), and it enters no test. Connections are read in one place, when the activation stands on the apex
-(R27), and what it reads there are the inferences that choose the next action (§8.4). A child neuron fires only
+(R27), and what it reads there are the inferences that choose the next action (§9.4). A child neuron fires only
 when its parent's pattern was bought, so a child's connections are the future of that situation and nothing else,
 forming from the frame after its mint on (R17); a base neuron's are the marginal over every situation it fires
 in, and speak only where nothing more specific covers it (D10). Several children promoted at one coordinate are
@@ -1931,7 +1931,7 @@ action's worth changes, the neuron that notices is a new child with fresh connec
 
 ---
 
-**On Part V — the equal case rests on a small alphabet.** The copy in that case is a parameter over a digit's
+**On Part VI — the equal case rests on a small alphabet.** The copy in that case is a parameter over a digit's
 own slot, so the digit has to stand on the apex when the answer is said. It does, because with twelve base
 neurons a class of the ten digits saves a quarter of a bit each time it covers a digit and never pays its line
 within the history
