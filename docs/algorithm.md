@@ -1626,9 +1626,14 @@ it.
 > inside one group over one activation is two exposures: each frame has its own reward, and the connection keeps
 > nothing that could tell the two apart (D25).
 >
-> **Strengthening and reading are inverses**: an exposure is written at the offset its age rounds to, and read
-> back at the age from which that offset places a completion one frame ahead (R28, R36), so what a replay earns
-> lands on the connection it was learned from. Fan-out is the apex within reach: a neuron connects to what stood
+> **Writing rounds, reading does not.** An exposure is written at the offset its age rounds to (D6): at `R = 1`
+> an activation that saw a neuron at age 2 and one that saw it at age 3 strengthen the same connection, at
+> offset 2. An inference at that offset is placed at exactly that offset, the lower edge of its group, `b`
+> frames after the activation that reads it (R36). So a replay of what was seen at age 3 completes at 2, and
+> what it earns lands on the connection it was learned from, within the group's slack, which is the loss D6
+> carries everywhere else. The match reads the other way: what an expansion places into the past is looked for
+> anywhere in its offset's group (R49). Writing rounds to the group, matching reads the whole group, and only
+> the placement ahead lands on one frame, the group's lower edge, because a base symbol has to be put somewhere. Fan-out is the apex within reach: a neuron connects to what stood
 > uncovered in the frames after it, as far as it sees in every other dimension, and to nothing beneath that, and one exposure per apex activation per frame means a
 > neuron of reach `r` holds at most `R + ⌊log₂ (r / R)⌋` offsets per neuron it has seen.
 >
@@ -1847,9 +1852,11 @@ only what happened (R32).
 > the level below; a connection is **inferred**, forward, into the frames ahead (D25); what a call does and what
 > follows it are different directions.
 >
-> **A connection is placed the way a neighbor is.** A connection at offset `b`, read by an activation at age `a`,
-> puts the neuron it names `b − a` frames ahead — that is where it completes — and its expansion hangs
-> from there, its base symbols at the frames back from it. **A coarse
+> **A connection is placed the way a neighbor is.** A connection at offset `b`, read by an activation at its age
+> 0 (R36), puts the neuron it names `b` frames after the activation's frame — that is where it completes — and
+> its expansion hangs from there, its base symbols at the frames back from it. At a later age `a`, the raw count
+> of frames elapsed (D9), that completion is `b − a` frames ahead: `b` is the connection's offset, a D6-rounded
+> number, and `a` is never rounded. **A coarse
 > offset is not a window.** Its action completes at
 > `b`, not somewhere in the group `b` stands for, exactly as a neighbor named at `−b` is placed at `−b` and nowhere
 > else. So the base symbols of a long program reach the frame ahead one at a time, in order, each at exactly one age,
