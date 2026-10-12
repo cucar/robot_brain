@@ -1266,7 +1266,7 @@ so it is declined. The neuron is told none of this. `K`'s child is promoted at f
 **That is the whole of the neuron's frame.** Nothing is held open, nothing is committed for later, nothing will
 be asked again about frame 10.
 
-**Frames 11 through 13 — `infer`.** This activation was covered at age 0 — `K`'s child was bought
+**Frames 11 through 13 — `connect`.** This activation was covered at age 0 — `K`'s child was bought
 over it — so it writes nothing and is not heard for the rest of its window (D10): the sample it would have
 taken is its coverer's. `K`'s child, on the apex at level 1, is the one called. At 11 the action `u` runs; the
 machine calls the child at age 1 with `u`, and the child strengthens its connection at `(u, +1)`, creating it at
@@ -1761,12 +1761,12 @@ frame wider in time than the longest reach it holds and one box wide in every ot
 D24), and nothing global
 is held for an inference, which is one frame's output and not a map.
 
-# 8. The infer call
+# 8. The connect and infer calls
 
-**On §8.1 — why the call carries no decision.** Its jobs are transcription: the action that ran into the
-neuron's connections, a reward into the estimate of the connection it paid for. Neither feeds a test that is
-waiting. What the call does carry out is speech — what the neuron on the apex infers — and speech reads the
-connections without touching them.
+**On §8.1 — why the connect call carries no decision.** Its jobs are transcription: what stood on the apex into
+the neuron's connections, a reward into the estimate of the connection it paid for. Neither feeds a test that is
+waiting. Speech is the other call, `infer` at age 0 (§8.2), and speech reads the connections without touching
+them.
 
 ## Actions, reward and resolution
 

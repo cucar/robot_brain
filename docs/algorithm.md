@@ -255,8 +255,8 @@ the environment does not have, the action the machine inferred there, weak (D40)
 > active at one coordinate, since they inherit coordinates.
 
 > **D9 — Activation window.** An activation at frame `f` stays open through `f + reach_t`, its neuron's reach
-> in time (D4). Two things reach it over that span, one frame at a time, after every
-> level has run:
+> in time (D4). Two things reach it over that span, one frame at a time, by the connect call after every
+> level has run (§8.1):
 >
 > | Input           | Description                                                                                                 | References |
 > |-----------------|-------------------------------------------------------------------------------------------------------------|------------|
@@ -673,7 +673,7 @@ A neuron is a symbol, and a type (D2). It holds a patterns table, a
 history of past and present observations, and its connections (D25). What it holds is defined in §4, §5.2 and §5.3, and what it does with it in the
 sections after.
 
-**The machine reaches a neuron through five calls, and nothing else writes into one.** Each is specified where
+**The machine reaches a neuron through six calls, and nothing else writes into one.** Each is specified where
 it is used.
 
 | Call                    | Description                                                                                                                                                       | References |
@@ -682,13 +682,14 @@ it is used.
 | process functions       | In its level's turn: everything structural for the activations that fired this frame.                                                                             | §6, R20    |
 | wire child to pattern   | Once the last level has run, the machine points each function at the child it created or chose for it, and each variable's value at its value neuron.                                             | R16, R17, R44 |
 | delete pattern neighbor | The machine removes a neuron that no longer exists from every pattern and saved activation that names it.                                                          | R38        |
-| infer                   | After every level has finished, reaching every open activation at whatever age it stands at: it delivers what stood on the apex this frame and any reward, and collects what the apex infers.                          | §8         |
+| connect                 | After every level has finished, reaching every open activation at age 1 and beyond: it delivers what stood on the apex this frame and any reward, and collects nothing.                                   | §8.1       |
+| infer                   | After every level has finished, reaching every activation at age 0: it delivers nothing and collects what the activation infers.                                                                        | §8.2       |
 
 Every test the neuron runs is its own arithmetic over its own evidence, and it is never told what the board did
 with its bids (R24).
 
 Part II covers `process functions`: what a neuron does in the frame it fires.
-Part IV covers the `infer` call, where a neuron learns what followed and infers what comes next.
+Part IV covers the `connect` and `infer` calls, where a neuron learns what followed and infers what comes next.
 Part V covers selection, where the machine chooses among those inferences what runs and what is expected.
 
 > **R1 — One decision point: the frame it fires.** A neuron is called once per frame it fires in, for every
@@ -1474,7 +1475,7 @@ The frontier cuts across levels, not along one:
 **Events and actions run together within a level.** An action fires in the same column as the events it runs
 alongside (D8), so it is recognized and chunked by the rule they are, in the same patterns (D5). **The
 connection is not formed here**: it names what stands on the apex, which is known only once every level has
-settled, so it is recorded in the `infer` call instead (R31).
+settled, so it is recorded in the `connect` call instead (R31).
 
 ---
 
@@ -1509,17 +1510,23 @@ settled, so it is recorded in the `infer` call instead (R31).
 
 # Part IV — The future: a neuron
 
-# 8. The infer call
+# 8. The connect and infer calls
 
-Once the last level has run, the machine calls every open activation once more (§8.1), and what the neuron does
-with that call is the whole of this part. It does two things and nothing else, in this order:
+Once the last level has run, the machine calls every open activation once more, and what the neuron does with
+that call is the whole of this part. Which call it is depends on the activation's age, and the two never meet on
+one visit:
 
-| Step    | Description                                                                                                                            |
+| Call    | Description                                                                                                                            |
 |---------|----------------------------------------------------------------------------------------------------------------------------------------|
-| connect | Every open activation connects to what stands on the apex this frame, with any reward at its distance (R31, R33).                       |
-| return  | Every activation at age 0, and only then, returns what its neuron is connected to at every offset, each with its strength and estimate: its inferences (R36). |
+| connect | At every age from 1 to `reach_t`: the activation connects to what stands on the apex this frame, with any reward at its distance (R31, R33). It returns nothing (§8.1). |
+| infer   | At age 0, and only then: the activation returns what its neuron is connected to at every offset, each with its strength and estimate: its inferences (R36). It writes nothing (§8.2). |
 
-The neuron chooses nothing in it and is told nothing of what came of its inferences. Choosing among the
+**Nothing is written at age 0 and nothing is returned after it.** A connection's offset is the activation's age, and an
+offset is strictly positive in time (D25), so the visit at age 0 has nothing to write, and a reward share at distance `d`
+lands at offset `a − d`, which at age 0 is offset 0 again (R33). The visits after age 0 have nothing to say: the
+inferences are read once, in the frame the activation fires (R36).
+
+The neuron chooses nothing in either call and is told nothing of what came of its inferences. Choosing among the
 inferences of every activation is the machine's, and is Part V (§9).
 
 > **R29 — Two frames: infer, then execute and reward.** What is chosen in one frame is output for the next, and
@@ -1538,7 +1545,8 @@ inferences of every activation is the machine's, and is Part V (§9).
 
 ## 8.1 Connection
 
-**The machine calls every open activation once more**, at whatever age it stands at, with two things:
+**The machine calls `connect` on every open activation at age 1 and beyond**, once per frame of its window, with
+two things:
 
 ```
 the apex          every activation standing on the apex this frame within the
@@ -1634,8 +1642,8 @@ it.
 > **Nothing is being divided up.** Every distance in the span is paid, and the shares are not a partition of
 > the reward — a reward is not in short supply, and the point of spreading it is not to conserve it but to say
 > how likely each frame is to have earned it. What is genuinely responsible recurs and accumulates; what is not
-> is sampled once and averaged away. **Each share is delivered, in the `infer` call (§8.1), to every open
-> activation, and the activation picks the connection from its age and the reward's channels.** The machine hands
+> is sampled once and averaged away. **Each share is delivered, in the `connect` call (§8.1), to every open
+> activation past age 0, and the activation picks the connection from its age and the reward's channels.** The machine hands
 > it, for the frame each distance names, the action that ran there in each channel the reward pays, from the
 > window it keeps (D24). An activation at age `a` takes the share at distance `d`, `d` at most `a`, into its
 > neuron's connection at the offset `a − d` rounds to, to that action, where it was uncovered at that frame (D9):
@@ -1677,20 +1685,21 @@ it.
 
 ## 8.2 The inference
 
-**At age 0, and only then, the call returns what the activation infers.** It reads its own neuron's connections
+**At age 0, and only then, the machine calls `infer`, and the call returns what the activation infers.** It reads its own neuron's connections
 at every offset, out to its reach, and returns each with its strength and estimate, covered or not. Those are
 its **inferences** (R36), each naming a neuron at whatever level it stands (D25), and the machine keeps them for
-as long as the activation is open (R45); at every later age the call delivers and asks nothing. A base neuron
+as long as the activation is open (R45); at every later age the machine calls `connect` instead (§8.1), which
+delivers and asks nothing. A base neuron
 infers from its own connections like any other; what it infers is the marginal over every situation it fires
 in, and it is heard only because nothing more specific covers it.
 
 **An activation's window closes at age `reach_t`** (D9), once that frame's exposure is taken. The window closing stops the
-connecting and drops its standing inferences (R45), and nothing else — there is no second call and nothing is
+connect calls and drops its standing inferences (R45), and nothing else — no call marks it and nothing is
 saved twice.
 
 > **R36 — The inference.** One connection read by one activation at age 0: it names a neuron, at whatever level
 > it stands (D25), and carries the strength and the estimate the connection held then. An activation reads every
-> connection its neuron holds, at every offset out to its reach, once, in the frame it fires (§8), and never
+> connection its neuron holds, at every offset out to its reach, once, in the frame it fires (§8.2), and never
 > again: what the walk wires or a reward moves afterwards is read by the neuron's next activation. What runs and
 > what is expected are chosen from the inferences and nothing else (R47).
 >
