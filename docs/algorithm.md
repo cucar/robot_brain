@@ -1,20 +1,26 @@
 # Universal Compression with Actions and Rewards (UCAR)
 
-UCAR is the design for a machine that compresses what it observes by building a hierarchical dictionary of patterns, and
-learns what to do by observing rewards. It is defined by two alphabets, like a Turing machine: the **event
-alphabet** it can observe and the **action alphabet** it can execute. Above each, it forms symbols of its
-own. Every symbol, base or learned, event or action, is a **neuron**.
+UCAR is an algorithm that compresses what it observes and acts on the best reward estimate it holds. A machine
+running it is a **UCAR machine**, and like a Turing machine it is defined by two alphabets: the **event alphabet**
+it can observe and the **action alphabet** it can execute. Every symbol, base or learned, event or action, is a
+**neuron**.
 
-It has two inputs and one output. Inputs: the events observed, the actions that ran, and the rewards earned.
-Output: what it places at the frame ahead, written in the base alphabet, the actions it infers and the events
-it predicts; the environment executes what it will of the actions, reads what it will of the predictions, and
-reports what ran and what was observed.
+Its inputs are the events observed, the actions that ran and the rewards earned. Its output is what it places
+at the frame ahead, written in the base alphabet: the actions and the events it infers.
 
-This document is the specification, and nothing else. **D** is a definition and **R** a rule; together they
-are the machine. Theorems and all commentary on why the design is shaped this way live in
-[algorithm-remarks.md](algorithm-remarks.md), keyed by the same D and R numbers; risks, diagnostics and open
-questions live in [algorithm-evaluation.md](algorithm-evaluation.md); the worked examples are listed in Part VI,
-each in a file of its own.
+Above the alphabets it builds a hierarchical dictionary of **patterns**. A pattern is a variable or a function.
+A **variable** names a set of positions and a set of neurons that co-occur. A **function** names neurons and
+variables that co-occur. A function has a single child. A variable has multiple children: one child per value.
+
+What no pattern covers is the **apex**: the machine's state at a frame, the situation it is in, and the set that
+infers the frame to come. Every neuron records what followed its activations along with their rewards.
+Each frame, every activation still on the apex connects to what stands on the apex now, building a network of apex-to-apex connections.
+
+The machine expands the inferences based on those connections and resolves them at the base level, while matching them to observed reality.
+One winner is resolved per dimension, and the machine outputs them: the actions and the events it infers.
+The environment executes the actions, and reports what ran, what was observed and what it earned.
+
+**D** is a definition and **R** a rule; together they are the machine.
 
 ---
 
@@ -50,7 +56,7 @@ a neuron, an offset, and the neuron that stood on the apex there after it, an ac
 alike (D25), with the mean reward the frames it stood in paid (R31). It is an exact mean over every exposure the
 connection has ever had, never discounted, never decayed and never windowed. Every frame, each action dimension
 runs the action with the largest such mean among what the neurons then standing on the apex, which is the
-situation, place there (D49, R47); an event dimension expects what the most of them place, and reads no
+situation, place there (D49, R47); an event dimension infers what the most of them place, and reads no
 estimate. That is the whole of it — **act on
 the best estimate you hold, for the situation you are actually in.**
 
@@ -76,8 +82,8 @@ accepted (§7). Once the last level has run it wires children, calls every open 
 children that are due (§7.5): every open
 activation connects to what stands on the apex, with the reward for what ran, and returns what its neuron is
 connected to. Then it selects (§9): what the apex returned is expanded to the base symbols of the frame ahead;
-one winner per dimension is resolved there, an action in each action dimension and an expected event in each
-event dimension, and both are output; and the winners fire weakly in that frame, for the world's report to
+one winner per dimension is resolved there, an action in each action dimension and an event in each event
+dimension, and both are output; and the winners fire weakly in that frame, for the world's report to
 replace. The reward for the action arrives with the next frame
 (R29).
 
@@ -333,8 +339,8 @@ assumes for anything the file does not state.
 > serves both. A shape learned anywhere is learned everywhere, and the dictionary holds it once.
 
 > **D40 — Strength.** An activation is **strong** when the environment reported it, and **weak** when an
-> inference placed it (§9.5). That holds for events and actions alike: an event the machine expects and an action
-> it infers are both weak, and the environment's report replaces both. The neuron is the same either way: a
+> inference placed it (§9.5). That holds for events and actions alike: an event and an action the machine
+> infers are both weak, and the environment's report replaces both. The neuron is the same either way: a
 > weak activation is an activation of the neuron the environment would have reported.
 >
 > **A weak activation is an input of its frame like a strong one.** It is in the neighborhood of everything that
@@ -344,11 +350,11 @@ assumes for anything the file does not state.
 > is not open afterward: it writes no connection, nothing connects to it, and no reward reaches it (R31). **The
 > report replaces it**: where a strong activation of the same neuron stands at the same coordinate, at any level,
 > the weak one is dropped. Where nothing reports, the inference peeks through: an inferred action nothing reports
-> as run, and an expected event nothing reports as seen, are what the machine had in that frame, and a dimension
+> as run, and an inferred event nothing reports as seen, are what the machine had in that frame, and a dimension
 > the environment does not have holds nothing else.
 >
 > **A child is as strong as what it covers.** An accepted bid's child is strong when any activation it covers
-> is strong, and weak when every one of them is: a situation made entirely of expected inputs is expected. A
+> is strong, and weak when every one of them is: a situation made entirely of inferred inputs is inferred. A
 > value neuron is as strong as the value it stands for (D45).
 
 ## 3.4 The file
@@ -458,8 +464,8 @@ what was seen and what was done together (D5).
 each activation dimension its channel declares (D1).
 
 **At most one action runs per action dimension per position in a frame** (D8). The machine outputs what its
-inferences place at the frame ahead, in every dimension: the actions, and the events it expects beside them
-(R47). The environment executes what it will of the actions, reads what it will of the expectations, runs
+inferences place at the frame ahead, in every dimension: the actions, and the events it infers beside them
+(R47). The environment executes what it will of the actions, reads what it will of the events, runs
 actions of its own, and reports what ran and what it observed; an action has run when the report names it
 (D40). Where the report names nothing in a dimension, what the machine placed there stands as a weak
 activation, and is what the machine has in that frame.
@@ -472,8 +478,8 @@ tried (R37).
 
 **A pattern is matched or inferred, and both kinds of member take part in both.** Matched, a pattern says that
 its events stood and its actions ran. Inferred, it is expanded (R28): its actions are placed as the
-machine's output and its events as what the actions are expected to bring, both weakly, and the report makes
-strong what ran and what was seen (D40). What follows any activation is held on its neuron as
+machine's output and its events beside them, both weakly, and the report makes strong what ran and what was
+seen (D40). What follows any activation is held on its neuron as
 connections (D25), one kind, and an inference is a connection read.
 
 > **D50 — The neighborhood policy.** Declared once for the machine, as the alphabet is (D1). For it a neuron is of
@@ -713,7 +719,7 @@ with its bids (R24).
 
 Part II covers `process functions`: what a neuron does in the frame it fires.
 Part IV covers the `connect` and `infer` calls, where a neuron learns what followed and infers what comes next.
-Part V covers selection, where the machine chooses among those inferences what runs and what is expected.
+Part V covers selection, where the machine chooses among those inferences one winner per dimension.
 
 > **R1 — One decision point: the frame it fires.** A neuron is called once per frame it fires in, for every
 > activation of that frame together, each at age 0, and everything structural happens in that call: it refreshes
@@ -1052,9 +1058,7 @@ what stood on the apex in the frames after it, event and action alike.
 > | strength  | the number of exposures: the times an activation saw that neuron on the apex at that offset |
 > | estimate  | the mean reward those exposures received                                                 |
 >
-> Every neuron holds them, base events and base actions included. A connection to a neuron whose expansion
-> places actions is a plan; one to a neuron whose expansion places events alone is a prediction; the two are
-> not told apart.
+> Every neuron holds them, base events and base actions included.
 
 # Part II — The past and present: a neuron
 
@@ -1744,8 +1748,8 @@ saved twice.
 > **R36 — The inference.** One connection read by one activation at age 0: it names a neuron, at whatever level
 > it stands (D25), and carries the strength and the estimate the connection held then. An activation reads every
 > connection its neuron holds, at every offset out to its reach, once, in the frame it fires (§8.2), and never
-> again: what the walk wires or a reward moves afterwards is read by the neuron's next activation. What runs and
-> what is expected are chosen from the inferences and nothing else (R47).
+> again: what the walk wires or a reward moves afterwards is read by the neuron's next activation. The winner of
+> every dimension is chosen from the inferences and nothing else (R47).
 >
 > **An inference is placed at its completion, and a connection means what it recorded.** A connection at offset
 > `b` was written when that neuron completed `b` frames after the situation opened (R31), so an inference at
@@ -1780,7 +1784,7 @@ there down to the base alphabet, in this order and no other:
 | expand   | Expand of every standing inference what comes due: the base symbols it places at the frame ahead are what it proposes (R28).                   |
 | match    | Read each standing inference's line against the frames it reaches back into; propose it where the line would pay there, strike it where it would not (R49). |
 | resolve  | One winner per dimension at the frame ahead: in each action dimension by estimate, in each event dimension by share of voters (R47).           |
-| activate | The winner of every dimension fires weakly at the frame ahead (D40), action and expected event alike, and both are output; the world's report replaces them, in part or in whole, and what ran arrives with its reward (R40). |
+| activate | The winner of every dimension fires weakly at the frame ahead (D40), action and event alike, and both are output; the world's report replaces them, in part or in whole, and what ran arrives with its reward (R40). |
 
 No neuron takes part in any of it. What an activation returned is kept, placed, expanded, matched, resolved
 and fired by the machine alone, as the election is the machine's alone (R24), and a neuron learns of the outcome
@@ -1826,8 +1830,8 @@ only what happened (R32).
 > **This is the one expansion in the design.** It recovers the run from the file (D12): a parameter expands to
 > the member its value neuron names, at every one of its positions, and a class to the combination its value
 > neuron names, a member at each. And it turns an inferred
-> pattern into a program and an expectation at once (R30): the actions it places run, and the events it places
-> fire weakly as what those actions are expected to bring (D40). It reads dictionary lines only. Recognition runs it backward: a pattern fit by what
+> pattern into a program (R30): the actions it places run, and the events it places fire weakly beside them
+> (D40). It reads dictionary lines only. Recognition runs it backward: a pattern fit by what
 > fired says that this function ran here, with these arguments, and the level above writes the call and its
 > values. **What
 > travels down with a symbol is
@@ -1866,14 +1870,13 @@ only what happened (R32).
 > **R30 — Execution is an expansion**, of the selected pattern (R47) through its dictionary line (R28). A high
 > pattern becomes its members at the offsets its line records, down to base symbols. Its base actions are output,
 > each in the frame its expansion places it in, the nearest being `+1` (R29); its base events are placed in
-> theirs, as what the program is expected to see. Both fire weakly (D40), and the report replaces them: the
-> actions it names as run and the events it names as seen become strong, and the rest last their frame.
-> Execution is not a second mechanism; it is this expansion read as a program, and expectation is the same
-> expansion read as a prediction. A weak pattern's expansion places no action: what is output is chosen by
-> estimate, never by expecting itself to act.
+> theirs. Both fire weakly (D40), and the report replaces them: the actions it names as run and the events it
+> names as seen become strong, and the rest last their frame. Execution is not a second mechanism; it is this
+> expansion read as a program. A weak pattern's expansion places no action: what is output is chosen by
+> estimate, never by a pattern that was itself inferred.
 >
-> **Execution activates what it expands, where it won.** A base action fires weakly in the frame R47 selected
-> it, a base event where R47 expected it, and a pattern the expansion passed through fires weakly when its
+> **Execution activates what it expands, where it won.** A base action or a base event fires weakly in the frame R47
+> selected it, and a pattern the expansion passed through fires weakly when its
 > expansion completes, at the coordinate the expansion placed it — the last frame of what it covers, which is the
 > coordinate recognition would have given it — provided the standing inference that placed it still stands
 > (R45) and what it placed at that frame was selected (R47). An inference that lost its dimensions, or whose
@@ -1946,7 +1949,7 @@ only what happened (R32).
 > **Every apex activation votes**, base actions included. A pattern that names what was done beside what was
 > seen votes knowing the situation; a child over actions alone, or a base action, votes what followed it, a habit,
 > and reward prices the habit like anything else. What an inference places in an event dimension is resolved
-> the same way, and the winner is expected, and output as an expectation (R47, R30).
+> the same way, and the winner is output (R47, R30).
 >
 > **Nothing runs where nothing infers.** An action dimension no inference reaches is output nothing: no call
 > runs, nothing fires in it, and the frame carries silence there as an event dimension with nothing to report
@@ -1982,21 +1985,21 @@ only what happened (R32).
 >
 > **An event dimension resolves by share of voters.** At each position of it, every base event some voter's
 > expansion placed there is a candidate, and every voter whose expansion placed one is one vote, split across the
-> events it placed at that position by strength, as above. **The candidate with the largest share is expected**
+> events it placed at that position by strength, as above. **The candidate with the largest share is output**
 > (R40). The estimate is not read here: it is the reward of the actions of those frames, and an event is what
-> followed, not what paid. Ties go to the older event. A position no voter reaches expects nothing.
+> followed, not what paid. Ties go to the older event. A position no voter reaches outputs nothing.
 >
 > **A bad plan is worn down, not cut.** A standing inference carries the estimate it read at age 0 (R45). Each
-> frame it places what comes due at the frame ahead: actions in their dimensions, expected events in theirs, at
+> frame it places what comes due at the frame ahead: actions in their dimensions, events in theirs, at
 > their positions, all at that estimate. Activations that fired after a reward moved the estimate place
 > candidates at the moved number, or the walk's untried action at zero (R37). Where the largest estimate is one
 > of those, the plan's action does not run; where the world reports an event other than the one the plan
-> expected, that event did not stand. Each such placement is a failed neighbor to the plan's match (R49). The
+> placed, that event did not stand. Each such placement is a failed neighbor to the plan's match (R49). The
 > plan stands while what it found still pays for what it missed, and is dropped when it no longer does.
 >
 > **Each dimension is resolved on its own**: a plan that loses its action dimension still counts for the events it
-> placed, and one that wins is not favored for them, so what is expected is what the most voters placed, whichever
-> inference placed it, and an inference that places events alone, a prediction (D25), is resolved like any other.
+> placed, and one that wins is not favored for them, so what an event dimension outputs is what the most voters placed, whichever
+> inference placed it, and an inference that places events alone is resolved like any other.
 
 > **R48 — Speaking falls through the cover.** A covered neuron supplies nothing while its coverer speaks (D10).
 > Where the coverer has no inference for the frame ahead, what it covers speaks in its place, and what they cover
@@ -2038,24 +2041,25 @@ only what happened (R32).
 
 > **R40 — An inference is weak until the report makes it strong.** Resolution leaves one winner per dimension,
 > action and event alike (R47), and each fires weakly in the frame it was placed in (D40), the action to run and
-> the event as what the machine expects, and both are the machine's output. Where the report names that
+> the event to come, and both are the machine's output. Where the report names that
 > dimension at that coordinate, the report stands and the weak activation is dropped; an action nothing reports as run, or an event nothing
 > reports as seen, lasts its frame and is gone. Where the expansion reaches a parameter, what fires is its value,
-> bound from what has happened (D44). An expected event above the base is expanded in turn, one frame at a time
-> as its members come due, so what a plan expects reaches the base as expected inputs exactly as what it does
-> reaches the base as output. A weak activation is an input of its frame: it is recognized as a neighbor, it may
+> bound from what has happened (D44). An inferred event above the base is expanded in turn, one frame at a time
+> as its members come due, so the events a plan infers reach the base as inputs exactly as its actions reach
+> the base as output. A weak activation is an input of its frame: it is recognized as a neighbor, it may
 > be covered or stand on the apex and vote once, and then it is gone. It carries no reward, connects to nothing,
 > and is connected to by nothing (R31).
 
-# Part VI — The examples
+# Part VI — Beyond the specification
 
-Nine cases, each worked by hand in a file of its own. Nothing in them is normative; each follows the
-definitions through one small job.
+# 10. The examples
+
+Nine cases, each worked by hand in a file of its own; each follows the definitions through one small job.
 
 | Case | File | What it shows |
 |---|---|---|
 | Alternation | [algorithm-xy.md](algorithm-xy.md) | A stream at radius 4. A neuron that keeps seeing a different pair of letters holds two parameters and one function that names both, learned from the pairs that go by once: its child is the alternation, one neuron for every such pair, and the value neurons beside it say which pair. A pair that comes often is named by its own letters' patterns first, and stands in a class instead. |
-| Addition | [algorithm-addition.md](algorithm-addition.md) | A request with each column, a neuron for each case that can be asked, a function per case, and a carry the world shows while it teaches and the machine expects afterwards. |
+| Addition | [algorithm-addition.md](algorithm-addition.md) | A request with each column, a neuron for each case that can be asked, a function per case, and a carry the world shows while it teaches and the machine infers afterwards. |
 | Copy | [algorithm-copy.md](algorithm-copy.md) | Shown a digit and asked, the machine says it: one parameter in the answer's table over the digit shown and the digit said, bound from what was shown, so a digit never said before is said the first time; once a class covers the shown digit the same parameter reads it through the class's value neuron. |
 | Equal | [algorithm-equal.md](algorithm-equal.md) | Shown four digits in one frame and asked, the machine says the third where the first two are the same and the fourth where they differ: equality is a parameter over two slots of the request, the answer is a copy by a parameter over a slot of the request and the slot of the answer, bound from what was shown, and the request answers by a vote the one voter that knows the situation decides. |
 | Hit | [algorithm-hit.md](algorithm-hit.md) | Offsets from where the world reports something approaching as the reference frame, a parameter that takes whatever comes, a value neuron and a lesson per thing, and a thing never seen answered by the habit of the event the world reports in common. |
@@ -2063,3 +2067,14 @@ definitions through one small job.
 | MNIST | [algorithm-mnist.md](algorithm-mnist.md) | An image channel with two spatial dimensions and a binary pixel dimension, 256 buckets or three channels for color later; patches at the base, odd shapes closed on the frontier, a digit action taught by demonstration. |
 | Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument with own and disown as its actions, under a policy where an action is no one's neighbor and only events and patterns connect, to actions alone; patterns over frames; a world that runs the right action wherever the machine has none; and a reward scoped to the channel and the frame, each frame. |
 | Text | [algorithm-text.md](algorithm-text.md) | A stream of letters at reach 1: at the base a class of the letters that stand before each letter, its value neurons the pairs; words of any length from children and letters on the frontier, a doubled letter as a parameter. |
+
+# 11. Further reading
+
+Each document is written in the terms of this specification and references its keys.
+
+| Document | What it holds |
+|---|---|
+| [algorithm-remarks.md](algorithm-remarks.md) | The theorems, and the commentary on why the design is shaped this way, keyed by the same D and R numbers. |
+| [algorithm-evaluation.md](algorithm-evaluation.md) | The falsifiable claim, the risks with what would be done about each, and the open questions. |
+| [algorithm-implementation.md](algorithm-implementation.md) | The implementation plan: the per-neuron state and calls, the build stages, and the deltas against the current code. |
+| [hippocampus.md](hippocampus.md) | An addendum: the second organ, running beside this machine over the same neurons, with rules keyed **H**. |
