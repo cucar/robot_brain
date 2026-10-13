@@ -33,17 +33,15 @@ The compression decides what the current situation *is*, and that's provided to 
 
 ## 1.1 Compression: classify the situation
 
-**The machine compresses by naming.** A pattern is a set of lower level symbols or patterns that keep occurring
-together — past and present neighbors of one another (D26) — and one symbol stands for all of them. The run can be shortened by using
-these patterns. Patterns can name base symbols 
-or other patterns, so one symbol high in the stack can stand for a long stretch of the run. 
-This substitution is the whole mechanism for compression.
+**The machine compresses by naming.** A pattern is a set of symbols that keep occurring together, and a
+symbol stands for them wherever they do. The run can be shortened by using these patterns. Patterns can name
+base symbols or the children of other patterns. This substitution is the whole mechanism for compression.
 
 **The compression is lossy, in two places.**
 
 | Loss      | Description                                                                                                                                       | Reference |
 |-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
-| placement | An offset is exact within the radius its dimension declares and beyond it kept to one significant digit in base 2, so a far neighbor is placed only to within the group it rounds to. | D1, D6    |
+| placement | An offset is exact within the radius `R` its dimension declares and beyond it rounded down to one significant digit in base `R + 1`, so a far neighbor is placed only to within the group it rounds to. | D1, D6    |
 | evidence  | A neuron decides its structure over its last `H` activations and the history slides, so the structure that would restate a frame long past is neither held nor recoverable. | D18       |
 
 Both losses are why the file is a yardstick and not an artifact (D12). Imagine the run written out under the
@@ -105,7 +103,7 @@ replace. The reward for the action arrives with the next frame
 > over* its activation dimensions and *reports* its neuron dimensions at each point of that layout.
 >
 > **Each activation dimension is declared with its radius `R`**, a count of positions, `1` or more: how far a
-> base neuron sees in it (D4), and the unit in which every distance in it is written (D6). It is the resolution
+> base neuron sees in it (D4), and how every distance in it is rounded (D6). It is the resolution
 > of the layout, as the bucket count is the resolution of what is reported on it, and with `H` it is one of
 > the two things the designer picks (R4): an image whose pixel is to be told from the next declares `R = 1` in
 > `x` and `y`; a stream in which the fourth frame back matters as exactly as the first declares `R = 4` in time.
@@ -173,24 +171,27 @@ what the dictionary writes is a pattern.
 > adjacent coverages are joined into one a level up. **The level plays no part in it** (D2): a child one letter
 > longer than its parent stands a level higher and sees one position further. In space the reach runs either
 > way; in time it runs back, and the same number runs forward as the activation's window (D9). The reach is a
-> bound, not a distance: a neuron sees every distance up to it, exact within `R` and bucketed by powers of two
-> beyond (D6). `reach_t` is this reach in the time dimension, the neuron's window.
+> bound, not a distance: a neuron sees every distance up to it, exact within `R` and rounded to one significant
+> digit beyond (D6). `reach_t` is this reach in the time dimension, the neuron's window.
 
 > **D6 — Offsets.** The offset between two activations is the difference of their coordinates, one component per
-> activation dimension they share (D1, D2), each written in units of that dimension's radius `R` (D1): **exact
-> within `R`, and beyond it rounded down to a power of two times `R`**:
+> activation dimension they share (D1, D2), each **rounded down to one significant digit in base `R + 1`**, `R`
+> being the radius of that dimension (D1):
 > ```
-> offset(x)   =   x                                          |x| ≤ R
-> offset(x)   =   sign(x) · R · 2^floor(log2 (|x| / R))      |x| > R
 > offset(0)   =   0
+> offset(x)   =   sign(x) · floor(|x| / (R + 1)^k) · (R + 1)^k         k = floor(log_(R + 1) |x|)
 > ```
-> At `R = 1`, 5 and 7 become 4, and −13 becomes −8; at `R = 4`, 3 stays 3, 5 and 7 become 4, and −13 becomes −8.
-> The reachable offsets are `0`, every distance up to `±R`, then `±2R, ±4R, ±8R, …` up to the largest not above
-> the reach, and the last group is cut off at the reach: at `R = 1` a reach of 38 names 1, 2, 4, 8, 16 and 32, the
-> last standing for 32 through 38; at `R = 4` it names 1, 2, 3, 4, 8, 16 and 32. A reach of `r` gives
-> `R + ⌊log₂ (r / R)⌋ + 1` offsets in time, zero and the past, and `2R + 2⌊log₂ (r / R)⌋ + 1` in any other
-> dimension; at `R = 1` those are `⌊log₂ r⌋ + 2` and `2⌊log₂ r⌋ + 3`. Within the radius nothing is lost; beyond
-> it, distance is kept to one significant digit, in units of `R`.
+> The single digits of base `R + 1` are `0` through `R`, so every distance up to `R` is exact, and beyond it the
+> distance is kept to one digit. At `R = 1`, 5 and 7 become 4 and −13 becomes −8; at `R = 10`, 7 stays 7, 15
+> becomes 11, 95 becomes 88 and −250 becomes −242. The reachable offsets are `0`, every distance up to `±R`, then
+> `±(R + 1), ±2(R + 1), … ±R(R + 1), ±(R + 1)², ±2(R + 1)², …` up to the largest not above the reach, and the last
+> group is cut off at the reach: at `R = 1` a reach of 38 names 1, 2, 4, 8, 16 and 32, the last standing for 32
+> through 38; at `R = 10` a reach of 250 names 1 through 10, 11 through 110 by elevens, 121 and 242, the last
+> standing for 242 through 250. A reach of `r` holds
+> ```
+> offsets(r)  =  R · k  +  floor(r / (R + 1)^k)                 k = floor(log_(R + 1) r);  the distances from 1 to r
+> ```
+> so `offsets(r) + 1` offsets in time, zero and the past, and `2 · offsets(r) + 1` in any other dimension.
 
 > **D5 — Adjacency.** Two activations are adjacent when **the second stands on the apex (R27) as the first
 > fires, within reach in every activation dimension they share** (D4), **and the second is not later than the
@@ -388,9 +389,9 @@ assumes for anything the file does not state.
 > a base symbol             log₂ B                                   among the B base neurons the machine declares (D1):
 >                                                                    every bucket of every event and action dimension
 > a neuron, named in a line log₂ n                                   among the n neurons the machine holds
-> an offset                 Σ over its dimensions  log₂ b            b the buckets of that dimension at the owner's reach r and
->                                                                    its radius R (D6): R + ⌊log₂ (r / R)⌋ + 1 in time and
->                                                                    2R + 2⌊log₂ (r / R)⌋ + 1 in any other
+> an offset                 Σ over its dimensions  log₂ b            b the buckets of that dimension at the owner's reach r
+>                                                                    (D6): offsets(r) + 1 in time and 2 · offsets(r) + 1
+>                                                                    in any other
 > which pattern             log₂ |patterns|                          which of the owner's patterns, of any kind
 > which member              log₂ |K|                                 among the members of the variable K
 > which combination         log₂ |C|                                 among the combinations the class has stored (D41)
@@ -1639,7 +1640,7 @@ it.
 > anywhere in its offset's group (R49). Writing rounds to the group, matching reads the whole group, and only
 > the placement ahead lands on one frame, the group's lower edge, because a base symbol has to be put somewhere. Fan-out is the apex within reach: a neuron connects to what stood
 > uncovered in the frames after it, as far as it sees in every other dimension, and to nothing beneath that, and one exposure per apex activation per frame means a
-> neuron of reach `r` holds at most `R + ⌊log₂ (r / R)⌋` offsets per neuron it has seen.
+> neuron of reach `r` holds at most `offsets(r)` offsets per neuron it has seen (D6).
 >
 > **Making and strengthening are one operation.** A neuron's connection at `(neuron, offset)` has a
 > **strength**, the number of its exposures — the times an activation of the neuron saw that neuron on the apex
@@ -1821,8 +1822,8 @@ only what happened (R32).
 >                     C's line, in c's table, is {(d, −1)}                  → b at f+4, c at f+2, d at f+1
 > ```
 > **A coarse offset expands to its rounded coordinate.** A neighbor named within the radius is placed where it
-> fired. One named at `sign · R · 2^g` is placed at exactly that distance whatever distance in the group it
-> fired at, and several neighbors at one coarse offset (D6) are each placed there. **The rounding composes.** Each level down adds its own group's slack, so a neuron
+> fired. One named beyond the radius is placed at exactly the distance its offset names, whatever distance in
+> the group it fired at, and several neighbors at one coarse offset (D6) are each placed there. **The rounding composes.** Each level down adds its own group's slack, so a neuron
 > places the base symbols of its farthest neighbors to within the sum of the groups along the path: the longer
 > its span, the coarser its far placements. That is the loss the file carries (§1), and expansion reports it
 > faithfully rather than hiding it.
