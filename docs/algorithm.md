@@ -76,17 +76,21 @@ Until then, the neurons that make up the situation each hold their own (R35).
 # 2. Frame processing
 
 A frame arrives carrying what each event dimension observed, what each action dimension executed (D8), and any
-rewards for actions already run (D35). The machine works **up one stack, a level at a time**: at each level it
-calls every neuron that fired, elects over their bids, and gives the accepted bids the children and value
-neurons they need, reused or new, and the level above is built out of what the election
-accepted (§7). Once the last level has run it wires children, calls every open activation (§8), and then deletes the
-children that are due (§7.5): every open
-activation connects to what stands on the apex, with the reward for what ran, and returns what its neuron is
-connected to. Then it selects (§9): what the apex returned is expanded to the base symbols of the frame ahead;
-one winner per dimension is resolved there, an action in each action dimension and an event in each event
-dimension, and both are output; and the winners fire weakly in that frame, for the world's report to
-replace. The reward for the action arrives with the next frame
-(R29).
+rewards for actions already run (D35).
+
+**Contraction** (§7). The machine compresses the frame, one level at a time. At each level it calls every neuron
+that fired, elects over their bids, and gives the accepted bids the call neurons and value neurons they need,
+reused or new. The level above is built out of what the election accepted. Once the last level has run, it
+wires the children to their patterns.
+
+**Connect and infer** (§8). The machine then calls every open activation. An activation connects to what
+stands on the apex, with the reward for what ran. One that fired this frame returns what its neuron is
+connected to instead. Then the children that are due are deleted (§7.5).
+
+**Selection** (§9). What the apex returned is expanded to the base symbols of the frame ahead. One winner per
+dimension is resolved there, an action in each action dimension and an event in each event dimension, and both
+are output. The winners fire weakly in that frame, for the world's report to replace. The reward for the action
+arrives with the next frame (R29).
 
 ---
 
