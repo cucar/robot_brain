@@ -37,36 +37,39 @@ The compression decides what the current situation *is*, and that's provided to 
 symbol stands for them wherever they do. The run can be shortened by using these patterns. Patterns can name
 base symbols or the children of other patterns. This substitution is the whole mechanism for compression.
 
-**The compression is lossy, in two places.**
+**The compression is lossy, in two places, and both are limits of the neuron.**
 
 | Loss      | Description                                                                                                                                       | Reference |
 |-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
-| placement | An offset is exact within the radius `R` its dimension declares and beyond it rounded down to one significant digit in base `R + 1`, so a far neighbor is placed only to within the group it rounds to. | D1, D6    |
-| evidence  | A neuron decides its structure over its last `H` activations and the history slides, so the structure that would restate a frame long past is neither held nor recoverable. | D18       |
+| vision    | A neuron has limited vision: it sees its neighbors exactly only up to a declared distance, and beyond that only roughly, so a far neighbor is placed only to within the distance it rounds to. | D6        |
+| memory    | A neuron has limited memory: it remembers only its most recent occurrences, and decides its patterns over those, so what it saw earlier no longer shapes its patterns. | D18       |
 
-Both losses are why the file is a yardstick and not an artifact (D12). Imagine the run written out under the
-structure as it now stands, and read the objective as: make that shorter.
+Both losses are what lets the machine generalize: a neuron that saw roughly and remembers recently names what
+recurs, not the instances it happened to meet. Imagine the run written out under the patterns as they now
+stand, and read the objective as: make that shorter.
 
 ## 1.2 Execution: the best estimate for the situation
 
-**There is no return, no horizon and no value function.** What the machine holds is one number per connection:
-a neuron, an offset, and the neuron that stood on the apex there after it, an action, an event or a pattern
-alike (D25), with the mean reward the frames it stood in paid (R31). It is an exact mean over every exposure the
-connection has ever had, never discounted, never decayed and never windowed. Every frame, each action dimension
-runs the action with the largest such mean among what the neurons then standing on the apex, which is the
-situation, place there (D49, R47); an event dimension infers what the most of them place, and reads no
-estimate. That is the whole of it — **act on
-the best estimate you hold, for the situation you are actually in.**
+A connection of a neuron contains the neuron that stood on the apex at an offset after it (D25).
+It holds two numbers: strength and earnings.
+Strength is the number of times that the connection was seen. Earnings are the total reward paid in those frames (R31).
+Its estimate is its earnings over its strength, the average reward per time seen.
+Every frame, each neuron standing on the apex infers from its connections what follows it (R36).
+If an inference names a higher level neuron, it is expanded down to the base neurons it stands for (R28).
+The base neurons placed at the frame ahead are then resolved into the machine's output.
+In each action dimension the machine outputs the action placed there with the largest estimate (R47).
+In each event dimension it outputs the event the most inferences place there, and reads no estimate.
+That is the whole of it: **act on the best estimate you hold, for the situation you are actually in.**
 
-**Credit is attributed, never propagated.** A reward names the frames it pays for and reaches each of them at a
-strength falling with distance (R33). No estimate is ever computed from another estimate, so nothing bootstraps
-and nothing has to converge before anything else can be read.
+**A reward pays frames and channels.** It arrives with a frame and may name the action channels it pays and the span of
+frames it pays over (D35). A reward that names no channels pays every action channel. One that names no span
+pays as far back as any neuron can still see, the longest reach in time the machine holds. The share of it
+reaching each frame of the span falls linearly with that frame's distance from the one it arrived in, and lands
+on the connections written at that frame (R33).
 
-**The two objectives meet in the neuron, and nowhere else.** An estimate is held by a neuron, so which parts of
-a situation can hold an estimate at all is settled entirely by the compression objective: a recurring part of
-the apex acquires an estimate of its own exactly when a pattern is minted for it, and until then only the
-neurons under it have anything to say (R35). Compression is not preprocessing for control; it is what defines the
-space control acts over.
+**Compression decides which neurons exist, and the neurons hold the connections.** A situation that recurs is
+named by a pattern. The pattern's child then stands on the apex in its place, and holds connections of its own.
+Until then, the neurons that make up the situation each hold their own (R35).
 
 ---
 
@@ -114,20 +117,20 @@ replace. The reward for the action arrives with the next frame
 > | Coordinate | Components                                        | Nature                                                              |
 > |------------|---------------------------------------------------|---------------------------------------------------------------------|
 > | base neuron | `(dim_id, bucket_id)`                            | structural and defining: the alphabet                               |
-> | higher neuron | a level and an id                              | a child: a function's child, a function neuron (D48), or a variable's child, a value neuron (D45); no dimension and no kind |
+> | interneuron | a level and an id                                | a child: a function's child, a call neuron (D48), or a variable's child, a value neuron (D45); no dimension and no kind |
 >
 > **Neuron ids are handed out in sequence**, the base neurons first in declaration order (D1) and every neuron
 > above them as it is created, so a smaller id is an older neuron, and that is what every tie on age reads.
 > | activation | frame, and one position per activation dimension  | fleeting; two activations of one neuron differ in nothing else      |
 >
 > **Neuron dimensions belong to the base alphabet and to nothing above it.** A base neuron is an event or an action
-> of one dimension of one channel. A higher neuron is a child, a function neuron or a value neuron, and has a
+> of one dimension of one channel. An interneuron is a child, a call neuron or a value neuron, and has a
 > level and a name and nothing else structural: it is not an event or an action, it belongs to no dimension and no
 > channel, and its body or its values may hold either kind. It sits one level above the highest activation the
 > bid it was created for covered (R24), and the level does one thing: it orders the frame's processing (R26). How
 > far the neuron sees is its reach, read off its patterns' lines as they stand and not off its level (D4). Other
 > functions may come to share a child (R43), and its parents may be of either kind. Only activation dimensions
-> exist above the base, and an activation of a higher neuron has exactly the coordinate it inherits.
+> exist above the base, and an activation of an interneuron has exactly the coordinate it inherits.
 >
 > **A child's activation inherits the parent activation's coordinate** — the frame, and the position in every
 > activation dimension — and never an average over what it covers.
@@ -136,7 +139,7 @@ replace. The reward for the action arrives with the next frame
 
 | Object     | Description                                                                                                                          | References    |
 |------------|--------------------------------------------------------------------------------------------------------------------------------------|---------------|
-| neuron     | A symbol, and a type. Sits at one level; a base neuron in one dimension of one channel, a higher one in none. Holds a patterns table, a history, and connections. | D32, D18, D25 |
+| neuron     | A symbol, and a type. Sits at one level; a base neuron in one dimension of one channel, an interneuron in none. Holds a patterns table, a history, and connections. | D32, D18, D25 |
 | pattern    | A function or a variable: one line of one neuron's table, over past and present neighbors, and the neuron it promotes. Lives in its parent. | D15, D38      |
 | activation | One occurrence of a neuron, at a frame and a position. Holds the neighborhood it observed, and the cover chosen for it.              | D7, D17       |
 
@@ -159,7 +162,7 @@ what the dictionary writes is a pattern.
 > of that dimension, in positions.
 > ```
 > span(base neuron)     =   0
-> span(higher neuron)   =   the largest, over the patterns wired to it and over everything each names,
+> span(interneuron)     =   the largest, over the patterns wired to it and over everything each names,
 >                           of that thing's offset from the bidder plus the thing's own neuron's span
 > reach                 =   span + R                                             per activation dimension
 > ```
@@ -334,7 +337,7 @@ the environment does not have, the action the machine inferred there, weak (D40)
 There is no rest value. A dimension where nothing happens supplies no symbol, and silence is what the decoder
 assumes for anything the file does not state.
 
-> **D11 — Identity.** A neuron's identity is its type alone, a base symbol or a higher neuron's id (D2), so
+> **D11 — Identity.** A neuron's identity is its type alone, a base symbol or an interneuron's id (D2), so
 > nothing about where it occurred is part of it. **The same shape at two positions is two activations of one neuron**,
 > and they pool: both carry the same relative neighborhood, so the same patterns cover them and one pattern
 > serves both. A shape learned anywhere is learned everywhere, and the dictionary holds it once.
@@ -484,8 +487,8 @@ seen (D40). What follows any activation is held on its neuron as
 connections (D25), one kind, and an inference is a connection read.
 
 > **D50 — The neighborhood policy.** Declared once for the machine, as the alphabet is (D1). For it a neuron is of
-> one of three kinds: an **event** or an **action**, a base neuron of that kind of dimension (D1), or a
-> **pattern**, a higher neuron, whatever its body or its values hold (D2). The policy is two tables of booleans,
+> one of three kinds: an **event** or an **action**, a base neuron of that kind of dimension (D1), or an
+> **interneuron**, whatever its body or its values hold (D2). The policy is two tables of booleans,
 > the kind of the holder by the kind of the target, nine entries each:
 >
 > | Table  | An entry on says                                                          | And so decides            |
@@ -527,7 +530,7 @@ What this section defines is shared: a neuron reads it over its own history and 
 > **D15 — The pattern.** A set of neighbors that a neuron **names**, each at an offset from the activation the pattern
 > stands on (D26), spanning the same box a neighborhood does (D5) and shaped like one (D7). It is a function or a
 > variable (D38). It is the collapse of the neighborhoods it covers (D27), moves as they move (D29), and promotes a
-> child: a function promotes one, a function neuron (R16), a variable one per value it has held, a value neuron
+> child: a function promotes one, a call neuron (R16), a variable one per value it has held, a value neuron
 > (D45). Its `id` is its creation
 > order within its owner's table, a handle that survives re-centering. It breaks one tie: where two of the
 > owner's patterns measure the same in recognition (D28), the older `id` is taken. The election never reads it.
@@ -708,7 +711,7 @@ it is used.
 
 | Call                    | Description                                                                                                                                                       | References |
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------|
-| create neuron           | The machine creates it when an accepted bid needs one and none can be reused, at the child's level (D2), holding nothing: a function neuron for a function, or a value neuron for the value a variable held. | R16, R43, R44 |
+| create neuron           | The machine creates it when an accepted bid needs one and none can be reused, at the child's level (D2), holding nothing: a call neuron for a function, or a value neuron for the value a variable held. | R16, R43, R44 |
 | process functions       | In its level's turn: everything structural for the activations that fired this frame.                                                                             | §6, R20    |
 | wire child to pattern   | Once the last level has run, the machine points each function at the child it created or chose for it, and each variable's value at its value neuron.                                             | R16, R17, R44 |
 | delete pattern neighbor | The machine removes a neuron that no longer exists from every pattern and saved activation that names it.                                                          | R38        |
@@ -813,7 +816,7 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > in frames to come takes its value from what stands at the first and places it at the second. That is how a
 > value is carried forward in time, and it is the whole of copying.
 
-> **D48 — The function neuron.** A function's child, one per function: the neuron the machine gives a function
+> **D48 — The call neuron.** A function's child, one per function: the neuron the machine gives a function
 > the first time a bid carrying it is accepted (R16), one level above the highest activation that bid covered
 > (D2), shared by every function the machine has wired to it (R43). It fires when a bid carrying the function is
 > accepted, at the bidder's coordinate, once, covering the bidder and what the function names (§7.4), and the
@@ -822,10 +825,10 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > function regardless of its values by a pattern over it alone. It holds a table, a history and connections of
 > its own, and is expanded through the function whose bid fired it (R28).
 
-> **D37 — The call.** An activation of a function neuron (D48), with one value neuron beside it per variable its
+> **D37 — The call.** An activation of a call neuron (D48), with one value neuron beside it per variable its
 > function names (D45). It is made in one of two ways and is the same activation either way. **Recognized**: the
 > election accepts a bid carrying the function, and the call fires at the bidder's coordinate, as strong as what
-> it covers (D40). **Inferred**: an expansion places the function neuron at its completion, the voter's coordinate
+> it covers (D40). **Inferred**: an expansion places the call neuron at its completion, the voter's coordinate
 > plus the connection's offset in time and in every other activation dimension (R28, R36), and the call fires
 > weakly there, for the report to make strong what it placed (R30). A call carries nothing of its own: what it is
 > stands in the dictionary line, and what its variables held stands in the value neurons beside it. Expanding it
@@ -1042,8 +1045,9 @@ What follows an activation is never in the file (D12) and enters no test. It is 
 what stood on the apex in the frames after it, event and action alike.
 
 > **D25 — Connections.** A neuron holds, per `(neuron, offset)`, one **connection**: a **strength**, the number
-> of times an activation of the neuron saw that neuron stand on the apex at that offset, and an **estimate**, the
-> mean reward the actions of those frames received. The offset is a full D6 offset from the holder's activation:
+> of times an activation of the neuron saw that neuron stand on the apex at that offset, and its **earnings**,
+> the total reward the actions of those frames received. Its **estimate** is its earnings over its strength,
+> and is read, never stored. The offset is a full D6 offset from the holder's activation:
 > positive in time, because what is connected to comes after, and signed in every other activation dimension.
 > **A connection reaches as far as a neighbor does** (D5): an activation connects to what stands on the apex
 > within its neuron's reach in every activation dimension the two share (D4), the window in time (D9) and the
@@ -1057,7 +1061,8 @@ what stood on the apex in the frames after it, event and action alike.
 > |-----------|------------------------------------------------------------------------------------------|
 > | key       | `(neuron, offset)`, the offset strictly positive in time                                 |
 > | strength  | the number of exposures: the times an activation saw that neuron on the apex at that offset |
-> | estimate  | the mean reward those exposures received                                                 |
+> | earnings  | the total reward those exposures received                                                |
+> | estimate  | earnings / strength, read whenever the connection is read                                |
 >
 > Every neuron holds them, base events and base actions included.
 
@@ -1192,7 +1197,7 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 
 > **R16 — What a child is at birth.** The neuron proposes, the election decides, and the machine creates. A
 > pattern is the neuron's own: it is added, used in covers and bid on the neuron's evidence alone. A function
-> with no child is bid as it is, and the bid asks for one, a function neuron (D48), if it is accepted (D31). A variable
+> with no child is bid as it is, and the bid asks for one, a call neuron (D48), if it is accepted (D31). A variable
 > has a child per value, a value neuron, and a bid carrying a value it has no child for asks for one the same
 > way (R44). **The
 > machine gives a child only to an accepted bid**, so no neuron exists for a pattern the board never bought, and
@@ -1604,7 +1609,7 @@ the reward         any reward that arrived, for the actions of this frame and fo
 ```
 
 The neuron strengthens a connection per apex activation and saves nothing: the connection at `(neuron, age)`,
-created at strength 1 or incremented (R31), and for each reward share the estimate of the connections it names
+created at strength 1 or incremented (R31), and for each reward share the earnings of the connections it names
 (R33) — for this frame, the connections just strengthened, in the same write. A share for an earlier frame,
 at distance `d`, goes into the connection at the offset the activation's age less `d` rounds to, to the action
 the machine hands it for that frame, where the activation was uncovered then (D9). The activation keeps nothing
@@ -1644,10 +1649,10 @@ it.
 >
 > **Making and strengthening are one operation.** A neuron's connection at `(neuron, offset)` has a
 > **strength**, the number of its exposures — the times an activation of the neuron saw that neuron on the apex
-> at that offset — and an **estimate**, the mean of the reward those exposures received (R33). The first exposure creates
-> the connection at strength 1 and every later one increments it; each share of reward folds into the mean
-> weighted by `1 / strength`, so the estimate is the exact average over the connection's exposures and no rate
-> is chosen. **Nothing leaves.** No exposure is ever subtracted, no strength ever falls, and no window bounds a
+> at that offset — and its **earnings**, the total reward those exposures received (R33). The first exposure
+> creates the connection at strength 1 and earnings 0 and every later one adds 1 to the strength; each share of
+> reward adds to the earnings. The estimate is the earnings over the strength, the exact average over the
+> connection's exposures, and no rate is chosen. **Nothing leaves.** No exposure is ever subtracted, no strength ever falls, and no window bounds a
 > connection: it is the whole of what the neuron has seen follow it at that offset, over its life.
 >
 > **Every level holds them, base neurons included.** No operation derives what a child was worth from what its
@@ -1656,7 +1661,7 @@ it.
 >
 > **A connection dies with either of its ends.** Nothing else removes one (R34).
 >
-> **A connection wired ahead of any exposure is created at strength 1 and estimate 0.** The walk (R37) is the one
+> **A connection wired ahead of any exposure is created at strength 1 and earnings 0.** The walk (R37) is the one
 > thing that creates a connection nothing has yet been seen to follow; it is created exactly as a first exposure
 > at neutral reward would create it, and from then on it is a connection like any other.
 
@@ -1726,8 +1731,9 @@ it.
 > exists, and reward, which decides which of it is executed. They meet at exactly one place, a neuron's action
 > connections, and connections are not in the file and not priced by the one test.
 >
-> **Estimates are not decayed, and not windowed.** A connection's reward is the plain average over every exposure it
-> has had, with no cap, no rate and no horizon; nothing ever leaves it (R31). **Non-choice moves nothing**: an
+> **Estimates are not decayed, and not windowed.** A connection's estimate is its earnings over its strength,
+> the plain average over every exposure it has had, with no cap, no rate and no horizon; nothing ever leaves it
+> (R31). **Non-choice moves nothing**: an
 > action not taken keeps the value it had. What makes an estimate specific is the neuron that holds it, not
 > how recent its exposures are — a child's connections are over the one situation its parent's pattern names (R35),
 > and a changed situation is answered by a new child, never by forgetting.
@@ -1757,7 +1763,7 @@ saved twice.
 > offset `b` completes `b` frames after the activation that made it, and at the offset's components in every
 > other activation dimension from its position, as a neighbor is placed (R28). Expanded through its dictionary
 > line it places base symbols at the frames back from there (R30), every one carrying the strength and the
-> estimate of the connection it came from. A connection to a function neuron places a call (D37), weak, its
+> estimate of the connection it came from. A connection to a call neuron places a call (D37), weak, its
 > parameters bound from what stands at those of their positions that have happened (D44). What its expansion
 > puts at the frame ahead is what it proposes there, and the machine expands no more of it than that (R45): at
 > distance 1 the last thing a pattern places, at distance ten the one ten from its end, and the first only when its
@@ -1850,7 +1856,7 @@ only what happened (R32).
 > neuron standing alone expands to its bidder and to its value at every position of the variable whose bid fired
 > it. A function of the
 > level above that holds a child alone expands to the call with its arguments left to be bound, and one that holds
-> a value neuron beside the child expands to the call with that value. A neighbor that is itself a higher neuron is
+> a value neuron beside the child expands to the call with that value. A neighbor that is itself an interneuron is
 > expanded the same way from where it is placed. Recognition is this substitution run backward: a parameter is fit
 > by `t` standing at every one of its positions, and the level above receives its value neuron for `t`, beside the
 > child of the function that named it (D45). **Two words, never one.** A pattern is **expanded**, downward, into
@@ -2011,7 +2017,7 @@ only what happened (R32).
 
 > **R37 — Exploration.** Explore–exploit is resolved without randomness: **the action alphabet
 > is declared in order**, and **a connection whose estimate turns negative wires the next action in that
-> order** — the first one the neuron holds no connection to at that offset — at strength 1 and neutral estimate
+> order** — the first one the neuron holds no connection to at that offset — at strength 1 and earnings 0
 > (R31). **The walk runs at every level, and its dimensions are the connection's.** A neuron above the base is
 > not an alphabet: it was created when a pattern paid, it has no declared order, and nothing could name the next
 > one. The base actions are the one ordered alphabet there is, so what a negative connection wires is base
