@@ -24,9 +24,9 @@ The environment executes the actions, and reports what ran, what was observed an
 
 ---
 
-# Part I — The structure
+# Part I — Structure
 
-# 1. The objectives
+# 1. Objectives
 
 There are two objectives: **compress what is observed**, and **act on the best reward estimate**. 
 The compression decides what the current situation *is*, and that's provided to the second objective as input. 
@@ -94,9 +94,9 @@ arrives with the next frame (R29).
 
 ---
 
-# 3. The machine
+# 3. Machine
 
-## 3.1 The substrate
+## 3.1 Substrate
 
 > **D1 — Declaration.** The machine declares **channels**, and a channel declares two kinds of dimension.
 >
@@ -303,7 +303,7 @@ the environment does not have, the action the machine inferred there, weak (D40)
 > It infers once, at age 0, and the machine keeps what it inferred (R45); what it does for the rest of its life
 > is connect to what ran, and that is Part IV.
 
-> **D49 — The apex.** The activations of a frame that no accepted bid covers, at every level at once: a base
+> **D49 — Apex.** The activations of a frame that no accepted bid covers, at every level at once: a base
 > neuron no pattern found worth naming stands in it beside a level-4 child. It is the machine's whole state at
 > that frame, and it has four names for the four things it is. It is the **frontier**, looking back: everything
 > underneath it is recovered by expanding it, so it is what the file's body writes. It is the **situation**: what
@@ -365,9 +365,9 @@ assumes for anything the file does not state.
 > is strong, and weak when every one of them is: a situation made entirely of inferred inputs is inferred. A
 > value neuron is as strong as the value it stands for (D45).
 
-## 3.4 The file
+## 3.4 File
 
-> **D12 — The file.** Two parts, both spanning the whole run. **The dictionary**: every neuron's table, its
+> **D12 — File.** Two parts, both spanning the whole run. **The dictionary**: every neuron's table, its
 > functions and variables, one line per pattern (D38). **The body**: every neuron no accepted bid
 > covers (D10) — what each accepted bid fired among them, written as its call: its owner and which of its
 > patterns, what each variable it carried held, and the neighbors it names that did not hold (error correction); and
@@ -490,7 +490,7 @@ machine's output and its events beside them, both weakly, and the report makes s
 seen (D40). What follows any activation is held on its neuron as
 connections (D25), one kind, and an inference is a connection read.
 
-> **D50 — The neighborhood policy.** Declared once for the machine, as the alphabet is (D1). For it a neuron is of
+> **D50 — Neighborhood policy.** Declared once for the machine, as the alphabet is (D1). For it a neuron is of
 > one of three kinds: an **event** or an **action**, a base neuron of that kind of dimension (D1), or an
 > **interneuron**, whatever its body or its values hold (D2). The policy is two tables of booleans,
 > the kind of the holder by the kind of the target, nine entries each:
@@ -504,7 +504,7 @@ connections (D25), one kind, and an inference is a connection read.
 > off removes that kind of target from that kind of holder's neighborhoods or connections, and nothing else:
 > what stands on the apex infers in every setting (D49), and the policy restricts only what it reaches.
 
-> **D51 — The action policy.** Declared once for the machine, as the alphabet and the neighborhood policy are
+> **D51 — Action policy.** Declared once for the machine, as the alphabet and the neighborhood policy are
 > (D1, D50): what an action dimension outputs when every candidate in it carries a negative estimate (R47),
 > **the least bad, or nothing**. The first is for a world that acts whether or not the machine does, where
 > silence hands the frame to the world's own action and the machine learns from that (§3.5); the second is for a
@@ -515,7 +515,7 @@ Nine cases are worked by hand on these definitions, listed in Part VI.
 
 ## 3.6 Rewards
 
-> **D35 — The reward.** An input, not a symbol: a frame carries an array of rewards for actions already
+> **D35 — Reward.** An input, not a symbol: a frame carries an array of rewards for actions already
 > executed, each
 > ```
 > { reward, channels, frames }
@@ -525,13 +525,13 @@ Nine cases are worked by hand on these definitions, listed in Part VI.
 > from the frame it arrives in. Both are optional, and an omitted one means all of them. A reward that names
 > channels reaches connections to base actions of those channels and nothing else (R33).
 
-# 4. The pattern and the cover
+# 4. Pattern and the cover
 
 What this section defines is shared: a neuron reads it over its own history and the machine over a frame.
 
-## 4.1 The pattern
+## 4.1 Pattern
 
-> **D15 — The pattern.** A set of neighbors that a neuron **names**, each at an offset from the activation the pattern
+> **D15 — Pattern.** A set of neighbors that a neuron **names**, each at an offset from the activation the pattern
 > stands on (D26), spanning the same box a neighborhood does (D5) and shaped like one (D7). It is a function or a
 > variable (D38). It is the collapse of the neighborhoods it covers (D27), moves as they move (D29), and promotes a
 > child: a function promotes one, a call neuron (R16), a variable one per value it has held, a value neuron
@@ -556,7 +556,7 @@ accepted bid is a call**: the function's child fires at the bidder's coordinate,
 per variable, carrying what the variable held (§7.4). A variable no function names is bid alone, and fires its
 value neuron.
 
-> **D38 — The two kinds.** A pattern is a function or a variable. A function names neighbors, each a neuron at an
+> **D38 — Two kinds.** A pattern is a function or a variable. A function names neighbors, each a neuron at an
 > offset from the activation the pattern stands on (D26), and variables. A variable names positions, offsets whose
 > neuron is left open, and is a class or a parameter:
 >
@@ -585,33 +585,33 @@ value neuron.
 > no loop. What branches is which pattern fires; what loops is the frame; what a variable held is on the level
 > above, in its value neuron.
 
-## 4.2 The cover
+## 4.2 Cover
 
 A neuron explains each activation's neighborhood with patterns from its table. This section defines that
 explanation: the cover, the owner of each neighbor, and the two readings of that, the coverage and the
 residual. Every price in the design (D13) is counted off them.
 
-> **D17 — The cover.** One per activation: the set of patterns chosen to explain its neighborhood. A pattern
+> **D17 — Cover.** One per activation: the set of patterns chosen to explain its neighborhood. A pattern
 > is a set of neighbors (D15), so it explains a subset of the neighbors of the neighborhood it names.
 
-> **D19 — The owner.** One per neighbor of the activation: the pattern of the cover credited with it. A neighbor no
+> **D19 — Owner.** One per neighbor of the activation: the pattern of the cover credited with it. A neighbor no
 > pattern of the cover names has no owner. Over the activation the owners are a map keyed by its neighbors,
 > `(neuron, offset)`: it has the shape of the neighborhood, what fired, and beside each entry which pattern is paid
 > for it (the owner). A neighbor that stands at a variable's position is owned by the function that names the
 > variable, and by the variable itself where it stands alone.
 
-> **D20 — The coverage.** What one pattern of the cover is credited with: the neighbors it owns (D19), and the
+> **D20 — Coverage.** What one pattern of the cover is credited with: the neighbors it owns (D19), and the
 > activation itself, which every pattern of the cover covers and the first one taken is credited (D28).
 > ```
 > coverage(p, O)   =   the neighbors of O owned by p, and the activation where no pattern was credited it first
 > ```
 
-> **D21 — The residual.** What no pattern of the cover is credited with: the neighbors with no owner (D19).
+> **D21 — Residual.** What no pattern of the cover is credited with: the neighbors with no owner (D19).
 > ```
 > residual(O)   =   the neighbors of O with no owner
 > ```
 
-## 4.3 The saving
+## 4.3 Saving
 
 > **D22 — Saving.** What one pattern saves over one activation: what it is credited with (D20), less what it
 > costs, the fields its occurrence writes (D13). The pattern is a function with the variables it names, or a
@@ -649,12 +649,12 @@ residual. Every price in the design (D13) is counted off them.
 > | the machine, in the election (R22, R24) | this frame's bids   | the board                                | what is credited, and so the file  |
 > | the machine, in the match (R49)       | one inferred pattern  | the frames its line reaches back into    | whether the inference is proposed  |
 
-## 4.4 The greedy cover
+## 4.4 Greedy cover
 
 One procedure appears twice in the design — once inside a neuron, over its own table, and once inside the
 machine, over a frame's bids. It is stated here and cited from both.
 
-> **D28 — The greedy cover.** The operation that covers a set of activations with **claimants**, each a set of
+> **D28 — Greedy cover.** The operation that covers a set of activations with **claimants**, each a set of
 > named neurons read against one of those activations, and credits each covered neuron to exactly one claimant.
 > It repeats:
 >
@@ -680,9 +680,9 @@ tie-break where it runs (D15, R24).
 | neuron - recognition (§6.2) | each function with its variables, then each variable alone, against each activation | the residual of the history (D21) |
 | machine - election (R24)  | bids | the board (§7.2) |
 
-## 4.5 The bid
+## 4.5 Bid
 
-> **D31 — The bid.** What an activation offers the machine from its cover (D17), as the neuron holds it.
+> **D31 — Bid.** What an activation offers the machine from its cover (D17), as the neuron holds it.
 >
 > **A function is bid with the variables it names, as one bid.** It cannot hold where they do not, so the
 > machine takes it or leaves it whole. Functions of one cover that name the same variable depend on one another
@@ -700,11 +700,11 @@ tie-break where it runs (D15, R24).
 > | children   | per function, the id of the child it promotes; none until a bid of it has been accepted (R16) |
 > | values     | per variable, what it held, a parameter's member or a class's combination, and that value's value neuron, none until the machine has created it (D45) |
 
-# 5. The neuron
+# 5. Neuron
 
 What this section defines belongs to one neuron and is read nowhere else.
 
-## 5.1 The interface
+## 5.1 Interface
 
 A neuron is a symbol, and a type (D2). It holds a patterns table, a
 history of past and present observations, and its connections (D25). What it holds is defined in §4, §5.2 and §5.3, and what it does with it in the
@@ -735,15 +735,15 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > pays, merges what became identical, and returns the bids of each cover together with everything it retired
 > (R20).
 
-## 5.2 The patterns table
+## 5.2 Patterns table
 
-> **D32 — The table.** A neuron holds one **patterns table**, **the table** for short: its functions, classes and
+> **D32 — Table.** A neuron holds one **patterns table**, **the table** for short: its functions, classes and
 > parameters (D38), one line per pattern, with each variable's members beside its line and each class's stored
 > combinations beside those. Recognition reads it (D28); adding, retiring and merging write it (R15, R18, D43).
 
-## 5.3 The history
+## 5.3 History
 
-> **D18 — The history.** A neuron's record of its own activations: the last `H` of them, oldest first, each
+> **D18 — History.** A neuron's record of its own activations: the last `H` of them, oldest first, each
 > holding the neighborhood it observed in the frame it fired (D7), each neighbor with what it cost to write,
 > and the activation's own cost beside them, since a cover is credited the activation too (D13, D20). It is the evidence every structural decision
 > the neuron makes is read over, and it holds nothing else: the neuron's connections are not in the history and
@@ -768,7 +768,7 @@ Part V covers selection, where the machine chooses among those inferences one wi
 
 ## 5.4 Variables and children
 
-> **D41 — The class.** A variable that says **one of these stands at each of these places**: one or more
+> **D41 — Class.** A variable that says **one of these stands at each of these places**: one or more
 > positions, offsets from the owner's activation, and a list of neurons, its **members**. At each position one
 > member stands, and not necessarily the same one. Members stand in place of one another: two neurons that stand
 > at a position in one row together are never both members there. Its line is its positions, its members, and
@@ -792,7 +792,7 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > hold members, and leaves when it stops. It is closed on its members and open on how they combine: a neuron that
 > is not a member does not fit, and an arrangement of members never seen before does.
 
-> **D44 — The parameter.** A variable that says **the same one stands at all of these places**: two or more
+> **D44 — Parameter.** A variable that says **the same one stands at all of these places**: two or more
 > positions, offsets from the owner's activation, that hold one and the same neuron, whichever it is. Its line is
 > its positions, and beside them its **members**, the neurons that have stood at all of them within the history,
 > each with its value neuron (D45). The list is a record and not a condition.
@@ -820,7 +820,7 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > in frames to come takes its value from what stands at the first and places it at the second. That is how a
 > value is carried forward in time, and it is the whole of copying.
 
-> **D48 — The call neuron.** A function's child, one per function: the neuron the machine gives a function
+> **D48 — Call neuron.** A function's child, one per function: the neuron the machine gives a function
 > the first time a bid carrying it is accepted (R16), one level above the highest activation that bid covered
 > (D2), shared by every function the machine has wired to it (R43). It fires when a bid carrying the function is
 > accepted, at the bidder's coordinate, once, covering the bidder and what the function names (§7.4), and the
@@ -829,7 +829,7 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > function regardless of its values by a pattern over it alone. It holds a table, a history and connections of
 > its own, and is expanded through the function whose bid fired it (R28).
 
-> **D37 — The call.** An activation of a call neuron (D48), with one value neuron beside it per variable its
+> **D37 — Call.** An activation of a call neuron (D48), with one value neuron beside it per variable its
 > function names (D45). It is made in one of two ways and is the same activation either way. **Recognized**: the
 > election accepts a bid carrying the function, and the call fires at the bidder's coordinate, as strong as what
 > it covers (D40). **Inferred**: an expansion places the call neuron at its completion, the voter's coordinate
@@ -840,7 +840,7 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > inferred call with no value neuron beside a parameter binds it from what stands at those of its positions that
 > have happened and places that at the rest (D44).
 
-> **D45 — The value neuron.** A variable's child, one per value: per parameter and member, and per class and
+> **D45 — Value neuron.** A variable's child, one per value: per parameter and member, and per class and
 > combination, shared by every variable the machine has wired to it (R43). The owner's table records what each
 > one stands for, and that is what it is as a neighbor: **its variable, with its value at each position the
 > variable holds** (D7). The value at a position is the neuron that stood there, followed through value neurons
@@ -860,9 +860,9 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > costs what its variable's choice cost to write, and the whole bid where the variable bid alone (D13), and it
 > expands to its bidder and to its value at the positions of its variable (R28).
 
-## 5.5 The relations and the collapse
+## 5.5 Relations and the collapse
 
-> **D47 — The relation.** Two neighbors of the residual (D21) that bear on one another, or the owner and one such
+> **D47 — Relation.** Two neighbors of the residual (D21) that bear on one another, or the owner and one such
 > neighbor, counted over the history (D18). It is one of four kinds, and each is the evidence for one kind of
 > pattern:
 > ```
@@ -882,7 +882,7 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > together. A position a variable holds is read as that variable and as nothing else. The counts move as rows enter
 > and leave the history and as neighbors are covered; how they are kept is the implementation's.
 
-> **D27 — The collapse.** The operation that grows a seed relation (D47) into a pattern, and re-decides what a
+> **D27 — Collapse.** The operation that grows a seed relation (D47) into a pattern, and re-decides what a
 > pattern names once it exists. The seed sets the pattern's **uses**, the neighborhoods where it holds, and
 > everything it names is decided by its price over those uses (D13), from the uses alone. There is one collapse per
 > kind, and what a neighbor is worth is always what it cost to write (D13), read from the saved neighborhood.
@@ -979,7 +979,7 @@ smoothing or probability estimate enters.
 > with it (D28). It runs the collapse (D27) over the activations the pattern now covers (residual included),
 > and updates the owners (D19) to what the pattern now holds.
 
-## 5.7 The margin
+## 5.7 Margin
 
 > **D30 — Margin.** What a pattern is worth over the history, less its dictionary line (D13). It is priced
 > against what would cover its neighbors without it, never against nothing.
@@ -1001,9 +1001,9 @@ smoothing or probability estimate enters.
 
 A pattern is added only when its margin is strictly positive (R15) and retired only when strictly negative (R18).
 
-## 5.8 The greedy pick
+## 5.8 Greedy pick
 
-> **D33 — The greedy pick.** The operation that builds new patterns out of the residual of the history (D21), in
+> **D33 — Greedy pick.** The operation that builds new patterns out of the residual of the history (D21), in
 > two stages, one candidate at a time. In each, a relation (D47) is the seed and the collapse of its kind grows
 > it (D27).
 >
@@ -1070,11 +1070,11 @@ what stood on the apex in the frames after it, event and action alike.
 >
 > Every neuron holds them, base events and base actions included.
 
-# Part II — The past and present: a neuron
+# Part II — Past and present: a neuron
 
-# 6. The process functions call
+# 6. Process functions call
 
-> **R20 — The call, in order.** Once per level per frame, the machine asks one neuron for everything it owes
+> **R20 — Call, in order.** Once per level per frame, the machine asks one neuron for everything it owes
 > that frame, handing it the count `n` of its neurons (D13) and **every activation of it that fired
 > this frame with a neighborhood that is not empty**,
 > each with its neighborhood, at age 0 (R1), every value neuron in it carrying its variable's values (D7),
@@ -1145,7 +1145,7 @@ collapse of its kind and priced by its margin, the variables first and then the 
 variables rewrite them.
 Each that pays joins the table and the covers it was priced on. Every relation is tried.
 
-> **R14 — The candidate.** A candidate `C` is what one round of the greedy pick builds (D33): the collapse of its
+> **R14 — Candidate.** A candidate `C` is what one round of the greedy pick builds (D33): the collapse of its
 > kind over the neighborhoods whose residual holds the seed relation (D27). Nothing seeds it from outside, and
 > nothing grows it a neighbor at a time. The seed is in every one of those neighborhoods and the relation has a
 > count of at least two (D33), so **nothing is ever built on a single occurrence**, and the collapse takes the seed
@@ -1179,7 +1179,7 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > facility-location problem and is not solvable exactly at any useful size. What it has instead is no free
 > choice anywhere in it.
 
-> **R15 — The add test.** The margin (D30) of a candidate, which is in no cover: it is credited what it adds to
+> **R15 — Add test.** The margin (D30) of a candidate, which is in no cover: it is credited what it adds to
 > each activation's cover (R14), and only in the activations where it pays.
 > ```
 > benefit  =  Σ over the history:  saving(o)                                          R14
@@ -1238,14 +1238,14 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > **It is born holding nothing.** No patterns, no history and no connections (R16). Everything it comes to
 > hold is over the situations its parent's pattern actually took (D25), from its first activation on.
 
-> **R41 — The life of a variable.** **Born** from a variable relation, a class from an offset that varies and a
+> **R41 — Life of a variable.** **Born** from a variable relation, a class from an offset that varies and a
 > parameter from a pair of offsets that agree, when its collapse and its margin pay (D27, D33). **Changed** by
 > its collapse, once per call: a class by its member test and its position test, a parameter by its position
 > test, its members being whatever has stood at all its positions (D27). **Dead** when its margin turns negative
 > (R18), and besides that a class when it is left with one position and one member, which is an ordinary
 > neighbor, and a parameter when fewer than two positions remain: it leaves the table.
 
-> **R44 — The life of a value neuron.** **Given** when an accepted bid first carries the variable with that value,
+> **R44 — Life of a value neuron.** **Given** when an accepted bid first carries the variable with that value,
 > a function's bid or the variable's own: the bid carries the value with no child, as a function new to the board
 > carries none, and the machine creates one (R16) and wires it to the variable's entry for that value (§5.1).
 > **Fired** by the election and by nothing else (§7.4). **Dead** when the last variable wired to it is deleted or
@@ -1282,11 +1282,11 @@ gives it a child, and every value the bid carries that has no value neuron one, 
 and wires them by the wire call (§5.1). A pattern retired is named by its id, and the machine deletes its child
 or its value neurons, if it has any, when they are due (R18).
 
-> **R21 — The bids of a cover.** An activation sends one bid (D31) per function of its cover, with the variables
+> **R21 — Bids of a cover.** An activation sends one bid (D31) per function of its cover, with the variables
 > it names, functions that share a variable together in one; and one per variable standing in the cover alone. A
 > neuron covering nothing sends nothing.
 
-# Part III — The past and present: the machine
+# Part III — Past and present: the machine
 
 # 7. Contraction
 
@@ -1340,7 +1340,7 @@ child and a value neuron holds for that one value.
 > at every level, in one pass**: a pattern at any level may name neighbors in its own frame, in earlier ones,
 > beside it in space, or in a mix.
 
-## 7.2 The election
+## 7.2 Election
 
 > **R22 — What a bid covers, and what it costs.** The neuron sends the bid, its patterns and what each variable
 > held (D31), and nothing else. The machine holds the frame, so it reads that one object against what fired
@@ -1376,7 +1376,7 @@ child and a value neuron holds for that one value.
 accepts or declines one — it never edits a bid, merges two, or invents a third. What it does do is *measure*
 one: a bid arrives as a definition, and everything it is worth this frame the machine works out itself (R22).
 
-> **D24 — The coverage set.** Per level, the machine keeps which accepted bid was credited each covered
+> **D24 — Coverage set.** Per level, the machine keeps which accepted bid was credited each covered
 > activation:
 > ```
 > coverage set    per level    which accepted bid holds each subsumed active activation
@@ -1561,9 +1561,9 @@ settled, so it is recorded in the `connect` call instead (R31).
 > expand them, so that pattern has to stay readable after the table stops covering with it, whether or not the
 > child lives on.
 
-# Part IV — The future: a neuron
+# Part IV — Future: a neuron
 
-# 8. The connect and infer calls
+# 8. Connect and infer calls
 
 Once the last level has run, the machine calls every open activation once more, and what the neuron does with
 that call is the whole of this part. Which call it is depends on the activation's age, and the two never meet on
@@ -1742,7 +1742,7 @@ it.
 > how recent its exposures are — a child's connections are over the one situation its parent's pattern names (R35),
 > and a changed situation is answered by a new child, never by forgetting.
 
-## 8.2 The inference
+## 8.2 Inference
 
 **At age 0, and only then, the machine calls `infer`, and the call returns what the activation infers.** It reads its own neuron's connections
 at every offset, out to its reach, and returns each with its strength and estimate, covered or not. Those are
@@ -1756,7 +1756,7 @@ in, and it is heard only because nothing more specific covers it.
 connect calls and drops its standing inferences (R45), and nothing else — no call marks it and nothing is
 saved twice.
 
-> **R36 — The inference.** One connection read by one activation at age 0: it names a neuron, at whatever level
+> **R36 — Inference.** One connection read by one activation at age 0: it names a neuron, at whatever level
 > it stands (D25), and carries the strength and the estimate the connection held then. An activation reads every
 > connection its neuron holds, at every offset out to its reach, once, in the frame it fires (§8.2), and never
 > again: what the walk wires or a reward moves afterwards is read by the neuron's next activation. The winner of
@@ -1782,7 +1782,7 @@ saved twice.
 > twice, and in a channel with a layout it is a proposal at each of two positions, each resolved where it lands
 > (R47).
 
-# Part V — The future: the machine
+# Part V — Future: the machine
 
 # 9. Selection
 
@@ -1900,9 +1900,9 @@ only what happened (R32).
 > it completes; the whole stands on the apex only in the frame it completes, and what the program earned reaches it through the span a
 > reward names (R33).
 
-## 9.3 The match
+## 9.3 Match
 
-> **R49 — The match.** The machine reads one standing inference (R45) against the frames its line reaches back
+> **R49 — Match.** The machine reads one standing inference (R45) against the frames its line reaches back
 > into, and proposes it where the line would pay there and strikes it where it would not. It runs every frame
 > the inference stands, over the part of the line that has come to lie in the past. Nothing competes in it,
 > nothing is credited and nothing is written: it is the one valuation (D22) read over its third set (§4.3).
@@ -1972,7 +1972,7 @@ only what happened (R32).
 > then hold is whatever was executed. R37's walk is the only thing that wires an action ahead of its running,
 > one at a time and only where the best known has been judged and found wanting.
 
-> **R46 — The electorate.** At frame `f` the voters on the frame ahead, `f + 1` (R35), are the open activations
+> **R46 — Electorate.** At frame `f` the voters on the frame ahead, `f + 1` (R35), are the open activations
 > the machine holds at `f` (D9), less every activation an accepted bid covers (D10), plus every covered
 > activation whose coverer has nothing for `f + 1`, and so on down through the covers to the base (R48). What
 > each voter proposes is what its standing inferences place at `f + 1` (R45): a base action by the inference at
@@ -2063,7 +2063,7 @@ only what happened (R32).
 
 # Part VI — Beyond the specification
 
-# 10. The examples
+# 10. Examples
 
 Nine cases, each worked by hand in a file of its own; each follows the definitions through one small job.
 
