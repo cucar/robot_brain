@@ -28,8 +28,8 @@ The environment executes the actions, and reports what ran, what was observed an
 
 # 1. Objectives
 
-There are two objectives: **compress what is observed**, and **act on the best reward estimate**. 
-The compression decides what the current situation *is*, and that's provided to the second objective as input. 
+There are two objectives: **compress what is observed**, and **act on the best reward estimate**.
+The compression decides what the current situation *is*, and that's provided to the second objective as input.
 
 ## 1.1 Compression: classify the situation
 
@@ -96,39 +96,44 @@ arrives with the next frame (R29).
 
 # 3. World
 
-## 3.1 Declaration
+The world is everything outside the machine. The two meet once per frame. The world reports what it observed,
+what actions ran and what they earned. The machine outputs the actions and the events it infers for the frame
+ahead. The actions run in the world, and the next frame reports what came of them.
 
-> **D1 — Declaration.** The machine declares **channels**, and a channel declares two kinds of dimension.
+## 3.1 Dimensions
+
+> **D1 — Dimensions.** There are two types of dimensions.
 >
-> **Neuron dimensions are structural**: they say what a symbol *is*. Each channel declares at most one **event
-> dimension** and at most one **action dimension**, each with its **resolution**, its bucket count. A base
-> symbol is a dimension–bucket pair, so this declaration *is* the alphabet.
+> A **neuron dimension** says what a symbol is. It is an **event dimension** or an **action dimension**, and is
+> declared with its **resolution**, its bucket count. A base symbol is a dimension–bucket pair. The neuron
+> dimensions together are the alphabet.
 >
-> **Activation dimensions are fleeting**: they say where one instance of a symbol happened. Every channel has
-> **time**; what else it has is the shape of its input — an image channel declares two more, a stream of prices
-> one more. Which kind a dimension is follows from the side of the input it sits on: the input is *laid out
-> over* its activation dimensions and *reports* its neuron dimensions at each point of that layout.
->
-> **Each activation dimension is declared with its radius `R`**, a count of positions, `1` or more: how far a
-> base neuron sees in it (D4), and how every distance in it is rounded (D6). It is the resolution
-> of the layout, as the bucket count is the resolution of what is reported on it, and with `H` it is one of
-> the two things the designer picks (R4): an image whose pixel is to be told from the next declares `R = 1` in
-> `x` and `y`; a stream in which the fourth frame back matters as exactly as the first declares `R = 4` in time.
-> Where this document writes a distance with no radius given, `R = 1`.
+> An **activation dimension** says where one instance of a symbol happened. It is an axis of the world: time
+> or an axis of space. Every world has time. An input arrives with its position in each activation dimension
+> it is laid out over.
 
-> **D3 — Channels and dimensions.** No mechanism mints a channel; what grows is the population
-> inside one, level by level and without bound. The channel set, and with it the dimension set, is a fixed
-> enumerable set over the whole run, which is what lets `(dimension, offset)` name a neighbor at any level.
+For example, a pixel's color could be a neuron dimension, an event dimension of 256 buckets. A motor's
+direction could be another, an action dimension of three buckets: forward, back and stop.
 
-> **R4 — `H` and `R` are the only free parameters.** Two things are the designer's to pick: `H`, the depth of
-> every neuron's history (D18), and `R`, one radius per activation dimension (D1), how far a base neuron sees in
-> it. Nothing else is. The alphabet (D1) states the problem and is not a knob. The reach (D4),
-> adjacency (D5) and the offsets (D6) are derived from `R`, not declared; the `n` every price reads is the
-> machine's count of its neurons (D13). The neighborhood policy (D50) and the action policy (D51) are
-> declarations like the alphabet: each states the kind of world the machine is in, and neither is a knob. **No
-> rule introduces a constant, a threshold, a window or a cap of its own.**
+An image's `x` and `y` are activation dimensions, and so is time. A position in `x` or `y` is the pixel's
+coordinate within the image. A position in time is the frame number, a counter that goes up by one with every
+frame that arrives.
 
-## 3.2 Frame
+## 3.2 Channels
+
+> **D3 — Channels.** A channel is defined by an event dimension, an action dimension, and spatial activation dimensions.
+> Channels must have an event and/or an action dimension, and they own them exclusively.
+> But the same activation dimensions may be shared by multiple channels.
+> Each frame, the channel reports a symbol of each of its neuron dimensions at each position.
+
+For example, a vision channel is laid out over `x`, `y`, and time. A stream of prices could use time alone.
+
+Three color channels of one camera use the same `x` and `y`, so a red pixel and a green pixel could occupy the same
+space in one camera. Two cameras with separate screens name separate axes.
+
+The machine declares its channels once, and the set is fixed over the whole run. A channel cannot be created dynamically.
+
+## 3.3 Frame
 
 Every frame, each event dimension quantizes what was observed (if anything) and each action dimension
 carries the action the environment reports as run in that same frame (if there is one), or, for a dimension
@@ -160,7 +165,7 @@ machine's output and its events beside them, both weakly, and the report makes s
 seen (D40). What follows any activation is held on its neuron as
 connections (D25), one kind, and an inference is a connection read.
 
-## 3.3 Reward
+## 3.4 Reward
 
 > **D35 — Reward.** An input, not a symbol: a frame carries an array of rewards for actions already
 > executed, each
@@ -172,7 +177,7 @@ connections (D25), one kind, and an inference is a connection read.
 > from the frame it arrives in. Both are optional, and an omitted one means all of them. A reward that names
 > channels reaches connections to base actions of those channels and nothing else (R33).
 
-## 3.4 Policies
+## 3.5 Policies
 
 > **D50 — Neighborhood policy.** Declared once for the machine, as the alphabet is (D1). For it a neuron is of
 > one of three kinds: an **event** or an **action**, a base neuron of that kind of dimension (D1), or an
@@ -191,11 +196,25 @@ connections (D25), one kind, and an inference is a connection read.
 > **D51 — Action policy.** Declared once for the machine, as the alphabet and the neighborhood policy are
 > (D1, D50): what an action dimension outputs when every candidate in it carries a negative estimate (R47),
 > **the least bad, or nothing**. The first is for a world that acts whether or not the machine does, where
-> silence hands the frame to the world's own action and the machine learns from that (§3.2); the second is for a
+> silence hands the frame to the world's own action and the machine learns from that (§3.3); the second is for a
 > world in which silence is an action in its own right and costs nothing. The walk is the same under either
 > (R37); the policy decides only what runs once the walk has nothing left to wire in a dimension.
 
 # 4. Machine
+
+> **R4 — `H` and `R` are the only free parameters.** Two things are the designer's to pick: `H`, the depth of
+> every neuron's history (D18), and `R`, one radius per activation dimension (D1), how far a base neuron sees in
+> it. Nothing else is. The alphabet (D1) states the problem and is not a knob. The reach (D4),
+> adjacency (D5) and the offsets (D6) are derived from `R`, not declared; the `n` every price reads is the
+> machine's count of its neurons (D13). The neighborhood policy (D50) and the action policy (D51) are
+> declarations like the alphabet: each states the kind of world the machine is in, and neither is a knob. **No
+> rule introduces a constant, a threshold, a window or a cap of its own.**
+
+The machine gives each activation dimension (D1) a **radius** `R`, a count of positions, `1` or more: how far a
+base neuron sees in it (D4), and how every distance in it is rounded (D6). The radius is the resolution of the
+layout, as the bucket count is the resolution of what is reported on it. For example, an image whose pixel is
+to be told from the next has `R = 1` in `x` and `y`. A stream in which the fourth frame back matters as exactly
+as the first has `R = 4` in time. Where this document writes a distance with no radius given, `R = 1`.
 
 ## 4.1 Neurons
 
@@ -492,7 +511,7 @@ offset, with one activation dimension and a reach of 1:
 > and the level above counts it at that and nothing more (D13).
 >
 > **Both types are in it.** An action the machine executed is a neuron that fired (D8), and it stands in the
-> file exactly as an observed event does, compressed by the same patterns (§3.2).
+> file exactly as an observed event does, compressed by the same patterns (§3.3).
 >
 > **It holds nothing about the future.** A neuron's connections — what followed its activations, event and
 > action alike, and what the actions earned — are in no
@@ -1967,7 +1986,7 @@ only what happened (R32).
 > **Nothing runs where nothing infers.** An action dimension no inference reaches is output nothing: no call
 > runs, nothing fires in it, and the frame carries silence there as an event dimension with nothing to report
 > does. The first action in a dimension is the world's. An action the environment executes on its own is a
-> lesson (§3.2): it stands on the apex of its frame, every uncovered activation connects to it with its reward by
+> lesson (§3.3): it stands on the apex of its frame, every uncovered activation connects to it with its reward by
 > the ordinary path (R31), and from then on it is an action the machine can infer. A neuron is born holding no
 > connection at all — a base neuron at cold start and a freshly
 > minted pattern alike say nothing about the next action until something has run under them, and what they
