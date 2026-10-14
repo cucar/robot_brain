@@ -584,7 +584,7 @@ What this section defines belongs to one neuron and is read nowhere else.
 ## 5.1 Interface
 
 A neuron is a symbol, and a type (D2). It holds a patterns table, a
-history of past and present observations, and its connections (D25). What it holds is defined in §5.2 through §5.7 and §5.12, and what it does with it in the
+history of past and present observations, and its connections (D25). What it holds is defined in §5.2 through §5.7 and §5.13, and what it does with it in the
 sections after.
 
 **The machine reaches a neuron through six calls, and nothing else writes into one.** Each is specified where
@@ -612,7 +612,24 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > pays, merges what became identical, and returns the bids of each cover together with everything it retired
 > (R20).
 
-## 5.2 Table and patterns
+## 5.2 History
+
+> **D18 — History.** A neuron's record of its own activations: the last `H` of them, oldest first, each
+> holding the neighborhood it observed in the frame it fired (D7), each neighbor with what it cost to write,
+> and the activation's own cost beside them, since a cover is credited the activation too (D13, D20). It is the evidence every structural decision
+> the neuron makes is read over, and it holds nothing else: the neuron's connections are not in the history and
+> `H` does not bound them (R31).
+>
+> **`H` is declared once for the machine and is the same for every neuron.** It counts that neuron's **own
+> activations**, not a stretch of run, so a neuron that fires constantly and one that fires rarely weigh their
+> patterns against the same amount of evidence. **The ring is exactly `H` deep once filled.** A neuron may fire many
+> times in one frame and not at all in the next (D8), so how many frames its `H` activations span is whatever its
+> rate makes it, from part of one frame to a long stretch of the run. Nothing else anywhere is measured in frames.
+>
+> **Every activation the call hands it is recorded, covered or not** (R20). An arriving activation evicts the oldest,
+> and only then.
+
+## 5.3 Patterns
 
 > **D32 — Table.** A neuron holds one **patterns table**, **the table** for short: its functions, classes and
 > parameters (D38), one line per pattern, with each variable's members beside its line and each class's stored
@@ -724,23 +741,6 @@ value neuron.
 > in frames to come takes its value from what stands at the first and places it at the second. That is how a
 > value is carried forward in time, and it is the whole of copying.
 
-## 5.3 History
-
-> **D18 — History.** A neuron's record of its own activations: the last `H` of them, oldest first, each
-> holding the neighborhood it observed in the frame it fired (D7), each neighbor with what it cost to write,
-> and the activation's own cost beside them, since a cover is credited the activation too (D13, D20). It is the evidence every structural decision
-> the neuron makes is read over, and it holds nothing else: the neuron's connections are not in the history and
-> `H` does not bound them (R31).
->
-> **`H` is declared once for the machine and is the same for every neuron.** It counts that neuron's **own
-> activations**, not a stretch of run, so a neuron that fires constantly and one that fires rarely weigh their
-> patterns against the same amount of evidence. **The ring is exactly `H` deep once filled.** A neuron may fire many
-> times in one frame and not at all in the next (D8), so how many frames its `H` activations span is whatever its
-> rate makes it, from part of one frame to a long stretch of the run. Nothing else anywhere is measured in frames.
->
-> **Every activation the call hands it is recorded, covered or not** (R20). An arriving activation evicts the oldest,
-> and only then.
-
 ## 5.4 Cover
 
 What this section defines is shared: a neuron reads it over its own history and the machine over a frame.
@@ -769,9 +769,9 @@ residual. Every price in the design (D13) is counted off them.
 > residual(O)   =   the neighbors of O with no owner
 > ```
 
-## 5.5 Saving
+## 5.5 Savings
 
-> **D22 — Saving.** What one pattern saves over one activation: what it is credited with (D20), less what it
+> **D22 — Savings.** What one pattern saves over one activation: what it is credited with (D20), less what it
 > costs, the fields its occurrence writes (D13). The pattern is a function with the variables it names, or a
 > variable alone.
 > ```
@@ -780,7 +780,7 @@ residual. Every price in the design (D13) is counted off them.
 >                 +  which member, per parameter                        what each variable it carries held
 >                 +  which combination, per class
 >                 +  failed · log₂ |p|                                  which of the things it names did not hold
-> saving(p, O)    =  coverage(p, O)  −  price(p, O)
+> savings(p, O)    =  coverage(p, O)  −  price(p, O)
 > ```
 > `|p|` is the count of what the bid names: a function's neighbors and the positions of the variables it carries,
 > or a lone variable's positions.
@@ -858,7 +858,7 @@ tie-break where it runs (D15, R24).
 > | children   | per function, the id of the child it promotes; none until a bid of it has been accepted (R16) |
 > | values     | per variable, what it held, a parameter's member or a class's combination, and that value's value neuron, none until the machine has created it (D45) |
 
-## 5.8 Relations and the collapse
+## 5.8 Relations
 
 > **D47 — Relation.** Two neighbors of the residual (D21) that bear on one another, or the owner and one such
 > neighbor, counted over the history (D18). It is one of four kinds, and each is the evidence for one kind of
@@ -879,6 +879,8 @@ tie-break where it runs (D15, R24).
 > thing being a neuron at an offset or a variable holding there (D33): a variable beside a neighbor, two variables
 > together. A position a variable holds is read as that variable and as nothing else. The counts move as rows enter
 > and leave the history and as neighbors are covered; how they are kept is the implementation's.
+
+## 5.9 Collapse
 
 > **D27 — Collapse.** The operation that grows a seed relation (D47) into a pattern, and re-decides what a
 > pattern names once it exists. The seed sets the pattern's **uses**, the neighborhoods where it holds, and
@@ -957,7 +959,7 @@ tie-break where it runs (D15, R24).
 
 The collapse is the only operation that decides what a pattern names. It runs in two places:
 
-- **Re-centering** (§5.9, D29) collapses the neighborhoods of the activations an existing pattern covers, at every
+- **Re-centering** (§5.10, D29) collapses the neighborhoods of the activations an existing pattern covers, at every
   call, for every kind.
 - **Creating** (§6.4, D33) collapses a seed relation into a pattern. A candidate is in no cover, so every owned
   neighbor is skipped and it is built on the residual alone.
@@ -970,14 +972,14 @@ or a silence, so the outermost offset is decided over the same `s` as offset 0, 
 skipped there. Each pattern's collapse has its own `s`; nothing is pooled across patterns, and no threshold,
 smoothing or probability estimate enters.
 
-## 5.9 Re-centering
+## 5.10 Re-centering
 
 > **D29 — Re-centering.** The operation that re-decides what a pattern names (D15) once the activations
 > it covers have changed: the oldest evicted when the history is full (D18), or a new one admitted and covered
 > with it (D28). It runs the collapse (D27) over the activations the pattern now covers (residual included),
 > and updates the owners (D19) to what the pattern now holds.
 
-## 5.10 Margin
+## 5.11 Margin
 
 > **D30 — Margin.** What a pattern is worth over the history, less its dictionary line (D13). It is priced
 > against what would cover its neighbors without it, never against nothing.
@@ -999,7 +1001,7 @@ smoothing or probability estimate enters.
 
 A pattern is added only when its margin is strictly positive (R15) and retired only when strictly negative (R18).
 
-## 5.11 Greedy pick
+## 5.12 Greedy pick
 
 > **D33 — Greedy pick.** The operation that builds new patterns out of the residual of the history (D21), in
 > two stages, one candidate at a time. In each, a relation (D47) is the seed and the collapse of its kind grows
@@ -1007,7 +1009,7 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 >
 > 1. **Variables.** Of the two variable relations, the offsets that vary and the pairs of offsets that agree
 >    (D47), the one that would save most as it stands is taken first. What a relation would save as it stands
->    is the seed taken as if it were the whole pattern: D22's saving of it, what it covers less what it writes,
+>    is the seed taken as if it were the whole pattern: D22's savings of it, what it covers less what it writes,
 >    summed over the rows that hold it. Ties go to the higher count, then to the older neuron, declaration order
 >    at the base and creation order above it, then to the nearer offset. The collapse of its type grows it into a class or a
 >    parameter, its own tests run on the seed's members and positions before anything else (D27), and it is
@@ -1041,7 +1043,7 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 >
 > Nothing else is merged.
 
-## 5.12 Connections
+## 5.13 Connections
 
 What follows an activation is never in the file (D12) and enters no test. It is held only here, as connections:
 what stood on the apex in the frames after it, event and action alike.
@@ -1164,7 +1166,7 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 >
 > **What `C` is worth.** Against an activation, `C` is worth what it adds to the cover that stands there (D30):
 > ```
-> saving(o)  =  what o's cover saves with C in it  −  what it saves as it stands           D22
+> savings(o)  =  what o's cover saves with C in it  −  what it saves as it stands           D22
 >               and 0 where that is negative           C joins a cover only where it pays (D28)
 > ```
 > With `C` in the cover, `C` owns the residual neighbors it names, and the variables it names stop bidding alone.
@@ -1182,10 +1184,10 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > **R15 — Add test.** The margin (D30) of a candidate, which is in no cover: it is credited what it adds to
 > each activation's cover (R14), and only in the activations where it pays.
 > ```
-> benefit  =  Σ over the history:  saving(o)                                          R14
+> benefit  =  Σ over the history:  savings(o)                                          R14
 > commit iff  benefit > C's entry in the table                                                             D13
 > ```
-> **An accepted candidate joins the cover of every activation where its saving is positive**, as the owner of
+> **An accepted candidate joins the cover of every activation where its savings are positive**, as the owner of
 > the residual it names there (D19), so its margin at birth is what the test counted.
 >
 > **An accepted add shortens the file**, against the table it was priced on.
@@ -1351,7 +1353,7 @@ child and a value neuron holds for that one value.
 > price     the fields its call writes (D13): what its bidder cost, which pattern per function it carries,
 >           what each variable held, and which of the neurons it names in those same frames did not fire
 > ```
-> `coverage − price` is the saving over stating what it covers flat, D22's expression over the machine's population.
+> `coverage − price` is the savings over stating what it covers flat, D22's expression over the machine's population.
 >
 > **A neuron that fired and the bid does not name belongs to neither side.** It stands in the file as itself if
 > nothing covers it (D23), and the same way if this child is promoted, since the child does not name it — its own
