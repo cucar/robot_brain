@@ -131,38 +131,23 @@ frame reports what was observed and what ran, and a symbol has happened when the
 
 ## 2.4 Reward
 
-> **D35 — Reward.** An input, not a symbol: a frame carries an array of rewards for actions already
-> executed, each
+> **D35 — Reward.** A frame carries an array of rewards for actions already executed, each
 > ```
 > { reward, channels, frames }
 > ```
-> `reward` is signed: strictly greater than zero is good, strictly less is bad, and zero is neither.
-> `channels` is the set of action channels it pays and `frames` the span of frames it pays over, counted back
-> from the frame it arrives in. Both are optional, and an omitted one means all of them. A reward that names
-> channels reaches connections to base actions of those channels and nothing else (R33).
+> `reward` is a signed number. `channels` is the set of action channels it pays. `frames` is the span of
+> frames it pays over, counted back from the frame it arrives in. Both are optional, and an omitted one means
+> all of them.
 
-## 2.5 Policies
+A reward is an input, not a symbol: nothing fires for it and no pattern names it. Zero is neutral, a positive
+reward is good and a negative one is bad. The numbers are the world's to choose. The only condition is that
+they are consistent with one another, a larger reward always meaning a better outcome, since the machine only
+ever compares them.
 
-> **D50 — Neighborhood policy.** Declared once for the machine, as the alphabet is (D1). For it a neuron is of
-> one of three kinds: an **event** or an **action**, a base neuron of that kind of dimension (D1), or an
-> **interneuron**, whatever its body or its values hold (D2). The policy is two tables of booleans,
-> the kind of the holder by the kind of the target, nine entries each:
->
-> | Table  | An entry on says                                                          | And so decides            |
-> |--------|---------------------------------------------------------------------------|---------------------------|
-> | past   | a target of that kind may stand in a holder of that kind's neighborhood (D5) | what patterns are built from |
-> | future | a holder of that kind may hold a connection to a target of that kind (D25)   | what inference reads      |
->
-> With every entry on, anything may be a neighbor of anything and anything may connect to anything. An entry
-> off removes that kind of target from that kind of holder's neighborhoods or connections, and nothing else:
-> what stands on the apex infers in every setting (D49), and the policy restricts only what it reaches.
-
-> **D51 — Action policy.** Declared once for the machine, as the alphabet and the neighborhood policy are
-> (D1, D50): what an action dimension outputs when every candidate in it carries a negative estimate (R47),
-> **the least bad, or nothing**. The first is for a world that acts whether or not the machine does, where
-> silence hands the frame to the world's own action and the machine learns from that (R35); the second is for a
-> world in which silence is an action in its own right and costs nothing. The walk is the same under either
-> (R37); the policy decides only what runs once the walk has nothing left to wire in a dimension.
+A reward is **scoped** when it names channels, a span, or both, and **unscoped** when it names neither. When the
+world knows what it is paying for, it scopes the reward. Example: a stock channel, and the frames a position was
+held. When the world does not know, the reward pays every action channel over the longest span any neuron is
+active for. A scoped reward reaches only the base actions of the channels it names.
 
 # 3. Machine
 
@@ -391,6 +376,20 @@ read.
 
 Events and actions are compressed in the same patterns: above the base a pattern may name what was seen and
 what was done together.
+
+> **D50 — Neighborhood policy.** Declared once for the machine, as the alphabet is (D1). For it a neuron is of
+> one of three kinds: an **event** or an **action**, a base neuron of that kind of dimension (D1), or an
+> **interneuron**, whatever its body or its values hold (D2). The policy is two tables of booleans,
+> the kind of the holder by the kind of the target, nine entries each:
+>
+> | Table  | An entry on says                                                          | And so decides            |
+> |--------|---------------------------------------------------------------------------|---------------------------|
+> | past   | a target of that kind may stand in a holder of that kind's neighborhood (D5) | what patterns are built from |
+> | future | a holder of that kind may hold a connection to a target of that kind (D25)   | what inference reads      |
+>
+> With every entry on, anything may be a neighbor of anything and anything may connect to anything. An entry
+> off removes that kind of target from that kind of holder's neighborhoods or connections, and nothing else:
+> what stands on the apex infers in every setting (D49), and the policy restricts only what it reaches.
 
 > **D26 — Neighbor.** **A neighbor is a neuron at an offset**: the neuron of an adjacent activation (D5), at its
 > offset (D6). At temporal offset 0 a neighbor co-occurs and at negative offsets it led here; **both are the same
@@ -2005,6 +2004,13 @@ only what happened (R32).
 > **Each dimension is resolved on its own**: a plan that loses its action dimension still counts for the events it
 > placed, and one that wins is not favored for them, so what an event dimension outputs is what the most voters placed, whichever
 > inference placed it, and an inference that places events alone is resolved like any other.
+
+> **D51 — Action policy.** Declared once for the machine, as the alphabet and the neighborhood policy are
+> (D1, D50): what an action dimension outputs when every candidate in it carries a negative estimate (R47),
+> **the least bad, or nothing**. The first is for a world that acts whether or not the machine does, where
+> silence hands the frame to the world's own action and the machine learns from that (R35); the second is for a
+> world in which silence is an action in its own right and costs nothing. The walk is the same under either
+> (R37); the policy decides only what runs once the walk has nothing left to wire in a dimension.
 
 > **R48 — Speaking falls through the cover.** A covered neuron supplies nothing while its coverer speaks (D10).
 > Where the coverer has no inference for the frame ahead, what it covers speaks in its place, and what they cover
