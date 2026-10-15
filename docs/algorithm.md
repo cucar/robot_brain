@@ -156,9 +156,11 @@ population of **neurons**, each a processor with a memory of its own, running th
 IV when called. The neurons are the base symbols the world declares and the interneurons the machine builds
 above them, and the machine reaches each by its id. A neuron fires as an **activation**, at a frame and a
 position. The machine's memory holds what spans the neurons: the open activations, the activations no pattern
-covers, which form the **apex**, its state at a frame, the coverage set, and the standing inferences. What the
-machine holds is priced as a **file**, the dictionary of every neuron's patterns and the body the apex writes,
-and shortening that file is the first objective.
+covers, which form the **apex**, its state at a frame, the coverage set, and the standing inferences. Each
+frame is one wave through the neurons: it rises through the frame as recognition, runs forward into the frame
+ahead as inference, and comes down to the base as expansion, where one winner per dimension is output. What
+the machine holds is priced as a **file**, the dictionary of every neuron's patterns and the body the apex
+writes, and shortening that file is the first objective.
 
 ## 3.1 Neurons
 
@@ -175,8 +177,8 @@ and shortening that file is the first objective.
 > history (D18) and connections (D25). Neuron ids are handed out in sequence, the base neurons first and every
 > interneuron as it is created, so a smaller id is an older neuron.
 
-A smaller id being an older neuron is what every tie on age reads. Neuron dimensions belong to the base
-alphabet and to nothing above it: an interneuron is not an event or an action, and its body or its values may
+Older neurons have smaller ids. That's how ties are broken. Neuron dimensions belong to the base
+alphabet and to nothing above it. An interneuron is not an event or an action, and its body or its values may
 hold either kind. How far it sees is its reach, read off its patterns' lines as they stand (D4). Other
 functions may come to share a child (R43), and its parents may be of either kind.
 
@@ -435,11 +437,10 @@ offset, with one activation dimension and a reach of 1:
 > that frame, and it has four names for the four things it is. It is the **frontier**, looking back: everything
 > underneath it is recovered by expanding it, so it is what the file's body writes. It is the **situation**: what
 > every neuron sees as its neighborhood (D5), what connects to what ran, and what votes. It is the
-> **wavefront**: the front of the frame's waves (R26), which run up through the frame for as long as bids are
-> accepted and then, from where they stop, forward into the frame to come, each activation of it reading its own
-> connections ahead, which it can do only because it is also the frontier, the neighborhood every neuron was
-> built on. And it is the apex, the top of the hierarchy as it stands. The four are one set, and coverage takes a
-> neuron out of it in every role at once.
+> **wavefront** of recognition: where the frame's waves stopped rising (R26), and from where the wave runs
+> forward, each activation of it reading its own connections ahead, which it can do only because it is also
+> the frontier, the neighborhood every neuron was built on. And it is the apex, the top of the hierarchy as it
+> stands. The four are one set, and coverage takes a neuron out of it in every role at once.
 
 > **D10 — Inhibition.** Coverage does three things to an activation, all from the frame it is covered in. It
 > leaves the file: the body writes its coverer's call, not it. It is not heard: resolution reads its coverer's
