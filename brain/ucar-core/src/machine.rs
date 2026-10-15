@@ -290,6 +290,7 @@ impl Machine {
         self.timings[2] += t.elapsed().as_secs_f64() * 1000.0;
         // delete children due (R38)
         let t = std::time::Instant::now();
+        self.refresh_spans();
         self.reap();
         self.timings[3] += t.elapsed().as_secs_f64() * 1000.0;
 
@@ -458,15 +459,7 @@ impl Machine {
     }
 
     fn update_span(&mut self, child: NeuronId) {
-        let parents = self.neurons[child as usize].parents.clone();
-        let mut span = [0i32; MAX_DIMS];
-        for (owner, pid) in parents {
-            if !self.neurons[owner as usize].alive { continue; }
-            for (n, off) in self.neurons[owner as usize].pattern_things(pid) {
-                let inner = n.map(|x| self.neurons[x as usize].span).unwrap_or([0; MAX_DIMS]);
-                for d in 0..MAX_DIMS { span[d] = span[d].max(off[d].abs() + inner[d]); }
-            }
-        }
+        let span = self.span_by_descent(child, &mut Vec::new());
         self.neurons[child as usize].span = span;
         let rt = span[0] + self.radii[0];
         if rt > self.max_reach_t { self.max_reach_t = rt; }
@@ -544,11 +537,15 @@ impl Machine {
                 let child = match bid.children[fi] {
                     Some(c) if self.neurons[c as usize].alive => c,
                     _ => {
-                        let reuse = shared.iter().find(|(k, _)| *k == key).map(|(_, c)| *c);
+                        let reuse = shared.iter().find(|(k, _)| *k == key).map(|(_, c)| *c)
+                            .or_else(|| self.find_reusable(bid));
                         let c = match reuse {
                             Some(c) => c,
                             None => { minted += 1; self.mint(child_level, axes, None) }
                         };
+                        if reuse.is_some() && std::env::var("UCAR_MINT").map_or(false, |v| v.parse::<i64>().map_or(true, |from| fno >= from)) {
+                            eprintln!("  [reuse f{}] #{} for owner #{} p{} covering {:?}", fno, c, bid.owner, fid, covered.iter().map(|r| { let a = self.act(*r).unwrap(); format!("#{}@{}", a.neuron, r.frame) }).collect::<Vec<_>>());
+                        }
                         if std::env::var("UCAR_MINT").map_or(false, |v| v.parse::<i64>().map_or(true, |from| fno >= from)) {
                             let body = self.neurons[bid.owner as usize].pattern(fid).map(|p| format!("{:?}", p.body)).unwrap_or_default();
                             eprintln!("  [mint f{}] #{} L{} for owner #{} (L{}) p{} {} covering {:?}", fno, c, child_level, bid.owner, self.neurons[bid.owner as usize].level, fid, body, covered.iter().map(|r| { let a = self.act(*r).unwrap(); format!("#{}@{}", a.neuron, r.frame) }).collect::<Vec<_>>());
@@ -629,7 +626,12 @@ impl Machine {
             if c as usize >= self.neurons.len() { continue; }
             let n = &mut self.neurons[c as usize];
             n.parents.retain(|(o, p)| !(*o == owner && *p == r.pattern));
-            if n.parents.is_empty() && n.alive && !self.ledger.contains(&c) { self.ledger.push(c); }
+            if n.parents.is_empty() && n.alive && !self.ledger.contains(&c) {
+                if std::env::var("UCAR_MINT").map_or(false, |v| v.parse::<i64>().map_or(true, |from| self.frame_no >= from)) {
+                    eprintln!("  [orphan f{}] #{} after owner #{} retired p{}", self.frame_no, c, owner, r.pattern);
+                }
+                self.ledger.push(c);
+            }
         }
     }
 
@@ -649,6 +651,9 @@ impl Machine {
     }
 
     fn delete_neuron(&mut self, c: NeuronId) {
+        if std::env::var("UCAR_MINT").map_or(false, |v| v.parse::<i64>().map_or(true, |from| self.frame_no >= from)) {
+            eprintln!("  [death f{}] #{} parents={:?} table={}", self.frame_no, c, self.neurons[c as usize].parents, self.neurons[c as usize].table.len());
+        }
         self.neurons[c as usize].alive = false;
         self.alive -= 1;
         let own: Vec<PatternId> = self.neurons[c as usize].table.iter().map(|p| p.id).collect();
@@ -778,7 +783,7 @@ impl Machine {
         if t.kind == Kind::Action { dims.push(t.dim.unwrap()); }
         else if t.kind == Kind::Inter {
             let mut placed = Vec::new();
-            self.expand(target, [0; MAX_DIMS], 0, &mut placed, None);
+            self.expand(target, [0; MAX_DIMS], &mut Vec::new(), &mut placed, None);
             for (n, _) in placed {
                 let nn = &self.neurons[n as usize];
                 if nn.kind == Kind::Action { if let Some(d) = nn.dim { if !dims.contains(&d) { dims.push(d); } } }
@@ -811,48 +816,138 @@ impl Machine {
 
     // ───────────────────────────── expansion (R28) ─────────────────────────────
 
-    /// Expand a neuron placed at a relative coordinate to base symbols at their relative coordinates.
-    fn expand(&self, n: NeuronId, at: Pos, depth: u32, out: &mut Vec<(NeuronId, Pos)>, fired_by: Option<&FiredBy>) {
-        if depth > 12 || out.len() > 4096 { return; }
+    /// Expand a neuron placed at a relative coordinate to base symbols at their relative coordinates (R28).
+    /// `path` is the descent so far: the wave coming down passes through a neuron once, and a neuron met
+    /// again on its own descent, as happens once a chain has closed on itself, is placed as its bidder's
+    /// symbol at that coordinate and not expanded further.
+    fn expand(&self, n: NeuronId, at: Pos, path: &mut Vec<NeuronId>, out: &mut Vec<(NeuronId, Pos)>, fired_by: Option<&FiredBy>) {
+        if path.len() > 64 || out.len() > 4096 { return; }
         let nn = &self.neurons[n as usize];
         if !nn.alive { return; }
         if nn.kind != Kind::Inter { out.push((n, at)); return; }
         let Some(&(owner, pid)) = fired_by.map(|f| (f.owner, f.pattern)).as_ref().or(nn.parents.first()) else { return };
         let on = &self.neurons[owner as usize];
         let Some(p) = on.pattern(pid) else { return };
+        let again = path.contains(&n);
+        path.push(n);
         // the bidder at the neuron's own coordinate
-        self.expand(owner, at, depth + 1, out, None);
-        let add = |o: &Offset| { let mut p = at; for d in 0..MAX_DIMS { p[d] += o[d]; } p };
-        match &p.body {
-            Body::Function { neighbors, variables, .. } => {
-                for (m, o) in neighbors { self.expand(*m, add(o), depth + 1, out, None); }
-                for vid in variables {
-                    let value = fired_by.and_then(|f| f.values.iter().find(|(v, _)| v == vid).map(|(_, val)| val.clone()));
-                    self.expand_variable(on, *vid, value.as_deref(), at, depth, out);
+        self.expand(owner, at, path, out, None);
+        if !again {
+            let add = |o: &Offset| { let mut p = at; for d in 0..MAX_DIMS { p[d] += o[d]; } p };
+            match &p.body {
+                Body::Function { neighbors, variables, .. } => {
+                    for (m, o) in neighbors { self.expand(*m, add(o), path, out, None); }
+                    for vid in variables {
+                        let value = fired_by.and_then(|f| f.values.iter().find(|(v, _)| v == vid).map(|(_, val)| val.clone()));
+                        self.expand_variable(on, *vid, value.as_deref(), at, path, out);
+                    }
+                }
+                Body::Class { .. } | Body::Parameter { .. } => {
+                    let value = nn.value.clone().or_else(|| fired_by.and_then(|f| f.values.first().map(|(_, v)| v.clone())));
+                    self.expand_variable(on, pid, value.as_deref(), at, path, out);
                 }
             }
-            Body::Class { .. } | Body::Parameter { .. } => {
-                let value = nn.value.clone().or_else(|| fired_by.and_then(|f| f.values.first().map(|(_, v)| v.clone())));
-                self.expand_variable(on, pid, value.as_deref(), at, depth, out);
-            }
         }
+        path.pop();
     }
 
-    fn expand_variable(&self, owner: &Neuron, vid: PatternId, value: Option<&[NeuronId]>, at: Pos, depth: u32, out: &mut Vec<(NeuronId, Pos)>) {
+    fn expand_variable(&self, owner: &Neuron, vid: PatternId, value: Option<&[NeuronId]>, at: Pos, path: &mut Vec<NeuronId>, out: &mut Vec<(NeuronId, Pos)>) {
         let Some(vp) = owner.pattern(vid) else { return };
         let add = |o: &Offset| { let mut p = at; for d in 0..MAX_DIMS { p[d] += o[d]; } p };
         match &vp.body {
             Body::Class { positions, members, .. } => {
                 for (k, o) in positions.iter().enumerate() {
                     let m = value.and_then(|v| v.get(k).copied()).or_else(|| members.first().copied());
-                    if let Some(m) = m { self.expand(m, add(o), depth + 1, out, None); }
+                    if let Some(m) = m { self.expand(m, add(o), path, out, None); }
                 }
             }
             Body::Parameter { positions, members, .. } => {
                 let m = value.and_then(|v| v.first().copied()).or_else(|| members.first().copied());
-                if let Some(m) = m { for o in positions { self.expand(m, add(o), depth + 1, out, None); } }
+                if let Some(m) = m { for o in positions { self.expand(m, add(o), path, out, None); } }
             }
             Body::Function { .. } => {}
+        }
+    }
+
+    // ───────────────────────────── windows and global reuse (R28, R43) ─────────────────────────────
+
+    /// What an activation stands for, placed relative to `origin` and read within `horizon`: its neuron
+    /// expanded with the values it fired with, cut at the horizon on every axis.
+    fn window_of_act(&self, r: ActRef, origin: Pos, horizon: Pos, out: &mut Vec<(NeuronId, Pos)>) {
+        let Some(a) = self.act(r) else { return };
+        let mut at = [0i32; MAX_DIMS];
+        for d in 0..MAX_DIMS { at[d] = a.pos[d] - origin[d]; }
+        let mut raw = Vec::new();
+        self.expand(a.neuron, at, &mut Vec::new(), &mut raw, a.fired_by.as_ref());
+        out.extend(raw.into_iter().filter(|(_, p)| (0..MAX_DIMS).all(|d| p[d].abs() <= horizon[d])));
+    }
+
+    /// The window a function bid's child would stand for: the bidder and everything the bid names, read
+    /// within the owner's reach.
+    fn window_of_bid(&self, bid: &Bid, horizon: Pos) -> Vec<(NeuronId, Pos)> {
+        let Some(b) = self.act(bid.bidder) else { return vec![] };
+        let origin = b.pos;
+        let mut out = Vec::new();
+        self.window_of_act(bid.bidder, origin, horizon, &mut out);
+        for &j in &bid.named { self.window_of_act(bid.neighbors[j].act, origin, horizon, &mut out); }
+        for v in &bid.variables { for &j in &v.owned { self.window_of_act(bid.neighbors[j].act, origin, horizon, &mut out); } }
+        out.sort(); out.dedup();
+        out
+    }
+
+    /// The window a neuron stands for, by its own definition, read within `horizon`.
+    fn window_of_neuron(&self, n: NeuronId, horizon: Pos) -> Vec<(NeuronId, Pos)> {
+        let mut raw = Vec::new();
+        self.expand(n, [0; MAX_DIMS], &mut Vec::new(), &mut raw, None);
+        let mut out: Vec<(NeuronId, Pos)> = raw.into_iter().filter(|(_, p)| (0..MAX_DIMS).all(|d| p[d].abs() <= horizon[d])).collect();
+        out.sort(); out.dedup();
+        out
+    }
+
+    /// Global reuse: the living call neuron that stands, within the owner's reach, for exactly what this
+    /// bid's child would stand for, if any. Matching is by what the neurons expand to, not by which
+    /// lines state it, so a chain that comes round to a window it has stood for before fires the neuron
+    /// it minted then instead of a new one.
+    fn find_reusable(&self, bid: &Bid) -> Option<NeuronId> {
+        if std::env::var("UCAR_NO_REUSE").is_ok() { return None; }
+        let horizon = self.reach_of(bid.owner);
+        let w = self.window_of_bid(bid, horizon);
+        if w.is_empty() { return None; }
+        self.neurons.iter()
+            .filter(|n| n.alive && n.kind == Kind::Inter && n.value.is_none() && !n.parents.is_empty())
+            .find(|n| self.window_of_neuron(n.id, horizon) == w)
+            .map(|n| n.id)
+    }
+
+    /// A neuron's span by descent (D4): the farthest base symbol under it, where a neuron met again on its
+    /// own descent counts as its bidder's symbol and no further, so a chain closed on itself spans one turn.
+    fn span_by_descent(&self, n: NeuronId, path: &mut Vec<NeuronId>) -> Pos {
+        let nn = &self.neurons[n as usize];
+        let mut span = [0i32; MAX_DIMS];
+        if nn.kind != Kind::Inter || !nn.alive || path.contains(&n) || path.len() > 64 { return span; }
+        path.push(n);
+        for &(owner, pid) in &nn.parents {
+            if !self.neurons[owner as usize].alive { continue; }
+            let os = self.span_by_descent(owner, path);
+            for d in 0..MAX_DIMS { span[d] = span[d].max(os[d]); }
+            for (m, off) in self.neurons[owner as usize].pattern_things(pid) {
+                let inner = m.map(|x| self.span_by_descent(x, path)).unwrap_or([0; MAX_DIMS]);
+                for d in 0..MAX_DIMS { span[d] = span[d].max(off[d].abs() + inner[d]); }
+            }
+        }
+        path.pop();
+        span
+    }
+
+    /// Recompute every living interneuron's span by descent (D4). Spans move only when lines move, so
+    /// this runs once per frame after the waves.
+    fn refresh_spans(&mut self) {
+        let ids: Vec<NeuronId> = self.neurons.iter().filter(|n| n.alive && n.kind == Kind::Inter).map(|n| n.id).collect();
+        for id in ids {
+            let span = self.span_by_descent(id, &mut Vec::new());
+            self.neurons[id as usize].span = span;
+            let rt = span[0] + self.radii[0];
+            if rt > self.max_reach_t { self.max_reach_t = rt; }
         }
     }
 
@@ -869,7 +964,7 @@ impl Machine {
             // a cheap bound: nothing placed can reach ahead if the completion is far behind it
             if (at[0] as i64) + self.neurons[inf.target as usize].span[0] as i64 + 1 < ahead { continue; }
             let mut placed = Vec::new();
-            self.expand(inf.target, at, 0, &mut placed, None);
+            self.expand(inf.target, at, &mut Vec::new(), &mut placed, None);
             for (n, p) in placed {
                 if p[0] as i64 != ahead { continue; }
                 let nn = &self.neurons[n as usize];

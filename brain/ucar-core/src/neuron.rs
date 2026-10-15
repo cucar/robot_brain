@@ -645,29 +645,23 @@ impl Neuron {
         }
     }
 
-    /// The variable of the table that holds a neighbor's position and admits it, if any (D27).
-    fn variable_holding(&self, nb: &Neighbor) -> Option<&Pattern> {
-        self.table.iter().find(|p| match &p.body {
-            Body::Class { positions, members, .. } => positions.contains(&nb.offset) && members.contains(&nb.neuron),
-            Body::Parameter { positions, .. } => positions.contains(&nb.offset),
-            _ => false,
-        })
-    }
-
     /// Things a row offers a function being collapsed: residual neighbors, what the pattern itself owns,
     /// and the variables standing in the row as things (D27, D33). A neighbor at a position a variable
     /// holds is read as that variable and never as the neuron standing there.
     fn row_things(&self, row: &Row, own: Option<PatternId>) -> Vec<(Thing, f64)> {
         let mut out: Vec<(Thing, f64)> = Vec::new();
         let mut seen: FxHashSet<Thing> = FxHashSet::default();
+        // a position a variable holds in this row is that variable's (D27, D19): the variable owns the
+        // neighbor there, alone or carried by the function being collapsed
+        let own_entry = own.and_then(|o| row.cover.iter().find(|e| e.pattern == o));
         for (j, nb) in row.neighbors.iter().enumerate() {
             let free = row.owner[j].is_none() || row.owner[j] == own;
             if !free { continue; }
-            if let Some(v) = self.variable_holding(nb) {
-                let t = Thing::Variable(v.id);
-                if seen.insert(t) {
-                    let choice = match &v.body { Body::Class { members, .. } => log2(members.len() as f64), Body::Parameter { members, .. } => log2(members.len().max(1) as f64), _ => 0.0 };
-                    out.push((t, nb.cost - choice));
+            let held = own_entry.and_then(|e| e.vars.iter().find(|v| v.owned.contains(&j)).map(|v| v.pattern));
+            if let Some(vid) = held {
+                if let Some(v) = self.pattern(vid) {
+                    let t = Thing::Variable(vid);
+                    if seen.insert(t) { out.push((t, nb.cost - self.var_choice(v))); }
                 }
                 continue;
             }
@@ -1025,7 +1019,6 @@ impl Neuron {
                 for j in 0..row.neighbors.len() {
                     if !self.claimable_by_variable(row, j) { continue; }
                     let nb = &row.neighbors[j];
-                    if self.variable_holding(nb).is_some() { continue; }
                     let e = at.entry(nb.offset).or_default().entry(nb.neuron).or_insert((0, 0.0, Vec::new()));
                     e.0 += 1; e.1 += nb.cost; e.2.push(r);
                 }
