@@ -164,48 +164,42 @@ writes, and shortening that file is the first objective.
 
 ## 3.1 Neurons
 
-> **D2 — Neuron.** A neuron is a symbol, and a type: its activations are its instances (D8). It is a base
-> neuron or an interneuron.
->
-> | Neuron      | Identity               | What it is                                                                                  |
-> |-------------|------------------------|---------------------------------------------------------------------------------------------|
-> | base neuron | an id, mapped from a base symbol `(dimension, bucket)` | a symbol of the alphabet: an event or an action of one dimension of one channel (D1, D3) |
-> | interneuron | an id                  | a pattern's child: a call neuron (D48) or a value neuron (D45); no dimension and no channel |
->
-> Every neuron is identified by its id. At declaration the machine maps each base symbol of the alphabet (D1)
-> to a base neuron, in declaration order, and keeps the map. Every neuron holds a patterns table (D32), a
-> history (D18) and connections (D25). Neuron ids are handed out in sequence, the base neurons first and every
-> interneuron as it is created, so a smaller id is an older neuron.
+> **D2 — Neuron.** A neuron is a symbol, and a type: its activations are its instances (D8). It is identified
+> by its id. Ids are handed out in sequence, so a smaller id is an older neuron. It is a processor with a
+> memory of its own, and that memory holds a patterns table (D32), a history (D18) and connections (D25). It
+> is a base neuron (D52) or an interneuron (D53).
 
-Older neurons have smaller ids. That's how ties are broken. Neuron dimensions belong to the base
-alphabet and to nothing above it. An interneuron is not an event or an action, and its body or its values may
-hold either kind. How far it sees is its reach, read off its patterns' lines as they stand (D4). Other
-functions may come to share a child (R43), and its parents may be of either kind.
+Older neurons have smaller ids. That's how ties are broken.
 
-A child's activation inherits the parent activation's coordinate, the frame and the position in every
-activation dimension, and never an average over what it covers.
+> **D11 — Identity.** A neuron's identity is its type alone, a base symbol or an interneuron's id (D2), so
+> nothing about where it occurred is part of it. **The same shape at two positions is two activations of one neuron**,
+> and they pool: both carry the same relative neighborhood, so the same patterns cover them and one pattern
+> serves both. A shape learned anywhere is learned everywhere, and the dictionary holds it once.
 
-**Three objects:**
+## 3.2 Base neurons
 
-| Object     | Description                                                                                                                          | References    |
-|------------|--------------------------------------------------------------------------------------------------------------------------------------|---------------|
-| neuron     | A symbol, and a type. A base neuron is in one dimension of one channel, an interneuron in none. Holds a patterns table, a history, and connections. | D32, D18, D25 |
-| pattern    | A function or a variable: one line of one neuron's table, over past and present neighbors, and the neuron it promotes. Lives in its parent. | D15, D38      |
-| activation | One occurrence of a neuron, at a frame and a position. Holds the neighborhood it observed, and the cover chosen for it.              | D7, D17       |
+> **D52 — Base neuron.** A symbol of the alphabet: an event or an action of one dimension of one channel (D1,
+> D3). At declaration the machine maps each base symbol `(dimension, bucket)` to a base neuron, in declaration
+> order, and keeps the map. The base neurons are the first neurons the machine holds.
+
+Neuron dimensions belong to the base alphabet and to nothing above it.
+
+## 3.3 Interneurons
+
+> **D53 — Interneuron.** A pattern's child: a call neuron (D48) or a value neuron (D45). The machine creates it
+> the first time a bid carrying its pattern is accepted (R16). It has an id and no dimension and no channel.
+> Its activation inherits the coordinate of the activation whose bid fired it: the frame, and the position in
+> every activation dimension.
+
+An interneuron is not an event or an action, though what it stands for may be either. A child may have
+several parents, since several patterns may come to share it (R43), and they may be of either kind. Its
+activation's coordinate is inherited and never an average over what it covers.
 
 **A pattern is a pointer to a child, and a child is a neuron.** The two are made apart. A neuron adds a
 **pattern**, a line in its own table that may enter a cover at once, and bids it with no child. The first
 time a bid of that pattern is accepted the machine gives it a **child**, a neuron (D2): one it mints, or
 one another pattern already has for the same activations (R16, R43). **Lines stay with the neuron, and neurons belong
 to the machine.**
-
-What fires is an activation; what the election takes is a bid;
-what the dictionary writes is a pattern.
-
-> **D11 — Identity.** A neuron's identity is its type alone, a base symbol or an interneuron's id (D2), so
-> nothing about where it occurred is part of it. **The same shape at two positions is two activations of one neuron**,
-> and they pool: both carry the same relative neighborhood, so the same patterns cover them and one pattern
-> serves both. A shape learned anywhere is learned everywhere, and the dictionary holds it once.
 
 > **D48 — Call neuron.** A function's child, one per function: the neuron the machine gives a function
 > the first time a bid carrying it is accepted (R16), shared by every function the machine has wired to it
@@ -215,17 +209,6 @@ what the dictionary writes is a pattern.
 > connections are one set for every value those variables have taken, so a neuron above learns about the
 > function regardless of its values by a pattern over it alone. It holds a table, a history and connections of
 > its own, and is expanded through the function whose bid fired it (R28).
-
-> **D37 — Call.** An activation of a call neuron (D48), with one value neuron beside it per variable its
-> function names (D45). It is made in one of two ways and is the same activation either way. **Recognized**: the
-> election accepts a bid carrying the function, and the call fires at the bidder's coordinate, as strong as what
-> it covers (D40). **Inferred**: an expansion places the call neuron at its completion, the voter's coordinate
-> plus the connection's offset in time and in every other activation dimension (R28, R36), and the call fires
-> weakly there, for the report to make strong what it placed (R30). A call carries nothing of its own: what it is
-> stands in the dictionary line, and what its variables held stands in the value neurons beside it. Expanding it
-> recovers its arguments, a parameter's member at every one of its positions and a class's combination; an
-> inferred call with no value neuron beside a parameter binds it from what stands at those of its positions that
-> have happened and places that at the rest (D44).
 
 > **D45 — Value neuron.** A variable's child, one per value: per parameter and member, and per class and
 > combination, shared by every variable the machine has wired to it (R43). The owner's table records what each
@@ -246,7 +229,7 @@ what the dictionary writes is a pattern.
 > costs what its variable's choice cost to write, and the whole bid where the variable bid alone (D13), and it
 > expands to its bidder and to its value at the positions of its variable (R28).
 
-## 3.2 Activations
+## 3.4 Activations
 
 > **D8 — Activation.** A neuron is activated (fires) only when something happens: an event neuron when its event
 > is observed, or an action neuron when its action runs.
@@ -309,13 +292,24 @@ assumes for anything the file does not state.
 > is strong, and weak when every one of them is: a situation made entirely of inferred inputs is inferred. A
 > value neuron is as strong as the value it stands for (D45).
 
+> **D37 — Call.** An activation of a call neuron (D48), with one value neuron beside it per variable its
+> function names (D45). It is made in one of two ways and is the same activation either way. **Recognized**: the
+> election accepts a bid carrying the function, and the call fires at the bidder's coordinate, as strong as what
+> it covers (D40). **Inferred**: an expansion places the call neuron at its completion, the voter's coordinate
+> plus the connection's offset in time and in every other activation dimension (R28, R36), and the call fires
+> weakly there, for the report to make strong what it placed (R30). A call carries nothing of its own: what it is
+> stands in the dictionary line, and what its variables held stands in the value neurons beside it. Expanding it
+> recovers its arguments, a parameter's member at every one of its positions and a class's combination; an
+> inferred call with no value neuron beside a parameter binds it from what stands at those of its positions that
+> have happened and places that at the rest (D44).
+
 **A pattern is matched or inferred, and both kinds of member take part in both.** Matched, a pattern says that
 its events stood and its actions ran. Inferred, it is expanded (R28): its actions are placed as the machine's
 output and its events beside them, both weakly, and the report makes strong what ran and what was seen. What
 follows any activation is held on its neuron as connections (D25), one kind, and an inference is a connection
 read.
 
-## 3.3 Space
+## 3.5 Space
 
 > **D4 — Reach.** The farthest a neuron sees, in each activation dimension (D1): its span plus the radius `R`
 > of that dimension, in positions.
@@ -430,7 +424,7 @@ offset, with one activation dimension and a reach of 1:
                    whole at age 0 — covered, priced, added and retired here
 ```
 
-## 3.4 Apex
+## 3.6 Apex
 
 > **D49 — Apex.** The activations of a frame that no accepted bid covers, at every height at once: a base
 > neuron no pattern found worth naming stands in it beside a child many patterns deep. It is the machine's whole state at
@@ -467,7 +461,7 @@ offset, with one activation dimension and a reach of 1:
 > activation still writes nothing and connects to nothing; only its coverer learns what ran. That is the whole
 > of inhibition in the design.
 
-## 3.5 File
+## 3.7 File
 
 > **D12 — File.** Two parts, both spanning the whole run. **The dictionary**: every neuron's table, its
 > functions and variables, one line per pattern (D38). **The body**: every neuron no accepted bid
@@ -562,7 +556,7 @@ offset, with one activation dimension and a reach of 1:
 > place at its price (R22), and a neuron's margin does the same over its own history (D30). Nothing computes
 > `L`: every quantity the design uses is a **difference**, which is finite however long the run is.
 
-## 3.6 Parameters
+## 3.8 Parameters
 
 > **R4 — `H` and `R` are the only free parameters.** Two things are the designer's to pick: `H`, the depth of
 > every neuron's history (D18), and `R`, one radius per activation dimension (D1), how far a base neuron sees in
