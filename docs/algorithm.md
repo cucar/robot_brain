@@ -151,19 +151,14 @@ active for. A scoped reward reaches only the base actions of the channels it nam
 
 # 3. Machine
 
-> **R4 — `H` and `R` are the only free parameters.** Two things are the designer's to pick: `H`, the depth of
-> every neuron's history (D18), and `R`, one radius per activation dimension (D1), how far a base neuron sees in
-> it. Nothing else is. The alphabet (D1) states the problem and is not a knob. The reach (D4),
-> adjacency (D5) and the offsets (D6) are derived from `R`, not declared; the `n` every price reads is the
-> machine's count of its neurons (D13). The neighborhood policy (D50) and the action policy (D51) are
-> declarations like the alphabet: each states the kind of world the machine is in, and neither is a knob. **No
-> rule introduces a constant, a threshold, a window or a cap of its own.**
-
-The machine gives each activation dimension (D1) a **radius** `R`, a count of positions, `1` or more: how far a
-base neuron sees in it (D4), and how every distance in it is rounded (D6). The radius is the resolution of the
-layout, as the bucket count is the resolution of what is reported on it. For example, an image whose pixel is
-to be told from the next has `R = 1` in `x` and `y`. A stream in which the fourth frame back matters as exactly
-as the first has `R = 4` in time. Where this document writes a distance with no radius given, `R = 1`.
+The machine is a processor with its own memory, running the procedure of Parts III and V once per frame, and a
+population of **neurons**, each a processor with a memory of its own, running the procedure of Parts II and
+IV when called. The neurons are the base symbols the world declares and the interneurons the machine builds
+above them, and the machine reaches each by its id. A neuron fires as an **activation**, at a frame and a
+position. The machine's memory holds what spans the neurons: the open activations, the activations no pattern
+covers, which form the **apex**, its state at a frame, the coverage set, and the standing inferences. What the
+machine holds is priced as a **file**, the dictionary of every neuron's patterns and the body the apex writes,
+and shortening that file is the first objective.
 
 ## 3.1 Neurons
 
@@ -567,6 +562,22 @@ offset, with one activation dimension and a reach of 1:
 > counting it twice. The election takes activations off the frontier at their cost and puts a call in their
 > place at its price (R22), and a neuron's margin does the same over its own history (D30). Nothing computes
 > `L`: every quantity the design uses is a **difference**, which is finite however long the run is.
+
+## 3.6 Parameters
+
+> **R4 — `H` and `R` are the only free parameters.** Two things are the designer's to pick: `H`, the depth of
+> every neuron's history (D18), and `R`, one radius per activation dimension (D1), how far a base neuron sees in
+> it. Nothing else is. The alphabet (D1) states the problem and is not a knob. The reach (D4),
+> adjacency (D5) and the offsets (D6) are derived from `R`, not declared; the `n` every price reads is the
+> machine's count of its neurons (D13). The neighborhood policy (D50) and the action policy (D51) are
+> declarations like the alphabet: each states the kind of world the machine is in, and neither is a knob. **No
+> rule introduces a constant, a threshold, a window or a cap of its own.**
+
+The machine gives each activation dimension (D1) a **radius** `R`, a count of positions, `1` or more: how far a
+base neuron sees in it (D4), and how every distance in it is rounded (D6). The radius is the resolution of the
+layout, as the bucket count is the resolution of what is reported on it. For example, an image whose pixel is
+to be told from the next has `R = 1` in `x` and `y`. A stream in which the fourth frame back matters as exactly
+as the first has `R = 4` in time. Where this document writes a distance with no radius given, `R = 1`.
 
 # 4. Neuron
 
