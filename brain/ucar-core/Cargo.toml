@@ -1,0 +1,8 @@
+[package]
+name = "ucar-core"
+version = "0.1.0"
+edition = "2021"
+description = "UCAR — Universal Compression with Actions and Rewards: the machine of docs/algorithm.md"
+
+[dependencies]
+rustc-hash = "2"

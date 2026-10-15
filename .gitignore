@@ -6,3 +6,4 @@ target
 backups/
 apps/mnist/*.log
 *.node
+brain/ucar-napi/ucar-napi.node

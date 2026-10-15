@@ -507,6 +507,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ucar-core"
+version = "0.1.0"
+dependencies = [
+ "rustc-hash",
+]
+
+[[package]]
+name = "ucar-napi"
+version = "0.1.0"
+dependencies = [
+ "napi",
+ "napi-build",
+ "napi-derive",
+ "ucar-core",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
