@@ -2,7 +2,8 @@
 
 A worked case for [algorithm.md](algorithm.md): how `x, y, x, y`, `a, b, a, b` and `m, n, m, n` are seen by a
 neuron that keeps seeing a different pair in the same places, and what it comes to hold for them. Two things, in
-one table: a general form, two parameters and one function, learned from the pairs that go by once or twice; and
+one table: a general form, one parameter and one function naming it twice, learned from the pairs that go by
+once or twice; and
 a memorized pair, named by a class, for each pair that comes often. Nothing here is normative. It follows the
 letters' own tables first, then one neuron's table through the greedy pick, the collapse of its residual, the
 price and the election.
@@ -26,8 +27,8 @@ both be written at `−2` (D6), and nothing could say that one back and three ba
 The letters are called in the same level as `p` and before it in the stream, and what they build decides what
 `p` sees, since a neighbor is whatever stands uncovered on the frontier (D5).
 
-**A pair that comes often is named outright.** `y` keeps seeing `x` one back, so its table holds a function naming `x`
-at `−1`, with whatever else recurs around it (D47, D27), and its child, `xy`, fires at `y`'s frame covering both
+**A pair that comes often is named outright.** `y` keeps seeing `x` one back, so its table holds a function
+naming `y` and `x` at `−1` from it, with whatever else recurs around them (D47, D27), and its child, `xy`, fires at `y`'s frame covering both
 letters. The second `x` of the alternation then sees `xy` one back, not `y`, and comes to name it in turn; the
 second `y` sees that child, and names it. So a frequent alternation is covered whole, a letter at a time, into
 one neuron, `xyxy`, standing at the frame of the last `y`, as a word is ([algorithm-text.md](algorithm-text.md)).
@@ -46,43 +47,46 @@ Every activation of `p` records what stood within four frames (D7): for an alter
 neuron at
 `−1`; for a bare one, four letters. The greedy pick builds variables first (D33), and the bare rows are where it
 finds them. In every one of them, whatever the pair, one back and three back hold one neuron, and so do two back
-and four back. A pair of offsets that agree is a relation a variable is seeded on (D47), and each is grown by its
-own collapse and kept on its own uses (D27). Positions that hold one and the same neuron are a parameter (D44):
+and four back. Two offsets that hold one neuron is a relation a variable is seeded on (D47), and it is keyed on
+the offset between them, so the two pairs are one relation at distance 2, holding twice in every bare row. Its
+collapse grows it into a parameter (D44):
 
 ```
-P:  (−1, −3)        Q:  (−2, −4)
+P:  two positions, the second 2 before the first
 ```
 
-`P` says that one back and three back hold the same letter, and `Q` the same for two and four back (D38). Each
-writes two letters as one member, and its members are the letters that have stood at both its offsets, a record
-of what has passed and no condition on what may; neither keeps a list of the pairs. They form as soon as two bare
-alternations have come round, the same pair or two different ones.
+`P` says that two frames two apart hold the same letter (D38). It writes two letters as one member, and its
+members are the letters that have stood two apart, a record of what has passed and no condition on what may; it
+keeps no list of the pairs. It names no owner, so it holds anywhere in a window where two frames two apart
+agree (D15). It forms as soon as two bare alternations have come round, the same pair or two different ones.
 
-# 4. The function over them
+# 4. The function over it
 
-Then the pick builds functions, over the rows as the variables have rewritten them. `P` and `Q` hold together in
-every bare row, which is a relation between two variables, and the collapse grows it into a function (D27):
+Then the pick builds functions, over the rows as the variable has rewritten them. In every bare row `p` stands
+with `P` holding one back and `P` holding again two back, which are relations between things (D47), and the
+collapse grows them into one function (D27):
 
 | Question | Answer |
 |---|---|
-| Is anything left for the function to name as a neighbor? | No. `P` and `Q` hold all four offsets, and a position a variable holds is that variable's (D27). |
-| Which variables hold in those rows? | `P`, over one and three back; `Q`, over two and four back. |
-| So what does the function name? | The two parameters, and nothing else. |
+| Is anything left for the function to name as a neighbor? | No. `P` holds all four offsets, and a coordinate a variable holds is that variable's (D27). |
+| What holds in those rows? | `p` itself, and `P` twice: its first position one back, and again two back. |
+| So what does the function name? | `p`, and `P` at `−1` and at `−2` from it, and nothing else. |
 
 ```
-alternation:  P, Q
+alternation:  p at 0, P at −1, P at −2
 ```
 
-The function fixes no letter. It says that `P` and `Q` held together, which is the alternation, whatever the
-pair was.
+The function fixes no letter. It says that `P` held twice, interleaved, before `p`, which is the alternation,
+whatever the pair was. It names `p`, so it holds at `p` alone and covers it (D38).
 
 # 5. The recurring pairs
 
 The three pairs that recur are not written by `alternation`. By the time `p` fires they are one neuron each,
-`xyxy`, `abab` or `mnmn`, standing one back (§2), and the letters under them are covered (D5). One offset where
-different neurons stand is what a class is seeded on (D47), so `p`'s table holds a class at `−1` whose members
-are the alternations that have recurred there (D41), and a value neuron for each, `p:xyxy` (D45). A class is
-closed on its members: a child that has not stood there before is a failed neighbor until it has recurred (D27).
+`xyxy`, `abab` or `mnmn`, standing one back (§2), and the letters under them are covered (D5). An offset from
+`p` where different neurons stand is what a class is seeded on (D47), so `p`'s table holds a class whose members
+are the alternations that have recurred one back, a function naming `p` and the class at `−1` from it (D41), and
+a value neuron for each member, `p:xyxy`, which fires where the alternation stood (D45). A class is closed on
+its members: a child that has not stood there before is a failed neighbor until it has recurred (D27).
 
 So the two forms stand in one table and never meet in one row. What comes often is memorized as children by its
 own letters and named here by the class; what comes rarely is described by the general form. A pair that becomes
@@ -92,33 +96,35 @@ simply stop holding four letters and start holding one neuron.
 # 6. The price
 
 Say the base alphabet has thirty-two symbols, so a letter costs 5 bits to write, and say `p` cost 5 as well.
-`P` and `Q` each hold eight letters as members, so which member costs 3; and `p` holds four patterns, `P`, `Q`,
-`alternation` and the class, so which of them costs 2 (D13).
+`P` holds sixteen letters as members, every letter that has stood two apart, so which member costs 4; and `p`
+holds four patterns, `P`, `alternation`, the class and the function over it, so which of them costs 2 (D13).
 
 | written as | bits |
 |---|---|
 | a pair, flat: `p` and four letters, each at what it cost | 5 × 5 = 25 |
-| by `P` alone, the other two letters flat: `p`, which pattern, one member, two letters | 5 + 2 + 3 + 5 + 5 = 20 |
-| by `alternation`: `p`, which pattern, and two members | 5 + 2 + 3 + 3 = 13 |
+| by `P` alone, once: two letters covered, `p` and the other two flat | covers 10 for `p`'s name, which pattern and one member, 11 |
+| by `alternation`: `p`, which pattern, and two members | 5 + 2 + 4 + 4 = 15 |
 
-A second parameter bidding alone would write `p` and which pattern again, 10 bits, for two letters that cost 10,
-so it does not pay (D28). Without the function a pair costs 20 bits, and `alternation` saves 7 on every one
-(D30). Its line is two references, which pattern each, 4 bits, so it pays at its first occurrence. A parameter's
-line is an offset per position and a neuron per member, and naming a neuron in a line is a choice among every
-neuron the machine holds: at `R = 4` and a reach of 4 an offset in time is one of five, zero and the four exact
-distances, about 2.3 bits (D6), so with two hundred and fifty-six neurons the line is `2 · 2.3 + 8 · 8 ≈ 69`
-bits, paid once. A letter new to `P` is its value the first time it passes, since agreeing at both offsets is
-the whole test (D27), and is a member from then on.
+`P` alone never pays here: it names no owner, so it covers the two letters and not `p`, and a call pays its
+owner's name whether or not it covers the bidder (D13). It stands in the table on the margin `alternation`
+gives it (D30). Without the function a pair costs 25 bits, and `alternation` writes it in 15, saving 10 on every
+one. Its line is `p`, and `P` twice, which pattern and an offset each: at `R = 4` and a reach of 4 an offset in
+time is one of five, zero and the four exact distances, about 2.3 bits (D6), so about 11 bits, paid once, and
+it pays at its second occurrence. A parameter's line is an offset per position but the first and a neuron per
+member, and naming a neuron in a line is a choice among every neuron the machine holds, so with two hundred and
+fifty-six neurons `P`'s line is `2.3 + 16 · 8 ≈ 130` bits, paid once. A letter new to `P` is its value the first
+time it passes, since agreeing at both positions is the whole test (D27), and is a member from then on.
 
 What the call fires stands on the frontier at what it cost to write: `alternation` at 7 bits, the owner and
-which pattern, and `P:t` and `Q:s` at 3 bits each. Whatever covers them later saves that and no more (D13).
+which pattern, at `p`'s frame, and `P:t` one frame back and `P:s` two back at 4 bits each. Whatever covers them
+later saves that and no more (D13).
 
 # 7. The return and the election
 
 `p` sends `alternation` whenever it is in a cover, as one bid with `P` and `Q` and the letter each held (D31).
 Nothing has a neuron yet. The first time the bid is accepted the machine gives the function a child,
-`alternation`, and each parameter a value neuron for the letter it passed, `P:t` and `Q:s`, one level above
-`p`, holding nothing (R16, R44).
+`alternation`, and `P` a value neuron for each letter it passed, `P:t` and `P:s`, one level above `p`, holding
+nothing (R16, R44).
 
 # 8. One occurrence
 
@@ -126,19 +132,21 @@ Nothing has a neuron yet. The first time the bid is accepted the machine gives t
 
 | Stage | what happens |
 |---|---|
-| `process functions`, in `p` | `P` holds `t` at one and three back and `Q` holds `s` at two and four, so `alternation` holds. `p` sends one bid: the function, with `P = t` and `Q = s`. |
-| the election | The bid covers `p` and the four letters, 25 bits, for a price of 13, and is accepted. |
-| activate children | One level up, at `p`'s coordinate: `alternation`, `P:t` and `Q:s` (§7.4). |
+| `process functions`, in `p` | `P` holds `t` at one and three back and `s` at two and four, so `alternation` holds. `p` sends one bid: the function, with `P = t` at `−1` and `P = s` at `−2`. |
+| the election | The bid covers `p` and the four letters, 25 bits, for a price of 15, and is accepted. |
+| activate children | One level up: `alternation` at `p`'s coordinate, `P:t` one frame back and `P:s` two back (§7.4). |
 
-The level above reads three neurons at one coordinate: which function ran, and what it was given. Nothing about
-`s` or `t` had to be learned first: each joined its parameter in this row, and only their value neurons are new.
+The level above reads three neurons across three frames: which function ran, and what it was given, each where
+it stood. Nothing about `s` or `t` had to be learned first: each joined the parameter in this row, and only
+their value neurons are new.
 
-`s, t, u, t, p` does not fit fully: `P` holds `t` at both its offsets, but `Q` holds `s` at two back and `u` at
-four back. `Q`'s value is the nearer, `s`, and four back is a failed neighbor (D44, D22).
+`s, t, u, t, p` does not fit fully: `P` at `−1` holds `t` at both its positions, but `P` at `−2` holds `s` at
+two back and `u` at four back. Its value there is the letter at its first position, `s`, and four back is a
+failed neighbor (D44, D22).
 
 `x, y, x, y, p` arrives and `p` sees `xyxy` one back and nothing else (§2). `alternation` does not hold, since
-nothing stands at its parameters' positions; the class holds, `p` sends it alone, and its value neuron
-`p:xyxy` fires one level up.
+nothing stands at `P`'s positions; the function over the class holds, `p` sends it, its child fires at `p`'s
+frame and the value neuron `p:xyxy` fires one frame back, where the alternation stood.
 
 # 9. What the one child buys
 
@@ -159,8 +167,8 @@ What recurs is named, and the general form is learned from what does not
 | in the code | in the machine |
 |---|---|
 | three copies of one block with different names in them | `x, y, x, y`, `a, b, a, b` and `m, n, m, n` in the stream |
-| noticing they are one block with two names that vary | four offsets that agree in pairs: the two parameter relations |
-| the parameters | `P` and `Q`, in `p`'s table |
-| the extracted function | `alternation`, a function that names `P` and `Q`, held once in `p`'s table |
-| a call with its arguments | `alternation` firing, with `P:t` and `Q:s` beside it |
+| noticing they are one block with two names that vary | two frames two apart that agree, twice over: the parameter relation |
+| the parameters | `P`, in `p`'s table, named twice |
+| the extracted function | `alternation`, a function that names `p` and `P` twice, held once in `p`'s table |
+| a call with its arguments | `alternation` firing, with `P:t` and `P:s` behind it |
 | keeping the hot path inlined | `xyxy`, one neuron for a frequent pair, and `p`'s class over such neurons |

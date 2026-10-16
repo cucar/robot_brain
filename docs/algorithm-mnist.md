@@ -36,12 +36,15 @@ scoped to the digit channel reaches exactly those (R33).
 
 | What stands | its reach | what it sees, and what forms |
 |---|---|---|
-| a pixel | 1 | An inked pixel sees the inked pixels at `±1` in `x` and `y`. The relations are the owner with one neighbor and two neighbors standing together (D47); the functions are pairs and corners, a child each. |
+| a pixel | 1 | An inked pixel sees the inked pixels at `±1` in `x` and `y`. The relation is two things standing together, the pixel itself one of them or not (D47); the functions are pairs and corners, a child each, and a pair is one pattern wherever in a pixel's window it stands (D15). |
 | a pair or a corner | 2 along what it spans, 1 across | A child sees the frontier within its reach: other children, and the pixels the base left uncovered. Strokes form, and a stroke of three pixels forms as a pair child beside the pixel it did not cover (D5). |
 | a stroke, a part | what it spans, plus one (D4) | Strokes join into parts of digits, and parts into a digit's whole shape, each a level above the highest thing it covers (D2). |
 
-Variables form where the shapes vary. An offset where different children have stood, the end of a stroke that
-curves either way, is a class (D41); the same patch at two offsets, a symmetric digit, is a parameter (D44).
+Variables form where the shapes vary. An offset from a stroke where different children have stood, the end of
+a stroke that curves either way, is a class, named there by the stroke's function (D41); the same patch at two
+offsets, a symmetric digit, is a parameter (D44). A shape is written in the offsets between its own parts
+(D15), so a stroke learned at one place in the image is the same pattern at any other, in the table of every
+pixel whose window it has crossed, and the election gives it one child wherever two of them bid it (R43).
 Time offsets recur in nothing, since the images are unrelated, so no pattern comes to name one: a part of the
 previous image is a neighbor like any other, and it never pays.
 

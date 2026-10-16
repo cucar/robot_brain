@@ -43,13 +43,16 @@ the action is strengthened and takes the reward in one write (R29, R31).
 
 | What stands | its reach | what forms |
 |---|---|---|
-| a bar's move | 1 | A move sees the move before. The owner with its one neighbor is the relation (D47); recurring pairs of moves get a function and a child. |
+| a bar's move | 1 | A move sees the move before. The move and the one before it are two things standing together, the relation (D47); recurring pairs of moves get a function naming both and a child. |
 | a pair of bars | 2 | A pair child sees the frontier two bars back: other children and the bars nothing covered. A run of three bars forms as a pair beside the bar it left out (D5). |
 | a longer shape | what it spans, plus one (D4) | Longer shapes, and shapes across instruments: a child in one channel standing beside a child in another at offset zero. |
 
-Variables form where the shapes vary. An offset where moves of different size have stood is a class, "a fall of
-any size here" (D41); the same bucket at two offsets, a move that repeats, is a parameter (D44). Since no pattern
-names an action, the dictionary describes the market and nothing the machine did.
+Variables form where the shapes vary. An offset from a bar where moves of different size have stood is a class,
+"a fall of any size here", named there by a function (D41); the same bucket at two offsets, a move that
+repeats, is a parameter (D44). A pattern is written in offsets between its own bars (D15), so a run of moves
+seen three bars back and the same run seen ten bars back are one pattern, and a bar that fires every frame sees
+each stretch of the market once however many frames it stays in view (D27). Since no pattern names an action,
+the dictionary describes the market and nothing the machine did.
 
 # 3. Taking a position
 

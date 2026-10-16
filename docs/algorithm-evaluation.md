@@ -245,13 +245,17 @@ it, so the reaches summed up the stack bound a condition rather than counting ou
 
 **Patterns and variables (D37–D47) — what stands between the model and an implementation.** A pattern above the
 base names events and actions together (D5), and there is one kind of connection (D25). A pattern is of one of
-two kinds, a function or a variable (D38). A variable is a set of positions and a set of members, of one of two
-types that mean opposite things: a class says one of its members stands at each position, and a parameter says
-one and the same neuron stands at all of them. A function is the neighbors it names and the variables of its
-table that it names: classes are its local variables and parameters its arguments. Every level is explained as
-a set of function calls with their arguments: an accepted bid is a call, a function's child with one value
-neuron per variable beside it, or a lone variable's value neuron, all at the bidder's coordinate (§7.1, D45).
-Every bid covers its bidder (D31), and every symbol is counted at what it cost to write (D13). Base actions take
+two kinds, a function or a variable (D38). A variable is one set, of one of two types that mean opposite
+things: a class is a set of members, one of which stands where a function names it, and a parameter is a set of
+positions, offsets from its first, at all of which one and the same neuron stands. A function is the things it
+names, each at an offset from the others: neighbors, variables of its table, and the owner's activation where it
+names it; classes are its local variables and parameters its arguments. A pattern is written in its own frame of
+reference (D15), so one that names the owner holds at the owner and one that does not holds wherever its things
+stand in the window. Every level is explained as a set of function calls with their arguments: an accepted bid
+is a call, a function's child at the coordinate of its reference with one value neuron per variable where each
+value stood, or a lone parameter's value neuron (§6.4, D45). A bid covers what its patterns name, the bidder
+among them where a pattern names the owner (D31), and every symbol is counted at what it cost to write (D13).
+Base actions take
 no arguments, and one whose channel has no layout acts at a focus the environment holds; the variables are built first, each by its own collapse
 and priced on its own uses, and the functions over the rows as the variables rewrite them (D27, D33); an
 inferred pattern runs its actions and expects its events, weakly (R30). Nine cases are worked by hand on it
@@ -278,10 +282,16 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   reasoned on the addition case taught mixed and not run. Taught one case at a time
   ([algorithm-addition.md](algorithm-addition.md)), the machine has a neuron per combination from the first
   level.
-- **A class's combinations.** A class over several positions stores each combination that stands and gives it a
-  value neuron (D41). Their number is bounded by what occurs within the history, and a combination no row holds
-  is dropped, but between those a class with many members at several positions can hold many. **Diagnostic:**
-  combinations stored per class against its uses.
+- **A child fired frames back.** A pattern that does not name its owner fires its child where its things stood,
+  which may be frames before the one being compressed (D53), and its first connect call hands it the frames it
+  missed from the kept apexes (§7.1). How often that happens, how far back, and what it costs to catch up have
+  not been measured. **Diagnostic:** the distance in frames between a child's coordinate and the frame it fired
+  in, per frame.
+- **Uses are places.** A relation and a pattern count uses, sets of coordinates, and the same coordinates seen
+  from several activations of the owner count once (D27). The tallies the implementation keeps are per
+  activation today, and telling one place seen twice from two places that look alike needs the coordinates of
+  the seed's things on every count. Whether that stays cheap at a radius of a hundred has not been tried.
+  **Diagnostic:** rows per use, per pattern.
 - **Depth on input that repeats.** A stretch that repeats exactly gains a level each time round, with a neuron
   per level, and nothing caps it (T13). The reach stays in proportion, the span plus `R` (D4), so what grows is the
   count of neurons and the height of the stack, not how far they see. **Diagnostic:** the highest level reached
@@ -300,14 +310,15 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   same activations at the same price (R43). A pattern one neighbor off that does worse on the board gets a
   child of its own, and two children that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
   bids cover mostly the same activations, per level.
-- **Membership lags.** A class fits only a member (D41); a non-member at its position is a failed neighbor, and it
+- **Membership lags.** A class fits only a member (D41); a non-member where a function names it is a failed neighbor, and it
   joins when it has recurred enough to pay for its entry (D27). Until then a new variant is written with failed
   neighbors. A parameter has no such lag: whatever stands at all its positions is its value. **Diagnostic:**
   occurrences of a function written with a class's failed neighbors, per class.
-- **A class's two tests run once per call.** Its members decide its uses and its uses decide its positions
-  (D27), and each call runs the member test and then the position test once. Nothing shows that the two settle
-  rather than trade places from call to call. **Diagnostic:** member and position changes per class per call
-  on stationary input; they should die out.
+- **A pattern's reference moves.** The reference is the owner where the pattern names it, else the thing latest
+  in time (D15), and re-centering may add or drop the owner or that thing, moving the reference and every offset
+  in the line with it (D29). The child stays, and its next activation fires at the new reference. Nothing shows
+  how often that happens. **Diagnostic:** reference changes per pattern per call on stationary input; they should
+  die out.
 - **Reach bounds what a parameter can carry.** A parameter binds from offsets within its owner's reach (D4). A
   value needed from further back than that is out of sight, and a value carried forward is carried only as far
   as its owner's reach.
@@ -410,6 +421,7 @@ wires a declared default at birth at strength 1 and runs it where nothing infers
 default and outputs nothing there (R35); the code connects to
 base actions instead of the apex (D25), and so needs no expansion (R28, R30); covered activations keep learning
 in the code, where D10 stops them the frame after they are covered; the code places a recognized pattern's
-activation back at the frame its age names, where the spec fires everything at the bidder's coordinate; and it
+activation back at the frame its age names, where the spec fires each child at its pattern's reference and each
+value neuron where its value stood; and it
 shapes no reward (above).
 [algorithm-implementation.md](algorithm-implementation.md) lists the changes.
