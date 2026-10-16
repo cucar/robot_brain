@@ -1105,8 +1105,16 @@ impl Neuron {
         self.table.push(Pattern { id: pid, body: Body::Parameter { positions: vec![o1, o2], members: Vec::new(), values: FxHashMap::default() } });
         let joined = self.join_variable_covers(pid, ctx);
         let i = self.table.len() - 1;
-        self.collapse_parameter(i);
-        let members_len = { let Body::Parameter { members, .. } = &self.table[i].body else { unreachable!() }; members.len() };
+        // the seed's own tests run on its positions before anything else (D33, D27): a position that fails
+        // over the rows it joined leaves, and a parameter left with fewer than two positions is no parameter
+        self.collapse_parameter_ctx(i, Some(ctx));
+        let (members_len, positions_len) = { let Body::Parameter { members, positions, .. } = &self.table[i].body else { unreachable!() }; (members.len(), positions.len()) };
+        if positions_len < 2 {
+            if TRACE_NEURON.load(Ordering::Relaxed) == self.id { eprintln!("      [parameter n{}] ({},{}) fails its position test at the seed", self.id, o1[0], o2[0]); }
+            self.remove_pattern(pid);
+            self.next_pattern -= 1;
+            return false;
+        }
         if TRACE_NEURON.load(Ordering::Relaxed) == self.id {
             eprintln!("      [parameter n{}] ({},{}) joined {} rows, {:?}, margin {:.1} (line {:.1})", self.id, o1[0], o2[0], joined, self.table[i].body, self.margin(pid, ctx), self.line_cost(&self.table[i], ctx));
         }
