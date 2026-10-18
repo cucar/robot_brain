@@ -58,7 +58,7 @@ in the temporal insert ([neuron.rs](../brain/brain-core/src/neuron.rs)) → upda
 not the strength — so they change **only on create**, never on `strengthen_connection`.
 
 There is **no connection-delete/decay path today** (decay was removed —
-[neuron.rs](../brain/brain-core/src/neuron.rs)), so every indexed edge is live and no removal hook is
+[neuron.rs](../brain/brain-core/src/neuron.rs)), so every indexed connection is live and no removal hook is
 needed now. **If decay/delete returns**, drop `source` from `target`'s set on delete — leave a marked stub.
 
 ### Strength-blind candidacy (membership-only)
@@ -72,14 +72,14 @@ Over-reuse is controlled not by a strength gate on the index but by:
 
 - the **merge threshold** in Phase C's scoring (the reuse control), and
 - pattern-level **forgetting + the death ledger** — a correction that drives bad reuse isn't reinforced and
-  dies, taking its index edges with it.
+  dies, taking its index connections with it.
 
 ### Update batching at orchestration boundaries
 
 Each neuron emits `IndexUpdate` events in its per-neuron result; the thalamus applies them at the
 **orchestration boundary** right after the dispatch, so the Phase C lookup sees this frame's deltas (including
 corrections minted earlier this frame). Connection learning already routes through `create_connection`, so new
-edges hit the index by construction.
+connections hit the index by construction.
 
 ### Region query op
 
@@ -98,8 +98,8 @@ connection-restore path.
 
 - **Unit — spatial index**: two sources to one target in `spatial_connections` → query at d=0 returns both.
 - **Unit — temporal index distance keying**: sources to one target at d=2 vs d=3 resolve to the right sets.
-- **Unit — stores isolated**: a spatial edge to T never appears in a temporal query for T, and vice versa.
-- **Unit — rebuild**: snapshot → restore → rebuild → both indexes match a fresh build edge-for-edge.
+- **Unit — stores isolated**: a spatial connection to T never appears in a temporal query for T, and vice versa.
+- **Unit — rebuild**: snapshot → restore → rebuild → both indexes match a fresh build connection-for-connection.
 - **Size**: each index's entry count ∝ its connection-store size.
 - **No behavior change**: indexes built but unconsumed → no effect on the output.
 
@@ -108,5 +108,5 @@ connection-restore path.
 ## Notes / gotchas
 
 - **Shard by the source neuron's column**, not the target.
-- **Self-edges** harmless here; Phase C filters self-matches at lookup.
+- **Self-connections** harmless here; Phase C filters self-matches at lookup.
 - **Sequencing**: consumed only by Phase C, so A can sit anywhere before C.

@@ -24,7 +24,7 @@ use brain_core::types::{ConsensusMode, Coordinate, GroupMode, NeuronType};
 
 /// Read a JS Map<number, V> by calling its entries() iterator and collecting.
 /// Returns (key, JsUnknown) pairs so the caller can interpret V.
-fn read_js_map(_env: &Env, map_obj: &JsObject) -> Result<Vec<(i64, JsUnknown)>> {
+fn read_js_map(map_obj: &JsObject) -> Result<Vec<(i64, JsUnknown)>> {
     let size: u32 = map_obj.get_named_property::<JsNumber>("size")?.get_uint32()?;
     if size == 0 { return Ok(Vec::new()); }
 
@@ -46,8 +46,8 @@ fn read_js_map(_env: &Env, map_obj: &JsObject) -> Result<Vec<(i64, JsUnknown)>> 
 }
 
 /// Read a JS Map<number, number> into an FxHashMap.
-fn read_number_map(env: &Env, map_obj: &JsObject) -> Result<FxHashMap<u32, f64>> {
-    let entries = read_js_map(env, map_obj)?;
+fn read_number_map(map_obj: &JsObject) -> Result<FxHashMap<u32, f64>> {
+    let entries = read_js_map(map_obj)?;
     let mut result = FxHashMap::default();
     for (key, val) in entries {
         let v: f64 = val.coerce_to_number()?.get_double()?;
@@ -57,12 +57,12 @@ fn read_number_map(env: &Env, map_obj: &JsObject) -> Result<FxHashMap<u32, f64>>
 }
 
 /// Read a JS Map<number, Map<number, number>> into nested FxHashMaps.
-fn read_nested_map(env: &Env, map_obj: &JsObject) -> Result<FxHashMap<u32, FxHashMap<u32, f64>>> {
-    let entries = read_js_map(env, map_obj)?;
+fn read_nested_map(map_obj: &JsObject) -> Result<FxHashMap<u32, FxHashMap<u32, f64>>> {
+    let entries = read_js_map(map_obj)?;
     let mut result = FxHashMap::default();
     for (key, val) in entries {
         let inner_obj: JsObject = val.coerce_to_object()?;
-        let inner = read_number_map(env, &inner_obj)?;
+        let inner = read_number_map(&inner_obj)?;
         result.insert(key as u32, inner);
     }
     Ok(result)
@@ -71,7 +71,7 @@ fn read_nested_map(env: &Env, map_obj: &JsObject) -> Result<FxHashMap<u32, FxHas
 /// Read a JS Map<number, number> as a Vec<(f64, f64)>, preserving f64 precision on the key side.
 /// Used for the (value, reward) inner maps in the `learn()` actions payload — value is the action scalar
 /// (continuous in stocks, integer in MNIST) so we can't truncate it to int64 like read_number_map does.
-fn read_value_reward_pairs(_env: &Env, map_obj: &JsObject) -> Result<Vec<(f64, f64)>> {
+fn read_value_reward_pairs(map_obj: &JsObject) -> Result<Vec<(f64, f64)>> {
     let size: u32 = map_obj.get_named_property::<JsNumber>("size")?.get_uint32()?;
     if size == 0 { return Ok(Vec::new()); }
 
@@ -95,18 +95,17 @@ fn read_value_reward_pairs(_env: &Env, map_obj: &JsObject) -> Result<Vec<(f64, f
 /// Read a JS Map<channelId, Map<dimId, Map<value, reward>>> — the `learn()` actions payload shape.
 /// Outer two layers are integer-keyed (channelId, dimId); the innermost is value-keyed (action scalar) with reward as the value.
 fn read_actions_map(
-    env: &Env,
     map_obj: &JsObject,
 ) -> Result<FxHashMap<u32, FxHashMap<u32, Vec<(f64, f64)>>>> {
-    let entries = read_js_map(env, map_obj)?;
+    let entries = read_js_map(map_obj)?;
     let mut result = FxHashMap::default();
     for (key, val) in entries {
         let inner_obj: JsObject = val.coerce_to_object()?;
-        let inner_entries = read_js_map(env, &inner_obj)?;
+        let inner_entries = read_js_map(&inner_obj)?;
         let mut inner = FxHashMap::default();
         for (dim_key, dim_val) in inner_entries {
             let dim_obj: JsObject = dim_val.coerce_to_object()?;
-            let pairs = read_value_reward_pairs(env, &dim_obj)?;
+            let pairs = read_value_reward_pairs(&dim_obj)?;
             inner.insert(dim_key as u32, pairs);
         }
         result.insert(key as u32, inner);
@@ -151,12 +150,15 @@ impl JsBrain {
     ///   columns: number (default 1)
     ///   consensus: string 'democratic' | 'nb' (default 'democratic')
     ///   debug: boolean (default false)
+    ///   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
+    ///   horizon: number (default round(1/patternForgetRate)) — spatial history window in frames; set it to
+    ///     the episode length so the sliding window holds exactly one episode of evidence
     ///
     /// The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
     /// variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
     /// opposite sides, so there is one number, not six. Passing any retired key logs a one-time warning and is ignored.
     #[napi(constructor)]
-    pub fn new(_env: Env, options: Option<JsObject>) -> Result<Self> {
+    pub fn new(options: Option<JsObject>) -> Result<Self> {
         let (context_length, group_threshold, group_mode,
              pattern_forget_rate, regions, columns, consensus_mode, debug) = match options {
             Some(ref opts) => {
@@ -181,12 +183,23 @@ impl JsBrain {
             None => (10, 0.5, GroupMode::Neutral, 0.01, 1, 1, ConsensusMode::Democratic, false),
         };
 
-        Ok(Self {
-            inner: RefCell::new(CoreBrain::new(
-                context_length, group_threshold, group_mode,
-                pattern_forget_rate, regions, columns, consensus_mode, debug,
-            )),
-        })
+        // The learning state is fixed at construction: a frozen evaluation is a separate brain
+        // instance loaded from a backup, not a toggled one.
+        let learning = opt_bool(options.as_ref(), "learning")?.unwrap_or(true);
+
+        // The spatial evidence window in frames. Its own knob, decoupled from the temporal forget rate.
+        // Callers that do not set it fall back to the forget-rate timescale (round(1/rate)), which is the
+        // window the spatial history used before the split — so existing demos keep their behavior.
+        let horizon = opt_u32(options.as_ref(), "horizon")?.unwrap_or_else(|| {
+            if pattern_forget_rate > 0.0 { (1.0 / pattern_forget_rate).round().max(1.0) as u32 } else { u32::MAX }
+        });
+        let inner = CoreBrain::new(
+            context_length, group_threshold, group_mode,
+            pattern_forget_rate, regions, columns, consensus_mode, debug, learning,
+            horizon,
+        );
+
+        Ok(Self { inner: RefCell::new(inner) })
     }
 
     /// Register a channel spec. Accepts the same spec shape as JS Brain.
@@ -255,8 +268,8 @@ impl JsBrain {
     #[napi(js_name = "processFrame")]
     pub fn process_frame(&self, env: Env, inputs: JsObject, rewards: JsObject) -> Result<JsObject> {
         // Marshal inputs: Map<number, Map<number, number>> → FxHashMap
-        let rust_inputs = read_nested_map(&env, &inputs)?;
-        let rust_rewards = read_number_map(&env, &rewards)?;
+        let rust_inputs = read_nested_map(&inputs)?;
+        let rust_rewards = read_number_map(&rewards)?;
 
         // Call core
         let frame_result = self.inner.borrow_mut().process_frame(&rust_inputs, &rust_rewards);
@@ -274,7 +287,9 @@ impl JsBrain {
         let brain = self.inner.borrow();
         let snapshot = brain.get_context_snapshot();
         let mut arr = env.create_array_with_length(snapshot.len())?;
-        for (i, (neuron_id, _frame, temporal_level, state)) in snapshot.iter().enumerate() {
+        // Activation frame is part of the shared snapshot tuple (used elsewhere for CSV export offsets)
+        // but not part of this API's returned shape — see the doc comment above.
+        for (i, (neuron_id, _, temporal_level, state)) in snapshot.iter().enumerate() {
             let mut obj = env.create_object()?;
             obj.set_named_property("neuronId", env.create_uint32(*neuron_id as u32)?)?;
             obj.set_named_property("temporalLevel", env.create_uint32(*temporal_level as u32)?)?;
@@ -284,8 +299,10 @@ impl JsBrain {
         Ok(arr)
     }
 
-    /// Inspect one neuron: returns { neuronId, temporalLevel, parentId | null,
-    /// context: [{ neuronId, distance, strength }, ...] }.
+    /// Inspect one neuron: returns { neuronId, temporalLevel, spatialLevel, channelId | null,
+    /// parentId | null, context: [{ neuronId, distance, strength }, ...] }.
+    /// channelId is the neuron's own anchor channel — for sensory neurons their registered
+    /// channel, for spatial-correction neurons the founding pixel's channel (inherited at mint).
     /// Context entries come from the parent neuron's routing-table entry
     /// for this child pattern. Level-0 sensory neurons have parent_id=null
     /// and empty context.
@@ -296,6 +313,11 @@ impl JsBrain {
         let mut obj = env.create_object()?;
         obj.set_named_property("neuronId", env.create_uint32(info.neuron_id as u32)?)?;
         obj.set_named_property("temporalLevel", env.create_uint32(info.temporal_level as u32)?)?;
+        obj.set_named_property("spatialLevel", env.create_uint32(info.spatial_level as u32)?)?;
+        match info.channel_id {
+            Some(c) => obj.set_named_property("channelId", env.create_uint32(c as u32)?)?,
+            None => obj.set_named_property("channelId", env.get_null()?)?,
+        }
         match info.parent_id {
             Some(p) => obj.set_named_property("parentId", env.create_uint32(p as u32)?)?,
             None => obj.set_named_property("parentId", env.get_null()?)?,
@@ -339,18 +361,6 @@ impl JsBrain {
         Ok(())
     }
 
-    /// Master learning toggle.
-    /// When false, subsequent `processFrame` calls skip op-2 (decay/reap) and error-correction pattern neuron creation.
-    /// They also skip event→event connection strengthening, child-activation strengthening, and accuracy-stats tracking.
-    /// Sensory neuron creation (op-1) still runs because without it the frame cannot be processed at all.
-    /// Pattern activation and voting still run, so inferences remain populated.
-    /// Used by supervised harnesses (MNIST) for the held-out evaluation pass.
-    #[napi(js_name = "setLearning")]
-    pub fn set_learning(&self, learning: bool) -> Result<()> {
-        self.inner.borrow_mut().set_learning(learning);
-        Ok(())
-    }
-
     /// Supervised wiring step that sits on top of the last `processFrame` call.
     /// `actions: Map<channelId, Map<dimId, Map<value, reward>>>` names every action target with its per-value reward.
     /// Each `value` is quantized to the corresponding action neuron; reward is applied to that connection
@@ -358,11 +368,11 @@ impl JsBrain {
     /// on the dim — correct value with reward=1, others with reward=0 — so `conn.reward` converges to P(target|voter).
     /// `distance` is the connection-table slot at which to wire and read back.
     /// Wires every currently-active age-0 voter to every supplied action target at the given distance.
-    /// Then runs a post-wire inference sweep at age (distance - 1) and returns the resulting FrameResult.
+    /// Then runs post-wire inference at age (distance - 1) and returns the resulting FrameResult.
     /// Single-frame supervised harnesses (MNIST) pass distance=1 to match the existing temporal voting slot.
     #[napi(js_name = "learn")]
     pub fn learn(&self, env: Env, actions: JsObject, distance: u32) -> Result<JsObject> {
-        let rust_actions = read_actions_map(&env, &actions)?;
+        let rust_actions = read_actions_map(&actions)?;
         let frame_result = self.inner.borrow_mut().learn(&rust_actions, distance);
         build_frame_result(&env, &frame_result)
     }
@@ -394,6 +404,13 @@ impl JsBrain {
         Ok(self.inner.borrow().get_spatial_correction_count() as u32)
     }
 
+    /// Cumulative count of spatial children retired by the delete test since brain start.
+    /// Paired with getSpatialCorrectionCount, this is the cold-start churn the Phase-1 gate watches.
+    #[napi(js_name = "getSpatialDeletionCount")]
+    pub fn get_spatial_deletion_count(&self) -> Result<u32> {
+        Ok(self.inner.borrow().get_spatial_deletion_count() as u32)
+    }
+
     /// Number of correction neurons currently sitting above the base spatial level.
     #[napi(js_name = "countActiveSpatialCorrections")]
     pub fn count_active_spatial_corrections(&self) -> Result<u32> {
@@ -407,6 +424,13 @@ impl JsBrain {
         Ok(self.inner.borrow().spatial_level_counts())
     }
 
+    /// Per-level count of PAID correction neurons — patterns that may fire, as opposed to unpaid
+    /// hypotheses still accumulating evidence toward their price. Same indexing as spatialLevelCounts.
+    #[napi(js_name = "spatialLevelPaidCounts")]
+    pub fn spatial_level_paid_counts(&self) -> Result<Vec<u32>> {
+        Ok(self.inner.borrow().spatial_level_paid_counts())
+    }
+
     /// Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
     /// This is the set a channel may co-fire with in the same frame to form a spatial pattern.
     /// Names not in the registry are silently ignored; an empty list shrinks the spatial
@@ -415,6 +439,24 @@ impl JsBrain {
     #[napi(js_name = "setSpatialNeighbors")]
     pub fn set_spatial_neighbors(&self, name: String, neighbor_names: Vec<String>) -> Result<()> {
         self.inner.borrow_mut().set_spatial_neighbors(&name, &neighbor_names);
+        Ok(())
+    }
+
+    /// Declare per-level SPATIAL neighbor sets for a registered channel — the level-based radius.
+    /// `neighborNamesByLevel[l]` is the neighbor list a level-l neuron of this channel uses (e.g. the
+    /// radius-(l+1) neighborhood of a retinotopic pixel); levels past the end reuse the last set. Each list is
+    /// used verbatim like `setSpatialNeighbors`. Call AFTER registering all channels.
+    #[napi(js_name = "setSpatialNeighborLevels")]
+    pub fn set_spatial_neighbor_levels(&self, name: String, neighbor_names_by_level: Vec<Vec<String>>) -> Result<()> {
+        self.inner.borrow_mut().set_spatial_neighbor_levels(&name, &neighbor_names_by_level);
+        Ok(())
+    }
+
+    /// Set a channel's 2D retinotopic position. The above-base neighbor rule places units by compass
+    /// direction, which needs coordinates rather than only the adjacency graph. Call after registering.
+    #[napi(js_name = "setChannelPosition")]
+    pub fn set_channel_position(&self, name: String, x: i32, y: i32) -> Result<()> {
+        self.inner.borrow_mut().set_channel_position(&name, x, y);
         Ok(())
     }
 
@@ -871,6 +913,15 @@ fn get_opt_i32_array(obj: &JsObject, key: &str) -> Result<Option<Vec<i32>>> {
         }
         Err(_) => Ok(None),
     }
+}
+
+/// Option-aware wrappers over the get_opt_* readers for options that may be absent entirely.
+fn opt_bool(opts: Option<&JsObject>, key: &str) -> Result<Option<bool>> {
+    match opts { Some(o) => get_opt_bool(o, key), None => Ok(None) }
+}
+
+fn opt_u32(opts: Option<&JsObject>, key: &str) -> Result<Option<u32>> {
+    match opts { Some(o) => get_opt_u32(o, key), None => Ok(None) }
 }
 
 fn parse_group_mode(s: &str) -> Result<GroupMode> {

@@ -227,20 +227,6 @@ Expose the Rust core to Python for broader adoption.
 
 ---
 
-## Pattern Efficiency
-
-### Current behavior
-- Error correction creates a higher-level pattern that captures the ENTIRE context and learns the ENTIRE inference across all channels/dimensions — even the ones the parent got right
-
-### Proposed optimization
-- When the parent gets a channel wrong, delegate inference of that channel to the higher-level child pattern
-- When the parent gets a channel right, do NOT delegate — parent keeps inferring correctly
-- This is more efficient but significantly more complicated
-- Open question: does selective delegation improve accuracy or just efficiency?
-- NOTE: if the neuron re-use works, this would be a conflicting optimization, and should not be done. 
-
----
-
 ## Hippocampal Region (Thinking, Long-Term Memory, Metacognition)
 
 The largest remaining architectural component. A second organ — the **executor** — that operates on cortical neurons in parallel with the cortex's own perception/action loop. Implements long-term memory, thinking-as-action, and offline policy improvement.
