@@ -411,6 +411,16 @@ forward-side deltas are the numbered list in the section above and land in Stage
     (`directional_neighbors`) and the reuse-the-last-declared-set fallback both go: adjacency is D4's box at
     D14's reach, at every level. `channel_positions` and `set_channel_position` serve only the sector rule and
     go with it.
+20. **Three indexes (D2, D52, D36).** The id array and the base-symbol map exist; add the third, a hash from
+    what an interneuron stands for to its id. The hash key is written from the line, each node by its own key,
+    with the relations in a fixed order, and recomputed when the line re-centers; the window scan that compared
+    expansions goes. Wiring an accepted bid without a child probes the index first (R16, R43), and a line whose
+    new key is another neuron's is rewired to it (D43).
+21. **Once per descent (R28, D4).** Expansion carries the path it came down and does not re-enter a neuron on
+    it, placing the owner's symbol where the function names the owner and stopping; span is read by the same
+    descent, and the horizon cut on the reuse comparison goes with the scan.
+22. **The whole-window gate (R20).** The call skips an activation whose reach in time runs back past the first
+    frame of the run; the activation still fires, stands on the apex and connects.
 
 **Phase 3 — the readout gate.**
 

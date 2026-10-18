@@ -155,9 +155,11 @@ active for. A scoped reward reaches only the base actions of the channels it nam
 The machine is a processor with its own memory, running the procedure of Parts III and V once per frame, and a
 population of **neurons**, each a processor with a memory of its own, running the procedure of Parts II and
 IV when called. The neurons are the base symbols the world declares and the interneurons the machine builds
-above them, and the machine reaches each by its id. A neuron fires as an **activation**, at a frame and a
-position. The machine's memory holds what spans the neurons: the open activations, the activations no pattern
-covers, which form the **apex**, its state at a frame, the coverage set, and the standing inferences. Each
+above them, and the machine reaches each by its id (D2), a base neuron also by the base symbol it was mapped to
+(D52), and an interneuron also by what it stands for (D36). A neuron fires as an **activation**, at a frame and a
+position. The machine's memory holds what spans the neurons: the three indexes, the open activations, the
+activations no pattern covers, which form the **apex**, its state at a frame, the coverage set, and the standing
+inferences. Each
 frame is one wave through the neurons: it rises through the frame as recognition, runs forward into the frame
 ahead as inference, and comes down to the base as expansion, where one winner per dimension is output. What
 the machine holds is priced as a **file**, the dictionary of every neuron's patterns and the body the apex
@@ -172,6 +174,9 @@ writes, and shortening that file is the first objective.
 
 Older neurons have smaller ids. That's how ties are broken.
 
+The machine holds an index of its neurons by id. Every line, connection, activation and deletion that names a
+neuron names it by id, and reaches it through this index.
+
 > **D11 — Identity.** A neuron's identity is its type alone, a base symbol or an interneuron's id (D2), so
 > nothing about where it occurred is part of it. **The same shape at two positions is two activations of one neuron**,
 > and they pool: both carry the same relative neighborhood, so the same patterns cover them and one pattern
@@ -185,10 +190,14 @@ Older neurons have smaller ids. That's how ties are broken.
 
 Neuron dimensions belong to the base alphabet and to nothing above it.
 
+The map is the machine's index of its base neurons by base symbol: a symbol a frame reports reaches the neuron
+that fires through it (D8), and expansion ends on base symbols read back through it (R28).
+
 ## 3.3 Interneurons
 
 > **D53 — Interneuron.** A pattern's child: a call neuron (D48) or a value neuron (D45). The machine creates it
-> the first time a bid carrying its pattern is accepted (R16). It has an id and no dimension and no channel.
+> the first time a bid carrying its pattern is accepted and no interneuron already stands for the same thing
+> (R16, R43, D36). It has an id and no dimension and no channel.
 > Its activation fires over what its bid covered (D31), and the machine places it: **in time at the latest
 > frame covered**, since an activation stands in no frame before what it covers has happened (D5); **in every
 > other activation dimension at the center of the box the covered nodes span**, rounded toward the smaller
@@ -201,6 +210,17 @@ several parents, since several patterns may come to share it (R43), and they may
 activation's coordinate is within the box its bid covers, at the box's end in time and its middle in space.
 Time and space are placed by different rules because the future has not happened: in time the end of what is
 covered is the latest point the activation can see, and in space nothing is ahead or behind.
+
+> **D36 — Interneuron index.** The machine's index of its interneurons by what each stands for, beside the one
+> by id (D2) and the one by base symbol (D52). An interneuron stands for its expansion (R28): a call neuron for
+> its function's relations (D34) with the variables left open, a value neuron for its variable with its member,
+> each node in them for what it stands for in turn, down to base symbols. Expansion passes through a neuron once
+> (R28), so what a neuron stands for is finite on a chain of children closed on itself. **No two interneurons
+> stand for the same thing.** An accepted bid whose pattern has no child is wired to the interneuron that stands
+> for what its child would, whether that neuron bid this frame, fired frames ago or has not fired within any
+> open window, and a new one is created only where none does (R16, R43). A line that re-centers changes what its
+> child stands for (D29), and where that is what another interneuron stands for, the line is wired to that
+> neuron: merging, across owners (D43).
 
 **A pattern is a pointer to a child, and a child is a neuron.** The two are made apart. A neuron adds a
 **pattern**, a line in its own table that may enter a cover at once, and bids it with no child. The first
@@ -334,7 +354,8 @@ read.
 > where the nodes its pattern names stood when its bid fired it (D31). A pattern may stand at a different
 > distance from its nodes on each occurrence, so the span is the activation's, and it is fixed when the
 > activation fires. In every dimension but time the activation stands at the center of what it covers (D53), so
-> its span there is half the box. An activation sees `R` beyond the farthest node it stands for. A base activation stands
+> its span there is half the box. The span is read by the descent expansion makes (R28), once through each
+> neuron, so a chain of children closed on itself spans one turn and not the run. An activation sees `R` beyond the farthest node it stands for. A base activation stands
 > for nothing but itself and sees `R`; a child over a pair of adjacent positions sees `R + 1`; a child whose
 > coverage ends where another's begins sees that child's coordinate, one past its span, which is how two
 > adjacent coverages are joined into one by a child above them. A child one letter longer than its parent's
@@ -1116,11 +1137,17 @@ Nine cases are worked by hand on these definitions, listed in Part VI.
 
 > **R20 — Call, in order.** Once per wave it fires in, the machine asks one neuron for everything it owes
 > that frame, handing it the count `n` of its neurons (D13) and **every activation of it that fired
-> this frame with a neighborhood that is not empty**,
+> this frame with a neighborhood that is not empty and is whole**,
 > each with its neighborhood, at age 0 (R1), every value neuron in it carrying its variable's values (D7),
 > which the machine reads off the owner's table and the neuron could not. They are processed together. A neuron none of whose activations
 > has a neighbor is not called; such an activation is still open (D9) and on the apex (R27) like any uncovered
 > activation.
+>
+> **A neighborhood is whole when the run is at least the activation's reach in time old** (D4). Before that the
+> window reaches back past the first frame, what would have stood there is missing, and a pattern built on the
+> neighborhood would name the edge of the run and not the world. The machine does not hand such an activation
+> over; it fires, stands on the apex and connects like any other (R27, R31), and the neuron hears nothing of it.
+> At the base that is the first `R` frames of the run, and a child waits its own reach.
 >
 > | Step               | Description                                                                                                       |
 > |--------------------|-------------------------------------------------------------------------------------------------------------------|
@@ -1250,7 +1277,8 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > has a child per value, a value neuron, and a bid carrying a value it has no child for asks for one the same
 > way (R44). **The
 > machine gives a child only to an accepted bid**, so no neuron exists for a pattern the board never bought, and
-> it reuses a child before it creates one (R43). A new child has an id and no dimension (D2). It is created with
+> it reuses the interneuron that already stands for what the child would (D36, R43) before it creates one. A
+> new child has an id and no dimension (D2). It is created with
 > **an empty table**: its own patterns are over what it will see, which it has not observed yet. Its *existence*
 > is decided by the election, its *structure* by itself.
 >
@@ -1352,7 +1380,7 @@ reported, each after it over what the wave before bought, until a wave fires not
 | activate children | Fire every child and value neuron the wave before bought, each placed over what its bid covered (D53); the uncovered stand on the apex. |
 | process functions | Call every neuron with an activation in this wave, value neurons included (§5).                                 |
 | elect bids        | Cover the frontier's activations that this wave's bids name, by the greedy cover over the board.            |
-| create children   | Give every function of an accepted bid that has no child one, and every value the bid carries that has no value neuron one: a child and the value neurons reused where another bid of the election tied it, created otherwise (R43). Each fires in the next wave. |
+| create children   | Give every function of an accepted bid that has no child one, and every value the bid carries that has no value neuron one: a child and the value neurons reused where an interneuron already stands for the same thing (D36, R43), created otherwise. Each fires in the next wave. |
 
 Then, once the last wave has run:
 
@@ -1498,25 +1526,27 @@ bid**, which is what stops an activation being paid for twice.
 Every function of an accepted bid that has no child is given one, and every value the bid carries that has no
 value neuron is given one. A bid that lost is given nothing.
 
-> **R43 — Reuse or new.** The candidates for reuse are the bids already on the board. Every neuron the accepted
-> bid covered was called this frame and bid every line of its cover (R21), so a line that describes this ground
-> from another of its neurons is among this election's bids, measured on the same board at the same prices
-> (R22).
+> **R43 — Reuse or new.** The candidate for reuse is the interneuron that stands for what the accepted bid's
+> child would, found through the index (D36), wherever it is: a neuron that bid this frame, one that fired
+> frames ago and has stood for the same thing since, or one that has not fired within any open window. A stretch
+> that comes round again therefore fires the neuron minted when it first came round, and not a new one above it.
 >
-> **Identical bids share one child.** Two bids are identical when each names exactly the activations the other
-> names, the bidder among them where a pattern names the owner, at the same price (D31): two lines stating one
-> set of activations from two of its neurons, which the machine places at one coordinate (D53). A pattern that does not name its
-> owner is the common case here, since every neuron whose window held the place saw the same nodes there and
-> bids them at the same coordinate. There are three cases, and each ends with one child.
+> **Identical bids share one child.** Two bids are identical when their children would stand for one thing: each
+> names exactly the activations the other names, the bidder among them where a pattern names the owner, at the
+> same price (D31), two lines stating one set of activations from two of its neurons, which the machine places
+> at one coordinate (D53). Every neuron the accepted bid covered was called this frame and bid every line of its cover
+> (R21), so such a line is among this election's bids, and a pattern that does not name its owner is the common
+> case, since every neuron whose window held the place saw the same nodes there. There are three cases, and
+> each ends with one child.
 >
 > - One carries a child and the other none: the one with none is wired to that child.
 > - Neither carries a child: the first accepted is given one (R16), and the other is wired to it.
 > - Both carry children: the younger child's patterns are rewired to the older child, every one of them, and
 >   the younger, with no pattern wired to it, dies when its last open activation's window closes (R38).
 >
-> A bid that measured better than the accepted one would have been taken before it (D28), so reuse is only
-> ever a tie; a bid that does better than every bid carrying a child states a different set of activations, and gets a child
-> of its own.
+> A bid that measured better than the accepted one would have been taken before it (D28), so reuse among the
+> board's bids is only ever a tie; a bid that does better than every bid carrying a child states a different set
+> of activations, and gets a child of its own unless some neuron already stands for it.
 >
 > **A variable's children are reused with the function's.** The two bids name the same ground, so the machine
 > also has what each variable of either covered on the board. Where a variable of the accepted bid covered the
@@ -1891,6 +1921,13 @@ only what happened (R32).
 > relations (D34), the owner's activation among them where the pattern names it — offsets compose because each
 > is a difference of activation coordinates (D2) — repeated down to base symbols. A pattern that does not name
 > its owner puts nothing back for the owner: it never said where the owner stood.
+>
+> **An expansion passes through a neuron once.** A neuron met again on its own descent is not expanded again:
+> where its function names the owner, the owner's symbol is placed at that coordinate, and the descent ends
+> there. Reuse across frames (R43) makes a chain of children closed on itself out of a stretch that repeats,
+> each child naming the one before it and the last naming the first, and such a chain expands to one turn,
+> ending on the symbol that begins the next. The span is read by the same descent (D4), so the chain spans one
+> turn, and the match reads one expansion down (R49) and is not reached by it.
 > ```
 > A placed at f:      A's line, in v's table, is {u at −1 from v}              → v at f,   u at f−1
 > P placed at f+4:    P's line, in b's table, is {C at −2 from b},

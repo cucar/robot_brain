@@ -1554,6 +1554,17 @@ the machine (D34, D53), so the level above sees one thing at one place whichever
 the same things there, and each bids them at the same coordinate. A child was never renamed when its one line
 re-centered (D29); several lines that drift apart are the same thing across parents.
 
+**On D36 — why the machine indexes interneurons by what they stand for.** Reuse among the board's bids catches
+two owners stating one thing in one frame and nothing else. A stretch that came round a lap ago was stated
+then, by a neuron that has not bid since, and without the index the machine either scans every living
+interneuron and expands each to compare, which is what the first implementation did and what no population of
+any size can afford, or mints a second neuron for the same thing and a third the lap after, which is how a
+repeating stream gained a level every lap. What a neuron stands for is written from its line, each node by what
+it stands for in turn, so it is had in the length of the line and compared in one probe, and it is the same
+whichever owner's line produced it, since a line is relations between nodes and names no owner's place (D34).
+The three indexes were always there: a line names a neuron by id (D2), a frame names a base neuron by its
+symbol (D52), and the third says what an interneuron is in the terms of the two below it.
+
 **On R43 — reuse beyond the tie, priced.** Exact reuse is what the design does; a priced reuse of a near match
 is plausible and is kept here. It is the machine's decision and must be priced from the machine's side, since
 the neuron is never told what the board did. Take a bid accepted on the board whose function has no child, and
@@ -1782,7 +1793,9 @@ nothing needs it in advance.
 > `D + 1` base activations that has occurred at least twice. **The stack is no deeper than the longest stretch
 > that has repeated.** On input with any variety in it that length grows slowly with the run, about as its
 > logarithm, since every step that can vary multiplies the stretches there are and divides how often each comes
-> round. On input that repeats exactly, it grows with the run, a level each time round, and nothing caps it.
+> round. On input that repeats exactly, the children of one lap are the children of the next: reuse across
+> frames fires the neuron minted a lap ago rather than a new one above it (R43, D36), the chain closes on
+> itself and expands to one turn (R28), and the stack settles at one neuron per phase of the lap.
 > What it does not do is widen the reach out of proportion: a deep chain sees `R` past what it stands for (D4), not
 > two to the power of its level. A variable loosens "the same stretch" to "the same function, with any value",
 > which is what it is for; the value neuron above it is specific again. The bound rests on T12, and fails

@@ -293,11 +293,12 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   activation today, and telling one place seen twice from two places that look alike needs the coordinates of
   the seed's things on every count. Whether that stays cheap at a radius of a hundred has not been tried.
   **Diagnostic:** rows per use, per pattern.
-- **Depth on input that repeats.** A stretch that repeats exactly gains a level each time round, with a neuron
-  per level, and nothing caps it (T13). The reach stays in proportion, the span plus `R` (D4), so what grows is the
-  count of neurons and the height of the stack, not how far they see. **Diagnostic:** the highest level reached
-  per frame against run length; it should rise and flatten on input that varies, and rise with the run only
-  where the input repeats.
+- **Depth on input that repeats.** A stretch that repeats exactly closes into a cycle of children, one per
+  phase, since reuse across frames fires the neuron minted a lap ago (R43, D36) and a closed chain expands to
+  one turn (R28); a six-bar cycle settled at six neurons. What is not measured is how long that takes under the
+  whole-window gate (R20) and how the first lap's partial neighborhoods, which the gate withholds, would have
+  shaped the children had they been recorded. **Diagnostic:** the highest level reached per frame against run
+  length; it should rise and flatten on input that varies and on input that repeats alike.
 - **Prices move.** Every price is `log₂` of an alphabet (D13), and the alphabets move: `n` as the machine fills and
   is pruned, a table as entries come and go, a variable with its members. A neighbor is counted at what it cost
   when it stood, which is kept with it, so the same neuron can stand in two rows at two costs. So a pattern can
@@ -307,10 +308,10 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   distinct neurons seen at an offset. Each relation tried costs a collapse over its uses, `O(H · c)`, and the
   greedy pick tries every one in every call (D33). How to try fewer without passing over one that would pay is
   open.
-- **Near-duplicates stay apart.** Children are merged only for identical bids, two lines naming exactly the
-  same activations at the same price (R43). A pattern one neighbor off that does worse on the board gets a
-  child of its own, and two children that turn out to stand for the same thing are never merged. **Diagnostic:** pairs of children whose accepted
-  bids cover mostly the same activations, per level.
+- **Near-duplicates stay apart.** Children are shared only between lines that stand for exactly the same thing
+  (D36, R43). A pattern one neighbor off gets a child of its own, and two children that stand
+  for nearly the same thing are never merged. **Diagnostic:** pairs of children whose accepted bids cover
+  mostly the same activations, per level.
 - **Membership lags.** A class fits only a member (D41); a non-member where a function names it is a failed neighbor, and it
   joins when it has recurred enough to pay for its entry (D27). Until then a new variant is written with failed
   neighbors. A parameter has no such lag: whatever stands at all its positions is its value. **Diagnostic:**
