@@ -1,306 +1,187 @@
-# UCAR implementation: first pass and results
+# UCAR on the wavefront specification: implementation and results
 
-A from-scratch implementation of [algorithm.md](algorithm.md) as a new Rust crate, with a Node
-binding and one job per application. The old engine (`brain-core`, `brain-napi`) is untouched; the
-new one lives beside it so both can run.
-
-| Piece | Where | What |
-|---|---|---|
-| core | `brain/ucar-core/` | the machine: `types.rs` (D1, D3, D35, D50, D51), `offsets.rs` (D6, D13's offset alphabets), `neuron.rs` (§4, §5), `machine.rs` (§6, §7, §8) |
-| tests | `brain/ucar-core/tests/machine.rs`, `offsets.rs` | D6 rounding; a repeated pair gets a function and a child; varied predecessors form a class; prediction climbs over passes; a closed loop acts on the estimate; weak activations are connected to by nothing |
-| examples | `brain/ucar-core/examples/` | `text` (letter stream with per-phase timings), `world` (synthetic closed loop with rewards), `dump` (print tables) |
-| binding | `brain/ucar-napi/`, `brain/src/ucar.js`, `brain/build-ucar.sh` | the `Ucar` class: `declareAxis`, `declareChannel`, `processFrame(Int32Array, rewards)`, `resetContext`, `stats`, `levelCounts`, `dumpTables` |
-| apps | `apps/text/jobs/ucar.js`, `apps/stocks/jobs/ucar.js`, `apps/mnist/jobs/ucar.js` | standalone jobs (import the binding by path; no workspace install needed) |
-
-Build and run:
-
-```
-brain/build-ucar.sh                                   # cargo build --release -p ucar-napi, copies ucar-napi.node
-cd brain/ucar-core && cargo test --release             # 7 tests
-node apps/text/jobs/ucar.js --file test.txt --episodes 5 --h 256
-node apps/stocks/jobs/ucar.js --symbols AAPL,MSFT,NVDA --episodes 2 --h 256 --max-frames 2500 --holdout 500
-node apps/mnist/jobs/ucar.js --image-size 14 --per-class 100 --teach 300 --test 500 --h 2048
-```
-
-Every job takes `--dump` to print tables at the end. The first-pass tables below that compare "claim" and "no-claim" were measured under a regime that has since been removed (see "Two regimes"); the second pass supersedes them.
+What `brain/brain-core` implements of [algorithm.md](algorithm.md) as it stands on the `wavefront` branch,
+the one departure it makes, what is not there yet, and what the machine does on the six-bar cycle and on a
+letter stream. The numbers below are from `cargo run --release -p brain-core --example simple` and
+`--example text`; the Node jobs give the same.
 
 ## What is implemented
 
-**World and machine (§2, §3).** Activation dimensions (time plus up to two spatial axes, each with its
-radius), channels with one event and/or one action dimension laid out over a subset of the axes, base
-neurons minted in declaration order, frames of inputs with positions, rewards scoped to channels and a
-span (D35), the neighborhood policy as two 3×3 tables (D50) and the action policy (D51). Offsets are
-rounded to one significant digit in base R+1 (D6); prices are D13's fields in bits with `n` the live
-neuron count and `B` the declared alphabet.
+The neuron (`neuron.rs`), Parts II and IV:
 
-**Neuron (§4, §5).** The history ring of H activations, each with its neighborhood, own cost, cover and
-owners (D18, D17, D19). Patterns: functions naming neighbors and variables; classes of one position
-with members and value neurons (D41); parameters over two offsets that agree, with members and value
-neurons (D44). The greedy cover by ratio with first-claimant owners (D28); D22's prices with failed
-neighbors; the collapse for functions (every thing taken when what it covers beats its failures and its
-entry, iterated on |p|), for classes (members in order of count while each pays its entry and the
-widening; members never together in a row) and for parameters (members are what stood at all positions);
-re-centering on the rows a pattern covers (D29); margins and retirement (D30, R18, R41); the greedy
-pick, variables first then functions over rows read in things, each seeded on a relation counted at
-least twice and priced by its margin (D33, R14, R15); merging of identical lines (D43); bids of each
-fresh row's cover, functions sharing a variable bundled (D31, R21).
+- A pattern as a set of relations over nodes (D15, D16, D34): a function is its nodes with their offsets
+  from a reference node, the owner's activation where it names it and otherwise the node latest in time,
+  written in one canonical order for merging (D43) and for the index (D36). A class is its members (D41). A
+  parameter is its offsets from its first position, with its members as a record (D44).
+- The history (D18): `H` rows, each the activation's coordinate, its own cost, and its neighbors at exact
+  offsets with what each cost, its cover (D17), owners (D19) and the coordinates its variables claim.
+- Recognition as the greedy cover (D28) over each row: every function at every place its relations are
+  satisfied, the owner anchoring it where named (§5.2), with its variables; then every parameter alone on
+  what no function took (D31). Measured by D22, with the coarse-offset groups of D26.
+- Uses as places (D27): the coordinates a pattern's nodes stand at, counted once however many rows saw
+  them, the latest row credited.
+- The collapse per kind (D27): a function re-decides every candidate relation from a node already in to
+  what stands around its uses, the owner's activation among the candidates at each offset rows saw the
+  use from; a parameter its positions; a class its members with the widening term.
+- The three seed relations (D47), the two-stage pick with variables first and the claims they leave
+  (D33), candidates priced by the exact difference between a use's cover with the candidate in it and as
+  it stands (R14, R15), seeds that build nothing passed over.
+- Margin (D30) as the difference with and without the pattern over its uses, retirement (R18, R41),
+  merging (D43, §5.5), and the return: one bid per claimant of each of the frame's covers (D31, R21).
 
-**Contraction (§6).** The level stack: activate children bought for the level, call every neuron with
-an activation there, elect, create children, up to the last level with anything (R26). The election is
-D28 over the board with R22's coverage and price, R24's tie order, coverage acquired late and never
-revoked (R27), children one level above the highest activation covered, reuse of a child between
-identical accepted bids (R43), value neurons per value (R44), wiring, spans and reaches recomputed when
-lines move (D4), and the death ledger with deletion once the last window closes (R38).
+The machine (`machine.rs`), Parts III and V:
 
-**Connect and infer (§7).** Every strong open activation connects at its age to every strong apex
-activation within reach the future table admits, or to its coverer in the frame it is covered (D10, R31);
-connections hold strength and earnings; rewards land on the frame's connections with linearly falling
-shares over the span and only on base actions of the named channels when scoped (R33); a negative
-estimate wires the next untried base action, in each dimension the target acted in (R37); `infer` at age
-0 snapshots the neuron's connections as standing inferences (R36, R45).
+- Base neurons by declaration (D52), the interneuron index by what each stands for (D36), with keys
+  recomputed after each frame's waves and lines whose child comes to stand for what another neuron does
+  rewired to it.
+- Neighborhoods from the open activations within the activation's own reach (D4, D5, D7), the past table
+  of the policy applied (D50).
+- Waves (R26): activate, call, elect, create, until a wave fires nothing. The election is D28 over the
+  board with R22's measure and R24's tie-break; credit once, never revisited (R23).
+- Children placed at the latest frame covered and the center of the box in space (D53), with their span
+  read from what they cover (D4); value neurons where the member stood; reuse through the index before
+  anything is minted (R43, R16); the death ledger and the subtree rule (R38).
+- Connections written by the connect call to the apex of each frame within reach, the last connection to
+  the coverer (D10, R31), rewards shaped by span and scoped by channel (R33), the walk on a negative
+  estimate (R37); a child placed frames back is handed the frames it missed (§7.1).
+- Inference at age 0 (R36), standing inferences (R45), expansion once per descent with the owner's symbol
+  placed where a chain closes on itself (R28), the electorate falling through covers (R46, R48),
+  resolution by estimate and by share (R47), and weak activations that last their frame (D40, R40).
 
-**Selection (§8).** Standing inferences are placed at their completion and expanded through dictionary
-lines to base symbols with offsets composed (R28), bound values from the value neurons beside a call
-or the most frequent member otherwise; the electorate is every uncovered open activation plus, where a
-coverer has nothing for the frame ahead, what it covers (R46, R48); one winner per dimension and
-position, actions by share-weighted estimate, events by share (R47), with the least-bad or nothing
-policy (D51); winners fire weakly in the frame ahead, are replaced by the report where it names the
-dimension, last one frame, write nothing and are connected to by nothing (D40, R40).
+## The one departure
 
-## What is not implemented or deviates
+D18 records the apex at firing; D5 makes an activation another bid already covers no neighbor at all.
+Here a row records every activation within reach, with a flag saying whether it stood on the apex when the
+owner fired. Holding reads every recorded activation. Seeding (D47) and credit (D20, D22) read only the
+uncovered ones. On the board R22 already says the same thing: a neuron the bid names that fired and
+another bid covers is credited to no one and charged nothing. The change makes the neuron's arithmetic
+match the machine's, and nothing else.
 
-- **Match (R49)** is not implemented: a standing inference is proposed wherever its placements land,
-  never struck for failing to match the past. Plans therefore are not worn down.
-- **Classes have one position; parameters have exactly two.** The position tests of D27 (an offset
-  joining or leaving a variable) are not run, and a class stores no combinations beyond one position.
-- **Every row is re-covered on every call** rather than only rows whose residual changed (§5.2). The
-  stricter rule is available (`UCAR_DIRTY_ONLY=1`) and is 2-4× faster on text, but it left stale covers
-  that cost 10 points in the closed-loop world. The staleness §2 of the evaluation document anticipates
-  is real.
-- **A candidate function is priced over the rows that hold its seed**, not over the whole history
-  (R15 says every activation where it pays). Pricing over all rows (`UCAR_ALL_ROWS=1`) scored the same
-  on the world and costs about 3× in the pick.
-- **Re-centering runs only for patterns whose covered rows changed** (a fresh row, an evicted row), as
-  D29 says, but a pattern no fresh row reaches is never revisited.
-- **The greedy pick tries at most 12 seeds per stage per call**, in order of standing savings, and
-  stops at the first whose savings are not positive. The spec tries every relation.
-- **Unscoped rewards for earlier frames** reach the connections to the actions that ran at those
-  frames, not every connection written then.
-- **The walk** fires on every update that leaves an estimate negative, so repeated negative exposures
-  wire successive untried actions.
-- **The subtree rule of R38** is partial: a dead neuron's own patterns are retired, which orphans their
-  children onto the ledger, but a neuron that still has a parent outside the subtree is not told apart
-  from one that does not.
-- **The one expansion** binds an inferred call's parameters from their most frequent member, never
-  from what stands at positions that have happened (D44's carry-forward).
-- No backups, no persistence, no diagnostics beyond per-frame stats and table dumps.
+One consequence showed up at once in the traces and is worth stating. The collapse decides what a line
+names by what each node covers (D27). A node whose activations are always covered by other bids covers
+nothing, so the collapse drops it at the next re-centering even though it holds in every use. A line
+whose nodes are all out-credited therefore degenerates to the owner alone and is retired, which is the
+same end the document's rule reaches by failure, one step later.
 
-## Two regimes
+## Not implemented, or simplified
 
-Variables are built on the residual only (D21, D33): a candidate skips every owned neighbor. An earlier
-build let a new variable take neighbors out of a function's cover entry without re-measuring that entry,
-which left stale entries and double-counted coverage; that regime and its `--no-claim` switch are gone.
-Functions read a position a variable holds as the variable when they are collapsed (D27).
+- The match (R49): standing inferences are not read back against the frames they point into and are
+  never struck; they stand until the window closes.
+- Functions of one cover that share a variable go as separate bids, not as one (D31).
+- Keys for the index are recomputed for every living interneuron after each frame; the window scan of the
+  earlier implementation is gone, but nothing is incremental yet.
+- Spans are per activation (D4), and the owner's reach in prices (D13) is read from the largest span any
+  activation of the neuron has had.
+- No backup or persistence, and no parallel dispatch: neurons are called one at a time per wave.
+- The MNIST job runs but has not been measured on this core.
 
-## Results
+## The six-bar cycle
 
-All runs on this container (4 cores), single-threaded. "claim" is the default regime, "no-claim"
-`--no-claim`. Accuracy for text is next-letter accuracy of the event the machine outputs for the frame
-ahead; "apex" is the cost in bits of the settled frontier per frame (D14's body, per frame); "child
-voters" is the share of frames where something above the base voted.
+The configuration of the specification: one channel, a binary price move and own/out, radius 6, `H` 256,
+the `eventsToActions` policy, the world running the right action where the machine is silent, the reward
+the bar's return signed by the action, scoped to the channel and the frame. 200 laps:
 
-**Text, `test.txt` (127 bytes), 5 passes, H=256, R=1**
+| laps | right per bar, of 20 | minted | added | retired | alive neurons | patterns | max height |
+|------|----------------------|--------|-------|---------|---------------|----------|------------|
+| 1-20 | 13 15 17 17 18 16 | 20 | 24 | 12 | 14 | 9 | 5 |
+| 21-40 | 17 16 20 19 20 15 | 20 | 58 | 40 | 14 | 13 | 4 |
+| 41-60 | 11 17 20 18 20 17 | 18 | 134 | 118 | 24 | 23 | 5 |
+| 61-80 | 16 18 20 20 20 14 | 21 | 170 | 160 | 31 | 26 | 6 |
+| 81-100 | 16 20 19 18 20 17 | 12 | 165 | 155 | 31 | 30 | 8 |
+| 101-120 | 14 18 20 20 20 16 | 14 | 44 | 32 | 42 | 38 | 10 |
+| 121-140 | 14 18 20 20 20 19 | 12 | 102 | 96 | 41 | 41 | 11 |
+| 141-160 | 15 15 20 18 20 16 | 11 | 182 | 169 | 39 | 39 | 11 |
+| 161-180 | 14 20 20 19 20 18 | 17 | 234 | 226 | 43 | 42 | 7 |
+| 181-200 | 13 19 19 18 20 18 | 14 | 312 | 297 | 35 | 32 | 3 |
 
-| pass | claim: accuracy / apex / child voters | no-claim: accuracy / apex / child voters |
-|---|---|---|
-| 1 | 20.2% / 6.34 / 3% | 17.0% / 6.25 / 5% |
-| 3 | 54.8% / 3.61 / 36% | 65.9% / 2.85 / 56% |
-| 5 | 73.8% / 2.89 / 58% | 81.0% / 1.79 / 73% |
+Overall 1065 of 1197 right (89%), the last ten laps 55 of 60. Bars 3 and 5 are right from lap 10 on; bars
+1 and 6 keep being lost, since the lines that serve them are the ones that turn over. The machine does not
+settle: patterns are added and retired at a rising rate, and the stack of children over the base grows to
+height 11 and collapses again.
 
-After 5 passes the stack stands 6 (claim) and 9 (no-claim) levels deep; ~8 ms per pass.
+## Four readings of the neighborhood, same outcome
 
-**Text, `abramov_summary.txt` (2 KB), 6 passes, H=1024, R=1**
+Three switches select how a row is recorded and read; all four combinations were run on the cycle for
+100 laps (`UCAR_ROWS=apex`, `UCAR_THROUGH=1`, `UCAR_OWNER_PARAM=1` on the example):
 
-| pass | claim: accuracy / apex / child voters | no-claim: accuracy / apex / child voters |
-|---|---|---|
-| 1 | 21.4% / 5.36 / 41% | 23.1% / 5.01 / 52% |
-| 2 | 27.8% / 4.69 / 59% | 32.0% / 3.86 / 73% |
-| 4 | 34.5% / 4.48 / 60% | 43.3% / 3.18 / 82% |
-| 6 | 41.1% / 4.18 / 60% | 49.8% / 2.88 / 83% |
+| rows | parent matches child | owner as a parameter position | right, laps 81-100 (of 120) | added / retired over 100 laps | alive neurons at 100 |
+|------|----------------------|-------------------------------|-----------------------------|-------------------------------|----------------------|
+| apex only, as D18 says | no | no | 103 | 1683 / 1597 | 37 |
+| every activation, flagged | no | no | 110 | 551 / 485 | 31 |
+| apex only | yes | no | 102 | 1057 / 977 | 38 |
+| every activation, flagged | yes | no | 110 | 572 / 507 | 34 |
+| every activation, flagged | no | yes | 110 | 323 / 255 | 51 |
+| apex only | no | yes | 111 | 3516 / 3430 | 30 |
+| every activation, flagged | no | no, and a function naming the owner may not name the owner's own neuron | 109 | 153 / 90 | 25 |
+| apex only | no | same rule | 108 | 1762 / 1678 | 43 |
 
-A bigram predictor gets about 27% here. After 6 passes: 1,598 / 2,300 neurons, 808 / 1,785 patterns,
-9 / 10 levels, ~5 s / ~11 s per pass.
+The last rule (`UCAR_NO_SELF=1`) excludes exactly the lines that build the stack, "owner, and the owner's
+own neuron one period back". With it and flagged rows the base tables hold, by lap 40, one line per bar
+over base symbols, "owner down, up at −2, up at −1" for bar 6 and "owner up, down at −4, down at −2,
+down at −1" for bar 4 among them, which is the structure the discussion asked for; the children's
+tables then build lines over other children, and the stack continues a level every ten laps or so.
 
-**Text, `abramov.txt` (32 KB), H=1024, R=1, no-claim**: first pass 33.1% (apex 3.67 bits/frame, 83% of
-frames with a child voter, 3,512 neurons over 9 levels, 167 s). An earlier build of the same regime
-reached 35.9% on its second pass with 13 levels; a second pass takes about 4 minutes.
+The document's own reading churns the most. Letting a pattern's parent be matched by the child covering
+it does not change the race described below, since the child that covers the parent is the one the base
+line then names, and the child's own table runs first either way. Admitting the owner's activation as a
+parameter position turns the self-period relation into a parameter whose value neuron the index reuses,
+which lowers the churn and raises the neuron count, and the tables still turn over.
 
-**Synthetic closed loop** (`examples/world.rs`, a 7-bar cycle of moves where the right action needs
-two bars of context; bigram ceiling 43%, true ceiling 71%; reward scoped to the channel and the frame;
-the world runs the right action where the machine is silent): the machine takes 4 lessons in 4,000
-frames and is right on 59-61% of its own calls (claim 59%, no-claim 61%), 0.15 ms per frame.
+## What the traces show
 
-**Stocks, 5 symbols (AAPL, MSFT, NVDA, JPM, XOM), daily bars, 2,500 bars with the last 500 held out,
-H=256, 7 return buckets, lessons where silent, reward = the bar's return signed by the action**
+The per-lap dump (`UCAR_LAP=1`) of the two base tables and the apex per bar, read with the add and retire
+trace (`UCAR_TRACE=1`), gives the sequence. Up is neuron 1, down is 0; the actions are 2 and 3 and under
+this policy are never covered.
 
-| | pass 1 train (2,000 bars) | pass 1 holdout, first sight | pass 2 holdout, second sight |
-|---|---|---|---|
-| claim: calls right | 50.4% | 49.9% | 53.9% |
-| claim: machine vs buy&hold return | 191% vs 229% | 32% vs 60% | 74% vs 60% |
-| no-claim: calls right | 50.2% | 48.8% | 51.8% |
-| no-claim: machine vs buy&hold return | 139% vs 229% | 14% vs 60% | 45% vs 60% |
+1. **Lap 2: the two bigrams.** Down's table adds "owner, up at −1", which holds at bars 2 and 6; up's table
+   adds "owner, down at −1", which holds at bars 1 and 4. Each is bought a child, 4 and 5. From here every
+   base activation is covered by its own bar's bid, and the next bar sees the child.
+2. **Lap 4: the child names itself one period back.** Child 4 fires at bars 2 and 6, so from lap 3 its own
+   activation stands uncovered at −6 in every row. That is a relation counted twice per lap (D47), it pays
+   after three uses, and 4's table adds "owner, 4 at −6" with a child, 6, in the same wave the child fires.
+   The base lines that would name 4 at −1 need the same three uses at one or two per lap, and lose the race
+   by a frame. Child 5 does the same a lap later. Over the run, 28 of the 107 functions added name their
+   own neuron.
+3. **The base lines chase the top of the stack.** Because a child is covered by its own table's bid in the
+   frame it fires, the next bar's row never holds the child on the apex; it holds the child's child. So
+   down's table names 6 at −1, then 10, 13, 17, 19, 22, as each new top appears, and up's table does the
+   same with the other stack.
+4. **Each stack dies and regrows.** "Owner, 4 at −6" earns only while 4 at −6 is uncovered. Once anything
+   names 4 at −1 its previous activation is covered, the node covers nothing, the collapse drops it, the
+   line is retired, 6 dies, and every line above that named 6 fails. Then 4 is uncovered again, the same
+   seed recurs, and the stack rebuilds. That is the added-and-retired column.
+5. **The bigrams flicker through the early rows.** With `H` 256 the first laps' rows, where every base
+   symbol was bare, stay in the history for the whole run. When a bigram is retired its neighbors there
+   fall back to the residual, the same seed pays on those rows, and the same line is added again a frame
+   later with a new child. At lap 14 "owner, down at −1" went out and came back as a new pattern in the
+   same call.
+6. **Bar-specific lines do form, on the stack tops.** "Owner, 4 at −3, 4 at −1" in down's table holds at
+   bar 3 alone; "owner, 5 at −3, 4 at −1" in up's table at bar 1; "owner, 4 at −5, 5 at −1" at bar 5. Each
+   predicts its bar exactly while it lives, and lives as long as the children it names.
 
-The machine speaks on 99.9% of symbol-bars after 10 lessons. The first-sight holdout is a coin flip; the
-second pass re-runs bars the machine was already rewarded on, so its edge is memory, not
-generalization. Per frame: 5-10 ms with 5 symbols; ~90 ms with 10 symbols (the earlier 10-symbol run
-was at 50.4% right after 3,500 bars). Dictionary after two passes: 4,335 neurons over 19 levels
-(claim), 1,791 over 9 (no-claim).
+The ring described in the discussion, each bar's line naming the previous bar's child and nothing above
+the children, never closes, because the self-period line in each child's table is seeded from the same
+evidence as the next bar's line and bids first, in the child's own frame.
 
-**MNIST, 14×14 binarized, 1,000 training images (100 per class) with the first 300 taught, then 500
-test images, H=2048, reward +1/-1 scoped to the digit channel, two frames per image**
+## The letter stream
 
-| | train (after the 300 lessons) | test, 500 images |
-|---|---|---|
-| claim | 14.6% | 17.4% |
-| no-claim | 13.7% | 23.4% |
+`th ch sh wh` repeated four times, radius 1: `h`'s table holds one function per predecessor, each naming
+`h` and the letter at −1, each with a child, and no class. Under D27 and D33 as written a function needs
+one pair twice while a class needs two members twice, so each letter is named outright the second time it
+comes before `h`, and the class seed only ever sees the residual. The worked case in
+[algorithm-text.md](algorithm-text.md) §2 expects a class here.
 
-A longer run (3,000 training images, 1,000 taught, 1,000 test, earlier build) reached 20.5% on test.
-Chance is 10%. The stack reaches level 4-5 on an image; 70-130 ms per image at H=2048.
+`apps/text/jobs/text.js` on `apps/text/data/test.txt` (127 bytes), `H` 256, radius 1: 17% of next bytes
+right on the first pass, 56% on the second, with children voting in 35% of frames.
 
+## Running it
 
-## Reading the numbers
-
-- **Text** behaves as the design intends: the frontier's cost per settled frame falls with passes,
-  the stack grows a letter at a time to a dozen levels, and next-letter accuracy climbs from the
-  bigram level without any supervised signal. The large file is slow because every one of its
-  thousands of neurons re-covers its whole history on each call; profiling is in
-  `examples/text.rs` (per-phase timings).
-- **The synthetic world** confirms the forward side: the machine speaks after a handful of lessons
-  and exceeds the bigram ceiling (43%) on a cycle that needs two bars of context, reaching ~60% of a
-  71% maximum.
-- **Stocks** on daily bars is a coin flip (49-50% of the machine's calls right), as it was for the old
-  engine; being out of the market half the time, the equal-weight portfolio lags buy-and-hold over a
-  bull run. Nothing here says the compression finds no structure, only that daily returns carry little.
-- **MNIST** is the weak one. Under D11 the single ink neuron pools every pixel position, so the only
-  carriers of digit information are shapes high enough in the stack to be digit-specific, and after a
-  few thousand images the stack reaches level 4-5 (pairs, corners, short strokes). Accuracy is above
-  chance (10%) but far from the old engine's position-specific readout. This is the design's bet, not an
-  implementation shortcut, and it is the first thing to look at: how many levels an image needs before
-  its frontier names digit-specific parts, and whether the level-above pricing lets them be bought.
-
-## Where to look next
-
-1. R49's match, so inferred programs are struck when they stop matching.
-2. The variable position tests of D27 and classes with combinations, which the copy and equal cases
-   need.
-3. The two regimes above: whether the widening term should price members as it does.
-4. Performance: incremental counts for the collapse (the implementation document's "pattern counts")
-   instead of re-reading rows; a spatial index for neighborhoods; not scanning every neuron's history on
-   a death.
-
-# Second pass: the extended cycle test and the MNIST review
-
-The acceptance test was the synthetic extended cycle (`apps/stocks/jobs/synthetic-extended-test.js`): the
-first 12 rows of KGC repeated, binary price and volume buckets, own/out, the world running the right action
-where the machine is silent, a reward scoped to the price channel and the frame. It is now
-`apps/stocks/jobs/ucar-extended.js` (and `brain/ucar-core/examples/cycle.rs`, which can trace tables, bids,
-mints and votes), with a test in `tests/machine.rs` that asserts more than 90% optimal decisions over the
-last ten cycles.
-
-## Bugs found and fixed
-
-- **A neuron's activations took the level of each new bid** instead of the neuron's own level (D2), so one
-  child drifted from level 1 to level 5 as its bids covered higher things, and the frame's processing order
-  no longer matched its tables.
-- **The add test and the margin read different counterfactuals** for a function over variables: it was
-  added by its gain over what the variables saved alone in each row, and retired by a margin that charged
-  what they would save alone in every row. The same pattern was added, retired and re-added every few calls.
-  Both now read one formula (D30's "without f, its variables bid alone where that pays").
-- **Recognition re-derived every cover from scratch**, so a candidate priced on the rows it joined (R15) lost
-  them to a same-ratio rival the next call. Recognition now covers the residual of a row and keeps what the
-  cover holds (§5.2), and re-centering re-measures a pattern's own entries in place (D29). The old behavior is
-  `UCAR_REDERIVE=1`.
-- The class collapse dropped members that happened to come after the first failing candidate in count order.
-
-## What the cycle test showed
-
-Measured over the last ten of 100 cycles, H=256 (`last10` in the job's output):
-
-| configuration | optimal |
-|---|---|
-| full machine, R=1 | 62-65% |
-| full machine, R=4 or 12 | 65-77% |
-| no patterns at all, bare base neurons, R=12 | **92.5%** |
-| full machine with the stack capped at one level, R=4 (probe) | 91.7% |
-| functions only (no variables), stack capped, R=12 | 91.7% |
-| functions only, a silent gap of 24 frames after each cycle, R=4 | **96.4%** (100 cycles); **100%** at 200 cycles |
-| functions only, a gap of 12, R=1 | 90.9% (100 cycles); **100%** at 200 cycles |
-| functions only, no gap, 200 cycles | 82.5% |
-| functions only, gap, H=64 instead of 256 | 84% at 100 cycles, unstable after |
-| full machine (variables on), same gap | 54-60% |
-
-Two things explain the gap between the bare base and the full machine.
-
-**1. An unbroken periodic stream is one infinite word, and the stack unrolls it.** A child sits one level
-above the highest activation its bid covered (D2), and a neighbor is whatever stands uncovered within reach
-at whatever level (D5). In a stream that never pauses, the top at each frame names the top of the frame
-before, so the dictionary cannot close the loop: the lap of twelve patterns can never be mutually consistent
-at one set of levels, so every lap a new level forms (as soon as the previous one has recurred twice, R14),
-and the apex at every frame is a neuron minted within the last lap or two. It has one or two exposures, it
-silences everything beneath it (D10), and when it has nothing the fall-through (R48) reaches base marginals
-at odd offsets. The spec's own loop case says this: "the chain grows a level every couple of runs", and ends
-only because the world "shows nothing for a while". Traced over cycles 20-30 the frontier at a fixed cycle
-position changes every lap; capped at one level it settles perfectly (one function per cycle position, 51
-uses each, identical rows, no churn over 25 cycles). With a gap after each cycle the word has an end, the
-towers stop at the gap, and by 200 cycles every decision of the last ten cycles is optimal, at R=4 with a
-gap of 24 and at R=1 with a gap of 12 (the first bar after a gap is the world's lesson, since nothing within
-reach has fired). Convergence takes about 80-100 cycles at H=256 and does not hold at H=64, where the
-history spans too few laps for the position-specific functions to keep their margins. This is a property of the
-design on strictly periodic input, not of this implementation; real bars never repeat exactly, and text
-breaks its chains at rare transitions.
-
-**2. On a binary alphabet the variable stage is degenerate.** A parameter over two positions whose only
-member ever is `vol-up` is a function in disguise: its line costs two offsets and one neuron where a
-function's costs two of each, its choice costs `log2 1 = 0` per occurrence where a function's costs
-`log2 |patterns|`, and agreement between two binary positions is true half the time. So the pick, which
-builds variables first (D33), fills every table with eight parameters over every pair of offsets among
-`−4..0`, each with a margin of hundreds of bits, overlapping on every position; a cover takes one of them
-and leaves the other seven neighbors bare (a second claimant pays the bidder again, D22), and functions can
-only name variables, which overlap and fail. The position-specific functions that would carry the decision
-never form. With variables off they form at once. The spec's parameter is written for an alphabet where
-agreement is rare and meaningful (the alternation case, 32 letters); whether its price should change for a
-binary dimension, or whether a parameter should need two members, is a design question.
-
-The text results are unchanged by the fixes (35% / 46% at four passes on the 2 KB file, spec regime /
-function regime), and the synthetic 7-bar world, which is also an unbroken cycle, is at 48-59% depending on
-the recognition mode.
-
-## MNIST review
-
-Probes on 500 training images (first 200 taught) and 300 test images at 14×14, H=1024:
-
-| configuration | test accuracy |
-|---|---|
-| full machine | 18.3% |
-| stack capped at one level | 17.7% |
-| stack capped at two levels | 16.0% |
-| functions only | 15.7% |
-
-Neither the stack height nor the variable stage moves it, so the loss is not the tower. What votes on an
-image is the uncovered frontier: pairs, corners and short strokes of ink, each a neuron that stands at every
-position it occurs at (D11), so each votes a mean reward over every digit it has stood in. The whole-digit
-shapes that would be specific sit at level 6-8 and rarely recur exactly, so nothing is built on them (R14).
-Two frames per image, the reward scoped to the digit channel, and the teaching phase all run as the MNIST
-case describes; the machine speaks on every image after the lessons; the estimates behave as R47 says (ties
-during teaching go to the share, so the first answers are frequency votes; wrong answers push an estimate
-negative and the walk wires the next digit at zero). Under this design a digit is recognized only once a
-pattern names most of it, and that is the thing to measure next: the level at which digit-specific children
-first appear and how often they recur.
-
-## Probes left in the code
-
-All read from the environment, all default off, none part of the design: `UCAR_MAX_LEVEL` (cap the stack),
-`UCAR_NO_VARIABLES` (skip the variable stage; also the `variables: false` option), `UCAR_NO_CLAIM` (D27's
-claim rule off; also `variablesClaim: false`), `UCAR_REDERIVE` (re-derive covers), `UCAR_ALL_VOTE` (covered
-activations vote), `UCAR_GAP` (silent frames per cycle in the examples), and the traces `UCAR_TRACE=<id|churn>`,
-`UCAR_TRACE_ROWS`, `UCAR_VOTES=<frame>`, `UCAR_MINT=<frame>`.
+```bash
+cd brain
+cargo test --release -p brain-core                       # four behavioral tests; the cycle target is ignored
+cargo run --release -p brain-core --example simple -- 200 256 6
+UCAR_WINDOW=5 UCAR_LAP=1 cargo run --release -p brain-core --example simple -- 24 256 6   # tables per lap
+UCAR_TRACE=1 cargo run --release -p brain-core --example simple -- 40 256 6               # adds, retires, deaths
+UCAR_DUMP=1  cargo run --release -p brain-core --example simple -- 100 256 6              # every table at the end
+cargo run --release -p brain-core --example text -- "th ch sh wh th ch sh wh " 1 64 h
+```

@@ -1,172 +1,113 @@
-/// Shared type aliases and common structures used across the brain.
-///
-/// All cross-module references use integer IDs rather than pointers.
-/// This keeps ownership simple and mirrors the JS implementation.
+//! Shared types for the UCAR machine (docs/algorithm.md).
 
-/// Unique identifier for a neuron (sensory or pattern).
-pub type NeuronId = u64;
+/// Time plus up to two spatial activation dimensions. Index 0 is always time (D1).
+pub const MAX_DIMS: usize = 3;
 
-/// Unique identifier for a channel (e.g. a stock ticker, a text stream).
+/// A coordinate: frame in slot 0, spatial positions after it (D2).
+pub type Pos = [i32; MAX_DIMS];
+/// A rounded offset between two coordinates (D6).
+pub type Offset = [i32; MAX_DIMS];
+
+pub type NeuronId = u32;
+pub type PatternId = u32;
+pub type DimId = u32;
 pub type ChannelId = u32;
+pub type Frame = i64;
 
-/// Unique identifier for a dimension within a channel (e.g. "close", "volume").
-pub type DimensionId = u32;
-
-/// Bucket index within a dimension. Signed because action dimensions use negative
-/// values (e.g. -1 for "OUT"). Event buckets are 1-indexed: [1..=resolution].
-pub type BucketId = i32;
-
-/// Temporal distance in the context window (0 = current frame, 1 = one frame ago, etc.).
-pub type Distance = u32;
-
-/// Hierarchical level (0 = sensory, 1+ = pattern).
-pub type Level = u32;
-
-/// Frame number — signed so context restore can use negative activation
-/// frames (representing neurons activated before the current frame 0).
-pub type FrameNumber = i64;
-
-/// Connection strength (f64 to match JS behavior).
-pub type Strength = f64;
-
-/// Reward signal from the environment.
-pub type Reward = f64;
-
-/// A coordinate identifies a specific sensory neuron: (dimension, bucket).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Coordinate {
-    pub dim_id: DimensionId,
-    pub bucket_id: BucketId,
+/// The three kinds the neighborhood policy distinguishes (D50).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Kind {
+    Event = 0,
+    Action = 1,
+    Inter = 2,
 }
 
-/// The type of a sensory neuron — either an observable event or a choosable action.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum NeuronType {
-    Event,
-    Action,
+/// A neuron dimension: an event or action alphabet of one channel (D1).
+#[derive(Clone, Debug)]
+pub struct NeuronDim {
+    pub id: DimId,
+    pub name: String,
+    pub channel: ChannelId,
+    pub kind: Kind,
+    pub resolution: u32,
+    /// Id of the base neuron for bucket 0; bucket b is `first + b`.
+    pub first: NeuronId,
 }
 
-/// Data stored per connection: how strongly neuron A predicts neuron B,
-/// and the reward signal observed when this prediction fired.
-#[derive(Debug, Clone)]
-pub struct ConnectionData {
-    pub strength: Strength,
-    pub reward: Reward,
+/// An activation dimension: an axis with its radius (D1, R4).
+#[derive(Clone, Debug)]
+pub struct ActDim {
+    pub name: String,
+    pub radius: i32,
 }
 
-/// Result of matching a context against observed active neurons.
-#[derive(Debug, Clone)]
-pub struct MatchResult {
-    /// Overall match quality score.
-    pub score: f64,
-    /// Context entries that matched observed neurons.
-    pub common: Vec<ContextEntry>,
-    /// Context entries not found in observed neurons.
-    pub missing: Vec<ContextEntry>,
-    /// Observed neurons not in the context (potential additions).
-    pub novel: Vec<ContextEntry>,
+/// A channel: its neuron dimensions and the axes it is laid out over (D3).
+#[derive(Clone, Debug)]
+pub struct Channel {
+    pub id: ChannelId,
+    pub name: String,
+    pub event: Option<DimId>,
+    pub action: Option<DimId>,
+    /// Bitmask over activation dimensions; bit 0 (time) is always set.
+    pub axes: u8,
 }
 
-/// A single entry in a context: a neuron at a specific distance with a strength.
-#[derive(Debug, Clone)]
-pub struct ContextEntry {
-    pub neuron_id: NeuronId,
-    pub distance: Distance,
-    pub strength: Strength,
+/// What an action dimension outputs when every candidate is negative (D51).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ActionPolicy {
+    LeastBad,
+    Nothing,
 }
 
-/// Death frame entry for a child pattern: the frame at which it decays to zero strength
-/// and becomes eligible for reaping. Produced by neurons and rebuilt into the death ledger
-/// on restore, so it crosses the neuron → column → region boundary.
-#[derive(Debug, Clone)]
-pub struct DeathFrameEntry {
-    pub pattern_id: NeuronId,
-    pub death_frame: FrameNumber,
+/// The neighborhood policy (D50) and the action policy (D51).
+#[derive(Clone, Debug)]
+pub struct Policy {
+    /// past[holder][target]: may a target of that kind be a neighbor of a holder of that kind.
+    pub past: [[bool; 3]; 3],
+    /// future[holder][target]: may a holder of that kind connect to a target of that kind.
+    pub future: [[bool; 3]; 3],
+    pub action: ActionPolicy,
 }
 
-/// Welford online statistics for incremental mean/variance calculation.
-/// Used for dynamic error thresholds per (neuron, age).
-#[derive(Debug, Clone)]
-pub struct WelfordState {
-    pub n: u64,
-    pub mean: f64,
-    pub m2: f64,
-}
-
-impl WelfordState {
-    pub fn new() -> Self {
-        Self { n: 0, mean: 0.0, m2: 0.0 }
+impl Policy {
+    pub fn all_on() -> Self {
+        Policy { past: [[true; 3]; 3], future: [[true; 3]; 3], action: ActionPolicy::LeastBad }
     }
-
-    /// Record a new observation, updating running statistics.
-    pub fn update(&mut self, value: f64) {
-        self.n += 1;
-        let delta = value - self.mean;
-        self.mean += delta / self.n as f64;
-        let delta2 = value - self.mean;
-        self.m2 += delta * delta2;
-    }
-
-    /// Population variance (returns 0.0 if fewer than 2 samples).
-    pub fn variance(&self) -> f64 {
-        if self.n < 2 {
-            0.0
-        } else {
-            self.m2 / self.n as f64
+    /// The stocks/MNIST policy: no action is anyone's neighbor; only events and interneurons
+    /// connect, and only to actions (algorithm-stocks.md §1).
+    pub fn events_to_actions() -> Self {
+        let mut past = [[true; 3]; 3];
+        for k in 0..3 {
+            past[k][Kind::Action as usize] = false;
+            past[Kind::Action as usize][k] = false;
         }
+        let mut future = [[false; 3]; 3];
+        future[Kind::Event as usize][Kind::Action as usize] = true;
+        future[Kind::Inter as usize][Kind::Action as usize] = true;
+        Policy { past, future, action: ActionPolicy::LeastBad }
     }
-
-    /// Population standard deviation.
-    pub fn std_dev(&self) -> f64 {
-        self.variance().sqrt()
-    }
 }
 
-/// Processing phase — distinguishes spatial (d=0 co-activation) from temporal (d>0 sequence) work.
-/// Both phases use the same per-neuron prediction/error/correction mechanism; they differ only in
-/// which connection-distance slot they read and which level index in Memory they iterate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Phase {
-    Spatial,
-    Temporal,
+/// log2 that prices a one-option alphabet at zero bits (D13).
+#[inline]
+pub fn log2(x: f64) -> f64 {
+    if x <= 1.0 { 0.0 } else { x.log2() }
 }
 
-/// Consensus mode — determines how the per-voter action posteriors are combined into a winner.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConsensusMode {
-    /// Strength-weighted arithmetic mean of the per-voter posteriors, argmax over the dimension.
-    /// A soft ensemble: a candidate can win on a good average even when several voters contradict it.
-    Democratic,
-    /// Naive-Bayes product of the per-voter posteriors: argmax over Σ_voter log(P|voter + NB_EPS).
-    /// Each voter's near-zero posterior acts as a veto, the correct rule for argmax over
-    /// mutually-exclusive classes with roughly-independent evidence.
-    Nb,
+/// A reward as the world reports it (D35).
+#[derive(Clone, Debug)]
+pub struct Reward {
+    pub reward: f64,
+    /// Action channels it pays; empty means every channel.
+    pub channels: Vec<ChannelId>,
+    /// Span of frames, counted back from the arriving frame; 0 means the longest window.
+    pub frames: u32,
 }
 
-
-/// Group mode — determines how the derived correction threshold (1 − group_threshold) adapts from error stats.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GroupMode {
-    /// Fixed threshold = the derived 1 − group_threshold (no adaptation).
-    Static,
-    /// mean + 1 standard deviation (fewer corrections).
-    Conservative,
-    /// mean (moderate corrections).
-    Neutral,
-    /// mean - 1 standard deviation (more corrections).
-    Aggressive,
-}
-
-/// Jaccard-union error between an inferred set and an observed set: `(missing + novel) / union`, where
-/// missing = inferred ∖ observed and novel = observed ∖ inferred. This is `1 − match` under the union
-/// denominator — the SAME grouping comparison recognition uses, here over predicted-vs-actual sets.
-/// Shared by the spatial (neuron-side) and temporal (thalamus-side) prediction-error evaluations;
-/// both pass sets already restricted to the comparable kind (events). Returns None when the union is
-/// empty (nothing to compare).
-pub fn get_union_error(inferred: &rustc_hash::FxHashSet<NeuronId>, observed: &rustc_hash::FxHashSet<NeuronId>) -> Option<f64> {
-    let union_size = inferred.union(observed).count();
-    if union_size == 0 { return None; }
-    let missing = inferred.difference(observed).count();
-    let novel = observed.difference(inferred).count();
-    Some((missing + novel) as f64 / union_size as f64)
+/// One symbol reported by the world in a frame (§2.3).
+#[derive(Clone, Copy, Debug)]
+pub struct Input {
+    pub dim: DimId,
+    pub bucket: u32,
+    pub pos: Pos,
 }

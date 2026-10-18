@@ -1,27 +1,26 @@
-/// Core brain computation engine.
-///
-/// This crate implements the hierarchical prediction system:
-/// neurons, contexts, connections, pattern recognition, and voting.
-///
-/// Architecture (single-threaded, Phase 1):
-/// - Brain: orchestrator — frame loop, learning, inference
-/// - Thalamus: neuron registry, channel management, routing
-/// - Memory: temporal sliding window of active neurons
-/// - Column: neuron partition, batch operations
-/// - Region: column partition, deterministic routing
-/// - Neuron: connections, children, voting, learning, decay
-/// - Context: pattern context matching & merging
-/// - Quantizer: scalar-to-bucket discretization
-/// - Diagnostics: accuracy tracking
-pub mod brain;
-pub mod types;
+//! UCAR: the machine of docs/algorithm.md. One file per type: the neuron side (Parts II and IV) is
+//! `neuron`, `pattern`, `history`, `cover`, `collapse`, `margin`, `pick`, `merge`, `bid` and
+//! `connection`; the machine side (Parts III and V) is `machine`, `activation`, `neighborhood`,
+//! `election`, `index`, `death`, `connect`, `expansion` and `selection`.
 
-mod backup;
-mod column;
-mod context;
-mod diagnostics;
-mod memory;
-mod neuron;
-mod quantizer;
-mod region;
-mod thalamus;
+pub mod activation;
+pub mod bid;
+pub mod collapse;
+pub mod connect;
+pub mod connection;
+pub mod cover;
+pub mod death;
+pub mod election;
+pub mod expansion;
+pub mod history;
+pub mod index;
+pub mod machine;
+pub mod margin;
+pub mod merge;
+pub mod neighborhood;
+pub mod neuron;
+pub mod offsets;
+pub mod pattern;
+pub mod pick;
+pub mod selection;
+pub mod types;
