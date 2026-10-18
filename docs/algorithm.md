@@ -1137,17 +1137,11 @@ Nine cases are worked by hand on these definitions, listed in Part VI.
 
 > **R20 — Call, in order.** Once per wave it fires in, the machine asks one neuron for everything it owes
 > that frame, handing it the count `n` of its neurons (D13) and **every activation of it that fired
-> this frame with a neighborhood that is not empty and is whole**,
+> this frame with a neighborhood that is not empty**,
 > each with its neighborhood, at age 0 (R1), every value neuron in it carrying its variable's values (D7),
 > which the machine reads off the owner's table and the neuron could not. They are processed together. A neuron none of whose activations
 > has a neighbor is not called; such an activation is still open (D9) and on the apex (R27) like any uncovered
 > activation.
->
-> **A neighborhood is whole when the run is at least the activation's reach in time old** (D4). Before that the
-> window reaches back past the first frame, what would have stood there is missing, and a pattern built on the
-> neighborhood would name the edge of the run and not the world. The machine does not hand such an activation
-> over; it fires, stands on the apex and connects like any other (R27, R31), and the neuron hears nothing of it.
-> At the base that is the first `R` frames of the run, and a child waits its own reach.
 >
 > | Step               | Description                                                                                                       |
 > |--------------------|-------------------------------------------------------------------------------------------------------------------|

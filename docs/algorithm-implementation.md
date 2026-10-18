@@ -419,8 +419,6 @@ forward-side deltas are the numbered list in the section above and land in Stage
 21. **Once per descent (R28, D4).** Expansion carries the path it came down and does not re-enter a neuron on
     it, placing the owner's symbol where the function names the owner and stopping; span is read by the same
     descent, and the horizon cut on the reuse comparison goes with the scan.
-22. **The whole-window gate (R20).** The call skips an activation whose reach in time runs back past the first
-    frame of the run; the activation still fires, stands on the apex and connects.
 
 **Phase 3 — the readout gate.**
 

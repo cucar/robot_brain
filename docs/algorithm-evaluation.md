@@ -295,10 +295,10 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   **Diagnostic:** rows per use, per pattern.
 - **Depth on input that repeats.** A stretch that repeats exactly closes into a cycle of children, one per
   phase, since reuse across frames fires the neuron minted a lap ago (R43, D36) and a closed chain expands to
-  one turn (R28); a six-bar cycle settled at six neurons. What is not measured is how long that takes under the
-  whole-window gate (R20) and how the first lap's partial neighborhoods, which the gate withholds, would have
-  shaped the children had they been recorded. **Diagnostic:** the highest level reached per frame against run
-  length; it should rise and flatten on input that varies and on input that repeats alike.
+  one turn (R28); a six-bar cycle settled at six neurons. What is not measured is how long that takes, and how
+  the first lap's neighborhoods, whose windows reach back past the start of the run, shape the children that
+  form first. **Diagnostic:** the highest level reached per frame against run length; it should rise and
+  flatten on input that varies and on input that repeats alike.
 - **Prices move.** Every price is `log₂` of an alphabet (D13), and the alphabets move: `n` as the machine fills and
   is pruned, a table as entries come and go, a variable with its members. A neighbor is counted at what it cost
   when it stood, which is kept with it, so the same neuron can stand in two rows at two costs. So a pattern can
