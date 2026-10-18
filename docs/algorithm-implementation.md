@@ -64,9 +64,9 @@ and each neighbor at its exact offset (D18), so a use is identified by the coord
 a row that sees a use already counted adds nothing to the tallies below. The sections below say "activation" for
 the row that carries a use; the tally moves once per use.
 
-**What a pattern keeps.** Over exactly the uses it covers, two sparse tallies per thing at its offset from the
-pattern's reference (D15) — indexed by the things actually seen, not by everything the box admits — and `n`, the
-number of uses it covers:
+**What a pattern keeps.** Over exactly the uses it covers, two sparse tallies per candidate relation, a node of
+the pattern and a node at an offset from it (D34) — indexed by the nodes actually seen, not by everything the
+box admits — and `n`, the number of uses it covers:
 ```
 present(n)   the covered activations in which n fired and no other pattern of that activation's cover
              holds it — its own share plus the residual
@@ -350,11 +350,13 @@ forward-side deltas are the numbered list in the section above and land in Stage
    the frame numbers. The histogram keyed on identical contexts goes: covers are per activation, so identical
    backward halves no longer share one (§6.2). Rounding (D6) moves out of the history and into writing: a line's
    offsets, a connection's offset, and a placement.
-2a. **Lines in their own frame.** A pattern's offsets are from its reference, the owner's activation is a thing
-   it names or does not (D15), relations are pairwise between things with the owner one of them (D47), and a use
-   is a set of coordinates counted once however many rows saw it (D27). The matcher reads a line against a
-   neighborhood at every place its things fit, not at the owner alone (§5.2). A class loses its positions and
-   its combinations and keeps its members; a parameter's positions are offsets from its first (D41, D44).
+2a. **Lines as relations.** A function is a set of relations between nodes, one fewer than its nodes, the
+   owner's activation a node it names or does not (D15, D16, D34); the seeds are pairwise between nodes with the
+   owner one of them (D47), and a use is a set of coordinates counted once however many rows saw it (D27). The
+   matcher reads a line against a neighborhood at every place its relations are satisfied, not at the owner
+   alone (§5.2). A class loses its positions and its combinations and keeps its members; a parameter is its
+   offsets (D41, D44). Comparing two lines exactly, for D43 and for child reuse, needs a fixed order of the
+   relations, for example written from the latest node; that order is this document's and not the design's.
 3. **Replace the server with the cover.** Routing chooses one closest entry today; it becomes D28's greedy
    cover by ratio with first-namer owners, and both are written into the activation.
 4. **Delete the normal.** `spatial_normal_config`, `refresh_normal_config`, `served`, `spatial_target_channels`
@@ -400,10 +402,11 @@ forward-side deltas are the numbered list in the section above and land in Stage
 16. **Price named-and-absent in bids.** Carry `1 + |p \ O⁻|` on the bid as its price and change the survival
     test in `spatial_survivors` from a flat `≥ 2` to R24's `covered > price`.
 17. **Offer the cover.** Today a neuron bids its routed entry only. R20 sends a bid for every pattern of the
-    activation's cover, so the election sees the whole partition. Each bid carries the coordinate of its
-    reference and of each variable's value (D31); the election resolves it there, the child fires at the
-    reference and each value neuron where its value stood (D53, D45), and a child fired frames back is handed
-    the frames it missed from the coverage set in its first connect call (D9, §7.1).
+    activation's cover, so the election sees the whole partition. Each bid carries where each node stood, the
+    owner at zero (D31); the election resolves it by the bidder's coordinate, the machine places the child at
+    the latest frame covered and the center of the box in space and each value neuron where its value stood
+    (D53, D45), and a child fired frames back is handed the frames it missed from the coverage set in its first
+    connect call (D9, §7.1).
 18. **Replace the above-base adjacency heuristics with the reach.** The eight-sector nearest rule
     (`directional_neighbors`) and the reuse-the-last-declared-set fallback both go: adjacency is D4's box at
     D14's reach, at every level. `channel_positions` and `set_channel_position` serve only the sector rule and

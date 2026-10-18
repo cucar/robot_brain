@@ -4,7 +4,7 @@ A worked case for [algorithm.md](algorithm.md): a machine that hits whatever is 
 of them are, written out neuron by neuron. Nothing here is normative, and the machine is shown running: its
 tables and connections are as listed, and its histories already hold moments like this one. It shows where the
 design does its reference-frame calculation: the machine subtracts coordinates when it assembles a neighborhood
-(D6), and a pattern is written in the offsets between its own things (D15), so everything that is learned or
+(D6), and a pattern is written in the offsets between its own nodes (D34), so everything that is learned or
 acted on is written in differences, and a thing's course is written without saying where it was. And it shows
 what answers for a thing never seen before: the situation written without the thing.
 
@@ -44,7 +44,7 @@ than it was a frame ago. A parameter is written in the offset between its positi
 thing moved and not where it was. The function that names `approaching` beside it says where, since
 `approaching` fires at the body (D38).
 
-| Parameter | its first position, from the body | its second, from the first | what its value neurons learn |
+| Parameter | where `coming` names it, from the body | its one offset | what its value neurons learn |
 |---|---|---|---|
 | `T`, coming straight on | `(0, +2)` now | `(0, +2)` further out, one frame ago | `hit` |
 | `T′`, from the left | `(−2, 0)` now | `(−2, 0)` further out, one frame ago | `turn-left` |
@@ -52,14 +52,15 @@ thing moved and not where it was. The function that names `approaching` beside i
 
 When `T` holds two positions ahead of the body, `coming` holds: a function naming `approaching` and `T` at
 `(0, +2)` from it (D38). `approaching` sends it as one bid, with `T` and the thing it held (D31). The bid
-covers `approaching` and both activations of the thing; `COMING` fires at the body, the function's reference,
-and `T`'s value neuron for that thing fires at `T`'s first position, two ahead of the body (D45). A value
-neuron is one thing on one course, `T:ball` a ball coming straight on, and each holds a lesson of its own:
-`T:ball` connects to what follows it, `hit`, at the offset from where it stood to the body a frame later, with
-what the hit earned (R31). `COMING` is anything coming straight on, and holds that lesson for all of them.
+covers `approaching` and both activations of the thing. `COMING` fires in the frame `approaching` fires, at the
+center of what the bid covered, `(0, +2)` from the body, between the body and where the thing was (D53), and
+`T`'s value neuron for that thing fires over `T`'s two positions, `(0, +3)` from the body (D45). A value neuron
+is one thing on one course, `T:ball` a ball coming straight on, and each holds a lesson of its own: `T:ball`
+connects to what follows it, `hit`, at the offset from where it stood to the body a frame later, with what the
+hit earned (R31). `COMING` is anything coming straight on, and holds that lesson for all of them.
 
 The function in `hit`'s table is the same thing seen from the action: it names `hit` and what stood a frame
-before it, `COMING` at the body and the value neuron two positions ahead (D5). Once it exists its bid covers
+before it, `COMING` two positions ahead and the value neuron three ahead (D5). Once it exists its bid covers
 both in the frame `hit` runs, and in that frame each connects to its child, with that frame's reward (D10).
 Inferred, that child expands to its bidder, `hit`, which is output (R28, R30).
 
@@ -90,10 +91,11 @@ at `(10, 10)`.
 2. **The parameter holds, and the function with it.** `T`'s two positions are two apart and a frame apart, and
    the same member stands at both; `approaching` stands two behind the first. `approaching` sends `coming` with
    `T` holding `ball` (D31). The bid is accepted, covering `approaching` and both activations of the ball, and
-   one level up `COMING` fires at the body and `T:ball` at `(10, 12)`, where the ball is (§7.4).
+   one level up `COMING` fires at `(10, 12)`, the center of the body and the ball's two positions, and `T:ball`
+   at `(10, 13)` (§7.4).
 3. **The value neuron speaks.** Its connection names the child of the function in `hit`'s table, one frame on
-   and two positions back, where the body is (D25). That is the entire record, and `COMING` holds the same one
-   from the body itself.
+   and three positions back, where the body is (D25). That is the entire record, and `COMING` holds the same
+   one from two positions back.
 4. **Next frame the child is expanded and `hit` runs** (R28, R30). Its bid covers `COMING` and `T:ball`, which
    connect to it once more, with what the hit earned (D10).
 
@@ -134,9 +136,9 @@ next action (R37).
 
 | in a reference-frame account | in the machine |
 |---|---|
-| the frame's origin | the pattern's reference: the body where the function names `approaching`, and the thing's own first position for the parameter (D15) |
-| a location in the frame | an offset from the pattern's other things (D6) |
-| a feature at a location | a thing at an offset from the reference (D15) |
+| the frame's origin | none in the pattern: a relation is an offset between two nodes (D34), and the child is placed over what it covered (D53) |
+| a location in the frame | an offset from another node (D6, D34) |
+| a feature at a location | a node in a relation (D16, D34) |
 | the same object at any place in the world | one pattern, since no coordinate is part of a neuron (D11) and no pattern says where it stood (D13) |
 | any object at that location | a class a function names at the offset (D41) |
 | the same object at two locations | one parameter, the offset between them (D44) |

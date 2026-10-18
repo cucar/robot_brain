@@ -21,8 +21,8 @@ across rows, the different letters that have stood one back from it.
 - **A class of the letters before it.** Different letters stand before `h`, so `h`'s table holds a class whose
   members are the letters that have recurred one back (D41, D47), and a function naming `h` and the class at
   `−1` from it (D38). Where a member stands, two letters are written as one call: the function's child fires at
-  `h`'s frame, its reference, and the class's value neuron for the letter that stood fires where that letter
-  stood, one frame back (D45). This case writes the child `·h`, a letter and then `h`, and the value neuron for
+  `h`'s frame, the latest the bid covers (D53), and the class's value neuron for the letter that stood fires
+  where that letter stood, one frame back (D45). This case writes the child `·h`, a letter and then `h`, and the value neuron for
   `t` as `C:t`.
 - **A neighbor where nothing varies.** Where only one letter has stood before another within its history, there
   is nothing to choose among, and the table holds a function that names the letter and that one neighbor. Once

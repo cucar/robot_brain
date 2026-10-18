@@ -249,11 +249,12 @@ two kinds, a function or a variable (D38). A variable is one set, of one of two 
 things: a class is a set of members, one of which stands where a function names it, and a parameter is a set of
 positions, offsets from its first, at all of which one and the same neuron stands. A function is the things it
 names, each at an offset from the others: neighbors, variables of its table, and the owner's activation where it
-names it; classes are its local variables and parameters its arguments. A pattern is written in its own frame of
-reference (D15), so one that names the owner holds at the owner and one that does not holds wherever its things
-stand in the window. Every level is explained as a set of function calls with their arguments: an accepted bid
-is a call, a function's child at the coordinate of its reference with one value neuron per variable where each
-value stood, or a lone parameter's value neuron (§6.4, D45). A bid covers what its patterns name, the bidder
+names it; classes are its local variables and parameters its arguments. A function is a set of relations
+between its nodes (D15, D34), so one that names the owner holds at the owner and one that does not holds
+wherever its nodes stand in the window. Every level is explained as a set of function calls with their
+arguments: an accepted bid is a call, a function's child placed over what the bid covered, at the latest frame
+and the center of the box (D53), with one value neuron per variable where each value stood, or a lone
+parameter's value neuron (§6.4, D45). A bid covers what its patterns name, the bidder
 among them where a pattern names the owner (D31), and every symbol is counted at what it cost to write (D13).
 Base actions take
 no arguments, and one whose channel has no layout acts at a focus the environment holds; the variables are built first, each by its own collapse
@@ -314,11 +315,11 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   joins when it has recurred enough to pay for its entry (D27). Until then a new variant is written with failed
   neighbors. A parameter has no such lag: whatever stands at all its positions is its value. **Diagnostic:**
   occurrences of a function written with a class's failed neighbors, per class.
-- **A pattern's reference moves.** The reference is the owner where the pattern names it, else the thing latest
-  in time (D15), and re-centering may add or drop the owner or that thing, moving the reference and every offset
-  in the line with it (D29). The child stays, and its next activation fires at the new reference. Nothing shows
-  how often that happens. **Diagnostic:** reference changes per pattern per call on stationary input; they should
-  die out.
+- **The child's place moves.** A child is placed at the latest frame its bid covered and the center of the box
+  in space (D53). Re-centering that adds or drops a node at the edge of the box moves where the next activation
+  of the child fires (D29), and what stood beside it a frame later is then at a different offset in the
+  connections. Nothing shows how often that happens. **Diagnostic:** changes in a child's coordinate relative to
+  its bidder, per pattern per call on stationary input; they should die out.
 - **Reach bounds what a parameter can carry.** A parameter binds from offsets within its owner's reach (D4). A
   value needed from further back than that is out of sight, and a value carried forward is carried only as far
   as its owner's reach.
@@ -421,7 +422,7 @@ wires a declared default at birth at strength 1 and runs it where nothing infers
 default and outputs nothing there (R35); the code connects to
 base actions instead of the apex (D25), and so needs no expansion (R28, R30); covered activations keep learning
 in the code, where D10 stops them the frame after they are covered; the code places a recognized pattern's
-activation back at the frame its age names, where the spec fires each child at its pattern's reference and each
-value neuron where its value stood; and it
+activation back at the frame its age names, where the spec places each child at the latest frame it covered
+and the center of its box in space, and each value neuron where its value stood (D53); and it
 shapes no reward (above).
 [algorithm-implementation.md](algorithm-implementation.md) lists the changes.

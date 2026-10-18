@@ -266,16 +266,25 @@ pricing its patterns as if it did not.
 **On D15 — why the two objects can never be one.** Being a center (T5), a pattern is typically a set no
 neighborhood ever was.
 
-**On D15 — why a pattern is written in its own frame of reference.** An earlier draft named every neighbor at
-its offset from the owner. A neuron that fires often and sees far looks back on one stretch of the run from
-many of its activations, each a frame later than the last, so the same arrangement stood at `−5` in one row and
-`−6` in the next and shared no entry between them: nothing counted it twice, and nothing could build it. Written
-between its own things, the arrangement is one pattern wherever it stands in the window, and the rows that saw
-it are one use (D27). Two more things fall out. Rounding (D6) now falls on where a pattern stands, which is never
-written, and not on what it is: three things at `−98`, `−99` and `−100` at radius 10 all rounded to `−99` from
-the owner and lost their order, and at distance 1 from one another they keep it. And the owner's own activation
-becomes one thing among the others, named where naming it pays: a pattern that names it covers it and holds
-nowhere else, exactly as every pattern did before, and one that does not is free of the owner's place.
+**On D15 — why a pattern has no place of its own.** An earlier draft named every neighbor at its offset from
+the owner. A neuron that fires often and sees far looks back on one stretch of the run from many of its
+activations, each a frame later than the last, so the same arrangement stood at `−5` in one row and `−6` in the
+next and shared no entry between them: nothing counted it twice, and nothing could build it. Written as
+relations between its own nodes (D34), the arrangement is one pattern wherever it stands in the window, and the
+rows that saw it are one use (D27). Two more things fall out. Rounding (D6) now falls on where a pattern stands,
+which is never written, and not on what it is: three nodes at `−98`, `−99` and `−100` at radius 10 all rounded
+to `−99` from the owner and lost their order, and at distance 1 from one another they keep it. And the owner's
+own activation becomes one node among the others, named where naming it pays: a pattern that names it covers
+it and holds nowhere else, exactly as every pattern did before, and one that does not is free of the owner's
+place.
+
+**On D34 — why a function is relations and not a star from one node.** A star from one node, that node at zero
+and every other at its offset from it, writes the same offsets a set of relations does, one fewer than the nodes.
+What it adds is a distinguished node, and a distinguished node asks to mean something: where the search starts,
+where the child fires, which node two owners have to agree on. None of those is a fact about the pattern. Where
+the child fires is a fact about the activation, and D53 says it there, on what the bid covered. Written as
+relations, a function has no node that is first, and the question of which node a line is written from is the
+implementation's, as the order two lines are compared in is.
 
 ## 4.2 The cover
 
@@ -841,8 +850,8 @@ what then runs, and speaks for itself from there on.
 activation, and the activation stands at offset zero in every dimension of it. An earlier draft had every bid
 cover its bidder without naming it, since a child that replaced what its pattern names and left the bidder
 standing would leave the level above with both. That tied every pattern to the owner's place, and the same
-arrangement seen from two activations of the owner was two patterns. Now the owner's activation is one thing
-among the others (D15). A pattern that names it costs one offset in the line, holds at the owner and nowhere
+arrangement seen from two activations of the owner was two patterns. Now the owner's activation is one node
+among the others (D16). A pattern that names it costs one offset in the line, holds at the owner and nowhere
 else, and covers it, which is every pattern of the earlier draft unchanged. One that does not holds wherever its
 things stand in the window and leaves the owner as it was. The call writes its owner either way, since it has to
 say whose pattern ran (D13); where the pattern names the owner the two cancel, which is why a letter and the one
@@ -881,10 +890,11 @@ neuron is the member re-labelled by its class, at the place the level above saw 
 for nothing (D13). A parameter has one value however many positions it holds, so its value neuron fires once, at
 its first position. What the earlier rule feared, activations put into frames that had already run, is now what
 any pattern that does not name its owner does with its child, and D9 and §7.1 give such an activation its age
-and the frames it missed. A centroid of what a pattern names was tried too and dropped: it put a child's
-neighbors on both sides of its coordinate, so a line had offsets into its own future and an inference placed a
-center rather than a completion. The reference is the latest thing (D15), so every offset in a line is zero or
-behind it.
+and the frames it missed. A center in time was tried and dropped: it put a child's nodes on both sides of its
+coordinate, so a line had offsets into its own future and an inference placed a middle rather than a
+completion. In space nothing is ahead or behind, so there the child stands at the center of the box it covers,
+where its span is least (D53), and in time at the box's end, the latest frame covered, so nothing a child
+covers is ahead of it.
 
 **On D45 — why one value neuron per variable and value.** Two variables of one activation that both hold `x`
 are two arguments that happen to be equal, and the level above should hear two things. If it matters that they
@@ -1539,9 +1549,8 @@ line written over another neuron's history may not pay on this one's, and the de
 neuron optimizing its history and the machine its window. The cost is that near-duplicates stay two symbols.
 
 **On R43 — a child with several parents.** Each pattern wired to a child is one neuron's view of what it covers,
-with offsets from its own reference, and two lines stating one set of activations have the same reference and
-fire the child at one coordinate (D15, D31), so the level above sees one thing at one place whichever parent
-won. A pattern that does not name its owner is the common case: every neuron whose window held the place saw
+as relations between its nodes, and two lines stating one set of activations are placed at one coordinate by
+the machine (D34, D53), so the level above sees one thing at one place whichever parent won. A pattern that does not name its owner is the common case: every neuron whose window held the place saw
 the same things there, and each bids them at the same coordinate. A child was never renamed when its one line
 re-centered (D29); several lines that drift apart are the same thing across parents.
 

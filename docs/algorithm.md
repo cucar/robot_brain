@@ -189,13 +189,18 @@ Neuron dimensions belong to the base alphabet and to nothing above it.
 
 > **D53 — Interneuron.** A pattern's child: a call neuron (D48) or a value neuron (D45). The machine creates it
 > the first time a bid carrying its pattern is accepted (R16). It has an id and no dimension and no channel.
-> Its activation fires at the coordinate the bid names for it (D31), the frame and the position in every
-> activation dimension: a call neuron where its pattern's reference stood (D15), a value neuron where its
-> variable's value stood (D45).
+> Its activation fires over what its bid covered (D31), and the machine places it: **in time at the latest
+> frame covered**, since an activation stands in no frame before what it covers has happened (D5); **in every
+> other activation dimension at the center of the box the covered nodes span**, rounded toward the smaller
+> coordinate on a half, which is where its span is least (D4). A call neuron is placed so over what its function
+> covered, a lone parameter's value neuron over the parameter's positions, and a class's value neuron stands
+> where its member stood (D45).
 
 An interneuron is not an event or an action, though what it stands for may be either. A child may have
 several parents, since several patterns may come to share it (R43), and they may be of either kind. Its
-activation's coordinate is one of the coordinates its bid covers and never an average over them.
+activation's coordinate is within the box its bid covers, at the box's end in time and its middle in space.
+Time and space are placed by different rules because the future has not happened: in time the end of what is
+covered is the latest point the activation can see, and in space nothing is ahead or behind.
 
 **A pattern is a pointer to a child, and a child is a neuron.** The two are made apart. A neuron adds a
 **pattern**, a line in its own table that may enter a cover at once, and bids it with no child. The first
@@ -205,9 +210,9 @@ to the machine.**
 
 > **D48 — Call neuron.** A function's child, one per function: the neuron the machine gives a function
 > the first time a bid carrying it is accepted (R16), shared by every function the machine has wired to it
-> (R43). It fires when a bid carrying the function is accepted, at the coordinate of the function's reference
-> (D15), once, covering what the function names, the bidder among them where the function names the owner
-> (§6.4), and the value neurons of the variables the function names fire where each value stood (D45). It says which function ran, and its
+> (R43). It fires when a bid carrying the function is accepted, over what the bid covered (D53), once, covering
+> what the function names, the bidder among them where the function names the owner (§6.4), and the value
+> neurons of the variables the function names fire where each value stood (D45). It says which function ran, and its
 > connections are one set for every value those variables have taken, so a neuron above learns about the
 > function regardless of its values by a pattern over it alone. It holds a table, a history and connections of
 > its own, and is expanded through the function whose bid fired it (R28).
@@ -222,9 +227,9 @@ to the machine.**
 > child (D2), and holds a table, a history and connections of its own.
 >
 > **It is the one neuron its variable fires.** It fires when a bid carrying its variable with that value is
-> accepted (§6.4), a function's bid or the parameter's own, where the value stood, once per offset the function
-> names the variable at: a class's value neuron where the member stood, and a parameter's at its first position,
-> however many positions it holds. In a function's bid it stands beside the function's child: the child says which function
+> accepted (§6.4), a function's bid or the parameter's own, where the value stood, once per relation naming the
+> variable: a class's value neuron where the member stood, and a parameter's over its positions, placed as a
+> child is (D53), however many positions it holds. In a function's bid it stands beside the function's child: the child says which function
 > ran, and the value neurons say with what. The child's connections are one set for every value, and a value
 > neuron holds connections of its own for its value, so a neuron above can learn about the function regardless
 > of its values by a pattern over the child, and about one value where that matters by a pattern over the child
@@ -245,7 +250,7 @@ to the machine.**
 >
 > **Above the base, multiple neurons can fire for the same dimension and position.** A neuron can choose to
 > cover with multiple patterns (D28), so several of its children, and the value neurons beside them (D45), may be
-> active at one coordinate, each firing where its bid names (D53).
+> active at one coordinate, each placed by what its bid covered (D53).
 
 > **D9 — Activation window.** An activation at frame `f` stays open through `f + reach_t`, its reach
 > in time (D4). Two things reach it over that span, one frame at a time, by the connect call after the
@@ -299,7 +304,7 @@ assumes for anything the file does not state.
 
 > **D37 — Call.** An activation of a call neuron (D48), with one value neuron beside it per variable its
 > function names (D45). It is made in one of two ways and is the same activation either way. **Recognized**: the
-> election accepts a bid carrying the function, and the call fires at its reference's coordinate (D53), as strong as what
+> election accepts a bid carrying the function, and the call fires over what the bid covered (D53), as strong as what
 > it covers (D40). **Inferred**: an expansion places the call neuron at its completion, the voter's coordinate
 > plus the connection's offset in time and in every other activation dimension (R28, R36), and the call fires
 > weakly there, for the report to make strong what it placed (R30). A call carries nothing of its own: what it is
@@ -322,13 +327,14 @@ read.
 > ```
 > span(a base activation)    =   0
 > span(an activation above)  =   the largest, over everything the pattern that fired it names,
->                                of that thing's offset from the activation plus the span of what stood there
+>                                of that node's offset from the activation plus the span of what stood there
 > reach                      =   span + R                                        per activation dimension
 > ```
 > The span is how far the farthest base activation under the activation lies from its coordinate, read from
-> where the things its pattern names stood when its bid fired it (D31). A pattern may stand at a different
-> distance from its things on each occurrence, so the span is the activation's, and it is fixed when the
-> activation fires. An activation sees `R` beyond the farthest thing it stands for. A base activation stands
+> where the nodes its pattern names stood when its bid fired it (D31). A pattern may stand at a different
+> distance from its nodes on each occurrence, so the span is the activation's, and it is fixed when the
+> activation fires. In every dimension but time the activation stands at the center of what it covers (D53), so
+> its span there is half the box. An activation sees `R` beyond the farthest node it stands for. A base activation stands
 > for nothing but itself and sees `R`; a child over a pair of adjacent positions sees `R + 1`; a child whose
 > coverage ends where another's begins sees that child's coordinate, one past its span, which is how two
 > adjacent coverages are joined into one by a child above them. A child one letter longer than its parent's
@@ -392,10 +398,10 @@ what was done together.
 > kind of thing**, and a spatial component is one more of the same.
 >
 > **A coarse offset in a line may be held by more than one neighbor**, since it spans a range and several
-> activations of one dimension can fall inside it (D6). A pattern names a thing at a written offset from its
-> reference (D15), every neighbor whose exact offset falls in it holds there, and `|p|` counts every thing
-> named. Above the base a `(dimension, position)` may itself carry several activations (D8), which this handles
-> the same way and needs no rule of its own.
+> activations of one dimension can fall inside it (D6). A relation's offset is written rounded (D34), every
+> neighbor whose exact offset from the relation's other node falls in it holds there, and `|p|` counts every
+> node named. Above the base a `(dimension, position)` may itself carry several activations (D8), which this
+> handles the same way and needs no rule of its own.
 >
 > **A neuron can be its own neighbor.** Two activations of one type at different positions each name the other
 > at a nonzero spatial offset. Offset zero in every component is where the activation itself sits, the center
@@ -454,8 +460,8 @@ offset, with one activation dimension and a reach of 1:
 > covered it: the function's child, or the value neuron of a parameter that bid alone. The connection is at the
 > offset from the activation's coordinate to its coverer's (D6), in time and in every other activation
 > dimension, as every connection is (D25), and it takes that frame's reward (R31). Then the activation is
-> silent. An activation that is its coverer's reference stands at the coverer's coordinate (D53), and writes
-> nothing, as one covered at age 0 does. Without this connection the activation could never learn the neuron built over it:
+> silent. An activation standing at its coverer's own coordinate (D53) writes nothing, as one covered at age 0
+> does. Without this connection the activation could never learn the neuron built over it:
 > the child did not exist in the frames it was uncovered, and it is inhibited from the frame the child first
 > fires. So a situation beside which a pattern has named what followed it learns that one neuron, the child, and
 > from then on infers it; the child learns what follows.
@@ -507,20 +513,22 @@ offset, with one activation dimension and a reach of 1:
 >                                                                    in any other
 > which pattern             log₂ |patterns|                          which of the owner's patterns, of any kind
 > which member              log₂ |K|                                 among the members of the variable K
-> which neighbor failed     log₂ |p|                                 among the |p| things and positions the pattern names
+> which neighbor failed     log₂ |p|                                 among the |p| nodes and positions the pattern names
 > ```
 > What each thing costs is the sum of the fields it writes:
 > ```
-> a function, in the table        =  a neuron per neighbor + which pattern per variable         written once
->                                 +  an offset per thing it names but its reference
-> a class, in the table           =  a neuron per member                                        written once
-> a parameter, in the table       =  an offset per position but the first + a neuron per member  written once
-> a bid, on one occurrence        =  what its bidder cost + which pattern                       its owner, and which of its patterns
->                                 +  which member, per variable, at each offset the function names it
->                                 +  which neighbor failed, per thing that did not hold
+> a function, in the table        =  a neuron per neighbor node + which pattern per variable node     written once
+>                                 +  an offset per relation written, one fewer than its nodes (D34)
+> a class, in the table           =  a neuron per member                                             written once
+> a parameter, in the table       =  an offset per offset + a neuron per member                      written once
+> a bid, on one occurrence        =  what its bidder cost + which pattern                            its owner, and which of its patterns
+>                                 +  which member, per variable, per relation naming it
+>                                 +  which neighbor failed, per node that did not hold
 > ```
-> A bid is a function with the variables it names, or a parameter alone (D31). The owner's activation is a thing
-> a function may name (D15), and it costs an offset alone, the neuron being the table's own.
+> A bid is a function with the variables it names, or a parameter alone (D31). The owner's activation is a node
+> a function may name (D16), and it costs nothing in the line beyond the relation that names it, the neuron
+> being the table's own. A function writes the relations that connect its nodes and no more, since the rest
+> follow (D34): three nodes are two offsets, whichever two.
 >
 > **A symbol costs what it took to write.** That is the cost of an activation, and it is the same wherever the
 > activation is counted:
@@ -535,11 +543,11 @@ offset, with one activation dimension and a reach of 1:
 > nothing: a class of two members covers a value neuron that cost one bit and writes one bit. And a class that
 > admitted every base symbol would cover `log₂ B` and write `log₂ B`.
 >
-> **Each kind pays for what it says.** A function says which things and where, once, and each occurrence says
-> only that it happened: the owner, which of its patterns, and what each variable held. Where it stood is not
-> said, since the layout is not priced. A class says which set, once, and leaves which member to each
-> occurrence. A parameter says where, once, and leaves which member to each occurrence, paid once however many
-> positions it stands at. A function that names a variable at two offsets pays its choice twice.
+> **Each kind pays for what it says.** A function says which nodes and the offsets between them, once, and each
+> occurrence says only that it happened: the owner, which of its patterns, and what each variable held. Where it
+> stood is not said, since the layout is not priced. A class says which set, once, and leaves which member to
+> each occurrence. A parameter says where, once, and leaves which member to each occurrence, paid once however
+> many positions it stands at. A function that names a variable in two relations pays its choice twice.
 >
 > **A call pays its owner's name whether or not it covers the bidder.** Where the pattern names the owner's
 > activation (D15), the bid covers the bidder, and what the bidder cost is on both sides and cancels (D22).
@@ -643,14 +651,22 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > parameters (D38), one line per pattern, with each variable's members beside its line. Recognition reads it
 > (D28); adding, retiring and merging write it (R15, R18, D43).
 
-> **D15 — Pattern.** A set of **things** that a neuron **names**, each at an offset from the pattern's
-> **reference** (D6), fitting inside the box a neighborhood spans (D5). A thing is a neighbor (D26), a variable of
-> the owner's table (D38), or the owner's own activation, which stands at offset zero in every neighborhood. The
-> reference is the owner's activation where the pattern names it, and otherwise the thing it names latest in
-> time, on a tie the one first in each other activation dimension in declared order. A pattern holds wherever
-> its things stand at those offsets from one another within the owner's window: one that names the owner holds
-> at the owner and nowhere else, and one that does not holds at any place in the window. It is a function or a
-> variable (D38). It is the collapse of the uses it covers (D27), moves as they move (D29), and promotes a
+> **D16 — Node.** What a pattern names: a neuron (D2), a variable of the owner's table (D38), or the owner's own
+> activation, which stands at offset zero in every neighborhood the owner records (D26).
+
+> **D34 — Relation.** Two nodes (D16) and the offset between them (D6), one component per activation dimension
+> the two share. In a line the offset is written rounded, as every written offset is, and the relation holds
+> where the two nodes stand at any exact offset in the written offset's group. Relations compose: given the
+> offset from `a` to `b` and from `b` to `c`, the offset from `a` to `c` follows, so a set of relations that
+> connects its nodes fixes every other relation among them.
+
+> **D15 — Pattern.** What a neuron **names**: a **function**, a set of relations (D34) that connects its nodes,
+> one relation fewer than nodes, the rest following; a **parameter**, a set of offsets (D6) with no nodes, the
+> same neuron assumed at both ends of each (D44); or a **class**, a set of nodes with no offsets (D41). A pattern
+> fits inside the box a neighborhood spans (D5), and a function holds where one set of activations satisfies
+> every relation it writes, anywhere in the owner's window. One that names the owner's activation holds at the
+> owner and nowhere else, since the owner stands at offset zero, and one that does not holds at any place in the
+> window. A pattern is the collapse of the uses it covers (D27), moves as they move (D29), and promotes a
 > child: a function promotes one, a call neuron (R16), a variable one per value it has held, a value neuron
 > (D45). Its `id` is its creation order within its owner's table, a handle that survives re-centering. It breaks
 > one tie: where two of the owner's patterns measure the same in recognition (D28), the older `id` is taken. The
@@ -661,67 +677,68 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > Neither is a frame: a frame is one column, either of these the whole window. What followed is in neither, and
 > is held as the neuron's connections (D25).
 >
-> **A pattern is written in its own frame of reference.** Its offsets are between the things it names, so the
-> same arrangement seen one frame back and seen ten frames back is one pattern, and a neuron that looks back on
-> one stretch of the run from several of its own activations sees one thing. Where the pattern stood is the
-> coordinate its child fires at (D53), and is never written (D13).
+> **A pattern has no place of its own.** Its relations are between the nodes it names, so the same arrangement
+> seen one frame back and seen ten frames back is one pattern, and a neuron that looks back on one stretch of
+> the run from several of its own activations sees one thing. Where it stood is where its child fires (D53),
+> and is never written (D13).
 
 **A pattern is one of two kinds: a function or a variable.** A variable is what changes from one occurrence to
 the next, and it is of one of two types, each one set. A **class** is a set of members, and says that one of
 them stands where a function names it, whichever. A **parameter** is a set of positions, and says that one and
-the same neuron stands at all of them, whichever it is. A function is what stays fixed around them: the
-neighbors it names, each a neuron at an offset, the variables of its own table that it names, and the owner's
-activation where it names it. **Classes are a function's local variables and parameters are its arguments**: a
-class is a place whose content is decided where the function runs, among what has stood there before, and a
-parameter is one value handed in and used at every one of its positions. **An accepted bid is a call**: the
-function's child fires at the coordinate of the function's reference, and one value neuron per variable fires
+the same neuron stands at all of them, whichever it is. A function is what stays fixed around them: its
+relations, each two nodes and the offset between them, the nodes being neighbors, variables of its own table,
+and the owner's activation where it names it. **Classes are a function's local variables and parameters are its
+arguments**: a class is a place whose content is decided where the function runs, among what has stood there
+before, and a parameter is one value handed in and used at every one of its positions. **An accepted bid is a
+call**: the function's child fires over what the bid covered (D53), and one value neuron per variable fires
 where the variable's value stood (§6.4). A parameter no function names is bid alone, and fires its value
 neuron. A class has no place of its own, and stands only where a function names it.
 
-> **D38 — Two kinds.** A pattern is a function or a variable. A function names things, each at an offset from
-> its reference (D15): neighbors, each a neuron (D26), variables of its owner's table, and the owner's
-> activation where it names it. A variable leaves a neuron open, and is a class or a parameter:
+> **D38 — Two kinds.** A pattern is a function or a variable. A function names relations (D34) over nodes
+> (D16): neighbors, each a neuron (D26), variables of its owner's table, and the owner's activation where it
+> names it. A variable leaves a neuron open, and is a class or a parameter:
 >
 > | Kind | Fixed | Open | Covers | Written once, in the table | Left open on each occurrence    |
 > |------|-------|------|--------|----------------------------|---------------------------------|
-> | a function | the things it names, and where each stands from the others | what its variables hold | its neighbors, what stands where its variables hold, and the owner where it names it | a neuron per neighbor, which pattern per variable, and an offset per thing but the reference | what each variable held         |
+> | a function | its relations: which nodes, and the offset between each pair it writes | what its variables hold | its neighbors, what stands where its variables hold, and the owner where it names it | a neuron or which pattern per node, and an offset per relation written | what each variable held         |
 > | a class (D41) | its members | which member stands where a function names it | the neuron standing there | a neuron per member | which member, `log₂ \|K\|` |
-> | a parameter (D44) | its positions, two or more, offsets from the first | which neuron, the same at all of them | what stands at its positions | an offset per position but the first, and a neuron per member | which member, `log₂ \|K\|`      |
+> | a parameter (D44) | its offsets, between two or more positions | which neuron, the same at all of them | what stands at its positions | an offset per offset, and a neuron per member | which member, `log₂ \|K\|`      |
 >
-> A function says which things and where they stand from one another, and which of its owner's variables stand
-> among them. A class says which set the neuron is from, and nothing about where. A parameter says where, and
-> that the neuron is the same at all of them, and nothing about which. **The two types are closed in opposite
-> ways.** A class is closed on its members and open on where: a neuron that is not a member does not fit, and
-> a function may name the class at any offset, and at several. A parameter is open on its members and closed on
+> A function says which nodes and the offsets between them, and which of its owner's variables stand among
+> them. A class says which set the neuron is from, and nothing about where. A parameter says where, and that
+> the neuron is the same at all of them, and nothing about which. **The two types are closed in opposite
+> ways.** A class is closed on its members and open on where: a neuron that is not a member does not fit, and a
+> function may name the class in any relation, and in several. A parameter is open on its members and closed on
 > where: any neuron fits, seen before or not, and only where it stands at every position. A function owns none
-> of the variables it names: every function of the table that names a variable names the same one, at one
-> offset or at several, and it is paid for once, in its own line. A function may name no neighbor at all, and be nothing but variables brought
-> together; over one variable and nothing else, not even the owner, it would write what the variable writes
-> alone, and is never built (D30). A class stands in no cover but a function's (D31).
+> of the variables it names: every function of the table that names a variable names the same one, in one
+> relation or in several, and it is paid for once, in its own line. A function may name no neighbor at all, and
+> be nothing but variables brought together; over one variable and nothing else, not even the owner, it would
+> write what the variable writes alone, and is never built (D30). A class stands in no cover but a function's
+> (D31).
 >
-> **The owner's activation is a thing like any other.** It stands at offset zero in every neighborhood (D26),
-> and a pattern names it or does not. One that names it holds there alone and covers it: the bidder and what
-> the bid names are then covered together. One that does not holds wherever its things stand in the window and
+> **The owner's activation is a node like any other.** It stands at offset zero in every neighborhood (D26),
+> and a function names it or does not. One that names it holds there alone and covers it: the bidder and what
+> the bid names are then covered together. One that does not holds wherever its nodes stand in the window and
 > covers them alone, and the owner stands as it was. On every occurrence a bid writes its owner and which of
-> its patterns, what each variable it carries held, and which of the things it names did not hold (D13, D22). A
+> its patterns, what each variable it carries held, and which of the nodes it names did not hold (D13, D22). A
 > variable writes what stood in it and passes it up, as a value neuron (D45). A function holds nothing but its
-> things: no branch, no loop. What branches is which pattern fires; what loops is the frame; what a variable
+> relations: no branch, no loop. What branches is which pattern fires; what loops is the frame; what a variable
 > held is above it, in its value neuron.
 
 > **D41 — Class.** A variable that says **one of these stands here**: a set of neurons, its **members**, and
-> nothing else. Where a function names it, at an offset from the function's reference (D38), one member stands,
-> and the function may name it at several offsets, a member at each. Members stand in place of one another: two
-> neurons that have stood together where the class is named are never both members. Its line is its members.
+> nothing else. Where a function names it, as a node of a relation (D38), one member stands, and the function
+> may name it in several relations, a member at each. Members stand in place of one another: two neurons that
+> have stood together where the class is named are never both members. Its line is its members.
 >
 > **Its value** is the member that stood. Each member has a value neuron of its own (D45), and it fires where
-> the member stood. Where no member stands at an offset a function names the class at, that is a failed
-> neighbor (D22), and the class does not hold there.
+> the member stood. Where no member stands where a relation names the class, that is a failed neighbor (D22),
+> and the class does not hold there.
 >
 > **A class is not a neuron.** It is a pattern: found on its own uses (D33), named by the functions of its table
 > wherever a member of it stands (D38), and deleted when its margin turns negative (R18) or it is left with one
 > member (R41). What it saves is the choice among its members against what the neuron standing there cost to
-> write (D13). Named at one offset by a function it is one choice there; named at two it is two, and a pair of
-> members that recurs together is a function of those two neurons, found by the pair relation (D47), not a
+> write (D13). Named in one relation by a function it is one choice there; named in two it is two, and a pair
+> of members that recurs together is a function of those two neurons, found by the pair relation (D47), not a
 > record the class keeps.
 >
 > **It grows and shrinks on one axis**, by its own collapse (D27). A neuron joins its members when what it
@@ -729,25 +746,24 @@ neuron. A class has no place of its own, and stands only where a function names 
 > learned about a member in one function holds in every other. It is closed on its members and open on where: a
 > neuron that is not a member does not fit, and a function that has never named the class at an offset may.
 
-> **D44 — Parameter.** A variable that says **the same one stands at all of these places**: two or more
-> **positions**, each an offset from the first (D6), that hold one and the same neuron, whichever it is. Its
-> first position is its reference (D15), the position latest in time, on a tie the one first in each other
-> activation dimension in declared order. Its line is its positions, and beside them its **members**, the
-> neurons that have stood at all of them within the history, each with its value neuron (D45). The list is a
-> record and not a condition.
+> **D44 — Parameter.** A variable that says **the same one stands at all of these places**: a set of offsets
+> (D6) between two or more **positions**, one offset fewer than positions, that hold one and the same neuron,
+> whichever it is. The offsets carry no nodes, and compose as relations do (D34). Its line is its offsets, and
+> beside them its **members**, the neurons that have stood at all of its positions within the history, each
+> with its value neuron (D45). The list is a record and not a condition.
 >
 > **Its value** is the neuron that stood at its positions, **read through value neurons**: where a value neuron
 > stands at a position, what stands there for the parameter is that variable's value (D45, D7), so one digit
 > shown bare and the same digit held in a class are one and the same neuron to it. A position at which a
 > variable's value neuron stands is recorded with that variable, so that expansion can put the value neuron
-> back there (R28). Where the positions disagree, the value is the neuron at most of them, the nearest to the
-> first on a tie, and every position that holds something else is a failed neighbor (D22).
+> back there (R28). Where the positions disagree, the value is the neuron at most of them, the latest on a tie,
+> and every position that holds something else is a failed neighbor (D22).
 >
 > **A parameter is not a neuron.** It is a pattern: found where two offsets hold one neuron (D33), named by the
 > functions of its table that hold where it does (D38), bid alone where none of them is in the cover (D31), and
 > deleted when its margin turns negative (R18) or fewer than two positions remain (R41). It writes which member
 > once, however many positions it has, so every position after the first is covered in full. For the neuron
-> that stood it fires that member's value neuron, once, at its first position (D45).
+> that stood it fires that member's value neuron, once, over its positions (D53, D45).
 >
 > **It is open on its members and closed on where.** Any neuron fits, seen before or not, and only where it
 > stands at every position: a thing that comes for the first time is the parameter's value the first time, and
@@ -797,13 +813,13 @@ residual. Every price in the design (D13) is counted off them.
 > coverage(p, O)  =  what the neighbors of O that p covers cost, and the activation where p names it and nothing was credited it first
 > price(p, O)     =  what its bidder cost + which pattern               its owner, and which of its patterns
 >                 +  which member, per variable, at each offset named   what each variable it carries held
->                 +  failed · log₂ |p|                                  which of the things it names did not hold
+>                 +  failed · log₂ |p|                                  which of the nodes it names did not hold
 > savings(p, O)    =  coverage(p, O)  −  price(p, O)
 > ```
-> `|p|` is the count of what the bid names: a function's things, a class counted once and a parameter at each
-> of its positions per offset it is named at, or a lone parameter's positions.
+> `|p|` is the count of what the bid names: a function's nodes, a class counted once and a parameter at each
+> of its positions per relation naming it, or a lone parameter's positions.
 > What a pattern names holds or fails: a neighbor fails when its neuron is absent, a class where no member
-> stands at the offset it is named at (D41), a parameter at each position where what stands differs from its
+> stands where a relation names it (D41), a parameter at each position where what stands differs from its
 > value (D44), and the owner's activation never, since it is there wherever the owner reads. What a pattern
 > fires on the apex stands in for what it covers; that is what it saves, and that is the coverage. What it costs
 > is what its occurrence writes. What the bidder cost is on both sides and cancels where the pattern names the
@@ -814,8 +830,8 @@ residual. Every price in the design (D13) is counted off them.
 > ```
 > part(x, O)      =  what the neighbors of O that x holds cost  −  its choice  −  failed · log₂ |x|
 > ```
-> Its choice is which member, once per offset the function names it at. `|x|` is a parameter's own positions,
-> and one for a class: its part does not change with the function it stands in.
+> Its choice is which member, once per relation naming it. `|x|` is a parameter's own positions, and one for a
+> class: its part does not change with the function it stands in.
 >
 > **This is the only valuation in the design**, and it is read over three different sets, so the three numbers
 > differ, and are meant to:
@@ -866,31 +882,33 @@ tie-break where it runs (D15, R24).
 > through it, and go as one bid, the variable carried once. **A parameter no function of the cover names is bid
 > alone.** A class never is: it has no place but the offset a function names it at (D41).
 >
-> **A bid carries what its patterns name, and where.** It names the coordinate of its reference (D15), where its
-> child fires (D53), and the coordinate each variable's value stood at, where that value neuron fires (D45). An
-> accepted bid covers what its patterns name: the bidder among them where a pattern names the owner (D38),
-> credited once, to the first bid of that activation the election accepts (R24), and not otherwise.
+> **A bid carries what its patterns name, and where each node stood.** It names the coordinate at which each
+> node was found, read off the neighborhood with the owner at zero (D7), and what each variable held. The machine
+> translates the coordinates by the bidder's own, credits the activations standing there (R22), and places the
+> child over them (D53): nothing in the bid says where a child fires. An accepted bid covers what its patterns
+> name: the bidder among them where a pattern names the owner (D38), credited once, to the first bid of that
+> activation the election accepts (R24), and not otherwise.
 >
-> | Component  | Description                                                                      |
-> |------------|----------------------------------------------------------------------------------|
-> | patterns   | the ids of the function or functions bid, or of the parameter alone; an id is its creation order (D15) |
-> | things     | the dictionary lines (D12): each function's things at their offsets from its reference, and the positions of every parameter carried |
-> | reference  | the coordinate of each pattern's reference (D15), where its child fires (D53)                |
-> | children   | per function, the id of the child it promotes; none until a bid of it has been accepted (R16) |
-> | values     | per variable, at each offset it is named at, the member that stood, where it stood, and that value's value neuron, none until the machine has created it (D45) |
+> | Component   | Description                                                                      |
+> |-------------|----------------------------------------------------------------------------------|
+> | patterns    | the ids of the function or functions bid, or of the parameter alone; an id is its creation order (D15) |
+> | relations   | the dictionary lines (D12): each function's relations, and the offsets of every parameter carried |
+> | coordinates | per node that stood, where it stood, the owner at zero                           |
+> | children    | per function, the id of the child it promotes; none until a bid of it has been accepted (R16) |
+> | values      | per variable, per relation naming it, the member that stood, where it stood, and that value's value neuron, none until the machine has created it (D45) |
 
 ## 4.8 Relations
 
-> **D47 — Relation.** Two things of the residual (D21) that bear on one another, counted over the history (D18)
-> in **uses**: a use is a set of coordinates, and the same coordinates seen from two activations of the owner
-> are one use (D27). A thing is a neighbor at its coordinate, a variable holding there, or the owner's activation
-> (D15). It is one of three kinds, and each is the evidence for one type of pattern:
+> **D47 — Seed relation.** Two nodes of the residual (D21) that bear on one another, counted over the history
+> (D18) in **uses**: a use is a set of coordinates, and the same coordinates seen from two activations of the
+> owner are one use (D27). The nodes are neighbors at their coordinates, variables holding there, and the
+> owner's activation (D16). It is one of three kinds, and each is the evidence for one type of pattern:
 > ```
-> two things standing together                 a, and b at δ from it                                        a function of the two
-> two offsets that hold one neuron             n at c, and n at c + δ, read through value neurons (D44)     a parameter at distance δ
-> one offset from a thing where neurons vary   a at δ from c in one use, b at δ from c in another           a class of a and b, named at δ from c (D41)
+> two nodes standing together                  a relation, a and b at δ from it (D34)                      a function of the two
+> two offsets that hold one neuron             n at c, and n at c + δ, read through value neurons (D44)     a parameter of the offset δ
+> one offset from a node where neurons vary    a at δ from c in one use, b at δ from c in another           a class of a and b, named at δ from c (D41)
 > ```
-> The first and the third hold between things of any kind, the owner's activation among them. The owner stands
+> The first and the third hold between nodes of any kind, the owner's activation among them. The owner stands
 > in every row at offset zero, so one neighbor that keeps standing at one offset from it is a function of the
 > two, which at the base in a stream of text is what every row carries. The first is counted by the uses that
 > hold the pair at that offset, wherever in the window the pair stands. The second is counted per offset,
@@ -908,22 +926,22 @@ tie-break where it runs (D15, R24).
 > it names is decided by its price over those uses (D13), from the uses alone. There is one collapse per type,
 > and what a neighbor is worth is always what it cost to write (D13), read from the saved neighborhood.
 >
-> **A use is a place, not a row.** It is the set of coordinates the pattern's things stand at, and what stands
+> **A use is a place, not a row.** It is the set of coordinates the pattern's nodes stand at, and what stands
 > around it is what every row of the history that saw those coordinates recorded there (D18). A stretch of the
 > run that several activations of the owner looked back on is one use, however many rows hold it, and one row
-> may hold a pattern at several places, each a use. The owner's activation of each row that saw a use is a thing
+> may hold a pattern at several places, each a use. The owner's activation of each row that saw a use is a node
 > of that use, at its offset from the place.
 >
 > **A parameter.** A use is a set of positions, at the parameter's offsets from one another, where one neuron
 > stands; where the positions disagree, its value there is the neuron at most of them, and each position that
 > holds something else is a failed neighbor (D44). The seed is a pair of coordinates holding one neuron, and
-> gives it those two positions, the later in time the first. Its members are the neurons that have stood at all
-> its positions within the history: **agreement is the whole test**, so a neuron never seen before is its value
-> the first time it stands there, becomes a member, and pays its entry from then on. A member that no use of the
-> history holds any longer leaves. Its positions are decided one by one, at the seed and at every call after; a
-> seed position that fails leaves one, which is no parameter (R41). Every offset `δ` from the first position is
-> counted by the uses in which it holds the parameter's value, and it is a position while what it covers there
-> beats the failures where it disagrees and its place in the line:
+> gives it that one offset. Its members are the neurons that have stood at all its positions within the
+> history: **agreement is the whole test**, so a neuron never seen before is its value the first time it stands
+> there, becomes a member, and pays its entry from then on. A member that no use of the history holds any longer
+> leaves. Its positions are decided one by one, at the seed and at every call after; a seed position that fails
+> leaves one, which is no parameter (R41). Every offset `δ` from a position already in is counted by the uses in
+> which the coordinate there holds the parameter's value, and it is a position while what it covers there beats
+> the failures where it disagrees and its place in the line:
 > ```
 > δ is a position when   what δ holds, over those uses   >   (uses − count(δ)) · log₂ |x|   +   an offset
 > ```
@@ -931,8 +949,8 @@ tie-break where it runs (D15, R24).
 > positions (D22). A parameter left with fewer than two positions is deleted (R41).
 >
 > **A class.** A use is a coordinate where a function names the class, or, before any does, a coordinate at the
-> seed's offset from its thing, holding a member; where no member stands there, that is a failed neighbor (D41).
-> The seed is an offset from a thing where neurons vary, and gives the class the two neurons that have stood
+> seed's offset from its node, holding a member; where no member stands there, that is a failed neighbor (D41).
+> The seed is an offset from a node where neurons vary, and gives the class the two neurons that have stood
 > there most and never together. One test decides it, at the seed and at every call after; a seed member that
 > fails leaves the seed one member, which is no class (R41), so the seed builds nothing and the pick names that
 > neuron outright in its next stage (D33).
@@ -949,12 +967,13 @@ tie-break where it runs (D15, R24).
 > wherever the class is named. A member leaves by the same test read the other way. A class left with one member
 > is an ordinary neighbor, and is deleted (R41).
 >
-> **A function.** The uses are the places whose residual holds the seed, each read in things (D33): a coordinate
+> **A function.** The uses are the places whose residual holds the seed, each read in nodes (D33): a coordinate
 > a variable holds is that variable, any other neighbor is the neuron standing there, and the owner's activation
-> is itself. For a thing `x` at offset `δ` from the seed, the uses that count are those in which the coordinate
-> at `δ` is not named by another function of the cover (D19). Let `s` be their number and `count(x)` how many of
-> them `x` holds in. Naming `x` saves what it covers in each of those, costs a failed neighbor in each of the
-> other `s − count(x)`, and costs its entry in the line (D13):
+> is itself. A candidate is a relation (D34) from a node already in the function to a node `x` of the residual
+> at offset `δ` from it; the uses that count are those in which the coordinate at `δ` from that node is not
+> named by another function of the cover (D19). Let `s` be their number and `count(x)` how many of them `x`
+> holds in. Naming `x` saves what it covers in each of those, costs a failed neighbor in each of the other
+> `s − count(x)`, and costs its entry in the line (D13):
 > ```
 > a neighbor covers    what it cost, in each use where it stands
 > a variable covers    its part (D22), in each use where it holds, over all its positions at once
@@ -962,14 +981,14 @@ tie-break where it runs (D15, R24).
 >
 > x is taken when   what x covers, over those uses   >   (s − count(x)) · log₂ |p|   +   its entry in the line
 > ```
-> the entry being a neuron and an offset for a neighbor, which pattern and an offset for a variable, and an
-> offset alone for the owner. Every offset is decided independently, from the input alone, so the result does
-> not depend on the order they are decided in. A variable is named whole, and it fails at each of its positions
-> where it does not hold. The owner's activation is decided like any thing: a row that saw a use puts the owner
-> at one offset from it, so it is counted at each offset rows saw the seed from, and named at the one where
-> naming it pays, or at none. Once every thing is decided the reference is settled (D15) and the offsets are
-> written from it. **A function chooses among the variables that exist and makes none**: variables are built by
-> their own collapse, first (D33).
+> the entry being an offset for the relation, and a neuron for a neighbor node, which pattern for a variable
+> node and nothing for the owner. Every relation is decided independently, from the input alone, so the result
+> does not depend on the order they are decided in, and a node may enter by its relation to any node already in,
+> since relations compose and the function is the same whichever is written (D34). A variable is named whole,
+> and it fails at each of its positions where it does not hold. The owner's activation is decided like any node:
+> a row that saw a use puts the owner at one offset from it, so it is counted at each offset rows saw the seed
+> from, and named at the one where naming it pays, or at none. **A function chooses among the variables that
+> exist and makes none**: variables are built by their own collapse, first (D33).
 >
 > **A coordinate a variable holds is that variable's.** Once a variable holds a coordinate, every function reads
 > what stands there as the variable: it names the variable or leaves the coordinate alone, and it never names
@@ -985,8 +1004,8 @@ The collapse is the only operation that decides what a pattern names. It runs in
 Skipping owned neighbors is what keeps patterns apart: a pattern grows only into the residual, never into what
 another pattern owns, so two patterns covering the same activations cannot converge on one set of neighbors.
 
-**Every offset is decided by the same uses.** A use says something at every offset from the seed, a neuron or
-a silence, so the outermost offset is decided over the same `s` as the one beside the seed, less only the uses
+**Every relation is decided by the same uses.** A use says something at every offset from the seed, a neuron or
+a silence, so the outermost relation is decided over the same `s` as the one beside the seed, less only the uses
 skipped there. Each pattern's collapse has its own `s`; nothing is pooled across patterns, and no threshold,
 smoothing or probability estimate enters.
 
@@ -1025,27 +1044,27 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 > two stages, one candidate at a time. In each, a relation (D47) is the seed and the collapse of its kind grows
 > it (D27).
 >
-> 1. **Variables.** Of the two variable relations, the offsets from a thing where neurons vary and the pairs of
->    offsets that hold one neuron (D47), the one that would save most as it stands is taken first. What a
->    relation would save as it stands is the seed taken as if it were the whole pattern: D22's savings of it,
->    what it covers less what it writes, summed over the uses that hold it. Ties go to the higher count, then to
->    the older neuron, declaration order at the base and creation order above it, then to the shorter offset.
->    The collapse of its type grows it into a class or a parameter, its own test run on the seed's members or
+> 1. **Variables.** Of the two variable seeds, the offsets from a node where neurons vary and the pairs of
+>    offsets that hold one neuron (D47), the one that would save most as it stands is taken first. What a seed
+>    would save as it stands is the seed taken as if it were the whole pattern: D22's savings of it, what it
+>    covers less what it writes, summed over the uses that hold it. Ties go to the higher count, then to the
+>    older neuron, declaration order at the base and creation order above it, then to the shorter offset. The
+>    collapse of its type grows it into a class or a parameter, its own test run on the seed's members or
 >    positions before anything else (D27), and it is kept if what survives is a variable and its margin is
 >    positive (D30); a seed whose members do not pay seeds nothing, and its neurons are named outright in the
->    next stage. A parameter already in the table with those positions, or a class with those members, is used
->    rather than a new one. A variable that is kept **claims** the coordinates of its uses, and every relation
->    from then on counts only unclaimed coordinates, so no neighbor is evidence for two variables. Then the next
->    relation.
-> 2. **Functions.** Each residual row is now read in **things**: a coordinate a variable holds as that variable,
->    any other neighbor as the neuron there, and the owner's activation as itself. Of the relations of two
->    things standing together, the one that would save most is taken first, read the same way as a variable
->    relation, with the same ties. The collapse grows it into a function over the uses that hold it, and it is
->    priced by its margin (D30): over each use, what the cover saves with the candidate in it less what it saves
->    as it stands, where that is positive. A candidate that pays joins the table and the covers it was priced
->    on, owning what it names there (D19). Then the next relation.
+>    next stage. A parameter already in the table with those offsets, or a class with those members, is used
+>    rather than a new one. A variable that is kept **claims** the coordinates of its uses, and every seed from
+>    then on counts only unclaimed coordinates, so no neighbor is evidence for two variables. Then the next
+>    seed.
+> 2. **Functions.** Each residual row is now read in **nodes** (D16): a coordinate a variable holds as that
+>    variable, any other neighbor as the neuron there, and the owner's activation as itself. Of the relations of
+>    two nodes standing together (D34), the one that would save most is taken first, read the same way as a
+>    variable seed, with the same ties. The collapse grows it into a function over the uses that hold it, one
+>    relation at a time, and it is priced by its margin (D30): over each use, what the cover saves with the
+>    candidate in it less what it saves as it stands, where that is positive. A candidate that pays joins the
+>    table and the covers it was priced on, owning what it names there (D19). Then the next relation.
 >
-> A relation counted fewer than twice seeds nothing, and the count is of uses, so one place in the run seen from
+> A seed counted fewer than twice seeds nothing, and the count is of uses, so one place in the run seen from
 > several activations of the owner counts once (D27). Each stage ends when every relation of its kind has been
 > tried or no residual is left. A parameter no function of a cover names stands in that cover alone, on the
 > positions it holds, where its own bid pays (D28, D31). **What the pick returns is the patterns added.**
@@ -1053,10 +1072,11 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 > **D43 — Merging.** Whenever a pattern is added or re-centered, it is compared with the table, exactly, and of
 > each identical group the oldest is kept and the rest are retired (§5.5):
 >
-> - Two functions with the same things at the same offsets from their reference are one function, their
->   covered uses joined. One that names the owner and one that does not are two functions.
+> - Two functions with the same nodes in the same relations are one function, their covered uses joined. One
+>   that names the owner and one that does not are two functions. Relations compose (D34), so two lines that
+>   write different relations over the same nodes and fix the same offsets among them are the same function.
 > - Two classes with the same members are one class, and their value neurons for each member are one.
-> - Two parameters with the same positions are one parameter, and their value neurons for each member are one.
+> - Two parameters with the same offsets are one parameter, and their value neurons for each member are one.
 >
 > Nothing else is merged.
 
@@ -1109,7 +1129,7 @@ Nine cases are worked by hand on these definitions, listed in Part VI.
 > | delete             | Retire every pattern whose margin is negative, every parameter left with fewer than two positions, and every class left with one member. |
 > | create             | Build patterns: seed each on a relation, grow it by the collapse of its kind, price it; variables first, then functions over the rows as the variables rewrite them. |
 > | merge              | Compare everything added or re-centered this call against its table, exactly; keep the oldest of each identical group and retire the rest. |
-> | return             | The bids of each cover, a function with its variables and what they held, a parameter alone with what it held, each with the coordinate its reference stood at; and everything retired. |
+> | return             | The bids of each cover, a function with its variables and what they held, a parameter alone with what it held, each with where its nodes stood; and everything retired. |
 
 The call runs before the election (R24).
 
@@ -1132,12 +1152,13 @@ keeps its cover, so the call's work is in what changed and not in `H`. The frame
 among them, and their covers matter beyond the history: they are what the call returns as bids (§5.6), so what
 recognition decides for them this call is what the election sees.
 
-**A function fits where its things stand at its offsets from one another, anywhere in the window, and its
-variables hold; a class where a member stands at the offset the function names it at; a parameter where one
-neuron stands at all of its positions.** A parameter takes whatever neuron stands there, member or not, and
-one that was not a member is one from that use on. A class takes members only (D27). Measuring a pattern
-against a neighborhood, each thing it names holds or fails (D22), and each that fails is a correction. A
-function that does not name the owner may fit at several places in one neighborhood, and each is a claimant.
+**A function fits where one set of activations satisfies every relation it writes, anywhere in the window, and
+its variables hold; a class where a member stands where a relation names it; a parameter where one neuron
+stands at all of its positions.** A parameter takes whatever neuron stands there, member or not, and one that
+was not a member is one from that use on. A class takes members only (D27). Measuring a pattern against a
+neighborhood, each node it names holds or fails (D22), and each that fails is a correction; where a failed node
+would have stood follows from its relation to any node that holds. A function that does not name the owner may
+fit at several places in one neighborhood, and each is a claimant.
 Every function of the table is a claimant with the variables it names, and takes the activation itself where
 it names it, with its neighbors (D20); a parameter is a claimant alone on the neighbors no function of the
 cover took. What a variable held is what the bid carries (D31).
@@ -1174,8 +1195,8 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > there. Everything else `C` names holds, in the residual, in enough of them to pay for itself:
 > D27 skips what another function names as it does everywhere, so **a candidate is built on the residual**, and
 > a function on the coordinates variables hold besides, which it names through the variable (D33, D27).
-> The seed is what the table is failing on most, and the collapse settles every other thing at once — the seed
-> chooses the uses, and the uses decide every thing.
+> The seed is what the table is failing on most, and the collapse settles every other node at once — the seed
+> chooses the uses, and the uses decide every node.
 >
 > **Only what a pattern names is built, because that is all a pattern is.** What the child will be followed by
 > is the child's own connections, formed by the child's own activations once it exists (D25). Nothing about it is
@@ -1261,7 +1282,7 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > **It is born holding nothing.** No patterns, no history and no connections (R16). Everything it comes to
 > hold is over the situations its parent's pattern actually took (D25), from its first activation on.
 
-> **R41 — Life of a variable.** **Born** from a variable relation, a class from an offset from a thing where
+> **R41 — Life of a variable.** **Born** from a variable relation, a class from an offset from a node where
 > neurons vary and a parameter from a pair of offsets that hold one neuron, when its collapse and its margin pay
 > (D27, D33). **Changed** by its collapse, once per call: a class by its member test, a parameter by its position
 > test, its members being whatever has stood at all its positions (D27). **Dead** when its margin turns negative
@@ -1279,8 +1300,8 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 ## 5.5 Merge
 
 Recognition re-centers, and creation adds, so either can leave two patterns in the table that are the same: two
-functions with the same things at the same offsets, two classes with the same members, two parameters with the
-same positions.
+functions with the same nodes in the same relations, two classes with the same members, two parameters with
+the same offsets.
 Merging compares everything added or re-centered this call against its own table, exactly (D43), and keeps
 the oldest of each identical group, the lowest creation order, and with it the oldest children the group
 holds, because those have accumulated histories, connections and estimates that a newer one has not.
@@ -1299,8 +1320,8 @@ the children on its ordinary pass.
 
 The call returns two lists: **the bids** of each of the frame's activations' covers (D31, R21), and **everything
 retired** this call, by deletion (R18) or by merging (§5.5). A bid is lines of the table: a function's id, its
-things and its child, with each variable it names and what that variable held, or a parameter alone with what
-it held (D31). A function that has never won a bid has no child, and its bid says so: if it is accepted the machine
+relations and its child, with each variable it names and what that variable held, or a parameter alone with
+what it held, and where each node stood (D31). A function that has never won a bid has no child, and its bid says so: if it is accepted the machine
 gives it a child, and every value the bid carries that has no value neuron one, reused or new (R16, R43, R44),
 and wires them by the wire call (§4.1). A pattern retired is named by its id, and the machine deletes its child
 or its value neurons, if it has any, when they are due (R18).
@@ -1328,7 +1349,7 @@ reported, each after it over what the wave before bought, until a wave fires not
 
 | Step              | Description                                                                                                   |
 |-------------------|---------------------------------------------------------------------------------------------------------------|
-| activate children | Fire every child and value neuron the wave before bought, each at the coordinate its bid names (D53); the uncovered stand on the apex. |
+| activate children | Fire every child and value neuron the wave before bought, each placed over what its bid covered (D53); the uncovered stand on the apex. |
 | process functions | Call every neuron with an activation in this wave, value neurons included (§5).                                 |
 | elect bids        | Cover the frontier's activations that this wave's bids name, by the greedy cover over the board.            |
 | create children   | Give every function of an accepted bid that has no child one, and every value the bid carries that has no value neuron one: a child and the value neurons reused where another bid of the election tied it, created otherwise (R43). Each fires in the next wave. |
@@ -1368,15 +1389,15 @@ child and a value neuron holds for that one value.
 > held (D31), and nothing else. The machine holds the frame, so it reads that one object against what fired
 > and derives both numbers.
 > ```
-> the bid   its patterns, each function's child or none, what each variable it carries held, and the
->           coordinate its reference stood at                                                          (D31)
+> the bid   its patterns, each function's child or none, what each variable it carries held, and where each
+>           node stood, the owner at zero                                                               (D31)
 > covered   the neurons it covers that fired and no earlier bid covers, its bidder among them where a pattern
 >           names the owner — each at what it cost
 > price     the fields its call writes (D13): what its bidder cost, which pattern per function it carries,
 >           what each variable held, and which of the neurons it names in those same frames did not fire
 > ```
-> The bid's offsets are read from the coordinate it names for its reference (D15), so the machine finds each
-> thing it names where the bid says it stood, and nothing in the bid is relative to the bidder.
+> The bid's coordinates are translated by the bidder's own, so the machine finds each node where the bid says it
+> stood, and the child it places is placed over them (D53), by a rule the neuron never reads.
 > `coverage − price` is the savings over stating what it covers flat, D22's expression over the machine's population.
 >
 > **A neuron that fired and the bid does not name belongs to neither side.** It stands in the file as itself if
@@ -1444,8 +1465,8 @@ bid**, which is what stops an activation being paid for twice.
 > the **free set**: every activation on the frontier (R27), at its own full coordinate — frame and position — that
 > some bid names and no earlier election has credited (R23).
 >
-> Bids arrive naming offsets from a reference and the coordinate that reference stood at (D31), so each is
-> resolved against that coordinate before the first round.
+> Bids arrive naming where each node stood, the owner at zero (D31), so each is resolved on the board by the
+> bidder's coordinate before the first round.
 > `price` is R22's. **Two bids that measure the same are told apart in this order**: a bid carrying a child
 > before one carrying none; between two with children, the older child; between two with none, the older
 > bidder; and between two activations of one neuron, the earlier coordinate, the earlier frame first and then
@@ -1483,9 +1504,9 @@ value neuron is given one. A bid that lost is given nothing.
 > (R22).
 >
 > **Identical bids share one child.** Two bids are identical when each names exactly the activations the other
-> names, the bidder among them where a pattern names the owner, at the same price and with the same reference
-> (D31): two lines stating one set of activations from two of its neurons. A pattern that does not name its
-> owner is the common case here, since every neuron whose window held the place saw the same things there and
+> names, the bidder among them where a pattern names the owner, at the same price (D31): two lines stating one
+> set of activations from two of its neurons, which the machine places at one coordinate (D53). A pattern that does not name its
+> owner is the common case here, since every neuron whose window held the place saw the same nodes there and
 > bids them at the same coordinate. There are three cases, and each ends with one child.
 >
 > - One carries a child and the other none: the one with none is wired to that child.
@@ -1519,11 +1540,12 @@ variable's value at its value neuron, by the wire call (§4.1).
 ## 6.4 Activate children
 
 A child fires in the wave after its bid is accepted, before that wave is called. What an accepted bid carries
-fires then where the bid names (D53): the child of each function at the coordinate of its reference, and one
-value neuron per variable where its value stood (D45). A parameter bid alone fires its value neuron and
-nothing else. A pattern that does not name its owner may put its child frames back from the frame being
-compressed, where its things stood; the child is in this frame's waves all the same, and stands on the apex
-of the frame of its coordinate from now on (R27). Nothing sees a child until it fires (D5). A child's activation records
+fires then where the machine places it (D53): the child of each function at the latest frame the bid covered
+and the center of the box its nodes span in every other dimension, and one value neuron per variable where its
+value stood (D45). A parameter bid alone fires its value neuron and nothing else. A pattern that does not name
+its owner may put its child frames back from the frame being compressed, where its nodes stood; the child is in
+this frame's waves all the same, and stands on the apex of the frame of its coordinate from now on (R27).
+Nothing sees a child until it fires (D5). A child's activation records
 the function whose bid fired it, and a value neuron's the variable, since either may have several (R43), and
 each is expanded through that one (R28). Every activation no accepted bid covers stands as itself.
 
@@ -1612,7 +1634,7 @@ lands at offset `a − d`, which at age 0 is offset 0 again (R33). The visits af
 inferences are read once, in the frame the activation fires (R36).
 
 **A child fired at a coordinate frames back is called for the frames it was not there for.** Its pattern did
-not name its owner, and its things stood before the frame being compressed (D53), so it opens at the age its
+not name its owner, and its nodes stood before the frame being compressed (D53), so it opens at the age its
 coordinate gives it (D9). In the frame it fires it is both infer and connect at once: the machine takes its
 inferences, as from any activation in the frame it fires, and then hands it, for each frame from the one after
 its coordinate to this one, that frame's apex within its reach and that frame's rewards at their distances,
@@ -1863,16 +1885,17 @@ only what happened (R32).
 ## 8.2 Expansion
 
 > **R28 — Expansion.** A neuron above the base is not yet anything in the base alphabet. Expanding it recovers
-> what its bid covered: the things its pattern names, the one whose bid fired the activation (§6.4), each at
-> the activation's coordinate plus its offset from the reference (D15), the owner's activation among them where
-> the pattern names it — offsets compose because each is a difference of activation coordinates (D2) —
-> repeated down to base symbols. A pattern that does not name its owner puts nothing back for the owner: it
-> never said where the owner stood.
+> what its bid covered: the nodes its pattern names, the one whose bid fired the activation (§6.4), placed
+> around the activation's coordinate as the child was placed over them (D53), the latest node at the
+> activation's frame and the nodes centered on its position in every other dimension, each other node by its
+> relations (D34), the owner's activation among them where the pattern names it — offsets compose because each
+> is a difference of activation coordinates (D2) — repeated down to base symbols. A pattern that does not name
+> its owner puts nothing back for the owner: it never said where the owner stood.
 > ```
-> A placed at f:      A's line, in v's table, is {v at 0, u at −1}             → v at f,   u at f−1
-> P placed at f+4:    P's line, in b's table, is {b at 0, C at −2},
->                     C's line, in c's table, is {c at 0, d at −1}             → b at f+4, c at f+2, d at f+1
-> Q placed at f+4:    Q's line, in b's table, is {C at 0, u at −3}             → c at f+4, d at f+3, u at f+1, and no b
+> A placed at f:      A's line, in v's table, is {u at −1 from v}              → v at f,   u at f−1
+> P placed at f+4:    P's line, in b's table, is {C at −2 from b},
+>                     C's line, in c's table, is {d at −1 from c}              → b at f+4, c at f+2, d at f+1
+> Q placed at f+4:    Q's line, in b's table, is {u at −3 from C}              → c at f+4, d at f+3, u at f+1, and no b
 > ```
 > **A coarse offset expands to its rounded coordinate.** A neighbor named within the radius is placed where it
 > fired. One named beyond the radius is placed at exactly the distance its offset names, whatever distance in
@@ -1892,7 +1915,7 @@ only what happened (R32).
 > what the connection carried**: every base symbol an inference's expansion places carries the strength and the
 > estimate of the connection it came from, and nothing is re-weighted on the way down.
 >
-> **Expansion substitutes the arguments.** A function's child expands to its things: its neighbors, the owner
+> **Expansion substitutes the arguments.** A function's child expands to its nodes: its neighbors, the owner
 > where it names it, and what its variables held, read from the value neurons its bid fired: a parameter to its
 > member at every one of its positions, a class to its member at each offset the function named it at. Where an
 > inferred call brought no value neuron,
@@ -1956,7 +1979,7 @@ only what happened (R32).
 > inference proposes and is not judged. Against them stands the apex of each frame within the longest reach in
 > time, as the machine keeps it (D24).
 >
-> **What each placed thing is worth.**
+> **What each placed node is worth.**
 > ```
 > a neighbor standing at its offset                     credits what it cost
 > a neighbor standing within reach at another offset    credits what it cost, and charges an offset (D13)
@@ -1970,8 +1993,8 @@ only what happened (R32).
 > group. A neighbor found at a different distance is a correction that says where, and it costs what an offset
 > costs to write, near or far: what makes a near miss cheap is that within the group it costs nothing.
 >
-> **The test.** The inference is proposed when what the placed things credit exceeds which pattern and what
-> they charge, and struck otherwise. That is D22's test with the bidder on neither side, since the reference,
+> **The test.** The inference is proposed when what the placed nodes credit exceeds which pattern and what
+> they charge, and struck otherwise. That is D22's test with the bidder on neither side, since the latest node,
 > and the owner's activation where the line names it, is ahead.
 >
 > **What it decides.** Proposed, the inference's placements ahead contend for their positions (R46, R47).

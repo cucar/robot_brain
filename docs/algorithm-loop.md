@@ -42,8 +42,8 @@ That is the whole machine: three neurons for the three states of the loop, and o
 1. **The first tap names the cue.** In `tap`'s history a third of the rows hold `go` one back, and a tap with
    the cue before it is two things standing together, a relation (D47). Its collapse is a function naming the
    tap and `go` at `−1` from it (D27); it pays at its second use against a line of one neuron and one offset
-   (R15); its bid covers `go` and the tap, and the child `go·tap` fires at the tap's frame, the function's
-   reference, one level up (R16, §7.4).
+   (R15); its bid covers `go` and the tap, and the child `go·tap` fires at the tap's frame, the latest the bid
+   covers (D53), one level up (R16, §7.4).
 2. **The second tap names the first child.** Once `go·tap` fires, the next tap sees it one back, since a
    neighbor is whatever stands uncovered within reach, at whatever level (D5). Another third of `tap`'s rows
    come to hold `go·tap` at `−1`, and the same relation gives the function and the child `go·tap²`, covering

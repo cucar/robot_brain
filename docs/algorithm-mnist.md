@@ -36,7 +36,7 @@ scoped to the digit channel reaches exactly those (R33).
 
 | What stands | its reach | what it sees, and what forms |
 |---|---|---|
-| a pixel | 1 | An inked pixel sees the inked pixels at `±1` in `x` and `y`. The relation is two things standing together, the pixel itself one of them or not (D47); the functions are pairs and corners, a child each, and a pair is one pattern wherever in a pixel's window it stands (D15). |
+| a pixel | 1 | An inked pixel sees the inked pixels at `±1` in `x` and `y`. The relation is two things standing together, the pixel itself one of them or not (D47); the functions are pairs and corners, a child each, and a pair is one pattern wherever in a pixel's window it stands (D15); a child fires at the center of the pixels it covers, on one of the two for a pair (D53). |
 | a pair or a corner | 2 along what it spans, 1 across | A child sees the frontier within its reach: other children, and the pixels the base left uncovered. Strokes form, and a stroke of three pixels forms as a pair child beside the pixel it did not cover (D5). |
 | a stroke, a part | what it spans, plus one (D4) | Strokes join into parts of digits, and parts into a digit's whole shape, each a level above the highest thing it covers (D2). |
 

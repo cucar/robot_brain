@@ -53,9 +53,9 @@ executes what the machine outputs, and pays what was right and what was wrong.
 3. **The function is grown over it.** `say` stands with `run` a frame before it in every row, and `W` holds in
    every row, so the collapse grows one function over the three, `write` (D33, D27): `W` alone would cover the
    two digits and not `say`, and a function over `W` and nothing else would write what `W` writes alone (D38).
-   `say` is the function's reference, so its child `WROTE` fires at `say`'s coordinate, covering `say`, `run`,
-   the shown digit and the said one, and `W`'s value neuron fires at `W`'s first position, the said digit's
-   frame, beside it (§7.4).
+   `say` is the latest frame the bid covers, so its child `WROTE` fires at `say`'s coordinate (D53), covering
+   `say`, `run`, the shown digit and the said one, and `W`'s value neuron fires over `W`'s two positions, at
+   the said digit's frame, beside it (§7.4).
 4. **The request learns its answer.** `run` is covered in the frame the answer runs and connects once to the
    neuron that covered it, `WROTE`, one frame ahead, with that frame's reward (D10). So does the shown digit,
    covered through `W`. Before `write` existed, `say` and the digit stood bare at the answer frame and both

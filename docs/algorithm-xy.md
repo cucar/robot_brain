@@ -52,7 +52,7 @@ the offset between them, so the two pairs are one relation at distance 2, holdin
 collapse grows it into a parameter (D44):
 
 ```
-P:  two positions, the second 2 before the first
+P:  one offset, 2
 ```
 
 `P` says that two frames two apart hold the same letter (D38). It writes two letters as one member, and its
@@ -73,7 +73,7 @@ collapse grows them into one function (D27):
 | So what does the function name? | `p`, and `P` at `−1` and at `−2` from it, and nothing else. |
 
 ```
-alternation:  p at 0, P at −1, P at −2
+alternation:  P at −1 from p,  P at −2 from p
 ```
 
 The function fixes no letter. It says that `P` held twice, interleaved, before `p`, which is the alternation,
@@ -141,7 +141,7 @@ it stood. Nothing about `s` or `t` had to be learned first: each joined the para
 their value neurons are new.
 
 `s, t, u, t, p` does not fit fully: `P` at `−1` holds `t` at both its positions, but `P` at `−2` holds `s` at
-two back and `u` at four back. Its value there is the letter at its first position, `s`, and four back is a
+two back and `u` at four back. Its value there is the letter at the later position, `s`, and four back is a
 failed neighbor (D44, D22).
 
 `x, y, x, y, p` arrives and `p` sees `xyxy` one back and nothing else (§2). `alternation` does not hold, since
