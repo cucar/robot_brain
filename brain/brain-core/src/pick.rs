@@ -12,7 +12,12 @@ pub(crate) enum VarSeed {
     Class { anchor: (Node, Offset), members: (NeuronId, NeuronId), uses: Vec<Pos> },
 }
 
-/// Where a variable bound in a cover entry stands: its first position's absolute coordinate.
+/// The rows of a history by the coordinates they hold, built once per call (see `coordinate_index`).
+pub(crate) struct CoordIndex {
+    pub fine: FxHashMap<Pos, Vec<usize>>,
+    pub owner: FxHashMap<Pos, Vec<usize>>,
+    pub coarse: Vec<(usize, FxHashSet<Offset>)>,
+}
 
 /// Whether `a` is later than `b`: later in time, then greater on the other axes.
 pub(crate) fn later(a: &Pos, b: &Pos) -> bool { a > b }
@@ -39,12 +44,21 @@ impl Neuron {
             if built { added += 1; }
         }
         let new_vars: Vec<PatternId> = self.table.iter().filter(|p| p.is_variable() && p.id >= first_pid).map(|p| p.id).collect();
-        // stage 2: functions
+        // stage 2: functions. The seeds are ranked once over the residual as it stands; a seed that
+        // builds nothing changes nothing, so the next in the ranking is the next the rule names; one that
+        // builds changes the residual, so the ranking is read again (D33). The rows are indexed by the
+        // coordinates they hold once per call, for the uses of each seed tried.
+        let at = self.coordinate_index();
         let mut tried: FxHashSet<(Node, Node, Offset)> = FxHashSet::default();
         loop {
-            let Some((a, b, off, uses)) = self.best_function_seed(ctx, &tried) else { break };
-            tried.insert((a, b, off));
-            if self.build_function(a, b, off, &uses, ctx) { added += 1; }
+            let ranked = self.ranked_function_seeds(ctx, &tried);
+            let mut built = false;
+            for ((a, b, off), pairs) in ranked {
+                tried.insert((a, b, off));
+                let uses = self.function_seed_places(a, pairs, &at);
+                if self.build_function(a, b, off, &uses, ctx) { added += 1; built = true; break; }
+            }
+            if !built { break; }
         }
         // a variable no function names would write what it writes alone, and is not kept (D30)
         for v in new_vars {
@@ -213,15 +227,18 @@ impl Neuron {
         true
     }
 
-    /// The function seed (D47): two nodes standing together, read in nodes (D33), the pair that would
-    /// save most as it stands. Returns the pair, the offset from the first to the second, and its uses.
-    pub(crate) fn best_function_seed(&self, ctx: Ctx, tried: &FxHashSet<(Node, Node, Offset)>) -> Option<(Node, Node, Offset, Vec<(Pos, Vec<usize>)>)> {
+    /// The function seeds (D47): two nodes standing together, read in nodes (D33), ranked by what each
+    /// would save as it stands, most first. Each comes with the offset from the first to the second and
+    /// the coordinates of its uses.
+    pub(crate) fn ranked_function_seeds(&self, ctx: Ctx, tried: &FxHashSet<(Node, Node, Offset)>) -> Vec<((Node, Node, Offset), Vec<(Pos, Pos)>)> {
         let wp = log2((self.table.len() + 1) as f64);
         struct FS { uses: FxHashMap<(Pos, Pos), (usize, f64)> }
         let mut fs: FxHashMap<(Node, Node, Offset), FS> = FxHashMap::default();
         for (i, row) in self.history.iter().enumerate() {
             // nodes of the row: the owner at zero, residual neighbors, claimed coordinates as variables at their first position
-            let mut nodes: Vec<(Node, Pos, f64)> = vec![(Node::Owner, row.pos, row.own_cost)];
+            // the owner's activation is residual where no entry of the cover is credited it; named where it
+            // is not, it is written and saves nothing
+            let mut nodes: Vec<(Node, Pos, f64)> = vec![(Node::Owner, row.pos, if row.owner_self.is_none() { row.own_cost } else { 0.0 })];
             let mut seen_vars: FxHashSet<PatternId> = FxHashSet::default();
             for j in 0..row.nbs.len() {
                 match row.claim[j] {
@@ -260,35 +277,87 @@ impl Neuron {
                 }
             }
         }
-        let mut best: Option<(f64, usize, (Node, Node, Offset), Vec<(Pos, Pos)>)> = None;
-        for (key, e) in &fs {
-            if e.uses.len() < 2 || tried.contains(key) { continue; }
+        let mut ranked: Vec<(f64, usize, (Node, Node, Offset), Vec<(Pos, Pos)>)> = Vec::new();
+        for (key, e) in fs {
+            if e.uses.len() < 2 || tried.contains(&key) { continue; }
             // as it stands: covers both, writes the owner, which pattern and no failure; the owner cancels where named
             let mut save = 0.0;
             let mut count = 0;
             for (_, (i, cov)) in &e.uses {
                 let row = &self.history[*i];
-                let price = if matches!(key.0, Node::Owner) { wp } else { row.own_cost + wp };
+                let price = if matches!(key.0, Node::Owner) && row.owner_self.is_none() { wp } else { row.own_cost + wp };
                 let s = cov - price;
                 if s > 0.0 { save += s; count += 1; }
             }
             if count < 2 { continue; }
-            let better = match &best { None => true, Some((bs, bc, bk, _)) => save > *bs || (save == *bs && (count > *bc || (count == *bc && key < bk))) };
-            if better { best = Some((save, count, *key, e.uses.keys().copied().collect())); }
+            ranked.push((save, count, key, e.uses.into_keys().collect()));
         }
         let _ = ctx;
-        let (_, _, (a, b, off), pairs) = best?;
-        // uses as places: the first node's coordinate, with the rows that saw the pair
+        // most saved first, then most uses, then the lesser key
+        ranked.sort_by(|x, y| y.0.partial_cmp(&x.0).unwrap_or(std::cmp::Ordering::Equal).then(y.1.cmp(&x.1)).then(x.2.cmp(&y.2)));
+        ranked.into_iter().map(|(_, _, key, pairs)| (key, pairs)).collect()
+    }
+
+    /// The rows by the coordinates their neighbors stand at, as `nbs_at` reads them (D6): a neighbor
+    /// within the radius stands at its coordinate exactly; one beyond it stands at a rounded offset,
+    /// which the rows holding any such offset keep by row, read against the rounded offset of the
+    /// coordinate asked for.
+    pub(crate) fn coordinate_index(&self) -> CoordIndex {
+        let mut fine: FxHashMap<Pos, Vec<usize>> = FxHashMap::default();
+        let mut owner: FxHashMap<Pos, Vec<usize>> = FxHashMap::default();
+        let mut coarse: Vec<(usize, FxHashSet<Offset>)> = Vec::new();
+        for (i, row) in self.history.iter().enumerate() {
+            owner.entry(row.pos).or_default().push(i);
+            let mut far: FxHashSet<Offset> = FxHashSet::default();
+            for nb in &row.nbs {
+                if self.within(&nb.delta) {
+                    let v = fine.entry(add(&self.mask(&row.pos), &self.mask(&nb.delta))).or_default();
+                    if v.last() != Some(&i) { v.push(i); }
+                } else {
+                    far.insert(self.round(&nb.delta));
+                }
+            }
+            if !far.is_empty() { coarse.push((i, far)); }
+        }
+        CoordIndex { fine, owner, coarse }
+    }
+
+    /// A delta on the owner's axes alone, as rounding leaves it within the radius.
+    pub(crate) fn mask(&self, d: &Pos) -> Pos {
+        let mut out = [0; MAX_DIMS];
+        for k in 0..MAX_DIMS.min(self.radii.len()) { if self.axes & (1 << k) != 0 { out[k] = d[k]; } }
+        out
+    }
+
+    /// Whether a delta lies within the radius on every axis the owner has, where rounding is exact and a
+    /// rounded offset beyond it never lands (D6).
+    pub(crate) fn within(&self, d: &Pos) -> bool {
+        (0..MAX_DIMS.min(self.radii.len())).all(|k| self.axes & (1 << k) == 0 || d[k].abs() <= self.radii[k])
+    }
+
+    /// A function seed's uses as places: the first node's coordinate, with the rows that saw it there.
+    pub(crate) fn function_seed_places(&self, a: Node, pairs: Vec<(Pos, Pos)>, at: &CoordIndex) -> Vec<(Pos, Vec<usize>)> {
         let mut places: Vec<(Pos, Vec<usize>)> = Vec::new();
         for (ca, _) in pairs {
-            let rows: Vec<usize> = self.history.iter().enumerate().filter(|(_, r)| {
-                match a { Node::Owner => r.pos == ca, _ => !self.nbs_at(r, &sub(&ca, &r.pos), None).is_empty() }
-            }).map(|(i, _)| i).collect();
+            let mut rows: Vec<usize> = match a {
+                Node::Owner => at.owner.get(&ca).cloned().unwrap_or_default(),
+                _ => {
+                    let mut v = at.fine.get(&self.mask(&ca)).cloned().unwrap_or_default();
+                    for (i, far) in &at.coarse {
+                        let d = sub(&ca, &self.history[*i].pos);
+                        if !self.within(&d) && far.contains(&self.round(&d)) { v.push(*i); }
+                    }
+                    v.sort_unstable();
+                    v.dedup();
+                    v
+                }
+            };
+            rows.shrink_to_fit();
             if !rows.is_empty() { places.push((ca, rows)); }
         }
         places.sort();
         places.dedup_by(|x, y| x.0 == y.0);
-        Some((a, b, off, places))
+        places
     }
 
     pub(crate) fn build_function(&mut self, a: Node, b: Node, off: Offset, uses: &[(Pos, Vec<usize>)], ctx: Ctx) -> bool {
@@ -313,6 +382,14 @@ impl Neuron {
         for (_, rows) in uses {
             let Some(&i) = rows.iter().max_by_key(|&&i| (self.history[i].pos[0], i)) else { continue };
             if !seen.insert(i) { continue; }
+            // a claim enters a cover only where it pays with nothing taken; where none of the line's
+            // placements does, the row's cover is as it stands and the line adds nothing there
+            {
+                let row = &self.history[i];
+                let free = vec![false; row.nbs.len()];
+                let wp = self.which_pattern_bits();
+                if !self.claimants(row, &p, &free, false, wp, ctx).iter().any(|c| c.coverage > c.price) { continue; }
+            }
             let with = self.greedy_cover_without(i, None, ctx);
             if !with.iter().any(|e| e.pattern == pid) { continue; }
             let as_is = self.greedy_cover_without(i, Some(pid), ctx);
