@@ -117,6 +117,8 @@ The implementation follows the specification on the `wavefront` branch of the do
 departure, stated at the top of `neuron.rs`: a node naming a neuron also holds where a child stands that
 covers an activation of that neuron at the node's offset, and the bid then covers the child. With it the
 six-bar cycle settles: every bar right and nothing added or retired from lap 111 at `H` 256 and radius 6.
+A second, in `neighborhood.rs`: base activations reported in one frame are neighbors of one another, which
+is what lets an image's pixels see each other.
 [docs/ucar-results.md](docs/ucar-results.md) records what the machine does on the cycle and on a letter
 stream, the readings that were tried, what the traces show, and what is not implemented yet.
 

@@ -57,6 +57,12 @@ the collapse (D27) all read a node this way, and the bid then covers the child i
 activation under it. A pattern's parent may be matched by its child. The rows themselves record the
 apex alone, as D18 says.
 
+A second departure is on the machine's side. D5 admits a same-frame neighbor only from an earlier wave,
+so the base activations reported in one frame never see one another. Here they do, within reach. On the
+cycle and the letter stream this changes nothing, since each frame there reports one event and one
+action and the policy keeps those apart. On MNIST it is the difference between learning nothing and
+learning something (below).
+
 An earlier departure, rows recording every activation within reach with a flag for the apex, is gone.
 Of all 64 combinations of the six readings that were tried (below), the only one that settles the
 cycle at every `H` and radius tried is this one with nothing else changed.
@@ -71,7 +77,6 @@ cycle at every `H` and radius tried is this one with nothing else changed.
 - Spans are per activation (D4), and the owner's reach in prices (D13) is read from the largest span any
   activation of the neuron has had.
 - No backup or persistence, and no parallel dispatch: neurons are called one at a time per wave.
-- The MNIST job runs but has not been measured on this core.
 
 ## The six-bar cycle
 
@@ -169,6 +174,23 @@ outright the second time it comes before `h`. The worked case in [algorithm-text
 
 `apps/text/jobs/text.js` on `apps/text/data/test.txt` (127 bytes), `H` 256, radius 1: 20% of next bytes
 right on the first pass, 78% on the second, with children voting in 83% of frames of the second.
+
+## MNIST
+
+`apps/mnist/jobs/mnist.js` at its defaults: 14×14 images, ink above 128 as one event, 1000 training
+images (100 per digit, the first 200 taught, the rest rewarded ±1), 500 test images, `H` 2048, radius 1.
+
+| neighbors in the image frame | train correct | test correct | patterns | neurons | ms per image |
+|------------------------------|---------------|--------------|----------|---------|--------------|
+| earlier waves only (D5) | 9.9% | 9.8% | 0 | 12 | 0.1 |
+| base activations of the frame | 17.6% | 15.8% | 390 after training, 555 after test | 266, then 365 | 293 train, 411 test |
+
+Under D5 every pixel of an image fires in the same wave and the previous image is out of reach, so no ink
+activation ever has a neighbor and nothing is built; the machine says a digit from the bare ink neuron's
+connections, at chance. With same-frame base neighbors pairs and corners form (254 neurons at the base,
+10 one level up, 2 two levels up at the end of training), accuracy is near 17% from image 100 on and does
+not climb, and the tables keep growing through the test images. The "apex/image" figure the job prints
+reads the frame one reach back, the digit frame in this protocol, and is not the image's apex.
 
 ## Running it
 

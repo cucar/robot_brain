@@ -5,7 +5,8 @@
 //! neuron stands at its offset, or where a child stands that covers an activation of that neuron at the
 //! offset (the child's expansion, R28, read at the row). Matching (D22), seeding (D47) and the collapse
 //! (D27) read it the same way, and the bid then covers the child. A history row records the apex alone,
-//! as D18 says.
+//! as D18 says. A second departure is on the machine's side (`neighborhood.rs`): base activations
+//! reported in one frame are neighbors of one another, where D5 admits only earlier waves.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 

@@ -19,8 +19,10 @@ impl Machine {
             for (i, b) in f.acts.iter().enumerate() {
                 let r = ActRef { frame: f.no, index: i as u32 };
                 if r == me { continue; }
-                // fired before me: an earlier frame, or an earlier wave of the same frame
-                if !(b.opened_at < a.opened_at || (b.opened_at == a.opened_at && b.wave < a.wave)) { continue; }
+                // fired before me: an earlier frame, or an earlier wave of the same frame; base activations
+                // reported in one frame see one another (the second departure, against D5)
+                let same_frame_base = b.opened_at == a.opened_at && a.wave == 0 && b.wave == 0;
+                if !(b.opened_at < a.opened_at || (b.opened_at == a.opened_at && b.wave < a.wave) || same_frame_base) { continue; }
                 if !self.cfg.policy.past[a.kind as usize][b.kind as usize] { continue; }
                 let shared = a.axes & b.axes;
                 let mut delta = [0i32; MAX_DIMS];
