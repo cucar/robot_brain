@@ -12,8 +12,8 @@ Above the alphabets it builds a hierarchical dictionary of **patterns**. A patte
 A **variable** is what changes from one occurrence of a pattern to the next, and is left open until the
 occurrence fills it. A **function** names neurons and variables, each at an offset from the others, and holds
 wherever they stand so. A function has a single child. A variable has multiple children: one child per value.
-Each frame, the machine compresses what arrived in waves. The neurons that fired bid their patterns, an
-election takes the bids that pay, and each accepted pattern's child fires in the next wave.
+Each frame, the machine compresses what arrived one level at a time. The neurons that fired bid their
+patterns, an election takes the bids that pay, and each accepted pattern's child fires at the next level.
 
 What no pattern covers is the **apex**: the machine's state at a frame, the situation it is in, and the set that
 infers the frame to come. Every neuron records what followed its activations along with their rewards.
@@ -58,7 +58,7 @@ It holds two numbers: strength and earnings.
 Strength is the number of times that the connection was seen. Earnings are the total reward paid in those frames (R31).
 Its estimate is its earnings over its strength, the average reward per time seen.
 Every frame, each neuron standing on the apex infers from its connections what follows it (R36).
-If an inference names a higher level neuron, it is expanded down to the base neurons it stands for (R28).
+If an inference names a neuron above the base, it is expanded down to the base neurons it stands for (R28).
 The base neurons placed at the frame ahead are then resolved into the machine's output.
 In each action dimension the machine outputs the action placed there with the largest estimate (R47).
 In each event dimension it outputs the event the most inferences place there, and reads no estimate.
@@ -274,7 +274,7 @@ to the machine.**
 
 > **D9 — Activation window.** An activation at frame `f` stays open through `f + reach_t`, its reach
 > in time (D4). Two things reach it over that span, one frame at a time, by the connect call after the
-> frame's last wave (§7.1):
+> frame's last level (§7.1):
 >
 > | Input           | Description                                                                                                 | References |
 > |-----------------|-------------------------------------------------------------------------------------------------------------|------------|
@@ -387,8 +387,9 @@ read.
 > fires, within reach in every activation dimension they share** (D4), **and the second is not later than the
 > first**. Whether the second is a base neuron or an interneuron is no condition: a neighbor is whatever
 > nothing has covered, so a base neuron sees a child one frame back beside the base neurons around it. What has not yet fired in the
-> frame is not there to be seen, and a child fires in the wave after its bid is accepted (§6.4), so a same-frame
-> neighbor is whatever an earlier wave fired. **The second's kind must be admitted beside the first's kind by the past
+> frame is not there to be seen, and a child fires at the level after the one its bid was accepted at (§6.4), so
+> a same-frame neighbor is whatever fired at the same level or an earlier one: every base activation the frame
+> reported fires at its first level, together. **The second's kind must be admitted beside the first's kind by the past
 > table of the policy** (D50); where it is, events and actions are adjacent to one another like anything else, and
 > what was done a frame ago is context as much as what was seen. In space both directions count — an activation
 > three positions to the right arrives in the same
@@ -466,7 +467,7 @@ offset, with one activation dimension and a reach of 1:
 > that frame, and it has four names for the four things it is. It is the **frontier**, looking back: everything
 > underneath it is recovered by expanding it, so it is what the file's body writes. It is the **situation**: what
 > every neuron sees as its neighborhood (D5), what connects to what ran, and what votes. It is the
-> **wavefront** of recognition: where the frame's waves stopped rising (R26), and from where the wave runs
+> **wavefront** of recognition: where the frame's levels stopped (R26), and from where the wave runs
 > forward, each activation of it reading its own connections ahead, which it can do only because it is also
 > the frontier, the neighborhood every neuron was built on. And it is the apex, the top of the hierarchy as it
 > stands. The four are one set, and coverage takes a neuron out of it in every role at once.
@@ -628,11 +629,11 @@ it is used.
 | Call                    | Description                                                                                                                                                       | References |
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------|
 | create neuron           | The machine creates it when an accepted bid needs one and none can be reused, holding nothing: a call neuron for a function, or a value neuron for the value a variable held. | R16, R43, R44 |
-| process functions       | In its wave: everything structural for the activations that fired this frame.                                                                             | §5, R20    |
-| wire child to pattern   | Once the frame's last wave has run, the machine points each function at the child it created or chose for it, and each variable's value at its value neuron.                                             | R16, R17, R44 |
+| process functions       | At its level: everything structural for the activations that fired this frame.                                                                             | §5, R20    |
+| wire child to pattern   | Once the frame's last level has run, the machine points each function at the child it created or chose for it, and each variable's value at its value neuron.                                             | R16, R17, R44 |
 | delete pattern neighbor | The machine removes a neuron that no longer exists from every pattern and saved activation that names it.                                                          | R38        |
-| connect                 | After the frame's last wave, reaching every open activation at age 1 and beyond: it delivers what stood on the apex this frame and any reward, and collects nothing.                                   | §7.1       |
-| infer                   | After the frame's last wave, reaching every activation at age 0: it delivers nothing and collects what the activation infers.                                                                        | §7.2       |
+| connect                 | After the frame's last level, reaching every open activation at age 1 and beyond: it delivers what stood on the apex this frame and any reward, and collects nothing.                                   | §7.1       |
+| infer                   | After the frame's last level, reaching every activation at age 0: it delivers nothing and collects what the activation infers.                                                                        | §7.2       |
 
 Every test the neuron runs is its own arithmetic over its own evidence, and it is never told what the board did
 with its bids (R24).
@@ -641,8 +642,8 @@ Part II covers `process functions`: what a neuron does in the frame it fires.
 Part IV covers the `connect` and `infer` calls, where a neuron learns what followed and infers what comes next.
 Part V covers selection, where the machine chooses among those inferences one winner per dimension.
 
-> **R1 — One decision point: the frame it fires.** A neuron is called once per wave it fires in, for every
-> activation of that wave together, each at age 0, and everything structural happens in that call: it refreshes
+> **R1 — One decision point: the frame it fires.** A neuron is called once per level it fires at, for every
+> activation of that level together, each at age 0, and everything structural happens in that call: it refreshes
 > its history, recognizes the frame's neighborhoods, retires what no longer pays, builds every candidate that
 > pays, merges what became identical, and returns the bids of each cover together with everything it retired
 > (R20).
@@ -1140,7 +1141,7 @@ Nine cases are worked by hand on these definitions, listed in Part VI.
 
 # 5. Process functions call
 
-> **R20 — Call, in order.** Once per wave it fires in, the machine asks one neuron for everything it owes
+> **R20 — Call, in order.** Once per level it fires at, the machine asks one neuron for everything it owes
 > that frame, handing it the count `n` of its neurons (D13) and **every activation of it that fired
 > this frame with a neighborhood that is not empty**,
 > each with its neighborhood, at age 0 (R1), every value neuron in it carrying its variable's values (D7),
@@ -1293,7 +1294,7 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 >
 > **Creating and wiring are separate, and only wiring waits.** The machine creates or chooses the child the
 > moment the bid is accepted — an id, its parent and an empty table — which is all the frame needs to activate
-> it, at the coordinate the machine places its activation at (D53), and call it (R17). Once the frame's last wave has run it points every pattern
+> it, at the coordinate the machine places its activation at (D53), and call it (R17). Once the frame's last level has run it points every pattern
 > at the child created or chosen for it, in one pass over its own alphabet, and after the frame's connect and
 > infer calls it reclaims every retired pattern's child now due (R38). Nothing in the frame reads that pointer
 > except a later bid, so **the wait costs nothing**.
@@ -1301,7 +1302,7 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > **R17 — A pattern added in a call is bid in it.** The candidate joins the parent's table and the covers
 > it was priced on in the call (R15), so every activation of the frame whose cover it joined bids it (R20), with
 > no child, and the bid competes like any other. If it wins, the machine gives a function a child, reused or
-> new (R43), and a variable a value neuron for what it held (R44), activates them in the next wave and calls them
+> new (R43), and a variable a value neuron for what it held (R44), activates them at the next level and calls them
 > there. A new child records its first neighborhood there and
 > nothing more: its table is empty, and a candidate needs two neighborhoods (R14). If it loses, there is no child; the pattern stays in the
 > table on its own margin (D30) and is bid again whenever it is in a cover.
@@ -1371,40 +1372,41 @@ or its value neurons, if it has any, when they are due (R18).
 > It is **axis-general** — a pattern names neighbors at offsets, so a promoted neuron replaces a stretch of
 > spacetime. Spatial contraction is the case where every offset is zero.
 
-**The machine compresses a frame in this order and no other.** In waves: the first over what the frame
-reported, each after it over what the wave before bought, until a wave fires nothing:
+**The machine compresses a frame in this order and no other.** One level at a time: the first over what the
+frame reported, each after it over what the level before bought, until a level fires nothing:
 
 | Step              | Description                                                                                                   |
 |-------------------|---------------------------------------------------------------------------------------------------------------|
-| activate children | Fire every child and value neuron the wave before bought, each placed over what its bid covered (D53); the uncovered stand on the apex. |
-| process functions | Call every neuron with an activation in this wave, value neurons included (§5).                                 |
-| elect bids        | Cover the frontier's activations that this wave's bids name, by the greedy cover over the board.            |
-| create children   | Give every function of an accepted bid that has no child one, and every value the bid carries that has no value neuron one: a child and the value neurons reused where an interneuron already stands for the same thing (D36, R43), created otherwise. Each fires in the next wave. |
+| activate children | Fire every child and value neuron the level before bought, each placed over what its bid covered (D53); the uncovered stand on the apex. |
+| process functions | Call every neuron with an activation at this level, value neurons included (§5).                              |
+| elect bids        | Cover the frontier's activations that this level's bids name, by the greedy cover over the board.            |
+| create children   | Give every function of an accepted bid that has no child one, and every value the bid carries that has no value neuron one: a child and the value neurons reused where an interneuron already stands for the same thing (D36, R43), created otherwise. Each fires at the next level. |
 
-Then, once the last wave has run:
+Then, once the last level has run:
 
 | Step              | Description                                                                                                   |
 |-------------------|---------------------------------------------------------------------------------------------------------------|
 | wire children     | Point every child created this frame at its pattern, and every variable's value at its value neuron (R16).    |
 | delete children   | After the frame's connect and infer calls (§7), delete every child that is due (R38).                        |
 
-## 6.1 Process waves
+## 6.1 Process levels
 
-**A wave is explained as a set of function calls with their arguments.** Every accepted bid is a call: a
+**A level is explained as a set of function calls with their arguments.** Every accepted bid is a call: a
 function's child, and beside it one value neuron per variable the function names, with what the variable held
 (D45); or, for a parameter bid alone, its value neuron. What stands above is made of the calls and their
 arguments (§6.4): a function there over a child alone holds for every value the call was given, and one over the
 child and a value neuron holds for that one value.
 
-> **R26 — Waves.** The first wave is the base neurons that fired: they run `process functions` and offer, and
-> the election settles which bids are bought. The next wave is the children those bids bought: they fire, run
-> `process functions` and offer, and so on upward. **When a wave fires nothing, the frame's waves end there.**
-> Nothing declares the depth and nothing caps it. A neuron fires in whatever wave buys its bid, and one neuron
-> may fire in different waves of different frames.
+> **R26 — Levels.** A frame is compressed one level at a time. The first level is every base activation the
+> frame reported, all of them together: they run `process functions` and offer, and the election settles which
+> bids are bought. The next level is the children those bids bought: they fire, run `process functions` and
+> offer, and so on upward. **When a level fires nothing, the frame's levels end there.** Nothing declares the
+> depth and nothing caps it. A level belongs to a frame and not to a neuron: a neuron fires at whatever level
+> buys its bid, and one neuron may fire at different levels of different frames.
 >
-> **Within a wave the order is activate, call, elect, create**, and it cannot be otherwise: what fires is what
-> the wave before bought, the bids are what the election is over, and a child is created only for a bid the
-> election accepted (R16). Nothing in that order leaves the wave or the frame.
+> **Within a level the order is activate, call, elect, create**, and it cannot be otherwise: what fires is what
+> the level before bought, the bids are what the election is over, and a child is created only for a bid the
+> election accepted (R16). Nothing in that order leaves the level or the frame.
 >
 > Every neuron runs the same rule at its own reach (D4). **Compression is spatio-temporal for every neuron, in
 > one pass**: a pattern may name neighbors in its own frame, in earlier ones, beside it in space, or in a mix.
@@ -1562,17 +1564,17 @@ value neuron is given one. A bid that lost is given nothing.
 > (D29); only the pointer is shared. Lines wired to one child may drift apart, as one line drifts over time,
 > and the child stands for all of them. The neuron optimizes its history and the machine its window.
 
-Once the frame's last wave has run, the machine points every function at the child created or chosen for it, and every
+Once the frame's last level has run, the machine points every function at the child created or chosen for it, and every
 variable's value at its value neuron, by the wire call (§4.1).
 
 ## 6.4 Activate children
 
-A child fires in the wave after its bid is accepted, before that wave is called. What an accepted bid carries
+A child fires at the level after the one its bid was accepted at, before that level is called. What an accepted bid carries
 fires then where the machine places it (D53): the child of each function at the latest frame the bid covered
 and the center of the box its nodes span in every other dimension, and one value neuron per variable where its
 value stood (D45). A parameter bid alone fires its value neuron and nothing else. A pattern that does not name
 its owner may put its child frames back from the frame being compressed, where its nodes stood; the child is in
-this frame's waves all the same, and stands on the apex of the frame of its coordinate from now on (R27).
+this frame's levels all the same, and stands on the apex of the frame of its coordinate from now on (R27).
 Nothing sees a child until it fires (D5). A child's activation records
 the function whose bid fired it, and a value neuron's the variable, since either may have several (R43), and
 each is expanded through that one (R28). Every activation no accepted bid covers stands as itself.
@@ -1604,9 +1606,9 @@ The frontier cuts across the hierarchy:
    frontier  =  { the child over (a,b),  the child over (c,d),  the child over (e,f,g,h),  i,  j }
 ```
 
-**Events and actions run together within a wave.** An action fires in the same column as the events it runs
+**Events and actions run together within a level.** An action fires in the same column as the events it runs
 alongside (D8), so it is recognized and covered by the rule they are, in the same patterns (D5). **The
-connection is not formed here**: it names what stands on the apex, which is known only once the frame's last wave has
+connection is not formed here**: it names what stands on the apex, which is known only once the frame's last level has
 settled, so it is recorded in the `connect` call instead (R31).
 
 ---
@@ -1647,7 +1649,7 @@ settled, so it is recorded in the `connect` call instead (R31).
 
 # 7. Connect and infer calls
 
-Once the frame's last wave has run, the machine calls every open activation once more, and what the neuron does with
+Once the frame's last level has run, the machine calls every open activation once more, and what the neuron does with
 that call is the whole of this part. Which call it is depends on the activation's age, and the two never meet on
 one visit:
 
@@ -1712,7 +1714,7 @@ it.
 
 > **R31 — A connection carries an estimate.** What stands on the apex at `f + 1` is not known at `f`: the action is
 > settled only when the report names what ran, and the events only when the environment reports them (D40). So at
-> `f + 1`, once the frame's last wave has run, **every uncovered activation open at that frame connects to every strong
+> `f + 1`, once the frame's last level has run, **every uncovered activation open at that frame connects to every strong
 > activation standing on the apex of that frame within its reach that the policy admits** (R27, D25, D50) at its
 > own age (§7.1), and the reward of that frame's
 > actions goes into each. An activation covered in that frame connects once more, to the neuron that covered it
@@ -1987,7 +1989,7 @@ only what happened (R32).
 > (R45) and what it placed at that frame was selected (R47). An inference that lost its dimensions, or whose
 > match failed on the way, fires nothing.
 > Where the report makes its actions strong, recognition builds the strong activation of the same pattern at
-> the same coordinate, and it replaces the weak one (D40). An executed pattern is therefore in its frame's waves
+> the same coordinate, and it replaces the weak one (D40). An executed pattern is therefore in its frame's levels
 > like a bought one: it runs `process functions`, may be covered (§6.1), and every uncovered activation open
 > at that frame connects to it (D25). While its
 > program runs, what stands on the apex at each frame is the base action it placed there, or a lower pattern as
