@@ -416,9 +416,9 @@ forward-side deltas are the numbered list in the section above and land in Stage
     with the relations in a fixed order, and recomputed when the line re-centers; the window scan that compared
     expansions goes. Wiring an accepted bid without a child probes the index first (R16, R43), and a line whose
     new key is another neuron's is rewired to it (D43).
-21. **Once per descent (R28, D4).** Expansion carries the path it came down and does not re-enter a neuron on
-    it, placing the owner's symbol where the function names the owner and stopping; span is read by the same
-    descent, and the horizon cut on the reuse comparison goes with the scan.
+21. **No circular definitions (D27, D29).** The collapse skips a node built over the line's own child, and a
+    variable a member or value built over one of its value neurons, each found through the index; expansion
+    and span need no path, and the horizon cut on the reuse comparison goes with the scan.
 
 **Phase 3 — the readout gate.**
 

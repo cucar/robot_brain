@@ -9,9 +9,9 @@ Its inputs are the events observed, the actions that ran and the rewards earned.
 at the frame ahead, written in the base alphabet: the actions and the events it infers.
 
 Above the alphabets it builds a hierarchical dictionary of **patterns**. A pattern is a variable or a function.
-A **variable** is a set of neurons that stand in for one another, or a set of positions that hold one neuron.
-A **function** names neurons and variables, each at an offset from the others, and holds wherever they stand
-so. A function has a single child. A variable has multiple children: one child per value.
+A **variable** is what changes from one occurrence of a pattern to the next, and is left open until the
+occurrence fills it. A **function** names neurons and variables, each at an offset from the others, and holds
+wherever they stand so. A function has a single child. A variable has multiple children: one child per value.
 Each frame, the machine compresses what arrived in waves. The neurons that fired bid their patterns, an
 election takes the bids that pay, and each accepted pattern's child fires in the next wave.
 
@@ -214,8 +214,8 @@ covered is the latest point the activation can see, and in space nothing is ahea
 > **D36 — Interneuron index.** The machine's index of its interneurons by what each stands for, beside the one
 > by id (D2) and the one by base symbol (D52). An interneuron stands for its expansion (R28): a call neuron for
 > its function's relations (D34) with the variables left open, a value neuron for its variable with its member,
-> each node in them for what it stands for in turn, down to base symbols. Expansion passes through a neuron once
-> (R28), so what a neuron stands for is finite on a chain of children closed on itself. **No two interneurons
+> each node in them for what it stands for in turn, down to base symbols. No line names a neuron built over its
+> own child (D27), so what a neuron stands for never contains itself and is finite. **No two interneurons
 > stand for the same thing.** An accepted bid whose pattern has no child is wired to the interneuron that stands
 > for what its child would, whether that neuron bid this frame, fired frames ago or has not fired within any
 > open window, and a new one is created only where none does (R16, R43). A line that re-centers changes what its
@@ -354,9 +354,8 @@ read.
 > where the nodes its pattern names stood when its bid fired it (D31). A pattern may stand at a different
 > distance from its nodes on each occurrence, so the span is the activation's, and it is fixed when the
 > activation fires. In every dimension but time the activation stands at the center of what it covers (D53), so
-> its span there is half the box. The span is read by the descent expansion makes (R28), once through each
-> neuron, so a chain of children closed on itself spans one turn and not the run. An activation sees `R` beyond the farthest node it stands for. A base activation stands
-> for nothing but itself and sees `R`; a child over a pair of adjacent positions sees `R + 1`; a child whose
+> its span there is half the box. An activation sees `R` beyond the farthest node it stands for. A base
+> activation stands for nothing but itself and sees `R`; a child over a pair of adjacent positions sees `R + 1`; a child whose
 > coverage ends where another's begins sees that child's coordinate, one past its span, which is how two
 > adjacent coverages are joined into one by a child above them. A child one letter longer than its parent's
 > sees one position further. In space the reach runs either way; in time it runs back, and the same number
@@ -1015,6 +1014,13 @@ tie-break where it runs (D15, R24).
 > what stands there as the variable: it names the variable or leaves the coordinate alone, and it never names
 > the neuron standing there. What stood there is not lost by that. It is in the variable's value neuron (D45). A
 > neighbor another function of the cover names is skipped (D19).
+>
+> **A line never names a neuron built over its own child.** A neuron is built over a child when what it stands
+> for passes through that child (D36): a pattern over the child, or over a neuron built over it. A function
+> with a child skips such a neuron as a node, as it skips a neighbor another function names. A variable skips a
+> neuron built over one of its own value neurons: it does not join a class's members, and a parameter does not
+> take it as a value. So no neuron stands for something that contains itself, and every expansion reaches the
+> base.
 
 The collapse is the only operation that decides what a pattern names. It runs in two places:
 
@@ -1035,7 +1041,8 @@ smoothing or probability estimate enters.
 > **D29 — Re-centering.** The operation that re-decides what a pattern names (D15) once the uses it covers
 > have changed: a use lost when the last row that saw it is evicted from a full history (D18), or a new one
 > admitted and covered with it (D28). It runs the collapse (D27) over the uses the pattern now covers (residual
-> included), and updates the owners (D19) to what the pattern now holds.
+> included), and updates the owners (D19) to what the pattern now holds. It never takes a neuron built over the
+> pattern's own child (D27).
 
 ## 4.11 Margin
 
@@ -1098,8 +1105,6 @@ A pattern is added only when its margin is strictly positive (R15) and retired o
 >   write different relations over the same nodes and fix the same offsets among them are the same function.
 > - Two classes with the same members are one class, and their value neurons for each member are one.
 > - Two parameters with the same offsets are one parameter, and their value neurons for each member are one.
->
-> Nothing else is merged.
 
 ## 4.13 Connections
 
@@ -1287,8 +1292,8 @@ Each that pays joins the table and the covers it was priced on. Every relation i
 > still promote leaves the child alone (R38).
 >
 > **Creating and wiring are separate, and only wiring waits.** The machine creates or chooses the child the
-> moment the bid is accepted — an id, its parent, the coordinate its bid names (D53) and an empty table — which
-> is all the frame needs to activate it and call it (R17). Once the frame's last wave has run it points every pattern
+> moment the bid is accepted — an id, its parent and an empty table — which is all the frame needs to activate
+> it, at the coordinate the machine places its activation at (D53), and call it (R17). Once the frame's last wave has run it points every pattern
 > at the child created or chosen for it, in one pass over its own alphabet, and after the frame's connect and
 > infer calls it reclaims every retired pattern's child now due (R38). Nothing in the frame reads that pointer
 > except a later bid, so **the wait costs nothing**.
@@ -1551,8 +1556,8 @@ value neuron is given one. A bid that lost is given nothing.
 > other bid keeps value neurons of its own, and a class and a parameter are never one. A value neuron is reused
 > whenever a variable wired to it passes that value again.
 >
-> **Otherwise the machine creates one**: an id, its parent, the coordinate its bid names (D53) and an empty
-> table (R16); a value neuron the same way, with no dimension (D45, R44).
+> **Otherwise the machine creates one**: an id, its parent and an empty table (R16), its first activation
+> placed as every activation of it is (D53); a value neuron the same way, with no dimension (D45, R44).
 >
 > **Nothing is sent back.** The pattern stays the neuron's own line and keeps re-centering on its own history
 > (D29); only the pointer is shared. Lines wired to one child may drift apart, as one line drifts over time,
@@ -1915,13 +1920,6 @@ only what happened (R32).
 > relations (D34), the owner's activation among them where the pattern names it — offsets compose because each
 > is a difference of activation coordinates (D2) — repeated down to base symbols. A pattern that does not name
 > its owner puts nothing back for the owner: it never said where the owner stood.
->
-> **An expansion passes through a neuron once.** A neuron met again on its own descent is not expanded again:
-> where its function names the owner, the owner's symbol is placed at that coordinate, and the descent ends
-> there. Reuse across frames (R43) makes a chain of children closed on itself out of a stretch that repeats,
-> each child naming the one before it and the last naming the first, and such a chain expands to one turn,
-> ending on the symbol that begins the next. The span is read by the same descent (D4), so the chain spans one
-> turn, and the match reads one expansion down (R49) and is not reached by it.
 > ```
 > A placed at f:      A's line, in v's table, is {u at −1 from v}              → v at f,   u at f−1
 > P placed at f+4:    P's line, in b's table, is {C at −2 from b},

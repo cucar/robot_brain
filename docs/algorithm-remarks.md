@@ -1793,9 +1793,10 @@ nothing needs it in advance.
 > `D + 1` base activations that has occurred at least twice. **The stack is no deeper than the longest stretch
 > that has repeated.** On input with any variety in it that length grows slowly with the run, about as its
 > logarithm, since every step that can vary multiplies the stretches there are and divides how often each comes
-> round. On input that repeats exactly, the children of one lap are the children of the next: reuse across
-> frames fires the neuron minted a lap ago rather than a new one above it (R43, D36), the chain closes on
-> itself and expands to one turn (R28), and the stack settles at one neuron per phase of the lap.
+> round. On input that repeats exactly, reuse across frames fires the neuron minted a lap ago rather than a
+> new one for the same stretch (R43, D36), and no chain of children closes on itself, since no line names a
+> neuron built over its own child (D27). How deep the stack grows there is open
+> ([algorithm-evaluation.md](algorithm-evaluation.md)).
 > What it does not do is widen the reach out of proportion: a deep chain sees `R` past what it stands for (D4), not
 > two to the power of its level. A variable loosens "the same stretch" to "the same function, with any value",
 > which is what it is for; the value neuron above it is specific again. The bound rests on T12, and fails

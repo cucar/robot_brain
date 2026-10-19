@@ -293,11 +293,12 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   activation today, and telling one place seen twice from two places that look alike needs the coordinates of
   the seed's things on every count. Whether that stays cheap at a radius of a hundred has not been tried.
   **Diagnostic:** rows per use, per pattern.
-- **Depth on input that repeats.** A stretch that repeats exactly closes into a cycle of children, one per
-  phase, since reuse across frames fires the neuron minted a lap ago (R43, D36) and a closed chain expands to
-  one turn (R28); a six-bar cycle settled at six neurons. What is not measured is how long that takes, and how
-  the first lap's neighborhoods, whose windows reach back past the start of the run, shape the children that
-  form first. **Diagnostic:** the highest level reached per frame against run length; it should rise and
+- **Depth on input that repeats.** A stretch that repeats exactly fires the neuron minted a lap ago rather
+  than a new one for it (R43, D36), and no chain of children closes on itself, since no line names a neuron
+  built over its own child (D27). Whether the stack then stops growing, and at what depth, has not been worked
+  out or measured: the six-bar cycle that settled at six neurons did so through closed chains, which the design
+  no longer allows. Also open is how the first lap's neighborhoods, whose windows reach back past the start of
+  the run, shape the children that form first. **Diagnostic:** the highest level reached per frame against run length; it should rise and
   flatten on input that varies and on input that repeats alike.
 - **Prices move.** Every price is `log₂` of an alphabet (D13), and the alphabets move: `n` as the machine fills and
   is pruned, a table as entries come and go, a variable with its members. A neighbor is counted at what it cost
