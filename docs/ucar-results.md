@@ -48,24 +48,33 @@ The machine (`machine.rs`), Parts III and V:
   placed where a chain closes on itself (R28), the electorate falling through covers (R46, R48),
   resolution by estimate and by share (R47), and weak activations that last their frame (D40, R40).
 
-## The one departure
+## The departures
 
-D22 says a node naming a neuron holds where that neuron stands at the node's offset. Here it also holds
-where a child stands that covers an activation of that neuron at that offset: the child's expansion
-(R28) is read at the row, as base symbols at their offsets from the owner. Matching, seeding (D47) and
-the collapse (D27) all read a node this way, and the bid then covers the child instead of the base
-activation under it. A pattern's parent may be matched by its child. The rows themselves record the
-apex alone, as D18 says.
+Four, each deliberate and stated at the top of `neuron.rs`:
 
-A second departure is on the machine's side. D5 admits a same-frame neighbor only from an earlier wave,
-so the base activations reported in one frame never see one another. Here they do, within reach. On the
-cycle and the letter stream this changes nothing, since each frame there reports one event and one
-action and the policy keeps those apart. On MNIST it is the difference between learning nothing and
-learning something (below).
+1. **A parent matches through its child.** D22 says a node naming a neuron holds where that neuron
+   stands at the node's offset. Here it also holds where a child stands that covers an activation of
+   that neuron at that offset: the child's expansion (R28) is read at the row, as base symbols at their
+   offsets from the owner. Matching, seeding (D47) and the collapse (D27) all read a node this way, and
+   the bid then covers the child. The rows themselves record the apex alone, as D18 says.
+2. **Holding is exact.** D15 says a function holds where one set of activations satisfies every
+   relation it writes; D22 then prices a failed node at `log₂ |p|` and lets the pattern hold anyway. Here
+   D15 is taken at its word: a node that fails means the pattern does not hold there, and nothing is
+   priced for failure. Variety is the business of classes and parameters.
+3. **The collapse chooses its uses.** Nodes are admitted one at a time. A node that holds in only some
+   of the line's uses is taken where what it covers there beats what the line saves in the uses it
+   would give up; those uses fall to the residual and are seeded again. This is how a phase-blind line
+   becomes a bar-specific one. A line that narrows keeps its child's name, which the lines above name,
+   and the child forgets its connections, since what it learned under the places given up is not about
+   the places kept; a child the line shared with another line is let go, and the line is bought one by
+   its new key (D36, R43).
+4. **Base activations of one frame are neighbors.** D5 admits a same-frame neighbor only from an
+   earlier wave, so the pixels of an image never saw one another. Here they do, within reach.
 
-An earlier departure, rows recording every activation within reach with a flag for the apex, is gone.
-Of all 64 combinations of the six readings that were tried (below), the only one that settles the
-cycle at every `H` and radius tried is this one with nothing else changed.
+Two faults of the implementation were found and fixed on the way to these: a claim in the neuron's own
+cover credited a neighbor once per variable position that bound it, so a 5-node line counted five
+pixels over three (17.9 bits against the 10.8 the board counted) and owned rows it could not pay for on
+the board; and the earlier flagged-row reading of D18 is gone.
 
 ## Not implemented, or simplified
 
@@ -84,33 +93,37 @@ The configuration of the specification: one channel, a binary price move and own
 the `eventsToActions` policy, the world running the right action where the machine is silent, the reward
 the bar's return signed by the action, scoped to the channel and the frame.
 
-| laps | right per bar, of 50 | added | retired | alive neurons | patterns |
-|------|----------------------|-------|---------|---------------|----------|
-| 1-50 | 45 28 47 48 47 50 | 18 | 5 | 13 | 11 |
-| 51-100 | 50 50 50 50 50 50 | 14 | 14 | 13 | 10 |
-| 101-150 | 50 50 50 50 50 50 | 1 | 4 | 11 | 7 |
-| 151-2000 | 50 50 50 50 50 50 | 0 | 0 | 11 | 7 |
+| laps | right per bar, of 50 | added | retired |
+|------|----------------------|-------|---------|
+| 1-50 | 45 44 47 47 48 50 | 20 | 11 |
+| 51-100 | 50 50 50 50 50 50 | 2 | 2 |
+| 101-300 | 50 50 50 50 50 50 | 0 | 0 |
 
-Every bar right from lap 31 on in windows of ten, and nothing added or retired from lap 111 to lap 2000:
-seven lines, eleven neurons, one child per bar. Over 1000 laps at other settings:
+Every bar right from lap 11, nothing added or retired from lap 94. Over 600 laps at every `H` from 16
+to 1024 and every radius from 1 to 18, the lap from which every bar is right, and the lap from which
+nothing turns over:
 
-| `H` | radius | every bar right from lap | nothing added or retired from lap |
-|-----|--------|--------------------------|-----------------------------------|
-| 64 | 3 | 61 | 81 |
-| 64 | 6 | 61 | 81 |
-| 64 | 12 | 151 | 151 |
-| 256 | 3 | 161 | 211 |
-| 256 | 6 | 31 | 111 |
-| 256 | 12 | 321 | 401 |
+| `H` \ radius | 1 | 2 | 3 | 4 | 6 | 8 | 12 | 18 |
+|---|---|---|---|---|---|---|---|---|
+| 16 | never | never | never | never | never | never | 597 / - | never |
+| 32 | never | 27 / 27 | 136 / 137 | 69 / 69 | 274 / 280 | 600 / - | 600 / 600 | never |
+| 64 | never | 135 / 153 | 272 / 292 | 118 / 122 | 11 / 13 | 225 / 225 | 34 / 54 | 39 / 41 |
+| 128 | never | 82 / 119 | 97 / 116 | 45 / 72 | 11 / 13 | 273 / 273 | 63 / 103 | 73 / 109 |
+| 256 | never | 229 / 229 | 141 / 141 | 145 / 145 | 11 / 94 | 106 / 176 | 96 / 164 | 130 / 209 |
+| 512 | never | 549 / 549 | 552 / 552 | 566 / 566 | 11 / 185 | 112 / 299 | 117 / 288 | 295 / 413 |
+| 1024 | never | 415 / 586 | 389 / 518 | 396 / 420 | 11 / 355 | 112 / 550 | 117 / 587 | 114 / 597 |
 
-The settled tables are a ring. Down's table holds "owner, the bar-1 child at −1" (bar 2) and "owner,
-the bar-2 child at −1" (bar 3); up's table holds the bar-3 line, and bars 5, 6 and 1 are lines naming
-the previous bar's child beside that lap's base symbols. One child's table holds one line, "owner, down
-at −7". Each child connects to the action of the bar after it, with strength in the hundreds.
+Radius 6, the period, is right from lap 11 at every `H` of 64 or more. With `H` of 64 or more and a
+radius of 2 or more, no run froze wrong: every lap in 301-600 with nothing turning over had every bar
+right, except one to four laps at `H` 512 and 1024 with radius 2 to 4, inside stretches that then
+converged. Radius 1 never converges: a base neuron sees one frame back, the lines that would tell the
+bars apart do not fire, and the base symbols vote phase-blind. `H` 16 and 32 hold too little history to
+keep a line. Freezing comes later as `H` grows, since old rows keep superseded lines alive until they
+are evicted.
 
-The `height` of an activation counts the chain of children covering children, which under this reading
-grows by one every frame; it no longer measures the structure, and the height and levels printouts of
-the examples and jobs mean nothing on the cycle.
+Other periods through the Node binding, 400 laps, `H` 256: period 4 and period 5 converge at radius 3
+to 6; period 8 at radius 8 (right from lap 42) and not at 3 or 6; period 10 only at radius 3, from lap
+224. Both long patterns repeat a bigram and need context three or more bars back.
 
 ## The readings that were tried
 
@@ -177,20 +190,17 @@ right on the first pass, 78% on the second, with children voting in 83% of frame
 
 ## MNIST
 
-`apps/mnist/jobs/mnist.js` at its defaults: 14×14 images, ink above 128 as one event, 1000 training
-images (100 per digit, the first 200 taught, the rest rewarded ±1), 500 test images, `H` 2048, radius 1.
+**Ten images, one per digit, 7×7, shown for 500 episodes** (`H` 2048, radius 1, the digit taught on
+the first episode only): all ten right from episode 25 to episode 500, with nothing added or retired
+after episode 25 (49 neurons, 61 patterns). Before the departures above this test froze at 7 of 10.
 
-| neighbors in the image frame | train correct | test correct | patterns | neurons | ms per image |
-|------------------------------|---------------|--------------|----------|---------|--------------|
-| earlier waves only (D5) | 9.9% | 9.8% | 0 | 12 | 0.1 |
-| base activations of the frame | 17.6% | 15.8% | 390 after training, 555 after test | 266, then 365 | 293 train, 411 test |
-
-Under D5 every pixel of an image fires in the same wave and the previous image is out of reach, so no ink
-activation ever has a neighbor and nothing is built; the machine says a digit from the bare ink neuron's
-connections, at chance. With same-frame base neighbors pairs and corners form (254 neurons at the base,
-10 one level up, 2 two levels up at the end of training), accuracy is near 17% from image 100 on and does
-not climb, and the tables keep growing through the test images. The "apex/image" figure the job prints
-reads the frame one reach back, the digit frame in this protocol, and is not the image's apex.
+**The job at its defaults**, 14×14, 1000 training images (the first 200 taught), 500 test images: 17.4%
+on training, 19.8% on test, 523 patterns. That is where the machine stands on varied shapes: its
+children are small ink blobs that occur in every digit (median top-digit share 0.21 over all ten digits),
+a position-free 3×3 window of ink carries the same 0.19, and the windows that would tell digits apart,
+5×5 and up, recur exactly in under three quarters of their instances, while a child needs an exact
+recurrence. The "apex/image" figure the job prints reads the frame one reach back, the digit frame in
+this protocol, and is not the image's apex.
 
 ## Running it
 

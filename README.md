@@ -113,14 +113,15 @@ lists them.
 
 ## Status
 
-The implementation follows the specification on the `wavefront` branch of the docs, with one deliberate
-departure, stated at the top of `neuron.rs`: a node naming a neuron also holds where a child stands that
-covers an activation of that neuron at the node's offset, and the bid then covers the child. With it the
-six-bar cycle settles: every bar right and nothing added or retired from lap 111 at `H` 256 and radius 6.
-A second, in `neighborhood.rs`: base activations reported in one frame are neighbors of one another, which
-is what lets an image's pixels see each other.
-[docs/ucar-results.md](docs/ucar-results.md) records what the machine does on the cycle and on a letter
-stream, the readings that were tried, what the traces show, and what is not implemented yet.
+The implementation follows the specification on the `wavefront` branch of the docs, with four deliberate
+departures stated at the top of `neuron.rs`: a node naming a neuron also holds where a child stands that
+covers an activation of that neuron; holding is exact, with nothing priced for a failed node; the collapse
+admits nodes one at a time and may narrow a line's uses to where a node holds; and base activations
+reported in one frame are neighbors of one another. With these the six-bar cycle is right from lap 11 and
+frozen from lap 94 at `H` 256 and radius 6, and ten fixed digit images are all recognized from episode 25.
+[docs/ucar-results.md](docs/ucar-results.md) records what the machine does on the cycle, on ten images,
+on MNIST proper and on a letter stream, the readings that were tried, what the traces show, and what is
+not implemented yet.
 
 ## Documentation
 

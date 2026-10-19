@@ -84,8 +84,8 @@ fn weak_activations_last_one_frame_and_write_nothing() {
 }
 
 /// The six-bar cycle in the spec's configuration (R = 6, H = 256, one channel): the machine must own
-/// before a rise and stand out before a fall, and settle. It does from lap 111: every bar right and
-/// nothing added or retired.
+/// before a rise and stand out before a fall, and settle. It does: every bar right from lap 11 and
+/// nothing added or retired from lap 94.
 #[test]
 fn six_bar_cycle_settles() {
     let pattern = [0.009, -0.019, -0.029, 0.019, 0.029, -0.009];

@@ -1,12 +1,20 @@
 //! One neuron (§4, §5): its table, its history and its connections, and the `process functions`
 //! call (R20) that reads them: refresh, recognize, delete, create, merge, return.
 //!
-//! One departure from the document is deliberate and marked: a node naming a neuron holds where that
-//! neuron stands at its offset, or where a child stands that covers an activation of that neuron at the
-//! offset (the child's expansion, R28, read at the row). Matching (D22), seeding (D47) and the collapse
-//! (D27) read it the same way, and the bid then covers the child. A history row records the apex alone,
-//! as D18 says. A second departure is on the machine's side (`neighborhood.rs`): base activations
-//! reported in one frame are neighbors of one another, where D5 admits only earlier waves.
+//! The departures from the document are deliberate and marked:
+//! - A node naming a neuron holds where that neuron stands at its offset, or where a child stands that
+//!   covers an activation of that neuron at the offset (the child's expansion, R28, read at the row).
+//!   Matching (D22), seeding (D47) and the collapse (D27) read it the same way, and the bid then covers
+//!   the child. A history row records the apex alone, as D18 says.
+//! - Holding is exact (D15): a function holds only where every node holds and a variable only where every
+//!   position holds; nothing is priced for a failed node, since nothing fails (against D22's failure term).
+//! - The collapse admits nodes one at a time, and a node that holds in only some of the line's uses is
+//!   taken where what it covers there beats what the line saves in the uses given up (D27 under D15);
+//!   the uses given up fall to the residual. A line that narrows this way keeps its child's name, which
+//!   the lines above name, and the child forgets its connections; a child the line shared with another
+//!   line is let go, and the line is bought one by its new key (D36, R43).
+//! - Base activations reported in one frame are neighbors of one another (`neighborhood.rs`), where D5
+//!   admits only earlier waves.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -63,15 +71,18 @@ pub struct Neuron {
     pub radii: Vec<i32>,
     /// Value neurons of members dropped from a variable since the last call, with the variable (R38).
     pub(crate) dropped_values: Vec<(PatternId, NeuronId)>,
+    /// Children of lines that came to hold in fewer places since the last call: a child stands for what
+    /// its line names (D36), so what it learned under the places the line gave up is let go (R31).
+    pub(crate) narrowed_children: Vec<(PatternId, NeuronId)>,
 }
 
 impl Neuron {
     pub fn base(id: NeuronId, kind: Kind, dim: DimId, bucket: u32, channel: ChannelId, axes: u8, h: usize, radii: Vec<i32>) -> Self {
-        Neuron { id, kind, dim: Some(dim), bucket, channel: Some(channel), axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: format!("b{}", id), radii, dropped_values: Vec::new() }
+        Neuron { id, kind, dim: Some(dim), bucket, channel: Some(channel), axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: format!("b{}", id), radii, dropped_values: Vec::new(), narrowed_children: Vec::new() }
     }
 
     pub fn inter(id: NeuronId, axes: u8, h: usize, radii: Vec<i32>) -> Self {
-        Neuron { id, kind: Kind::Inter, dim: None, bucket: 0, channel: None, axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: String::new(), radii, dropped_values: Vec::new() }
+        Neuron { id, kind: Kind::Inter, dim: None, bucket: 0, channel: None, axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: String::new(), radii, dropped_values: Vec::new(), narrowed_children: Vec::new() }
     }
 
     pub fn pattern(&self, pid: PatternId) -> Option<&Pattern> { self.table.iter().find(|p| p.id == pid) }
@@ -165,10 +176,11 @@ impl Neuron {
             let degenerate = {
                 let p = self.pattern_mut(pid).unwrap();
                 match &mut p.body {
-                    Body::Function { nodes, .. } => {
+                    Body::Function { nodes, child } => {
                         if nodes.iter().any(|(x, _)| *x == Node::Neuron(n)) {
                             let keep: Vec<(Node, Offset)> = nodes.iter().copied().filter(|(x, _)| *x != Node::Neuron(n)).collect();
                             *nodes = canonical(keep);
+                            let _ = child;
                         }
                         nodes.len() < 2
                     }

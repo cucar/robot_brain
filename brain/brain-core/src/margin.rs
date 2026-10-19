@@ -34,7 +34,8 @@ impl Neuron {
             }
         }
         if e.credited_owner && row.owner_self == Some(e.pattern) { coverage += row.own_cost; }
-        let price = row.own_cost + wp + choices + e.failed as f64 * log2(p_size.max(1) as f64);
+        let _ = p_size;
+        let price = row.own_cost + wp + choices;
         coverage - price
     }
 
@@ -79,7 +80,7 @@ impl Neuron {
                         if !seen.insert(place) { continue; }
                         let mut c = 0.0;
                         for pj in v.positions.iter().flatten() { if row.owner[*pj] == Some(e.pattern) { c += row.credit(*pj); } }
-                        total += c - v.choice - v.failed as f64 * log2(p.positions() as f64);
+                        total += c - v.choice;
                     }
                 }
             }

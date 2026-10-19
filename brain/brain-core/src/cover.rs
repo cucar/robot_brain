@@ -118,10 +118,11 @@ impl Neuron {
                 for anchor in anchors {
                     if !seen.insert(anchor) { continue; }
                     let Some(vb) = self.bind_parameter(row, p, offsets, &anchor, taken) else { continue };
+                    if vb.failed > 0 { continue; }
                     let mut coverage = 0.0;
                     let credited_owner = false;
                     for pj in vb.positions.iter().flatten() { if !taken[*pj] { coverage += row.credit(*pj); } }
-                    let price = row.own_cost + wp + vb.choice + vb.failed as f64 * log2(offsets.len() as f64);
+                    let price = row.own_cost + wp + vb.choice;
                     let failed = vb.failed;
                     let entry = CoverEntry { pattern: p.id, place: add(&row.pos, &anchor), nodes: vec![NodeBind { node: Node::Var(p.id), offset: [0; MAX_DIMS], nbs: Vec::new(), var: Some(vb) }], failed, credited_owner, names_owner: credited_owner };
                     out.push(Claim { entry, coverage, price, is_function: false });
@@ -222,7 +223,7 @@ impl Neuron {
                             } else {
                                 holds_any = true;
                                 let j = found[0];
-                                if !taken[j] { coverage += row.credit(j); }
+                                if !taken[j] && credited.insert(j) { coverage += row.credit(j); }
                                 binds.push(NodeBind { node: *node, offset: *off, nbs: Vec::new(), var: Some(VarBind { var: *v, member: Some(row.nbs[j].neuron), positions: vec![Some(j)], failed: 0, choice }) });
                             }
                         }
@@ -234,7 +235,7 @@ impl Neuron {
                                 Some(vb) => {
                                     if vb.member.is_some() { holds_any = true; }
                                     failed += vb.failed;
-                                    for pj in vb.positions.iter().flatten() { if !taken[*pj] { coverage += row.credit(*pj); } }
+                                    for pj in vb.positions.iter().flatten() { if !taken[*pj] && credited.insert(*pj) { coverage += row.credit(*pj); } }
                                     binds.push(NodeBind { node: *node, offset: *off, nbs: Vec::new(), var: Some(vb) });
                                 }
                                 None => {
@@ -248,8 +249,10 @@ impl Neuron {
                 }
             }
         }
-        if !holds_any { return None; }
-        let price = row.own_cost + wp + choices + failed as f64 * log2(p_size as f64);
+        // exact holding (D15): a node that fails means the function does not hold here
+        if !holds_any || failed > 0 { return None; }
+        let _ = p_size;
+        let price = row.own_cost + wp + choices;
         let entry = CoverEntry { pattern: p.id, place: add(&row.pos, &anchor), nodes: binds, failed, credited_owner, names_owner };
         Some(Claim { entry, coverage, price, is_function: true })
     }

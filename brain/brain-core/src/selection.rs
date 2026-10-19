@@ -61,6 +61,13 @@ impl Machine {
             }
         }
         self.last_stats.voters = voters.len();
+        if self.trace {
+            for (r, placed) in &voters {
+                let Some(a) = self.act(*r) else { continue };
+                let acts: Vec<String> = placed.iter().filter(|(n, _, _, _)| self.neurons[*n as usize].kind == Kind::Action).map(|(n, _, s, e)| format!("#{} s={:.2} e={:+.2}", n, s, e)).collect();
+                if !acts.is_empty() { eprintln!("[vote f{}] #{} at {:?} h{} : {}", fno, a.neuron, a.pos, a.height, acts.join(", ")); }
+            }
+        }
         self.last_stats.voters_above_base = voters.iter().filter(|(r, _)| self.act(*r).map_or(false, |a| a.height > 0)).count();
         // resolution (R47)
         struct Cand { share: f64, weighted: f64 }

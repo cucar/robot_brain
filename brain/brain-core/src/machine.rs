@@ -300,6 +300,20 @@ impl Machine {
             let rows = by_neuron.remove(&n).unwrap();
             let ctx = self.ctx_for(n);
             let (b, r, a) = self.neurons[n as usize].process(rows, ctx);
+            // a line that narrowed: a child it shares with another line now stands for something else to
+            // this line, which lets it go and is bought one by its new key (D36, R43); a child of its own
+            // keeps its name, which the lines above name, and forgets what it learned under the places given up
+            for (pid, c) in std::mem::take(&mut self.neurons[n as usize].narrowed_children) {
+                if (c as usize) >= self.neurons.len() { continue; }
+                if self.neurons[c as usize].parents.len() > 1 {
+                    self.neurons[c as usize].parents.retain(|p| *p != (n, pid));
+                    if let Some(p) = self.neurons[n as usize].pattern_mut(pid) { if let Body::Function { child, .. } = &mut p.body { *child = None; } }
+                    if self.trace { eprintln!("[narrowed f{}] #{} p{} lets go of shared child #{}", fno, n, pid, c); }
+                } else {
+                    self.neurons[c as usize].connections.clear();
+                    if self.trace { eprintln!("[narrowed f{}] #{} forgets its connections", fno, c); }
+                }
+            }
             if self.trace && (!b.is_empty() || !r.is_empty() || a > 0) {
                 eprintln!("[call f{} w{} #{}] bids {} retired {} added {}", fno, wave, n, b.len(), r.len(), a);
             }

@@ -33,7 +33,7 @@ impl Machine {
                 if a.covered_at.is_none() { covered.push(bid.bidder); coverage += a.cost; }
             }
         }
-        let price = bid.bidder_cost + bid.which_pattern_bits + bid.choice_bits + bid.failed as f64 * log2(bid.p_size as f64);
+        let price = bid.bidder_cost + bid.which_pattern_bits + bid.choice_bits;
         (coverage, price, covered, strong)
     }
 
@@ -69,7 +69,8 @@ impl Machine {
             }
             let Some((i, _, _)) = best else { break };
             let bid = remaining.remove(i);
-            let (_, _, covered, strong) = self.measure_bid(&bid);
+            let (cov, price, covered, strong) = self.measure_bid(&bid);
+            if self.trace { eprintln!("[accept f{} w{}] #{} p{} at {:?} cov {:.1} price {:.1} failed {} covers {}", fno, wave, bid.owner, bid.pattern, bid.bidder_pos, cov, price, bid.failed, covered.len()); }
             accepted += 1;
             // credit: covered at this frame, once (R23)
             for r in &covered {
@@ -134,7 +135,7 @@ impl Machine {
             if over.is_empty() { return (out, minted, reused); }
             let (mut pos, span) = self.place_over(&over, owner_axes, child);
             pos[0] = bid.place[0];
-            let cost = bid.bidder_cost + bid.which_pattern_bits + bid.failed as f64 * log2(bid.p_size as f64);
+            let cost = bid.bidder_cost + bid.which_pattern_bits;
             let fb = FiredBy { owner: bid.owner, pattern: bid.pattern, values };
             let act = self.new_act(child, pos, cost, strong, Some(fb), span, wave, height);
             if self.trace { eprintln!("[fire f{}] #{} at {:?} from #{} p{} cost {:.1} span {:?} {}", self.frame_no, child, pos, bid.owner, bid.pattern, cost, span, if minted > 0 { "minted" } else { "" }); }
