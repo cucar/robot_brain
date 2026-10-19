@@ -9,8 +9,8 @@ what forms over frames, and how a position comes to be taken.
 
 # 1. The environment
 
-**In.** One channel per instrument, laid out over time alone, with radius `R = 1` (D1): a bar sees the bar
-before it. Each declares one event dimension, `move`, whose
+**In.** One channel per instrument, laid out over time alone (D3), with radius `R = 1` (§3.8): a bar sees the
+bar before it. Each declares one event dimension, `move`, whose
 buckets are the bar's return quantized at the channel's resolution: a handful of buckets from a sharp fall to a
 sharp rise. One frame is one bar. Channels share only time, so a neuron of one instrument sees the frontier of
 another within reach in time (D5), and a pattern may name both.
@@ -21,15 +21,15 @@ or does nothing; the machine never names a trade.
 
 **Policy.** The machine declares its action policy (D51) as the least bad: an instrument is owned or disowned
 every day, and where the machine is silent the world runs its own action. It declares its neighborhood policy
-(D50) with every entry that has an action off in the past table, since the price does not move because the machine owns, and in the future table only event to
-action and pattern to action on. Everything below follows from that and nothing is declared for it: no action
-is anyone's neighbor, so no pattern names one, so no action is ever covered and every action on the apex is
+(D50) with every entry that has an action off in the past table, since the price does not move because the
+machine owns, and in the future table only event to action and interneuron to action on. Everything below
+follows from that and nothing is declared for it: no action is anyone's neighbor, so no pattern names one, so no action is ever covered and every action on the apex is
 base; a connection reaches base actions only, so an inference expands to nothing and contradicts nothing; actions
 write no connections and never vote; and every exposure of one action after one situation pools on one
 connection, which is the connection a reward scoped to that channel pays (R33).
 
 **Teaching.** Where the machine says nothing for an instrument, the world runs the right action for that frame
-itself, `own` where the bar rose and `disown` where it fell, and rewards it (§3.5). That runs all the time,
+itself, `own` where the bar rose and `disown` where it fell, and rewards it (R35). That runs all the time,
 beside the trading: a situation is taught until the machine speaks in it, and from then on what the machine
 says is what runs.
 
@@ -67,8 +67,9 @@ comes to hold `own` at a positive estimate, one that stood before a fall `disown
 stands on the apex it speaks.
 
 **The walk.** Nothing explores while nothing hurts (R37). An estimate turns negative when owning under a shape
-lost, and the connection whose estimate turned negative wires the other action, `disown` after `own`, at a
-neutral estimate. It outranks the negative one and is output; what it earns moves the estimate.
+lost, and the connection whose estimate turned negative wires the other action, `disown` after `own`, at
+strength 1 and earnings 0 (R31). Its estimate is zero, so it outranks the negative one and is output; what it
+earns moves the estimate.
 
 **Selection.** Each frame, every voter on the frontier proposes what its inferences place at the frame ahead
 (R45, R46), and the action with the largest estimate is output for each channel (R47). A child standing for a shape that has paid
@@ -80,6 +81,5 @@ lesson runs instead, and is learned the same way.
 # 4. What is and is not learned
 
 What the machine learns about prices is structure: the shapes that recur, written once each. What it learns
-about trading is a mean per situation per action per distance, and nothing else: no value function, no return
-and no horizon (§1.2). A shape that stops paying keeps its line as long as it describes the bars, and its
-estimates say not to own under it.
+about trading is a mean per situation per action per distance, and nothing else (§1.2). A shape that stops
+paying keeps its line as long as it describes the bars, and its estimates say not to own under it.
