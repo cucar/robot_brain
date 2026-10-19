@@ -21,6 +21,10 @@ pub struct BrainOptions {
     pub policy: Option<String>,
     /// "leastBad" or "nothing" (D51).
     pub action_policy: Option<String>,
+    /// Regions of the dispatch (default 1).
+    pub regions: Option<u32>,
+    /// Columns per region, each a thread of the wave (default: the available cores).
+    pub columns: Option<u32>,
 }
 
 #[napi(object)]
@@ -110,7 +114,7 @@ fn stats_out(m: &Machine) -> StatsOut {
 impl JsBrain {
     #[napi(constructor)]
     pub fn new(options: Option<BrainOptions>) -> Result<Self> {
-        let o = options.unwrap_or(BrainOptions { h: None, time_radius: None, policy: None, action_policy: None });
+        let o = options.unwrap_or(BrainOptions { h: None, time_radius: None, policy: None, action_policy: None, regions: None, columns: None });
         let mut policy = match o.policy.as_deref() {
             Some("eventsToActions") => Policy::events_to_actions(),
             _ => Policy::all_on(),
@@ -119,7 +123,15 @@ impl JsBrain {
             Some("nothing") => ActionPolicy::Nothing,
             _ => ActionPolicy::LeastBad,
         };
-        let m = Machine::new(o.h.unwrap_or(256) as usize, policy, o.time_radius.unwrap_or(1));
+        let h = o.h.unwrap_or(256) as usize;
+        let r = o.time_radius.unwrap_or(1);
+        let m = match (o.regions, o.columns) {
+            (None, None) => Machine::new(h, policy, r),
+            (regions, columns) => {
+                let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+                Machine::with_layout(h, policy, r, regions.unwrap_or(1) as usize, columns.map(|c| c as usize).unwrap_or(cores))
+            }
+        };
         Ok(Self { inner: RefCell::new(m) })
     }
 
@@ -177,7 +189,7 @@ impl JsBrain {
     #[napi(js_name = "describeNeuron")]
     pub fn describe_neuron(&self, id: u32) -> Result<String> {
         let m = self.inner.borrow();
-        if id as usize >= m.neurons.len() { return Ok(String::new()); }
+        if id as usize >= m.thalamus.len() { return Ok(String::new()); }
         Ok(m.describe_neuron(id))
     }
 
@@ -197,7 +209,7 @@ impl JsBrain {
     pub fn dump_tables(&self, limit: u32) -> Result<String> {
         let m = self.inner.borrow();
         let mut s = String::new();
-        for n in m.neurons.iter().filter(|n| n.alive && (!n.table.is_empty() || n.kind == Kind::Inter)).take(limit as usize) {
+        for n in m.thalamus.iter().filter(|n| n.alive && (!n.table.is_empty() || n.kind == Kind::Inter)).take(limit as usize) {
             s.push_str(&m.describe_neuron(n.id));
         }
         Ok(s)

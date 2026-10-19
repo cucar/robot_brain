@@ -6,6 +6,7 @@ use std::collections::VecDeque;
 
 use crate::neuron::*;
 use crate::offsets::*;
+use crate::thalamus::Thalamus;
 use crate::types::*;
 
 pub use crate::activation::*;
@@ -47,6 +48,9 @@ pub struct FrameStats {
 pub struct Config {
     pub h: usize,
     pub policy: Policy,
+    /// The dispatch: regions, and columns per region, over which the neurons are partitioned by id.
+    pub regions: usize,
+    pub columns: usize,
 }
 
 
@@ -56,7 +60,8 @@ pub struct Machine {
     pub radii: Vec<i32>,
     pub dims: Vec<NeuronDim>,
     pub channels: Vec<Channel>,
-    pub neurons: Vec<Neuron>,
+    /// The neurons, owned by the columns of the regions and reached by id.
+    pub thalamus: Thalamus,
     /// The largest span any activation of each neuron has had, for the owner's reach in prices (D13).
     pub spans: Vec<Pos>,
     pub alive: usize,
@@ -75,14 +80,21 @@ pub struct Machine {
 }
 
 impl Machine {
+    /// One region, a column per available core.
     pub fn new(h: usize, policy: Policy, time_radius: i32) -> Self {
+        let columns = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+        Self::with_layout(h, policy, time_radius, 1, columns)
+    }
+
+    /// With the dispatch laid out: `regions` regions of `columns` columns each.
+    pub fn with_layout(h: usize, policy: Policy, time_radius: i32, regions: usize, columns: usize) -> Self {
         Machine {
-            cfg: Config { h, policy },
+            cfg: Config { h, policy, regions: regions.max(1), columns: columns.max(1) },
             act_dims: vec![ActDim { name: "time".into(), radius: time_radius.max(1) }],
             radii: vec![time_radius.max(1)],
             dims: Vec::new(),
             channels: Vec::new(),
-            neurons: Vec::new(),
+            thalamus: Thalamus::new(regions, columns),
             spans: Vec::new(),
             alive: 0,
             base_count: 0,
@@ -123,9 +135,9 @@ impl Machine {
 
     pub(crate) fn declare_dim(&mut self, name: &str, channel: ChannelId, kind: Kind, resolution: u32, axes: u8) -> DimId {
         let id = self.dims.len() as DimId;
-        let first = self.neurons.len() as NeuronId;
+        let first = self.thalamus.len() as NeuronId;
         for b in 0..resolution {
-            self.neurons.push(Neuron::base(first + b, kind, id, b, channel, axes, self.cfg.h, self.radii.clone()));
+            self.thalamus.push(Neuron::base(first + b, kind, id, b, channel, axes, self.cfg.h, self.radii.clone()));
             self.spans.push([0; MAX_DIMS]);
         }
         self.alive += resolution as usize;
@@ -145,7 +157,7 @@ impl Machine {
     }
 
     pub(crate) fn ctx_for(&self, n: NeuronId) -> Ctx {
-        let nn = &self.neurons[n as usize];
+        let nn = &self.thalamus[n];
         let reach = self.reach_for(nn.axes, &self.spans[n as usize]);
         Ctx { neuron_bits: log2(self.alive as f64), offset_bits: offset_bits(&reach, &self.radii, nn.axes), frame: self.frame_no, trace: self.trace }
     }
@@ -193,7 +205,7 @@ impl Machine {
         }
         let weak = std::mem::take(&mut self.pending_weak);
         for (n, p) in weak {
-            let nn = &self.neurons[n as usize];
+            let nn = &self.thalamus[n];
             let Some(dim) = nn.dim else { continue };
             let mut pos = p;
             pos[0] = fno as i32;
@@ -259,8 +271,8 @@ impl Machine {
             stats.apex_cost = sf.acts.iter().filter(|a| a.covered_at.is_none()).map(|a| a.cost).sum();
         }
         stats.neurons = self.alive;
-        stats.patterns = self.neurons.iter().filter(|n| n.alive).map(|n| n.table.len()).sum();
-        stats.connections = self.neurons.iter().filter(|n| n.alive).map(|n| n.connections.len()).sum();
+        stats.patterns = self.thalamus.iter().filter(|n| n.alive).map(|n| n.table.len()).sum();
+        stats.connections = self.thalamus.iter().filter(|n| n.alive).map(|n| n.connections.len()).sum();
         let keep_from = fno - self.max_reach_t as i64 - 1;
         while self.frames.front().map_or(false, |f| f.no < keep_from) { self.frames.pop_front(); }
         stats.elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
@@ -272,7 +284,7 @@ impl Machine {
     pub(crate) fn current(&self) -> &FrameRec { self.frames.back().unwrap() }
 
     pub(crate) fn new_act(&self, n: NeuronId, pos: Pos, cost: f64, strong: bool, fired_by: Option<FiredBy>, span: Pos, wave: u32, height: u32) -> Act {
-        let nn = &self.neurons[n as usize];
+        let nn = &self.thalamus[n];
         let reach = self.reach_for(nn.axes, &span);
         Act { neuron: n, kind: nn.kind, axes: nn.axes, pos, cost, strong, span, reach, covered_at: None, coverer: None, covers: Vec::new(), fired_by, inferences: Vec::new(), opened_at: self.frame_no, wave, height, caught_up: pos[0] as i64 }
     }
@@ -281,7 +293,7 @@ impl Machine {
 
     pub(crate) fn call_wave(&mut self, wave: u32) -> (Vec<Bid>, Vec<(NeuronId, Retired)>, usize) {
         let fno = self.frame_no;
-        // the activations of this wave, grouped by neuron, in the order they fired
+        // route: the activations of this wave, grouped by neuron, in the order they fired
         let mut by_neuron: FxHashMap<NeuronId, Vec<RowInput>> = FxHashMap::default();
         let mut order: Vec<NeuronId> = Vec::new();
         let refs: Vec<ActRef> = self.frames.iter().flat_map(|f| f.acts.iter().enumerate().filter(|(_, a)| a.opened_at == fno && a.wave == wave).map(|(i, _)| ActRef { frame: f.no, index: i as u32 }).collect::<Vec<_>>()).collect();
@@ -293,33 +305,34 @@ impl Machine {
             let owner_value = self.follow(a.neuron);
             by_neuron.entry(a.neuron).or_default().push(RowInput { act: r, pos: a.pos, own_cost: a.cost, owner_value, nbs });
         }
+        let tasks: Vec<(NeuronId, Vec<RowInput>, Ctx)> = order.iter().map(|&n| (n, by_neuron.remove(&n).unwrap(), self.ctx_for(n))).collect();
+        // dispatch: every neuron's call runs in its column, the columns in parallel; collect in the order above
+        let results = self.thalamus.process_wave(tasks);
         let mut bids = Vec::new();
         let mut retired = Vec::new();
         let mut added = 0;
-        for n in order {
-            let rows = by_neuron.remove(&n).unwrap();
-            let ctx = self.ctx_for(n);
-            let (b, r, a) = self.neurons[n as usize].process(rows, ctx);
+        for w in results {
+            let n = w.neuron;
             // a line that narrowed: a child it shares with another line now stands for something else to
             // this line, which lets it go and is bought one by its new key (D36, R43); a child of its own
             // keeps its name, which the lines above name, and forgets what it learned under the places given up
-            for (pid, c) in std::mem::take(&mut self.neurons[n as usize].narrowed_children) {
-                if (c as usize) >= self.neurons.len() { continue; }
-                if self.neurons[c as usize].parents.len() > 1 {
-                    self.neurons[c as usize].parents.retain(|p| *p != (n, pid));
-                    if let Some(p) = self.neurons[n as usize].pattern_mut(pid) { if let Body::Function { child, .. } = &mut p.body { *child = None; } }
+            for (pid, c) in w.narrowed {
+                if (c as usize) >= self.thalamus.len() { continue; }
+                if self.thalamus[c].parents.len() > 1 {
+                    self.thalamus[c].parents.retain(|p| *p != (n, pid));
+                    if let Some(p) = self.thalamus[n].pattern_mut(pid) { if let Body::Function { child, .. } = &mut p.body { *child = None; } }
                     if self.trace { eprintln!("[narrowed f{}] #{} p{} lets go of shared child #{}", fno, n, pid, c); }
                 } else {
-                    self.neurons[c as usize].connections.clear();
+                    self.thalamus[c].connections.clear();
                     if self.trace { eprintln!("[narrowed f{}] #{} forgets its connections", fno, c); }
                 }
             }
-            if self.trace && (!b.is_empty() || !r.is_empty() || a > 0) {
-                eprintln!("[call f{} w{} #{}] bids {} retired {} added {}", fno, wave, n, b.len(), r.len(), a);
+            if self.trace && (!w.bids.is_empty() || !w.retired.is_empty() || w.added > 0) {
+                eprintln!("[call f{} w{} #{}] bids {} retired {} added {}", fno, wave, n, w.bids.len(), w.retired.len(), w.added);
             }
-            bids.extend(b);
-            retired.extend(r.into_iter().map(|x| (n, x)));
-            added += a;
+            bids.extend(w.bids);
+            retired.extend(w.retired.into_iter().map(|x| (n, x)));
+            added += w.added;
         }
         (bids, retired, added)
     }
@@ -331,7 +344,7 @@ impl Machine {
         let mut heights: FxHashMap<NeuronId, u32> = FxHashMap::default();
         for f in self.frames.iter() { for a in &f.acts { let e = heights.entry(a.neuron).or_default(); if a.height > *e { *e = a.height; } } }
         let mut v = Vec::new();
-        for n in self.neurons.iter().filter(|n| n.alive) {
+        for n in self.thalamus.iter().filter(|n| n.alive) {
             let h = heights.get(&n.id).copied().unwrap_or(0) as usize;
             if v.len() <= h { v.resize(h + 1, 0); }
             v[h] += 1;
@@ -340,7 +353,7 @@ impl Machine {
     }
 
     pub fn describe_neuron(&self, id: NeuronId) -> String {
-        let n = &self.neurons[id as usize];
+        let n = &self.thalamus[id];
         let mut s = match n.kind {
             Kind::Inter => format!("#{} inter{} parents={:?} key={}", id, n.value.map(|v| format!(" value=({},p{},#{})", v.owner, v.var, v.member)).unwrap_or_default(), n.parents, n.key),
             _ => format!("#{} {:?} dim{} b{}", id, n.kind, n.dim.unwrap(), n.bucket),

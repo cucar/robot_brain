@@ -14,7 +14,7 @@ impl Machine {
         let Some(a) = self.act(r) else { return vec![] };
         let mut out = Vec::new();
         for inf in &a.inferences {
-            if !self.neurons[inf.target as usize].alive { continue; }
+            if !self.thalamus[inf.target].alive { continue; }
             let mut at = a.pos;
             for d in 0..MAX_DIMS { at[d] += inf.offset[d]; }
             if (at[0] as i64) + self.spans[inf.target as usize][0] as i64 + 1 < ahead { continue; }
@@ -22,7 +22,7 @@ impl Machine {
             self.expand(inf.target, at, &mut Vec::new(), &mut placed, None);
             for (n, p) in placed {
                 if p[0] as i64 != ahead { continue; }
-                let nn = &self.neurons[n as usize];
+                let nn = &self.thalamus[n];
                 let mut pp = p;
                 for d in 1..MAX_DIMS { if nn.axes & (1 << d) == 0 { pp[d] = 0; } }
                 out.push((n, pp, inf.strength, inf.estimate));
@@ -64,7 +64,7 @@ impl Machine {
         if self.trace {
             for (r, placed) in &voters {
                 let Some(a) = self.act(*r) else { continue };
-                let acts: Vec<String> = placed.iter().filter(|(n, _, _, _)| self.neurons[*n as usize].kind == Kind::Action).map(|(n, _, s, e)| format!("#{} s={:.2} e={:+.2}", n, s, e)).collect();
+                let acts: Vec<String> = placed.iter().filter(|(n, _, _, _)| self.thalamus[*n].kind == Kind::Action).map(|(n, _, s, e)| format!("#{} s={:.2} e={:+.2}", n, s, e)).collect();
                 if !acts.is_empty() { eprintln!("[vote f{}] #{} at {:?} h{} : {}", fno, a.neuron, a.pos, a.height, acts.join(", ")); }
             }
         }
@@ -76,13 +76,13 @@ impl Machine {
         for (_, placed) in &voters {
             let mut totals: FxHashMap<(DimId, Pos), f64> = FxHashMap::default();
             for (n, p, s, _) in placed {
-                let nn = &self.neurons[*n as usize];
+                let nn = &self.thalamus[*n];
                 let Some(d) = nn.dim else { continue };
                 *totals.entry((d, *p)).or_default() += s;
             }
             for (k, _) in &totals { *voters_at.entry(*k).or_default() += 1; }
             for (n, p, s, e) in placed {
-                let nn = &self.neurons[*n as usize];
+                let nn = &self.thalamus[*n];
                 let Some(d) = nn.dim else { continue };
                 let share = s / totals[&(d, *p)];
                 let c = table.entry((d, *p)).or_default().entry(nn.bucket).or_insert(Cand { share: 0.0, weighted: 0.0 });

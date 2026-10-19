@@ -13,7 +13,7 @@ impl Machine {
         let mut total = 0.0;
         for rw in rewards {
             if rw.channels.is_empty() { total += rw.reward; continue; }
-            let t = &self.neurons[target as usize];
+            let t = &self.thalamus[target];
             if t.kind == Kind::Action && t.channel.map_or(false, |ch| rw.channels.contains(&ch)) { total += rw.reward; }
         }
         total
@@ -77,7 +77,7 @@ impl Machine {
                                 let Some(b) = self.act(ar).cloned() else { continue };
                                 if !self.cfg.policy.future[a.kind as usize][b.kind as usize] { continue; }
                                 let Some(off) = self.offset_between(&a, b.axes, &b.pos, age - d) else { continue };
-                                if self.neurons[a.neuron as usize].connections.contains_key(&(b.neuron, off)) {
+                                if self.thalamus[a.neuron].connections.contains_key(&(b.neuron, off)) {
                                     self.add_earnings(a.neuron, b.neuron, off, share);
                                 }
                             }
@@ -88,7 +88,7 @@ impl Machine {
             }
         }
         for (holder, target, off, share) in writes {
-            let c = self.neurons[holder as usize].connections.entry((target, off)).or_default();
+            let c = self.thalamus[holder].connections.entry((target, off)).or_default();
             c.strength += 1.0;
             if share != 0.0 { self.add_earnings(holder, target, off, share); }
         }
@@ -110,7 +110,7 @@ impl Machine {
 
     pub(crate) fn add_earnings(&mut self, holder: NeuronId, target: NeuronId, off: Offset, share: f64) {
         let est = {
-            let c = self.neurons[holder as usize].connections.entry((target, off)).or_default();
+            let c = self.thalamus[holder].connections.entry((target, off)).or_default();
             c.earnings += share;
             c.estimate()
         };
@@ -120,13 +120,13 @@ impl Machine {
     /// R37: a negative estimate wires the next untried base action, in each dimension the target acted in.
     pub(crate) fn walk(&mut self, holder: NeuronId, target: NeuronId, off: Offset) {
         let mut dims: Vec<DimId> = Vec::new();
-        let t = &self.neurons[target as usize];
+        let t = &self.thalamus[target];
         if t.kind == Kind::Action { dims.push(t.dim.unwrap()); }
         else if t.kind == Kind::Inter {
             let mut placed = Vec::new();
             self.expand(target, [0; MAX_DIMS], &mut Vec::new(), &mut placed, None);
             for (n, _) in placed {
-                let nn = &self.neurons[n as usize];
+                let nn = &self.thalamus[n];
                 if nn.kind == Kind::Action { if let Some(d) = nn.dim { if !dims.contains(&d) { dims.push(d); } } }
             }
         }
@@ -135,8 +135,8 @@ impl Machine {
             for b in 0..dim.resolution {
                 let n = dim.first + b;
                 let key = (n, off);
-                if !self.neurons[holder as usize].connections.contains_key(&key) {
-                    self.neurons[holder as usize].connections.insert(key, Conn { strength: 1.0, earnings: 0.0 });
+                if !self.thalamus[holder].connections.contains_key(&key) {
+                    self.thalamus[holder].connections.insert(key, Conn { strength: 1.0, earnings: 0.0 });
                     break;
                 }
             }
@@ -150,7 +150,7 @@ impl Machine {
         for f in self.frames.iter_mut() {
             for a in f.acts.iter_mut() {
                 if a.opened_at != fno { continue; }
-                let n = &self.neurons[a.neuron as usize];
+                let n = &self.thalamus[a.neuron];
                 a.inferences = n.connections.iter().map(|((t, o), c)| Inference { target: *t, offset: *o, strength: c.strength, estimate: c.estimate() }).collect();
             }
         }

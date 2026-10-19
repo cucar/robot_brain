@@ -36,7 +36,7 @@ impl Machine {
                 if !ok { continue; }
                 // the apex alone (D18)
                 if b.covered_at.is_some() { continue; }
-                let value = self.neurons[b.neuron as usize].value;
+                let value = self.thalamus[b.neuron].value;
                 // what a child stands for, as base symbols at their offsets from the owner (R28), where a
                 // pattern's parent may be matched by the child covering it
                 let covers: Vec<(NeuronId, Pos)> = if b.kind == Kind::Inter {

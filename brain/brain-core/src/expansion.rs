@@ -14,7 +14,7 @@ impl Machine {
     /// names the owner, and the descent ends there.
     pub fn expand(&self, n: NeuronId, at: Pos, path: &mut Vec<NeuronId>, out: &mut Vec<(NeuronId, Pos)>, fired_by: Option<&FiredBy>) {
         if path.len() > 64 || out.len() > 4096 { return; }
-        let nn = &self.neurons[n as usize];
+        let nn = &self.thalamus[n];
         if !nn.alive { return; }
         if nn.kind != Kind::Inter { out.push((n, at)); return; }
         // a value neuron: its variable with its value
@@ -26,7 +26,7 @@ impl Machine {
             return;
         }
         let Some((owner, pid)) = fired_by.map(|f| (f.owner, f.pattern)).or(nn.parents.first().copied()) else { return };
-        let Some(nodes) = self.neurons[owner as usize].function_nodes(pid) else { return };
+        let Some(nodes) = self.thalamus[owner].function_nodes(pid) else { return };
         let names_owner = matches!(nodes.first(), Some((Node::Owner, _)));
         if path.contains(&n) {
             if names_owner { self.expand(owner, at, path, out, None); }
@@ -59,7 +59,7 @@ impl Machine {
 
     /// A variable with its value, at its place: a class's member there, a parameter's at each position.
     pub(crate) fn expand_value(&self, owner: NeuronId, var: PatternId, member: NeuronId, at: Pos, path: &mut Vec<NeuronId>, out: &mut Vec<(NeuronId, Pos)>) {
-        match self.neurons[owner as usize].pattern(var).map(|p| &p.body) {
+        match self.thalamus[owner].pattern(var).map(|p| &p.body) {
             Some(Body::Class { .. }) => self.expand(member, at, path, out, None),
             Some(Body::Parameter { offsets, .. }) => {
                 for o in offsets { self.expand(member, add(&at, o), path, out, None); }
@@ -71,7 +71,7 @@ impl Machine {
     /// Bind a variable with no value neuron beside it (R28): from what stands at its positions that
     /// have happened, read through value neurons, else its most frequent member.
     pub(crate) fn bind_variable(&self, owner: NeuronId, var: PatternId, at: &Pos) -> Option<NeuronId> {
-        let p = self.neurons[owner as usize].pattern(var)?;
+        let p = self.thalamus[owner].pattern(var)?;
         if let Body::Parameter { offsets, .. } = &p.body {
             for o in offsets {
                 let c = add(at, o);

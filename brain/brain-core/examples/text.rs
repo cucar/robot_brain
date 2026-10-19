@@ -19,12 +19,12 @@ fn main() {
         let pred = w.iter().find(|w| w.dim == dim).map(|w| w.bucket);
         if i + 1 < bytes.len() && pred == Some(bytes[i + 1] as u32) { right += 1; }
     }
-    println!("right {}/{} | neurons {} alive of {} | patterns {} | heights {:?}", right, bytes.len() - 1, m.last_stats.neurons, m.neurons.len(), m.last_stats.patterns, m.height_counts());
+    println!("right {}/{} | neurons {} alive of {} | patterns {} | heights {:?}", right, bytes.len() - 1, m.last_stats.neurons, m.thalamus.len(), m.last_stats.patterns, m.height_counts());
     for c in dump.bytes() {
         let id = m.base_neuron(dim, c as u32);
         print!("{}", m.describe_neuron(id));
     }
     if std::env::var("UCAR_DUMP").is_ok() {
-        for nn in m.neurons.iter().filter(|x| x.alive && x.kind == Kind::Inter) { print!("{}", m.describe_neuron(nn.id)); }
+        for nn in m.thalamus.iter().filter(|x| x.alive && x.kind == Kind::Inter) { print!("{}", m.describe_neuron(nn.id)); }
     }
 }

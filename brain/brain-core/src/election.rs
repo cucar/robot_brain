@@ -90,23 +90,23 @@ impl Machine {
         let mut out = Vec::new();
         let mut minted = 0;
         let mut reused = 0;
-        let owner_axes = self.neurons[bid.owner as usize].axes;
+        let owner_axes = self.thalamus[bid.owner].axes;
         let height = 1 + bid.nodes.iter().flat_map(|(_, _, acts)| acts.iter()).filter_map(|r| self.act(*r)).map(|a| a.height).max().unwrap_or(0);
         // value neurons first, so their ids are known to the child's values
         let mut values: Vec<(PatternId, NeuronId, Option<NeuronId>)> = Vec::new();
         for v in &bid.values {
             let vn = match v.value_neuron {
-                Some(id) if self.neurons[id as usize].alive => id,
+                Some(id) if self.thalamus[id].alive => id,
                 _ => {
                     let key = self.value_key(bid.owner, v.var, v.member);
-                    match self.index.get(&key).copied().filter(|id| self.neurons[*id as usize].alive) {
+                    match self.index.get(&key).copied().filter(|id| self.thalamus[*id].alive) {
                         Some(id) => { reused += 1; id }
                         None => { minted += 1; self.mint(owner_axes, key, Some(Value { owner: bid.owner, var: v.var, member: self.follow(v.member) })) }
                     }
                 }
             };
-            self.neurons[bid.owner as usize].wire_value(v.var, v.member, vn);
-            if !self.neurons[vn as usize].parents.contains(&(bid.owner, v.var)) { self.neurons[vn as usize].parents.push((bid.owner, v.var)); }
+            self.thalamus[bid.owner].wire_value(v.var, v.member, vn);
+            if !self.thalamus[vn].parents.contains(&(bid.owner, v.var)) { self.thalamus[vn].parents.push((bid.owner, v.var)); }
             values.push((v.var, v.member, Some(vn)));
             // placed: a class's where its member stood, a parameter's over its positions
             let stood: Vec<&Act> = v.stood.iter().filter_map(|r| self.act(*r)).collect();
@@ -119,17 +119,17 @@ impl Machine {
         }
         if bid.is_function {
             let child = match bid.child {
-                Some(c) if self.neurons[c as usize].alive => c,
+                Some(c) if self.thalamus[c].alive => c,
                 _ => {
                     let key = self.child_key(bid.owner, bid.pattern);
-                    match self.index.get(&key).copied().filter(|id| self.neurons[*id as usize].alive && self.neurons[*id as usize].value.is_none()) {
+                    match self.index.get(&key).copied().filter(|id| self.thalamus[*id].alive && self.thalamus[*id].value.is_none()) {
                         Some(id) => { reused += 1; id }
                         None => { minted += 1; self.mint(owner_axes, key, None) }
                     }
                 }
             };
-            self.neurons[bid.owner as usize].wire_child(bid.pattern, child);
-            if !self.neurons[child as usize].parents.contains(&(bid.owner, bid.pattern)) { self.neurons[child as usize].parents.push((bid.owner, bid.pattern)); }
+            self.thalamus[bid.owner].wire_child(bid.pattern, child);
+            if !self.thalamus[child].parents.contains(&(bid.owner, bid.pattern)) { self.thalamus[child].parents.push((bid.owner, bid.pattern)); }
             let mut over: Vec<&Act> = bid.nodes.iter().flat_map(|(_, _, acts)| acts.iter()).filter_map(|r| self.act(*r)).collect();
             if bid.names_owner { if let Some(a) = self.act(bid.bidder) { over.push(a); } }
             if over.is_empty() { return (out, minted, reused); }
@@ -173,24 +173,24 @@ impl Machine {
     /// once through each neuron (D4).
     pub(crate) fn span_by_descent(&self, n: NeuronId, path: &mut Vec<NeuronId>) -> Pos {
         let mut span = [0i32; MAX_DIMS];
-        let nn = &self.neurons[n as usize];
+        let nn = &self.thalamus[n];
         if nn.kind != Kind::Inter || !nn.alive || path.contains(&n) || path.len() > 64 { return span; }
         path.push(n);
         if let Some(v) = nn.value {
-            if let Some(p) = self.neurons[v.owner as usize].pattern(v.var) {
+            if let Some(p) = self.thalamus[v.owner].pattern(v.var) {
                 let inner = self.span_by_descent(v.member, path);
                 let offsets: Vec<Offset> = match &p.body { Body::Parameter { offsets, .. } => offsets.clone(), _ => vec![[0; MAX_DIMS]] };
                 for o in offsets { for d in 0..MAX_DIMS { span[d] = span[d].max(o[d].abs() + inner[d]); } }
             }
         } else if let Some(&(owner, pid)) = nn.parents.first() {
-            if let Some(nodes) = self.neurons[owner as usize].function_nodes(pid) {
+            if let Some(nodes) = self.thalamus[owner].function_nodes(pid) {
                 let nodes: Vec<(Node, Offset)> = nodes.to_vec();
                 for (node, off) in nodes {
                     let inner = match node {
                         Node::Owner => self.span_by_descent(owner, path),
                         Node::Neuron(m) => self.span_by_descent(m, path),
                         Node::Var(v) => {
-                            let member = self.neurons[owner as usize].pattern(v).and_then(|q| q.frequent_member());
+                            let member = self.thalamus[owner].pattern(v).and_then(|q| q.frequent_member());
                             member.map(|m| self.span_by_descent(m, path)).unwrap_or([0; MAX_DIMS])
                         }
                     };
@@ -203,11 +203,11 @@ impl Machine {
     }
 
     pub(crate) fn mint(&mut self, axes: u8, key: String, value: Option<Value>) -> NeuronId {
-        let id = self.neurons.len() as NeuronId;
+        let id = self.thalamus.next_id();
         let mut n = Neuron::inter(id, axes, self.cfg.h, self.radii.clone());
         n.key = key.clone();
         n.value = value;
-        self.neurons.push(n);
+        self.thalamus.push(n);
         self.spans.push([0; MAX_DIMS]);
         self.alive += 1;
         self.index.insert(key, id);
@@ -217,7 +217,7 @@ impl Machine {
     /// A value followed through value neurons to a neuron that is not one (D45).
     pub(crate) fn follow(&self, mut n: NeuronId) -> NeuronId {
         for _ in 0..64 {
-            match self.neurons[n as usize].value { Some(v) => n = v.member, None => break }
+            match self.thalamus[n].value { Some(v) => n = v.member, None => break }
         }
         n
     }

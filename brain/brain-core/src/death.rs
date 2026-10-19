@@ -10,15 +10,15 @@ impl Machine {
 
     pub(crate) fn handle_retired(&mut self, owner: NeuronId, r: Retired) {
         if let Some(c) = r.child {
-            if (c as usize) < self.neurons.len() {
-                self.neurons[c as usize].parents.retain(|p| *p != (owner, r.pattern));
-                if self.neurons[c as usize].parents.is_empty() && !self.ledger.contains(&c) { self.ledger.push(c); }
+            if (c as usize) < self.thalamus.len() {
+                self.thalamus[c].parents.retain(|p| *p != (owner, r.pattern));
+                if self.thalamus[c].parents.is_empty() && !self.ledger.contains(&c) { self.ledger.push(c); }
             }
         }
         for v in r.value_neurons {
-            if (v as usize) < self.neurons.len() {
-                self.neurons[v as usize].parents.retain(|p| *p != (owner, r.pattern));
-                if self.neurons[v as usize].parents.is_empty() && !self.ledger.contains(&v) { self.ledger.push(v); }
+            if (v as usize) < self.thalamus.len() {
+                self.thalamus[v].parents.retain(|p| *p != (owner, r.pattern));
+                if self.thalamus[v].parents.is_empty() && !self.ledger.contains(&v) { self.ledger.push(v); }
             }
         }
     }
@@ -31,8 +31,8 @@ impl Machine {
         let mut pending = std::mem::take(&mut self.ledger);
         while !pending.is_empty() {
             for c in pending.drain(..) {
-                if !self.neurons[c as usize].alive { continue; }
-                if !self.neurons[c as usize].parents.is_empty() { continue; }
+                if !self.thalamus[c].alive { continue; }
+                if !self.thalamus[c].parents.is_empty() { continue; }
                 let open = self.frames.iter().any(|f| f.acts.iter().any(|a| a.neuron == c && (fno - f.no) <= a.reach[0] as i64));
                 if open { keep.push(c); continue; }
                 self.delete_neuron(c);
@@ -43,25 +43,24 @@ impl Machine {
     }
 
     pub(crate) fn delete_neuron(&mut self, c: NeuronId) {
-        if !self.neurons[c as usize].alive { return; }
-        self.neurons[c as usize].alive = false;
+        if !self.thalamus[c].alive { return; }
+        self.thalamus[c].alive = false;
         self.alive -= 1;
-        let key = self.neurons[c as usize].key.clone();
+        let key = self.thalamus[c].key.clone();
         if self.index.get(&key) == Some(&c) { self.index.remove(&key); }
         if self.trace { eprintln!("[death f{}] #{}", self.frame_no, c); }
         // its subtree: its own patterns' children with no parent outside
-        let table: Vec<(PatternId, Option<NeuronId>, Vec<NeuronId>)> = self.neurons[c as usize].table.iter().map(|p| (p.id, p.child(), p.members().iter().filter_map(|m| m.value_neuron).collect())).collect();
+        let table: Vec<(PatternId, Option<NeuronId>, Vec<NeuronId>)> = self.thalamus[c].table.iter().map(|p| (p.id, p.child(), p.members().iter().filter_map(|m| m.value_neuron).collect())).collect();
         for (pid, child, values) in table {
             self.handle_retired(c, Retired { pattern: pid, child, value_neurons: values, member_only: false });
         }
-        self.neurons[c as usize].table.clear();
-        self.neurons[c as usize].history.clear();
-        self.neurons[c as usize].connections.clear();
+        self.thalamus[c].table.clear();
+        self.thalamus[c].history.clear();
+        self.thalamus[c].connections.clear();
         // scrub it from every pattern and saved activation that names it
-        let ids: Vec<NeuronId> = self.neurons.iter().filter(|n| n.alive).map(|n| n.id).collect();
-        for n in ids {
-            let retired = self.neurons[n as usize].delete_neighbor(c);
-            for r in retired { if self.trace { eprintln!("[cascade f{} #{}] p{} child={:?} lost #{}", self.frame_no, n, r.pattern, r.child, c); } self.handle_retired(n, r); }
+        for (n, r) in self.thalamus.delete_neighbor(c) {
+            if self.trace { eprintln!("[cascade f{} #{}] p{} child={:?} lost #{}", self.frame_no, n, r.pattern, r.child, c); }
+            self.handle_retired(n, r);
         }
         for f in self.frames.iter_mut() {
             for a in f.acts.iter_mut() {

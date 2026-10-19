@@ -85,7 +85,9 @@ the board; and the earlier flagged-row reading of D18 is gone.
   earlier implementation is gone, but nothing is incremental yet.
 - Spans are per activation (D4), and the owner's reach in prices (D13) is read from the largest span any
   activation of the neuron has had.
-- No backup or persistence, and no parallel dispatch: neurons are called one at a time per wave.
+- No backup or persistence. The dispatch is parallel: the thalamus owns regions, a region its columns, a column
+  its partition of the neurons by id, and the call of a wave fans out over the columns with Rayon, as the
+  earlier brain's did; the election, wiring and ledger run sequentially on what comes back.
 
 ## The six-bar cycle
 

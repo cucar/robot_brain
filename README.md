@@ -62,7 +62,7 @@ UCAR_DUMP=1 cargo run --release -p brain-core --example simple -- 100 256 6
 |------|------------|
 | `docs/algorithm.md` | The specification: definitions **D** and rules **R**, which together are the machine. |
 | `docs/algorithm-*.md` | Worked cases (text, alternation, copy, equal, hit, loop, addition, MNIST, stocks), the remarks, the evaluation and the implementation plan. |
-| `brain/brain-core` | The machine in Rust, one file per type. The neuron side (Parts II and IV): `neuron` (the table, history and the `process functions` call), `pattern`, `history`, `cover` (recognition), `collapse`, `margin`, `pick`, `merge`, `bid`, `connection`. The machine side (Parts III and V): `machine` (the frame loop and waves), `activation`, `neighborhood`, `election`, `index`, `death`, `connect`, `expansion`, `selection`. `offsets` is D6 and `types` the alphabet, channels and policies. |
+| `brain/brain-core` | The machine in Rust, one file per type. The neuron side (Parts II and IV): `neuron` (the table, history and the `process functions` call), `pattern`, `history`, `cover` (recognition), `collapse`, `margin`, `pick`, `merge`, `bid`, `connection`. The machine side (Parts III and V): `machine` (the frame loop and waves), `activation`, `neighborhood`, `election`, `index`, `death`, `connect`, `expansion`, `selection`. The dispatch: `thalamus` owns the regions and routes a neuron id to its column, `region` fans its columns out in parallel with Rayon, `column` owns a partition of the neurons and runs their calls. `offsets` is D6 and `types` the alphabet, channels and policies. |
 | `brain/brain-core/examples` | `simple` (the six-bar cycle) and `text` (a letter stream, dumping the tables asked for). |
 | `brain/brain-core/tests` | Behavioral tests: a repeated pair, varied predecessors, prediction over passes, weak activations, and the cycle settling. |
 | `brain/brain-napi` | The N-API binding: the `Brain` class. |
@@ -92,6 +92,8 @@ out.stats;     // waves, bids, accepted, minted, reused, retired, added, neurons
 |--------|---------|---------|
 | `h` | 256 | The depth of every neuron's history, in its own activations (D18, R4). |
 | `timeRadius` | 1 | The radius in time: how far a base neuron sees exactly (D4, D6). Spatial axes are declared with `declareAxis(name, radius)`. |
+| `regions` | 1 | Regions of the dispatch; neurons are partitioned over them by id. |
+| `columns` | the available cores | Columns per region; each column runs its neurons' calls on its own thread within a wave. |
 | `policy` | `all` | The neighborhood policy (D50): `all`, or `eventsToActions`, where no action is anyone's neighbor and only events and interneurons connect, to actions alone. |
 | `actionPolicy` | `leastBad` | What an action dimension outputs when every candidate is negative (D51): `leastBad` or `nothing`. |
 

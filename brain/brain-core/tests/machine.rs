@@ -21,7 +21,7 @@ fn a_repeated_pair_gets_a_function_and_a_child() {
     stream(&mut m, dim, "ab ab ab ab ");
     let b = m.base_neuron(dim, b'b' as u32);
     let a = m.base_neuron(dim, b'a' as u32);
-    let nb = &m.neurons[b as usize];
+    let nb = &m.thalamus[b];
     // b's table names the owner and a at -1 (D47, D27), and the election gave it a child (R16)
     let f = nb.table.iter().find(|p| matches!(&p.body, Body::Function { nodes, .. } if nodes.iter().any(|(n, o)| *n == Node::Neuron(a) && o[0] == -1) && nodes.iter().any(|(n, _)| *n == Node::Owner)));
     assert!(f.is_some(), "b should name a at -1: {}", m.describe_neuron(b));
@@ -39,7 +39,7 @@ fn varied_predecessors_are_each_named() {
     let dim = m.channels[ch as usize].event.unwrap();
     stream(&mut m, dim, "th ch sh wh th ch sh wh th ch sh wh th ch sh wh ");
     let h = m.base_neuron(dim, b'h' as u32);
-    let nh = &m.neurons[h as usize];
+    let nh = &m.thalamus[h];
     let named: Vec<NeuronId> = nh.table.iter().filter_map(|p| match &p.body {
         Body::Function { nodes, .. } => nodes.iter().find(|(n, o)| matches!(n, Node::Neuron(_)) && o[0] == -1).map(|(n, _)| if let Node::Neuron(x) = n { *x } else { 0 }),
         _ => None,
@@ -75,11 +75,11 @@ fn weak_activations_last_one_frame_and_write_nothing() {
     stream(&mut m, dim, "abababab");
     let a = m.base_neuron(dim, b'a' as u32);
     let b = m.base_neuron(dim, b'b' as u32);
-    let before = m.neurons[b as usize].connections.get(&(a, [1, 0, 0])).map(|c| c.strength).unwrap_or(0.0);
+    let before = m.thalamus[b].connections.get(&(a, [1, 0, 0])).map(|c| c.strength).unwrap_or(0.0);
     assert!(before > 0.0);
     let w = m.process_frame(&[], vec![]);
     assert_eq!(w.iter().find(|w| w.dim == dim).map(|w| w.bucket), Some(b'b' as u32), "the weak a infers b");
-    let after = m.neurons[b as usize].connections.get(&(a, [1, 0, 0])).map(|c| c.strength).unwrap_or(0.0);
+    let after = m.thalamus[b].connections.get(&(a, [1, 0, 0])).map(|c| c.strength).unwrap_or(0.0);
     assert_eq!(before, after, "nothing connects to a weak activation (D40)");
 }
 
