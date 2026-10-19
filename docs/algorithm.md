@@ -383,19 +383,16 @@ read.
 > ```
 > so `offsets(r) + 1` offsets in time, zero and the past, and `2 · offsets(r) + 1` in any other dimension.
 
-> **D5 — Adjacency.** Two activations are adjacent when **the second stands on the apex (R27) as the first
-> fires, within reach in every activation dimension they share** (D4), **and the second is not later than the
-> first**. Whether the second is a base neuron or an interneuron is no condition: a neighbor is whatever
-> nothing has covered, so a base neuron sees a child one frame back beside the base neurons around it. What has not yet fired in the
-> frame is not there to be seen, and a child fires at the level after the one its bid was accepted at (§6.4), so
-> a same-frame neighbor is whatever fired at the same level or an earlier one: every base activation the frame
-> reported fires at its first level, together. **The second's kind must be admitted beside the first's kind by the past
-> table of the policy** (D50); where it is, events and actions are adjacent to one another like anything else, and
-> what was done a frame ago is context as much as what was seen. In space both directions count — an activation
-> three positions to the right arrives in the same
-> frame as one three positions to the left. In time only the past does, because compression only reads the
-> past. **What fires after an activation is not adjacent to it.** What the machine keeps about it is recorded
-> on the neuron as a connection (D25), and it is never in a neighborhood and never in a pattern.
+> **D5 — Adjacency.** An activation `b` is adjacent to an activation `a` when the following conditions hold:
+>
+> - `b` is in the same frame as `a` or in an earlier one.
+> - `b` is within `a`'s reach in every activation dimension they share, time among them (D4).
+> - `a` and `b` both stand on the apex (R27).
+> - The neighborhood policy allows `b`'s kind beside `a`'s (D50).
+>
+> For example, in an image channel the pixels of one frame are adjacent to one another within reach. In space
+> adjacency runs both ways. In time it runs only backward: what fires after `a` is never adjacent to it, and is
+> held as a connection instead (D25).
 
 Events and actions are compressed in the same patterns: above the base a pattern may name what was seen and
 what was done together.
