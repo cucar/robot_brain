@@ -43,7 +43,6 @@ impl Neuron {
                 if let Some(v) = &nb.var {
                     for (k, pj) in v.positions.iter().enumerate() {
                         if let Some(j) = pj {
-                            if *j == OWNER { if row.owner_self.is_none() { row.owner_self = Some(e.pattern); } continue; }
                             if row.owner[*j].is_none() { row.owner[*j] = Some(e.pattern); }
                             if row.claim[*j].is_none() { row.claim[*j] = Some((v.var, k)); }
                         }
@@ -88,7 +87,7 @@ impl Neuron {
                 if !(b.coverage > b.price) { break; }
                 for nb in &b.entry.nodes {
                     for &j in &nb.nbs { taken[j] = true; }
-                    if let Some(v) = &nb.var { for pj in v.positions.iter().flatten() { if *pj == OWNER { owner_taken = true; } else { taken[*pj] = true; } } }
+                    if let Some(v) = &nb.var { for pj in v.positions.iter().flatten() { taken[*pj] = true; } }
                 }
                 if b.entry.credited_owner { owner_taken = true; }
                 let _ = b.is_function;
@@ -103,6 +102,8 @@ impl Neuron {
         let mut out = Vec::new();
         match &p.body {
             Body::Function { nodes, .. } => {
+                // a function left with fewer than two nodes covers nothing; retire removes it (R41)
+                if nodes.len() < 2 { return out; }
                 let names_owner = matches!(nodes.first(), Some((Node::Owner, _)));
                 let anchors: Vec<Pos> = if names_owner { vec![[0; MAX_DIMS]] } else { self.anchors_for(row, &nodes[0].0, taken) };
                 for anchor in anchors {
@@ -113,24 +114,38 @@ impl Neuron {
                 // alone: its first position at any residual neighbor (D31)
                 let mut seen: FxHashSet<Pos> = FxHashSet::default();
                 let mut anchors: Vec<Pos> = Vec::new();
-                if self.owner_in_parameters && !owner_taken { anchors.push([0; MAX_DIMS]); }
                 for j in 0..row.nbs.len() { if !taken[j] && row.residual(j) { anchors.push(row.nbs[j].delta); } }
                 for anchor in anchors {
                     if !seen.insert(anchor) { continue; }
                     let Some(vb) = self.bind_parameter(row, p, offsets, &anchor, taken) else { continue };
                     let mut coverage = 0.0;
-                    let mut credited_owner = false;
-                    for pj in vb.positions.iter().flatten() {
-                        if *pj == OWNER { if !owner_taken { coverage += row.own_cost; credited_owner = true; } }
-                        else if !taken[*pj] { coverage += row.credit(*pj); }
-                    }
+                    let credited_owner = false;
+                    for pj in vb.positions.iter().flatten() { if !taken[*pj] { coverage += row.credit(*pj); } }
                     let price = row.own_cost + wp + vb.choice + vb.failed as f64 * log2(offsets.len() as f64);
                     let failed = vb.failed;
                     let entry = CoverEntry { pattern: p.id, place: add(&row.pos, &anchor), nodes: vec![NodeBind { node: Node::Var(p.id), offset: [0; MAX_DIMS], nbs: Vec::new(), var: Some(vb) }], failed, credited_owner, names_owner: credited_owner };
                     out.push(Claim { entry, coverage, price, is_function: false });
                 }
             }
-            Body::Class { .. } => {}
+            Body::Class { members, anchor } => {
+                // alone: at its position from the owner, or from each neighbor of its anchor's neuron (D31, D41)
+                let targets: Vec<Pos> = match anchor.0 {
+                    Node::Owner => vec![anchor.1],
+                    Node::Neuron(n) => (0..row.nbs.len()).filter(|&k| row.nbs[k].neuron == n).map(|k| add(&row.nbs[k].delta, &anchor.1)).collect(),
+                    Node::Var(_) => Vec::new(),
+                };
+                let mut seen: FxHashSet<Pos> = FxHashSet::default();
+                for target in targets {
+                    if !seen.insert(target) { continue; }
+                    let found: Vec<usize> = self.nbs_at(row, &target, None).into_iter().filter(|&j| !taken[j] && row.residual(j) && members.iter().any(|m| m.neuron == row.nbs[j].neuron)).collect();
+                    let Some(&j) = found.first() else { continue };
+                    let choice = p.choice();
+                    let coverage = row.credit(j);
+                    let price = row.own_cost + wp + choice;
+                    let entry = CoverEntry { pattern: p.id, place: add(&row.pos, &target), nodes: vec![NodeBind { node: Node::Var(p.id), offset: target, nbs: Vec::new(), var: Some(VarBind { var: p.id, member: Some(row.nbs[j].neuron), positions: vec![Some(j)], failed: 0, choice }) }], failed: 0, credited_owner: false, names_owner: false };
+                    out.push(Claim { entry, coverage, price, is_function: false });
+                }
+            }
         }
         let _ = ctx;
         out
@@ -168,6 +183,8 @@ impl Neuron {
         let mut credited_owner = false;
         let mut names_owner = false;
         let mut holds_any = false;
+        // a neighbor bound by several nodes, a child standing for several parents, is credited once
+        let mut credited: FxHashSet<usize> = FxHashSet::default();
         for (node, off) in nodes {
             let target = add(&anchor, off);
             match node {
@@ -187,7 +204,7 @@ impl Neuron {
                     if found.is_empty() { failed += 1; }
                     else {
                         holds_any = true;
-                        for &j in &found { if !taken[j] { coverage += row.credit(j); } }
+                        for &j in &found { if !taken[j] && credited.insert(j) { coverage += row.credit(j); } }
                     }
                     binds.push(NodeBind { node: *node, offset: *off, nbs: found, var: None });
                 }
@@ -217,10 +234,7 @@ impl Neuron {
                                 Some(vb) => {
                                     if vb.member.is_some() { holds_any = true; }
                                     failed += vb.failed;
-                                    for pj in vb.positions.iter().flatten() {
-                                        if *pj == OWNER { if !owner_taken && !credited_owner { coverage += row.own_cost; credited_owner = true; names_owner = true; } }
-                                        else if !taken[*pj] { coverage += row.credit(*pj); }
-                                    }
+                                    for pj in vb.positions.iter().flatten() { if !taken[*pj] { coverage += row.credit(*pj); } }
                                     binds.push(NodeBind { node: *node, offset: *off, nbs: Vec::new(), var: Some(vb) });
                                 }
                                 None => {
@@ -250,7 +264,7 @@ impl Neuron {
             if self.round(&nb.delta) == tr { out.push(j); }
         }
         // the parent named may be matched by the child that covers it
-        if out.is_empty() && self.through_children {
+        if out.is_empty() {
             if let Some(n) = neuron {
                 for (j, nb) in row.nbs.iter().enumerate() {
                     if nb.covers.iter().any(|(m, d)| *m == n && self.round(d) == tr) { out.push(j); }
@@ -266,7 +280,6 @@ impl Neuron {
         let mut per_pos: Vec<Option<usize>> = Vec::with_capacity(offsets.len());
         for off in offsets {
             let target = add(anchor, off);
-            if self.owner_in_parameters && target == [0; MAX_DIMS] { per_pos.push(Some(OWNER)); continue; }
             let found = self.nbs_at(row, &target, None);
             // prefer an untaken residual neighbor, then any
             let pick = found.iter().copied().find(|&j| !taken[j] && row.residual(j)).or_else(|| found.first().copied());
@@ -276,15 +289,15 @@ impl Neuron {
         // the value: the neuron at most positions, the latest (greatest time) on a tie
         let mut tally: Vec<(NeuronId, usize, i32)> = Vec::new();
         for pj in per_pos.iter().flatten() {
-            let v = row.pos_value(*pj);
-            let t = row.pos_time(*pj);
+            let v = row.value_at(*pj);
+            let t = row.nbs[*pj].delta[0];
             match tally.iter_mut().find(|e| e.0 == v) { Some(e) => { e.1 += 1; if t > e.2 { e.2 = t; } }, None => tally.push((v, 1, t)) }
         }
         tally.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)).then(a.0.cmp(&b.0)));
         let value = tally[0].0;
         let mut failed = 0u32;
         let positions: Vec<Option<usize>> = per_pos.iter().map(|pj| match pj {
-            Some(j) if row.pos_value(*j) == value => Some(*j),
+            Some(j) if row.value_at(*j) == value => Some(*j),
             _ => { failed += 1; None }
         }).collect();
         Some(VarBind { var: vp.id, member: Some(value), positions, failed, choice: vp.choice() })

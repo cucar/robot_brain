@@ -25,7 +25,7 @@ impl Neuron {
                     let vp = self.pattern(v.var);
                     p_size += vp.map_or(1, |q| q.positions() as u32);
                     choices += v.choice;
-                    for pj in v.positions.iter().flatten() { if row.pos_owned_by(*pj) == Some(e.pattern) { coverage += row.pos_credit(*pj); } }
+                    for pj in v.positions.iter().flatten() { if row.owner[*pj] == Some(e.pattern) { coverage += row.credit(*pj); } }
                 }
                 None => {
                     p_size += 1;
@@ -78,7 +78,7 @@ impl Neuron {
                         let Some(place) = nb_place(row, v) else { continue };
                         if !seen.insert(place) { continue; }
                         let mut c = 0.0;
-                        for pj in v.positions.iter().flatten() { if row.pos_owned_by(*pj) == Some(e.pattern) { c += row.pos_credit(*pj); } }
+                        for pj in v.positions.iter().flatten() { if row.owner[*pj] == Some(e.pattern) { c += row.credit(*pj); } }
                         total += c - v.choice - v.failed as f64 * log2(p.positions() as f64);
                     }
                 }
@@ -90,18 +90,26 @@ impl Neuron {
     /// Retire every pattern whose margin is negative, every parameter left with fewer than two
     /// positions and every class left with one member (R18, R41).
     pub(crate) fn retire(&mut self, ctx: Ctx) -> Vec<Retired> {
-        let mut gone: Vec<PatternId> = Vec::new();
-        for p in &self.table {
-            let degenerate = match &p.body {
-                Body::Parameter { offsets, .. } => offsets.len() < 2,
-                Body::Class { members, .. } => members.len() < 2,
-                Body::Function { nodes, .. } => nodes.len() < 2,
-            };
-            if degenerate || self.margin(p.id, ctx) < 0.0 { gone.push(p.id); }
-        }
         let mut out = Vec::new();
-        for pid in gone { out.push(self.remove_pattern(pid)); }
-        if !out.is_empty() {
+        // one at a time: the worst goes, and the rest are measured again without it, since two lines
+        // covering the same rows each show no margin while the other stands (D30)
+        loop {
+            let mut worst: Option<(PatternId, f64, bool)> = None;
+            for p in &self.table {
+                let degenerate = match &p.body {
+                    Body::Parameter { offsets, .. } => offsets.len() < 2,
+                    Body::Class { members, .. } => members.len() < 2,
+                    Body::Function { nodes, .. } => nodes.len() < 2,
+                };
+                let m = if degenerate { f64::NEG_INFINITY } else { self.margin(p.id, ctx) };
+                if m < 0.0 && worst.map_or(true, |(_, w, _)| m < w) { worst = Some((p.id, m, degenerate)); }
+            }
+            let Some((pid, _, degenerate)) = worst else { break };
+            if ctx.trace {
+                let p = self.pattern(pid).unwrap();
+                eprintln!("[why f{} #{}] p{} {} {}: benefit {:.1} line {:.1} uses {}", ctx.frame, self.id, p.id, describe_body(&p.body), if degenerate { "degenerate" } else { "margin<0" }, self.benefit(p.id, ctx), self.line_cost(p, ctx), self.history.iter().filter(|r| r.cover.iter().any(|e| e.pattern == p.id)).count());
+            }
+            out.push(self.remove_pattern(pid));
             // functions that named a retired variable re-center without it (R18); rows fall dirty
             self.recognize(ctx);
         }
@@ -126,7 +134,7 @@ impl Neuron {
             let had = row.cover.iter().any(|e| e.pattern == pid || e.nodes.iter().any(|nb| nb.var.as_ref().map_or(false, |v| v.var == pid)));
             if had { row.dirty = true; }
         }
-        Retired { pattern: pid, child: p.child(), value_neurons }
+        Retired { pattern: pid, child: p.child(), value_neurons, member_only: false }
     }
 
 }

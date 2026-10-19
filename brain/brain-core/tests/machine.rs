@@ -84,17 +84,16 @@ fn weak_activations_last_one_frame_and_write_nothing() {
 }
 
 /// The six-bar cycle in the spec's configuration (R = 6, H = 256, one channel): the machine must own
-/// before a rise and stand out before a fall, and settle. The target; not reached yet (see the
-/// results doc): the last ten laps stand near 53/60 with the tables still churning.
+/// before a rise and stand out before a fall, and settle. It does from lap 111: every bar right and
+/// nothing added or retired.
 #[test]
-#[ignore = "target not yet reached: the cycle does not settle, last ten laps about 53/60"]
 fn six_bar_cycle_settles() {
     let pattern = [0.009, -0.019, -0.029, 0.019, 0.029, -0.009];
     let mut m = Machine::new(256, Policy::events_to_actions(), 6);
     let ch = m.declare_channel("TEST", Some(("price_change", 2)), Some(("activity", 2)), &[]);
     let ev = m.channels[ch as usize].event.unwrap();
     let ac = m.channels[ch as usize].action.unwrap();
-    let laps = 60;
+    let laps = 150;
     let mut pending: Option<u32> = None;
     let (mut right, mut wrong) = (0, 0);
     for k in 0..laps * 6 {
@@ -107,5 +106,7 @@ fn six_bar_cycle_settles() {
         let w = m.process_frame(&inputs, vec![Reward { reward, channels: vec![ch], frames: 1 }]);
         pending = w.iter().find(|w| w.dim == ac).map(|w| w.bucket);
     }
-    assert!(right as f64 / (right + wrong).max(1) as f64 > 0.95, "last ten laps: {}/{} optimal", right, right + wrong);
+    assert_eq!((right, wrong), (60, 0), "last ten laps: {}/{} optimal", right, right + wrong);
+    let s = m.last_stats.clone();
+    assert_eq!((s.added, s.retired), (0, 0), "nothing turns over once settled");
 }

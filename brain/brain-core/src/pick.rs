@@ -25,6 +25,7 @@ impl Neuron {
     /// Build patterns out of the residual: variables first, then functions (D33). Returns how many were added.
     pub(crate) fn create(&mut self, ctx: Ctx) -> usize {
         let mut added = 0;
+        let first_pid = self.next_pid;
         // stage 1: variables; a seed that builds nothing is passed over and the next is tried (D33)
         let mut tried: FxHashSet<String> = FxHashSet::default();
         loop {
@@ -37,12 +38,23 @@ impl Neuron {
             };
             if built { added += 1; }
         }
+        let new_vars: Vec<PatternId> = self.table.iter().filter(|p| p.is_variable() && p.id >= first_pid).map(|p| p.id).collect();
         // stage 2: functions
         let mut tried: FxHashSet<(Node, Node, Offset)> = FxHashSet::default();
         loop {
             let Some((a, b, off, uses)) = self.best_function_seed(ctx, &tried) else { break };
             tried.insert((a, b, off));
             if self.build_function(a, b, off, &uses, ctx) { added += 1; }
+        }
+        // a variable no function names would write what it writes alone, and is not kept (D30)
+        for v in new_vars {
+            let named = self.table.iter().any(|p| matches!(&p.body, Body::Function { nodes, .. } if nodes.iter().any(|(n, _)| *n == Node::Var(v))));
+            if !named {
+                let r = self.remove_pattern(v);
+                for row in self.history.iter_mut() { for c in row.claim.iter_mut() { if matches!(c, Some((x, _)) if *x == v) { *c = None; row.dirty = true; } } }
+                let _ = r;
+                added -= 1;
+            }
         }
         added
     }
@@ -62,13 +74,6 @@ impl Neuron {
             let res: Vec<usize> = (0..row.nbs.len()).filter(|&j| row.residual(j) && row.claim[j].is_none()).collect();
             for &j in &res {
                 let cj = row.coord(j);
-                // parameter: the owner's activation as the first position, where admitted
-                if self.owner_in_parameters && row.value_at(j) == row.owner_value && row.nbs[j].delta[0] < 0 {
-                    let off = self.round(&row.nbs[j].delta);
-                    let e = ps.entry(off).or_insert_with(|| PS { uses: FxHashMap::default(), values: FxHashSet::default() });
-                    e.values.insert(row.owner_value);
-                    e.uses.entry((row.pos, cj)).or_insert((i, row.own_cost + row.credit(j)));
-                }
                 // class: from the owner
                 let off = self.round(&row.nbs[j].delta);
                 cs.entry((Node::Owner, off)).or_insert_with(|| CS { uses: FxHashMap::default() }).uses.entry(cj).or_insert((row.nbs[j].neuron, row.credit(j), i));
@@ -134,7 +139,7 @@ impl Neuron {
         // the seed's uses, as places: the first position's coordinate, with the rows that saw it
         let mut places: Vec<(Pos, Vec<usize>)> = Vec::new();
         for (first, _) in uses {
-            let rows: Vec<usize> = self.history.iter().enumerate().filter(|(_, r)| (self.owner_in_parameters && r.pos == *first) || !self.nbs_at(r, &sub(first, &r.pos), None).is_empty()).map(|(i, _)| i).collect();
+            let rows: Vec<usize> = self.history.iter().enumerate().filter(|(_, r)| !self.nbs_at(r, &sub(first, &r.pos), None).is_empty()).map(|(i, _)| i).collect();
             places.push((*first, rows));
         }
         self.collapse_parameter(pid, &places, ctx);
@@ -164,12 +169,11 @@ impl Neuron {
             let mut binds: Vec<(usize, usize)> = Vec::new();
             let taken: Vec<bool> = (0..row.nbs.len()).map(|j| !row.residual(j) || row.claim[j].is_some()).collect();
             let mut anchors: Vec<Pos> = Vec::new();
-            if self.owner_in_parameters { anchors.push([0; MAX_DIMS]); }
             for j in 0..row.nbs.len() { if !taken[j] { anchors.push(row.nbs[j].delta); } }
             for anchor in anchors {
                 let Some(vb) = self.bind_parameter(row, &p, offsets, &anchor, &taken) else { continue };
                 if vb.failed > 0 { continue; }
-                for (k, pj) in vb.positions.iter().enumerate() { if let Some(x) = pj { if *x != OWNER && !taken[*x] && !binds.iter().any(|(y, _)| y == x) { binds.push((*x, k)); } } }
+                for (k, pj) in vb.positions.iter().enumerate() { if let Some(x) = pj { if !taken[*x] && !binds.iter().any(|(y, _)| y == x) { binds.push((*x, k)); } } }
             }
             let row = &mut self.history[i];
             for (j, k) in binds { if row.claim[j].is_none() { row.claim[j] = Some((pid, k)); row.dirty = true; } }
@@ -228,7 +232,17 @@ impl Neuron {
                         nodes.push((Node::Var(v), c, part));
                     }
                     Some(_) => {}
-                    None => { if row.residual(j) { nodes.push((Node::Neuron(row.nbs[j].neuron), row.coord(j), row.credit(j))); } }
+                    None => {
+                        if row.residual(j) {
+                            nodes.push((Node::Neuron(row.nbs[j].neuron), row.coord(j), row.credit(j)));
+                            // the child read as what it stands for, its credit spread over them
+                            let nb = &row.nbs[j];
+                            if !nb.covers.is_empty() {
+                                let share = row.credit(j) / nb.covers.len() as f64;
+                                for (m, d) in &nb.covers { nodes.push((Node::Neuron(*m), add(&row.pos, d), share)); }
+                            }
+                        }
+                    }
                 }
             }
             for a in 0..nodes.len() {
@@ -238,7 +252,6 @@ impl Neuron {
                     let (nb, cb, crb) = nodes[b];
                     // the first is the later one; the owner is first where it is in the pair
                     if matches!(nb, Node::Owner) { continue; }
-                    if self.no_self && matches!(na, Node::Owner) && nb == Node::Neuron(self.id) { continue; }
                     if !matches!(na, Node::Owner) && !later(&ca, &cb) { continue; }
                     let off = self.round(&sub(&cb, &ca));
                     if off[0] > 0 { continue; }
@@ -323,7 +336,7 @@ impl Neuron {
             if e.credited_owner && tmp.owner_self.is_none() { tmp.owner_self = Some(e.pattern); }
             for nb in &e.nodes {
                 for &j in &nb.nbs { if tmp.owner[j].is_none() { tmp.owner[j] = Some(e.pattern); } }
-                if let Some(v) = &nb.var { for pj in v.positions.iter().flatten() { if *pj == OWNER { if tmp.owner_self.is_none() { tmp.owner_self = Some(e.pattern); } } else if tmp.owner[*pj].is_none() { tmp.owner[*pj] = Some(e.pattern); } } }
+                if let Some(v) = &nb.var { for pj in v.positions.iter().flatten() { if tmp.owner[*pj].is_none() { tmp.owner[*pj] = Some(e.pattern); } } }
             }
         }
         cover.iter().map(|e| self.entry_savings(&tmp, e)).sum()

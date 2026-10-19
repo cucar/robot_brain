@@ -64,7 +64,7 @@ UCAR_DUMP=1 cargo run --release -p brain-core --example simple -- 100 256 6
 | `docs/algorithm-*.md` | Worked cases (text, alternation, copy, equal, hit, loop, addition, MNIST, stocks), the remarks, the evaluation and the implementation plan. |
 | `brain/brain-core` | The machine in Rust, one file per type. The neuron side (Parts II and IV): `neuron` (the table, history and the `process functions` call), `pattern`, `history`, `cover` (recognition), `collapse`, `margin`, `pick`, `merge`, `bid`, `connection`. The machine side (Parts III and V): `machine` (the frame loop and waves), `activation`, `neighborhood`, `election`, `index`, `death`, `connect`, `expansion`, `selection`. `offsets` is D6 and `types` the alphabet, channels and policies. |
 | `brain/brain-core/examples` | `simple` (the six-bar cycle) and `text` (a letter stream, dumping the tables asked for). |
-| `brain/brain-core/tests` | Behavioral tests: a repeated pair, varied predecessors, prediction over passes, weak activations, and the cycle target. |
+| `brain/brain-core/tests` | Behavioral tests: a repeated pair, varied predecessors, prediction over passes, weak activations, and the cycle settling. |
 | `brain/brain-napi` | The N-API binding: the `Brain` class. |
 | `brain/src/index.js` | The entry point the apps import: `import { Brain } from 'brain'`. |
 | `apps/stocks`, `apps/text`, `apps/mnist` | Jobs on real data, each a standalone script. `apps/db` holds MySQL utilities for backup folders of the previous core and is not used by the machine. |
@@ -114,11 +114,11 @@ lists them.
 ## Status
 
 The implementation follows the specification on the `wavefront` branch of the docs, with one deliberate
-departure, stated at the top of `neuron.rs`: a history row records every activation within reach, covered
-or not, with a flag saying whether it stood on the apex when the owner fired; holding reads every recorded
-activation, while seeding and credit read only the uncovered ones. [docs/ucar-results.md](docs/ucar-results.md)
-records what the machine does on the six-bar cycle and on a letter stream, what the traces show, and what
-is not implemented yet.
+departure, stated at the top of `neuron.rs`: a node naming a neuron also holds where a child stands that
+covers an activation of that neuron at the node's offset, and the bid then covers the child. With it the
+six-bar cycle settles: every bar right and nothing added or retired from lap 111 at `H` 256 and radius 6.
+[docs/ucar-results.md](docs/ucar-results.md) records what the machine does on the cycle and on a letter
+stream, the readings that were tried, what the traces show, and what is not implemented yet.
 
 ## Documentation
 

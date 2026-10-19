@@ -43,6 +43,8 @@ pub struct Retired {
     pub pattern: PatternId,
     pub child: Option<NeuronId>,
     pub value_neurons: Vec<NeuronId>,
+    /// A member left a variable that stays: only its value neuron is released (R38).
+    pub member_only: bool,
 }
 
 /// The measure of one claimant against one row in one round of the greedy cover (D22, D28).
@@ -69,10 +71,10 @@ impl Neuron {
                             let is_class = matches!(vp.body, Body::Class { .. });
                             p_size += vp.positions() as u32;
                             choice_bits += v.choice;
-                            let stood: Vec<ActRef> = v.positions.iter().flatten().map(|&j| row.pos_act(j)).collect();
+                            let stood: Vec<ActRef> = v.positions.iter().flatten().map(|&j| row.nbs[j].act).collect();
                             let value_neuron = v.member.and_then(|m| vp.member(m)).and_then(|m| m.value_neuron);
                             if let Some(m) = v.member { values.push(BidValue { var: v.var, is_class, member: m, stood, value_neuron, choice: v.choice }); }
-                            nodes.push((nb.node, nb.offset, v.positions.iter().flatten().filter(|&&j| j != OWNER).map(|&j| row.nbs[j].act).collect()));
+                            nodes.push((nb.node, nb.offset, v.positions.iter().flatten().map(|&j| row.nbs[j].act).collect()));
                         }
                         None => { p_size += 1; nodes.push((nb.node, nb.offset, acts)); }
                     }

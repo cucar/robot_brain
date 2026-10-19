@@ -43,24 +43,10 @@ pub struct FrameStats {
     pub elapsed_ms: f64,
 }
 
-/// What a history row records (D18): the apex alone, as the document says, or every activation within
-/// reach with a flag for the apex, so holding reads all and seeding and credit read the uncovered.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Rows {
-    ApexOnly,
-    AllFlagged,
-}
-
 #[derive(Clone, Debug)]
 pub struct Config {
     pub h: usize,
     pub policy: Policy,
-    pub rows: Rows,
-    /// A pattern's parent may be matched by the child covering it, which the bid then covers.
-    pub through_children: bool,
-    /// The owner's own activation is admitted as a parameter position (the second seed relation).
-    pub owner_in_parameters: bool,
-    pub no_self: bool,
 }
 
 
@@ -91,13 +77,7 @@ pub struct Machine {
 impl Machine {
     pub fn new(h: usize, policy: Policy, time_radius: i32) -> Self {
         Machine {
-            cfg: Config {
-                h, policy,
-                rows: if std::env::var("UCAR_ROWS").map_or(false, |v| v == "apex") { Rows::ApexOnly } else { Rows::AllFlagged },
-                through_children: std::env::var("UCAR_THROUGH").is_ok(),
-                owner_in_parameters: std::env::var("UCAR_OWNER_PARAM").is_ok(),
-                no_self: std::env::var("UCAR_NO_SELF").is_ok(),
-            },
+            cfg: Config { h, policy },
             act_dims: vec![ActDim { name: "time".into(), radius: time_radius.max(1) }],
             radii: vec![time_radius.max(1)],
             dims: Vec::new(),
@@ -167,7 +147,7 @@ impl Machine {
     pub(crate) fn ctx_for(&self, n: NeuronId) -> Ctx {
         let nn = &self.neurons[n as usize];
         let reach = self.reach_for(nn.axes, &self.spans[n as usize]);
-        Ctx { neuron_bits: log2(self.alive as f64), offset_bits: offset_bits(&reach, &self.radii, nn.axes), frame: self.frame_no, trace: self.trace, through_children: self.cfg.through_children, owner_in_parameters: self.cfg.owner_in_parameters, no_self: self.cfg.no_self }
+        Ctx { neuron_bits: log2(self.alive as f64), offset_bits: offset_bits(&reach, &self.radii, nn.axes), frame: self.frame_no, trace: self.trace }
     }
 
     pub fn act(&self, r: ActRef) -> Option<&Act> {
@@ -247,7 +227,7 @@ impl Machine {
             let (bids, retired, added) = self.call_wave(wave);
             stats.bids += bids.len();
             stats.added += added;
-            stats.retired += retired.len();
+            stats.retired += retired.iter().filter(|(_, r)| !r.member_only).count();
             for (owner, r) in retired { self.handle_retired(owner, r); }
             // elect (R24) and create children (R43)
             let (accepted, minted, reused) = self.elect(wave, bids, &mut pending);

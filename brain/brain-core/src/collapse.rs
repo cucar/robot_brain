@@ -71,9 +71,20 @@ impl Neuron {
                     None => (Node::Neuron(nb.neuron), 0, row.credit(j)),
                 };
                 let key = (node, coord);
-                if seen.contains_key(&key) { continue; }
-                seen.insert(key, out.len());
-                out.push(Around { node, coord, credit, owned_by: row.owner[j], position, row: i, nb: Some(j) });
+                if !seen.contains_key(&key) {
+                    seen.insert(key, out.len());
+                    out.push(Around { node, coord, credit, owned_by: row.owner[j], position, row: i, nb: Some(j) });
+                }
+                // the child read as what it stands for
+                if row.claim[j].is_none() && !nb.covers.is_empty() {
+                    let share = row.credit(j) / nb.covers.len() as f64;
+                    for (m, d) in &nb.covers {
+                        let k2 = (Node::Neuron(*m), add(&row.pos, d));
+                        if seen.contains_key(&k2) { continue; }
+                        seen.insert(k2, out.len());
+                        out.push(Around { node: k2.0, coord: k2.1, credit: share, owned_by: row.owner[j], position: 0, row: i, nb: Some(j) });
+                    }
+                }
             }
         }
         out
@@ -88,7 +99,7 @@ impl Neuron {
             Body::Parameter { offsets, .. } => {
                 let vb = self.bind_parameter(row, vp, offsets, &anchor, &taken)?;
                 let mut c = 0.0;
-                for pj in vb.positions.iter().flatten() { c += row.pos_credit(*pj); }
+                for pj in vb.positions.iter().flatten() { c += row.credit(*pj); }
                 Some((c - vb.choice - vb.failed as f64 * log2(offsets.len() as f64), vb.failed))
             }
             Body::Class { members, .. } => {
@@ -143,7 +154,6 @@ impl Neuron {
             if key == reference { continue; }
             if matches!(key.0, Node::Owner) && !names_owner && key.1 == [0; MAX_DIMS] { continue; }
             if matches!(key.0, Node::Owner) && names_owner { continue; }
-            if self.no_self && names_owner && key.0 == Node::Neuron(self.id) { continue; }
             if let Node::Var(v) = key.0 { if self.pattern(v).is_none() { continue; } }
             let c = &cands[&key];
             let counted = s - c.skipped;
@@ -182,7 +192,6 @@ impl Neuron {
             for &i in rows.iter().rev() {
                 let row = &self.history[i];
                 let anchor = sub(place, &row.pos);
-                if self.owner_in_parameters && anchor == [0; MAX_DIMS] { value = Some(row.owner_value); break; }
                 for j in self.nbs_at(row, &anchor, None) { value = Some(row.value_at(j)); break; }
                 if value.is_some() { break; }
             }
@@ -198,7 +207,7 @@ impl Neuron {
                     if !here.insert(off) { continue; }
                     let c = cands.entry(off).or_insert(Cand { count: 0, covers: 0.0 });
                     c.count += 1;
-                    c.covers += nb.cost * if nb.uncovered { 1.0 } else { 0.0 };
+                    c.covers += nb.cost;
                 }
             }
         }
@@ -264,9 +273,11 @@ impl Neuron {
         }
         kept.sort();
         let changed = kept != old;
+        let mut dropped: Vec<(PatternId, NeuronId)> = Vec::new();
         if let Some(p) = self.pattern_mut(pid) {
             if let Body::Class { members, .. } = &mut p.body {
                 let mut newm: Vec<Member> = Vec::new();
+                for m in members.iter() { if !kept.contains(&m.neuron) { if let Some(v) = m.value_neuron { dropped.push((pid, v)); } } }
                 for n in &kept {
                     let count = counts.get(n).map(|c| c.0).unwrap_or(0);
                     let value_neuron = members.iter().find(|m| m.neuron == *n).and_then(|m| m.value_neuron);
@@ -275,6 +286,7 @@ impl Neuron {
                 *members = newm;
             }
         }
+        self.dropped_values.extend(dropped);
         changed
     }
 

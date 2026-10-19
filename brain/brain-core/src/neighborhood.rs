@@ -32,12 +32,17 @@ impl Machine {
                     if delta[d].abs() > a.reach[d] { ok = false; break; }
                 }
                 if !ok { continue; }
-                if self.cfg.rows == Rows::ApexOnly && b.covered_at.is_some() { continue; }
+                // the apex alone (D18)
+                if b.covered_at.is_some() { continue; }
                 let value = self.neurons[b.neuron as usize].value;
-                let covers: Vec<(NeuronId, Pos)> = if self.cfg.through_children {
-                    b.covers.iter().filter_map(|c| self.act(*c)).map(|c| (c.neuron, sub(&c.pos, &a.pos))).collect()
+                // what a child stands for, as base symbols at their offsets from the owner (R28), where a
+                // pattern's parent may be matched by the child covering it
+                let covers: Vec<(NeuronId, Pos)> = if b.kind == Kind::Inter {
+                    let mut placed = Vec::new();
+                    self.expand(b.neuron, b.pos, &mut Vec::new(), &mut placed, b.fired_by.as_ref());
+                    placed.into_iter().filter(|(_, p)| p[0] <= a.pos[0]).map(|(n, p)| (n, sub(&p, &a.pos))).collect()
                 } else { Vec::new() };
-                out.push(Nb { act: r, neuron: b.neuron, delta, cost: b.cost, uncovered: b.covered_at.is_none(), value, covers });
+                out.push(Nb { act: r, neuron: b.neuron, delta, cost: b.cost, value, covers });
             }
         }
         out

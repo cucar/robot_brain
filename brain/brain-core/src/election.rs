@@ -110,7 +110,7 @@ impl Machine {
             // placed: a class's where its member stood, a parameter's over its positions
             let stood: Vec<&Act> = v.stood.iter().filter_map(|r| self.act(*r)).collect();
             if stood.is_empty() { continue; }
-            let (pos, span) = self.place_over(&stood, owner_axes);
+            let (pos, span) = self.place_over(&stood, owner_axes, vn);
             let vstrong = stood.iter().any(|a| a.strong);
             let fb = FiredBy { owner: bid.owner, pattern: v.var, values: vec![] };
             let act = self.new_act(vn, pos, v.choice.max(0.0), vstrong, Some(fb), span, wave, height);
@@ -132,7 +132,7 @@ impl Machine {
             let mut over: Vec<&Act> = bid.nodes.iter().flat_map(|(_, _, acts)| acts.iter()).filter_map(|r| self.act(*r)).collect();
             if bid.names_owner { if let Some(a) = self.act(bid.bidder) { over.push(a); } }
             if over.is_empty() { return (out, minted, reused); }
-            let (mut pos, span) = self.place_over(&over, owner_axes);
+            let (mut pos, span) = self.place_over(&over, owner_axes, child);
             pos[0] = bid.place[0];
             let cost = bid.bidder_cost + bid.which_pattern_bits + bid.failed as f64 * log2(bid.p_size as f64);
             let fb = FiredBy { owner: bid.owner, pattern: bid.pattern, values };
@@ -146,7 +146,7 @@ impl Machine {
     /// Where a child stands over a set of activations (D53): in time at the latest, in every other
     /// dimension at the center of their box, rounded toward the smaller coordinate on a half; and its
     /// span (D4), the farthest base activation under it.
-    pub(crate) fn place_over(&self, over: &[&Act], axes: u8) -> (Pos, Pos) {
+    pub(crate) fn place_over(&self, over: &[&Act], axes: u8, child: NeuronId) -> (Pos, Pos) {
         let mut pos = [0i32; MAX_DIMS];
         pos[0] = over.iter().map(|a| a.pos[0]).max().unwrap_or(0);
         for d in 1..self.radii.len() {
@@ -155,14 +155,50 @@ impl Machine {
             let hi = over.iter().map(|a| a.pos[d]).max().unwrap_or(0);
             pos[d] = lo + (hi - lo) / 2;
         }
+        // the span is read by the descent expansion makes, once through each neuron, so a chain of
+        // children closed on itself spans one turn and not the run (D4)
         let mut span = [0i32; MAX_DIMS];
         for a in over {
+            let inner = self.span_by_descent(a.neuron, &mut vec![child]);
             for d in 0..self.radii.len() {
-                let s = (a.pos[d] - pos[d]).abs() + a.span[d];
+                let s = (a.pos[d] - pos[d]).abs() + inner[d];
                 if s > span[d] { span[d] = s; }
             }
         }
         (pos, span)
+    }
+
+    /// How far the farthest base symbol under a neuron lies from it, read down its first parent's line
+    /// once through each neuron (D4).
+    pub(crate) fn span_by_descent(&self, n: NeuronId, path: &mut Vec<NeuronId>) -> Pos {
+        let mut span = [0i32; MAX_DIMS];
+        let nn = &self.neurons[n as usize];
+        if nn.kind != Kind::Inter || !nn.alive || path.contains(&n) || path.len() > 64 { return span; }
+        path.push(n);
+        if let Some(v) = nn.value {
+            if let Some(p) = self.neurons[v.owner as usize].pattern(v.var) {
+                let inner = self.span_by_descent(v.member, path);
+                let offsets: Vec<Offset> = match &p.body { Body::Parameter { offsets, .. } => offsets.clone(), _ => vec![[0; MAX_DIMS]] };
+                for o in offsets { for d in 0..MAX_DIMS { span[d] = span[d].max(o[d].abs() + inner[d]); } }
+            }
+        } else if let Some(&(owner, pid)) = nn.parents.first() {
+            if let Some(nodes) = self.neurons[owner as usize].function_nodes(pid) {
+                let nodes: Vec<(Node, Offset)> = nodes.to_vec();
+                for (node, off) in nodes {
+                    let inner = match node {
+                        Node::Owner => self.span_by_descent(owner, path),
+                        Node::Neuron(m) => self.span_by_descent(m, path),
+                        Node::Var(v) => {
+                            let member = self.neurons[owner as usize].pattern(v).and_then(|q| q.frequent_member());
+                            member.map(|m| self.span_by_descent(m, path)).unwrap_or([0; MAX_DIMS])
+                        }
+                    };
+                    for d in 0..MAX_DIMS { span[d] = span[d].max(off[d].abs() + inner[d]); }
+                }
+            }
+        }
+        path.pop();
+        span
     }
 
     pub(crate) fn mint(&mut self, axes: u8, key: String, value: Option<Value>) -> NeuronId {

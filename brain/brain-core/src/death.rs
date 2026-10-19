@@ -52,7 +52,7 @@ impl Machine {
         // its subtree: its own patterns' children with no parent outside
         let table: Vec<(PatternId, Option<NeuronId>, Vec<NeuronId>)> = self.neurons[c as usize].table.iter().map(|p| (p.id, p.child(), p.members().iter().filter_map(|m| m.value_neuron).collect())).collect();
         for (pid, child, values) in table {
-            self.handle_retired(c, Retired { pattern: pid, child, value_neurons: values });
+            self.handle_retired(c, Retired { pattern: pid, child, value_neurons: values, member_only: false });
         }
         self.neurons[c as usize].table.clear();
         self.neurons[c as usize].history.clear();
@@ -61,7 +61,7 @@ impl Machine {
         let ids: Vec<NeuronId> = self.neurons.iter().filter(|n| n.alive).map(|n| n.id).collect();
         for n in ids {
             let retired = self.neurons[n as usize].delete_neighbor(c);
-            for r in retired { self.handle_retired(n, r); }
+            for r in retired { if self.trace { eprintln!("[cascade f{} #{}] p{} child={:?} lost #{}", self.frame_no, n, r.pattern, r.child, c); } self.handle_retired(n, r); }
         }
         for f in self.frames.iter_mut() {
             for a in f.acts.iter_mut() {

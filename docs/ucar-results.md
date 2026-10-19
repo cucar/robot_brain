@@ -50,18 +50,16 @@ The machine (`machine.rs`), Parts III and V:
 
 ## The one departure
 
-D18 records the apex at firing; D5 makes an activation another bid already covers no neighbor at all.
-Here a row records every activation within reach, with a flag saying whether it stood on the apex when the
-owner fired. Holding reads every recorded activation. Seeding (D47) and credit (D20, D22) read only the
-uncovered ones. On the board R22 already says the same thing: a neuron the bid names that fired and
-another bid covers is credited to no one and charged nothing. The change makes the neuron's arithmetic
-match the machine's, and nothing else.
+D22 says a node naming a neuron holds where that neuron stands at the node's offset. Here it also holds
+where a child stands that covers an activation of that neuron at that offset: the child's expansion
+(R28) is read at the row, as base symbols at their offsets from the owner. Matching, seeding (D47) and
+the collapse (D27) all read a node this way, and the bid then covers the child instead of the base
+activation under it. A pattern's parent may be matched by its child. The rows themselves record the
+apex alone, as D18 says.
 
-One consequence showed up at once in the traces and is worth stating. The collapse decides what a line
-names by what each node covers (D27). A node whose activations are always covered by other bids covers
-nothing, so the collapse drops it at the next re-centering even though it holds in every use. A line
-whose nodes are all out-credited therefore degenerates to the owner alone and is retired, which is the
-same end the document's rule reaches by failure, one step later.
+An earlier departure, rows recording every activation within reach with a flag for the apex, is gone.
+Of all 64 combinations of the six readings that were tried (below), the only one that settles the
+cycle at every `H` and radius tried is this one with nothing else changed.
 
 ## Not implemented, or simplified
 
@@ -79,109 +77,107 @@ same end the document's rule reaches by failure, one step later.
 
 The configuration of the specification: one channel, a binary price move and own/out, radius 6, `H` 256,
 the `eventsToActions` policy, the world running the right action where the machine is silent, the reward
-the bar's return signed by the action, scoped to the channel and the frame. 200 laps:
+the bar's return signed by the action, scoped to the channel and the frame.
 
-| laps | right per bar, of 20 | minted | added | retired | alive neurons | patterns | max height |
-|------|----------------------|--------|-------|---------|---------------|----------|------------|
-| 1-20 | 13 15 17 17 18 16 | 20 | 24 | 12 | 14 | 9 | 5 |
-| 21-40 | 17 16 20 19 20 15 | 20 | 58 | 40 | 14 | 13 | 4 |
-| 41-60 | 11 17 20 18 20 17 | 18 | 134 | 118 | 24 | 23 | 5 |
-| 61-80 | 16 18 20 20 20 14 | 21 | 170 | 160 | 31 | 26 | 6 |
-| 81-100 | 16 20 19 18 20 17 | 12 | 165 | 155 | 31 | 30 | 8 |
-| 101-120 | 14 18 20 20 20 16 | 14 | 44 | 32 | 42 | 38 | 10 |
-| 121-140 | 14 18 20 20 20 19 | 12 | 102 | 96 | 41 | 41 | 11 |
-| 141-160 | 15 15 20 18 20 16 | 11 | 182 | 169 | 39 | 39 | 11 |
-| 161-180 | 14 20 20 19 20 18 | 17 | 234 | 226 | 43 | 42 | 7 |
-| 181-200 | 13 19 19 18 20 18 | 14 | 312 | 297 | 35 | 32 | 3 |
+| laps | right per bar, of 50 | added | retired | alive neurons | patterns |
+|------|----------------------|-------|---------|---------------|----------|
+| 1-50 | 45 28 47 48 47 50 | 18 | 5 | 13 | 11 |
+| 51-100 | 50 50 50 50 50 50 | 14 | 14 | 13 | 10 |
+| 101-150 | 50 50 50 50 50 50 | 1 | 4 | 11 | 7 |
+| 151-2000 | 50 50 50 50 50 50 | 0 | 0 | 11 | 7 |
 
-Overall 1065 of 1197 right (89%), the last ten laps 55 of 60. Bars 3 and 5 are right from lap 10 on; bars
-1 and 6 keep being lost, since the lines that serve them are the ones that turn over. The machine does not
-settle: patterns are added and retired at a rising rate, and the stack of children over the base grows to
-height 11 and collapses again.
+Every bar right from lap 31 on in windows of ten, and nothing added or retired from lap 111 to lap 2000:
+seven lines, eleven neurons, one child per bar. Over 1000 laps at other settings:
 
-## Four readings of the neighborhood, same outcome
+| `H` | radius | every bar right from lap | nothing added or retired from lap |
+|-----|--------|--------------------------|-----------------------------------|
+| 64 | 3 | 61 | 81 |
+| 64 | 6 | 61 | 81 |
+| 64 | 12 | 151 | 151 |
+| 256 | 3 | 161 | 211 |
+| 256 | 6 | 31 | 111 |
+| 256 | 12 | 321 | 401 |
 
-Three switches select how a row is recorded and read; all four combinations were run on the cycle for
-100 laps (`UCAR_ROWS=apex`, `UCAR_THROUGH=1`, `UCAR_OWNER_PARAM=1` on the example):
+The settled tables are a ring. Down's table holds "owner, the bar-1 child at −1" (bar 2) and "owner,
+the bar-2 child at −1" (bar 3); up's table holds the bar-3 line, and bars 5, 6 and 1 are lines naming
+the previous bar's child beside that lap's base symbols. One child's table holds one line, "owner, down
+at −7". Each child connects to the action of the bar after it, with strength in the hundreds.
 
-| rows | parent matches child | owner as a parameter position | right, laps 81-100 (of 120) | added / retired over 100 laps | alive neurons at 100 |
-|------|----------------------|-------------------------------|-----------------------------|-------------------------------|----------------------|
-| apex only, as D18 says | no | no | 103 | 1683 / 1597 | 37 |
-| every activation, flagged | no | no | 110 | 551 / 485 | 31 |
-| apex only | yes | no | 102 | 1057 / 977 | 38 |
-| every activation, flagged | yes | no | 110 | 572 / 507 | 34 |
-| every activation, flagged | no | yes | 110 | 323 / 255 | 51 |
-| apex only | no | yes | 111 | 3516 / 3430 | 30 |
-| every activation, flagged | no | no, and a function naming the owner may not name the owner's own neuron | 109 | 153 / 90 | 25 |
-| apex only | no | same rule | 108 | 1762 / 1678 | 43 |
+The `height` of an activation counts the chain of children covering children, which under this reading
+grows by one every frame; it no longer measures the structure, and the height and levels printouts of
+the examples and jobs mean nothing on the cycle.
 
-The last rule (`UCAR_NO_SELF=1`) excludes exactly the lines that build the stack, "owner, and the owner's
-own neuron one period back". With it and flagged rows the base tables hold, by lap 40, one line per bar
-over base symbols, "owner down, up at −2, up at −1" for bar 6 and "owner up, down at −4, down at −2,
-down at −1" for bar 4 among them, which is the structure the discussion asked for; the children's
-tables then build lines over other children, and the stack continues a level every ten laps or so.
+## The readings that were tried
 
-The document's own reading churns the most. Letting a pattern's parent be matched by the child covering
-it does not change the race described below, since the child that covers the parent is the one the base
-line then names, and the child's own table runs first either way. Admitting the owner's activation as a
-parameter position turns the self-period relation into a parameter whose value neuron the index reuses,
-which lowers the churn and raises the neuron count, and the tables still turn over.
+Six readings were switches while this was measured, and are removed now. Rows of the apex alone (D18)
+or of every activation within reach with a flag; a parent matched through the child covering it (the
+departure above); no-self (a function naming the owner may not name the owner's own neuron); frozen
+(no re-centering, D29); strict (the collapse takes only nodes holding in every use); owner-param (the
+owner's activation as a parameter position). All 64 combinations, 300 laps each, after the fixes below:
 
-## What the traces show
+- 3 combinations were all right in laps 251-300 with nothing turning over: apex rows with through
+  children alone, with no-self added, and with owner-param, strict and frozen added.
+- 19 froze into a wrong structure: nothing added or retired, one to three bars wrong every lap.
+- 42 kept churning, 57% to 95% right in laps 251-300. All 32 combinations without through children are
+  among them, at 85% to 95%.
 
-The per-lap dump (`UCAR_LAP=1`) of the two base tables and the apex per bar, read with the add and retire
-trace (`UCAR_TRACE=1`), gives the sequence. Up is neuron 1, down is 0; the actions are 2 and 3 and under
-this policy are never covered.
+Over 1000 laps at `H` 64 and 256 and radius 3, 6 and 12, through children alone settled at all six
+settings; with no-self it failed at three of them, and with owner-param, strict and frozen at four,
+those freezing at 50 of 60 per ten laps.
 
-1. **Lap 2: the two bigrams.** Down's table adds "owner, up at −1", which holds at bars 2 and 6; up's table
-   adds "owner, down at −1", which holds at bars 1 and 4. Each is bought a child, 4 and 5. From here every
-   base activation is covered by its own bar's bid, and the next bar sees the child.
-2. **Lap 4: the child names itself one period back.** Child 4 fires at bars 2 and 6, so from lap 3 its own
-   activation stands uncovered at −6 in every row. That is a relation counted twice per lap (D47), it pays
-   after three uses, and 4's table adds "owner, 4 at −6" with a child, 6, in the same wave the child fires.
-   The base lines that would name 4 at −1 need the same three uses at one or two per lap, and lose the race
-   by a frame. Child 5 does the same a lap later. Over the run, 28 of the 107 functions added name their
-   own neuron.
-3. **The base lines chase the top of the stack.** Because a child is covered by its own table's bid in the
-   frame it fires, the next bar's row never holds the child on the apex; it holds the child's child. So
-   down's table names 6 at −1, then 10, 13, 17, 19, 22, as each new top appears, and up's table does the
-   same with the other stack.
-4. **Each stack dies and regrows.** "Owner, 4 at −6" earns only while 4 at −6 is uncovered. Once anything
-   names 4 at −1 its previous activation is covered, the node covers nothing, the collapse drops it, the
-   line is retired, 6 dies, and every line above that named 6 fails. Then 4 is uncovered again, the same
-   seed recurs, and the stack rebuilds. That is the added-and-retired column.
-5. **The bigrams flicker through the early rows.** With `H` 256 the first laps' rows, where every base
-   symbol was bare, stay in the history for the whole run. When a bigram is retired its neighbors there
-   fall back to the residual, the same seed pays on those rows, and the same line is added again a frame
-   later with a new child. At lap 14 "owner, down at −1" went out and came back as a new pattern in the
-   same call.
-6. **Bar-specific lines do form, on the stack tops.** "Owner, 4 at −3, 4 at −1" in down's table holds at
-   bar 3 alone; "owner, 5 at −3, 4 at −1" in up's table at bar 1; "owner, 4 at −5, 5 at −1" at bar 5. Each
-   predicts its bar exactly while it lives, and lives as long as the children it names.
+## The churn, read, and four faults in the implementation
 
-The ring described in the discussion, each bar's line naming the previous bar's child and nothing above
-the children, never closes, because the self-period line in each child's table is seeded from the same
-evidence as the next bar's line and bids first, in the child's own frame.
+Before the switch was settled, the added-and-retired counts were read line by line (300 laps,
+`UCAR_TRACE=1`, a reason printed for every retirement). Most of them were faults of the implementation,
+fixed in place:
+
+1. **Classes built and retired every frame.** A class was priced by the credit at its places less the
+   choice, while the cover never took a class alone, so with no function naming it its margin was about
+   −11 bits: retired the next call, rebuilt the call after. 572 of 587 retirements in laps 101-150 were
+   these. A variable that no function names at the end of the create step is no longer kept (D30: over
+   one variable and nothing else a function is never built), and a class alone is offered to the cover
+   as D41 says.
+2. **Value neurons leaked.** A member dropped from a variable never released its value neuron, which kept
+   its parent entry and never reached the ledger (R38). Alive neurons grew from 18 to 181 over 3000 laps
+   with 24 patterns, and since a node's price is `log₂` of the alive count (D13), every line grew dearer
+   with the run. Dropped members now hand their value neurons to the ledger.
+3. **Mutually redundant lines retired together.** Every line's margin was measured against the whole
+   table and every negative one removed in one pass. Two lines covering the same rows each show no margin
+   while the other stands, so both went and one was rebuilt. The worst goes now, and the rest are
+   measured again without it.
+4. **A function left with no nodes crashed recognition.** The collapse can strip a function to nothing;
+   recognition ran before retirement and indexed its first node. Such a function now covers nothing until
+   retirement removes it.
+
+**What the remaining churn was, under the specification's reading.** Each bar's cheapest line is "owner,
+the previous bar's newest child at −1". Every lap adds a link, so the structure is a helix: the child for
+bar 2 this lap is "down after this lap's up-child", a new neuron one lap longer. That is T13 as written:
+on input that repeats exactly the stack grows a level each time round and nothing caps it. Each new link
+makes the older lines over the same bar redundant; their margins (D30) sit at the knife edge (a benefit
+of 22.0 against a line of 23.9 after 40 uses), the roots retire, their children die, every line naming
+them loses a node, and the helix rebuilds from the base lines. 3000 laps of that reading: 90.7%, never
+settled. A link that names "the up-child of bar 1" through the up it covers, rather than this lap's
+particular child, is the same line every lap, and the ring closes.
 
 ## The letter stream
 
 `th ch sh wh` repeated four times, radius 1: `h`'s table holds one function per predecessor, each naming
-`h` and the letter at −1, each with a child, and no class. Under D27 and D33 as written a function needs
-one pair twice while a class needs two members twice, so each letter is named outright the second time it
-comes before `h`, and the class seed only ever sees the residual. The worked case in
-[algorithm-text.md](algorithm-text.md) §2 expects a class here.
+`h`, the letter at −1 and the child covering it, each with a child, and no class. Under D27 and D33 as
+written a function needs one pair twice while a class needs two members twice, so each letter is named
+outright the second time it comes before `h`. The worked case in [algorithm-text.md](algorithm-text.md)
+§2 expects a class here.
 
-`apps/text/jobs/text.js` on `apps/text/data/test.txt` (127 bytes), `H` 256, radius 1: 17% of next bytes
-right on the first pass, 56% on the second, with children voting in 35% of frames.
+`apps/text/jobs/text.js` on `apps/text/data/test.txt` (127 bytes), `H` 256, radius 1: 20% of next bytes
+right on the first pass, 78% on the second, with children voting in 83% of frames of the second.
 
 ## Running it
 
 ```bash
 cd brain
-cargo test --release -p brain-core                       # four behavioral tests; the cycle target is ignored
+cargo test --release -p brain-core                       # five behavioral tests, the cycle among them
 cargo run --release -p brain-core --example simple -- 200 256 6
 UCAR_WINDOW=5 UCAR_LAP=1 cargo run --release -p brain-core --example simple -- 24 256 6   # tables per lap
-UCAR_TRACE=1 cargo run --release -p brain-core --example simple -- 40 256 6               # adds, retires, deaths
+UCAR_TRACE=1 cargo run --release -p brain-core --example simple -- 40 256 6               # adds, retires with reasons, deaths, cascades
 UCAR_DUMP=1  cargo run --release -p brain-core --example simple -- 100 256 6              # every table at the end
 cargo run --release -p brain-core --example text -- "th ch sh wh th ch sh wh " 1 64 h
 ```

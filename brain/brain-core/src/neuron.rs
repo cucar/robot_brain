@@ -1,11 +1,11 @@
 //! One neuron (§4, §5): its table, its history and its connections, and the `process functions`
 //! call (R20) that reads them: refresh, recognize, delete, create, merge, return.
 //!
-//! One departure from the document is deliberate and marked: a history row records every activation
-//! within reach, covered or not, with a flag saying whether it stood on the apex when the owner fired
-//! (D18 says the apex alone). Holding reads every recorded activation; seeding (D47) and credit (D20)
-//! read only the uncovered ones. That makes the neuron's arithmetic match the machine's (R22): a bid
-//! may name an activation another bid already covers, and is credited nothing for it.
+//! One departure from the document is deliberate and marked: a node naming a neuron holds where that
+//! neuron stands at its offset, or where a child stands that covers an activation of that neuron at the
+//! offset (the child's expansion, R28, read at the row). Matching (D22), seeding (D47) and the collapse
+//! (D27) read it the same way, and the bid then covers the child. A history row records the apex alone,
+//! as D18 says.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -26,12 +26,6 @@ pub struct Ctx {
     pub offset_bits: f64,
     pub frame: Frame,
     pub trace: bool,
-    /// A node naming neuron `n` holds where a child covering an activation of `n` stands at the offset,
-    /// and the bid then covers the child.
-    pub through_children: bool,
-    /// The owner's own activation is admitted as a parameter position (D47 second relation).
-    pub owner_in_parameters: bool,
-    pub no_self: bool,
 }
 
 /// What the machine hands a neuron for one activation of the frame (R20).
@@ -66,19 +60,17 @@ pub struct Neuron {
     /// What an interneuron stands for (D36), as the machine last wrote it.
     pub key: String,
     pub radii: Vec<i32>,
-    pub through_children: bool,
-    pub owner_in_parameters: bool,
-    /// A function that names the owner names no activation of the owner's own neuron (a probe).
-    pub no_self: bool,
+    /// Value neurons of members dropped from a variable since the last call, with the variable (R38).
+    pub(crate) dropped_values: Vec<(PatternId, NeuronId)>,
 }
 
 impl Neuron {
     pub fn base(id: NeuronId, kind: Kind, dim: DimId, bucket: u32, channel: ChannelId, axes: u8, h: usize, radii: Vec<i32>) -> Self {
-        Neuron { id, kind, dim: Some(dim), bucket, channel: Some(channel), axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: format!("b{}", id), radii, through_children: false, owner_in_parameters: false, no_self: false }
+        Neuron { id, kind, dim: Some(dim), bucket, channel: Some(channel), axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: format!("b{}", id), radii, dropped_values: Vec::new() }
     }
 
     pub fn inter(id: NeuronId, axes: u8, h: usize, radii: Vec<i32>) -> Self {
-        Neuron { id, kind: Kind::Inter, dim: None, bucket: 0, channel: None, axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: String::new(), radii, through_children: false, owner_in_parameters: false, no_self: false }
+        Neuron { id, kind: Kind::Inter, dim: None, bucket: 0, channel: None, axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: String::new(), radii, dropped_values: Vec::new() }
     }
 
     pub fn pattern(&self, pid: PatternId) -> Option<&Pattern> { self.table.iter().find(|p| p.id == pid) }
@@ -111,9 +103,6 @@ impl Neuron {
     /// `process functions`: refresh, recognize, delete, create, merge, return (R20). Returns the bids of
     /// the frame's rows, everything retired, and how many patterns were added.
     pub fn process(&mut self, inputs: Vec<RowInput>, ctx: Ctx) -> (Vec<Bid>, Vec<Retired>, usize) {
-        self.through_children = ctx.through_children;
-        self.owner_in_parameters = ctx.owner_in_parameters;
-        self.no_self = ctx.no_self;
         let mut retired: Vec<Retired> = Vec::new();
         // refresh history (§5.1)
         let incoming = inputs.len().min(self.h);
@@ -138,9 +127,10 @@ impl Neuron {
         let added = self.create(ctx);
         // merge (§5.5)
         retired.extend(self.merge());
+        for (pid, vn) in std::mem::take(&mut self.dropped_values) { retired.push(Retired { pattern: pid, child: None, value_neurons: vec![vn], member_only: true }); }
         if ctx.trace {
             for p in self.table.iter().filter(|p| p.id >= before) { eprintln!("[add f{} #{}] p{} {} margin {:.1}", ctx.frame, self.id, p.id, describe_body(&p.body), self.margin(p.id, ctx)); }
-            for r in &retired { eprintln!("[retire f{} #{}] p{} child={:?}", ctx.frame, self.id, r.pattern, r.child); }
+            for r in retired.iter().filter(|r| !r.member_only) { eprintln!("[retire f{} #{}] p{} child={:?}", ctx.frame, self.id, r.pattern, r.child); }
         }
         // return (§5.6)
         let bids = self.bids(first_new);
@@ -168,6 +158,7 @@ impl Neuron {
     /// patterns left degenerate, which the machine treats as retired.
     pub fn delete_neighbor(&mut self, n: NeuronId) -> Vec<Retired> {
         let mut out = Vec::new();
+        let mut dropped: Vec<(PatternId, NeuronId)> = Vec::new();
         let ids: Vec<PatternId> = self.table.iter().map(|p| p.id).collect();
         for pid in ids {
             let degenerate = {
@@ -180,12 +171,13 @@ impl Neuron {
                         }
                         nodes.len() < 2
                     }
-                    Body::Class { members, .. } => { members.retain(|m| m.neuron != n); members.len() < 2 }
-                    Body::Parameter { members, offsets } => { members.retain(|m| m.neuron != n); offsets.len() < 2 }
+                    Body::Class { members, .. } => { for m in members.iter().filter(|m| m.neuron == n) { if let Some(v) = m.value_neuron { dropped.push((pid, v)); } } members.retain(|m| m.neuron != n); members.len() < 2 }
+                    Body::Parameter { members, offsets } => { for m in members.iter().filter(|m| m.neuron == n) { if let Some(v) = m.value_neuron { dropped.push((pid, v)); } } members.retain(|m| m.neuron != n); offsets.len() < 2 }
                 }
             };
             if degenerate { out.push(self.remove_pattern(pid)); }
         }
+        for (pid, v) in dropped { if self.pattern(pid).is_some() { self.dropped_values.push((pid, v)); } }
         for row in self.history.iter_mut() {
             if row.nbs.iter().any(|nb| nb.neuron == n) {
                 let keep: Vec<usize> = (0..row.nbs.len()).filter(|&j| row.nbs[j].neuron != n).collect();
