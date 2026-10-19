@@ -838,7 +838,12 @@ residual. Every price in the design (D13) is counted off them.
 > of its positions per relation naming it, or a lone parameter's positions.
 > What a pattern names holds or fails: a neighbor fails when its neuron is absent, a class where no member
 > stands where a relation names it (D41), a parameter at each position where what stands differs from its
-> value (D44), and the owner's activation never, since it is there wherever the owner reads. What a pattern
+> value (D44), and the owner's activation never, since it is there wherever the owner reads.
+>
+> **A child can stand in for its parent.** Where a pattern names the parent, the child can match as well (R28). The
+> bid then covers the child, and pays its cost once.
+>
+> What a pattern
 > fires on the apex stands in for what it covers; that is what it saves, and that is the coverage. What it costs
 > is what its occurrence writes. What the bidder cost is on both sides and cancels where the pattern names the
 > owner, for the first pattern taken; where it does not, it is on the price side alone (D13). A neuron the
@@ -936,6 +941,9 @@ tie-break where it runs (D15, R24).
 > in one use together. A coordinate a variable holds is read as that variable and as nothing else. The counts
 > move as rows enter and leave the history and as neighbors are covered; how they are kept is the
 > implementation's.
+>
+> **A child can stand in for its parents here too.** A child on the apex is a neighbor as itself, and as each
+> of the base symbols it stands for, each at its own offset (R28). Its cost is split equally among them.
 
 ## 4.9 Collapse
 
@@ -994,6 +1002,7 @@ tie-break where it runs (D15, R24).
 > `s − count(x)`, and costs its entry in the line (D13):
 > ```
 > a neighbor covers    what it cost, in each use where it stands
+> a base symbol a child stands in for covers    its share of the child's cost (D47), in each use where it stands
 > a variable covers    its part (D22), in each use where it holds, over all its positions at once
 > the owner covers     what the owner's activation cost, in each use where it stands at δ
 >
