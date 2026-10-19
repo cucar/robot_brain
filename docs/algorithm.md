@@ -385,8 +385,8 @@ read.
 
 > **D5 — Adjacency.** Two activations are adjacent when **the second stands on the apex (R27) as the first
 > fires, within reach in every activation dimension they share** (D4), **and the second is not later than the
-> first**. Height is no condition: a neighbor is whatever nothing has covered, however high it stands, so a
-> base neuron sees a high child one frame back beside the base neurons around it. What has not yet fired in the
+> first**. Whether the second is a base neuron or an interneuron is no condition: a neighbor is whatever
+> nothing has covered, so a base neuron sees a child one frame back beside the base neurons around it. What has not yet fired in the
 > frame is not there to be seen, and a child fires in the wave after its bid is accepted (§6.4), so a same-frame
 > neighbor is whatever an earlier wave fired. **The second's kind must be admitted beside the first's kind by the past
 > table of the policy** (D50); where it is, events and actions are adjacent to one another like anything else, and
@@ -461,8 +461,8 @@ offset, with one activation dimension and a reach of 1:
 
 ## 3.6 Apex
 
-> **D49 — Apex.** The activations of a frame that no accepted bid covers, at every height at once: a base
-> neuron no pattern found worth naming stands in it beside a child many patterns deep. It is the machine's whole state at
+> **D49 — Apex.** The activations of a frame that no accepted bid covers, base neurons and interneurons alike:
+> a base neuron no pattern found worth naming stands in it beside a child many patterns deep. It is the machine's whole state at
 > that frame, and it has four names for the four things it is. It is the **frontier**, looking back: everything
 > underneath it is recovered by expanding it, so it is what the file's body writes. It is the **situation**: what
 > every neuron sees as its neighborhood (D5), what connects to what ran, and what votes. It is the
@@ -1406,9 +1406,8 @@ child and a value neuron holds for that one value.
 > the wave before bought, the bids are what the election is over, and a child is created only for a bid the
 > election accepted (R16). Nothing in that order leaves the wave or the frame.
 >
-> Every neuron runs the same rule at its own reach (D4). **Compression is spatio-temporal at every height, in
-> one pass**: a pattern anywhere may name neighbors in its own frame, in earlier ones, beside it in space, or in
-> a mix.
+> Every neuron runs the same rule at its own reach (D4). **Compression is spatio-temporal for every neuron, in
+> one pass**: a pattern may name neighbors in its own frame, in earlier ones, beside it in space, or in a mix.
 
 ## 6.2 Election
 
@@ -1578,8 +1577,8 @@ Nothing sees a child until it fires (D5). A child's activation records
 the function whose bid fired it, and a value neuron's the variable, since either may have several (R43), and
 each is expanded through that one (R28). Every activation no accepted bid covers stands as itself.
 
-> **R27 — The apex is a frontier, not a height.** It is every active neuron **no accepted bid covers** (D49) — the
-> uncovered set, at every height at once — so a base neuron no pattern found worth naming stands in it beside a
+> **R27 — The apex is a frontier.** It is every active neuron **no accepted bid covers** (D49) — the
+> uncovered set, base neurons and interneurons alike — so a base neuron no pattern found worth naming stands in it beside a
 > child many patterns deep. This is the frontier the file's body writes, **the one every neuron sees as its neighborhood**
 > (D5), **the one that learns what ran** (D25), and **the one that votes** (§8.4): the uncovered set does all four,
 > and coverage silences a neuron in every one of them at once, its one last connection aside (D10). A reward for a
@@ -1593,13 +1592,13 @@ each is expanded through that one (R28). Every activation no accepted bid covers
 > takes it, and a bid can take it for as long as it lies within the bidder's reach (D4), so an activation may
 > speak for a few frames and then fall silent. **No accepted bid is ever dropped** (R23).
 
-The frontier cuts across heights, not along one:
+The frontier cuts across the hierarchy:
 
 ```
-   height 3                         ┌────── ▣ ──────┐
-   height 2               ┌─── ▣ ───┐               │
-   height 1     ┌─ ▣ ─┐   │         │       │       │
-   height 0     a     b   c         d   e   f   g   h        i     j
+                                    ┌────── ▣ ──────┐
+                          ┌─── ▣ ───┐               │
+                ┌─ ▣ ─┐   │         │       │       │
+                a     b   c         d   e   f   g   h        i     j
                                                              ▣     ▣
 
    frontier  =  { the child over (a,b),  the child over (c,d),  the child over (e,f,g,h),  i,  j }
@@ -1837,7 +1836,7 @@ it.
 
 **At age 0, and only then, the machine calls `infer`, and the call returns what the activation infers.** It reads its own neuron's connections
 at every offset, out to its reach, and returns each with its strength and estimate, covered or not. Those are
-its **inferences** (R36), each naming a neuron at whatever height it stands (D25), and the machine keeps them for
+its **inferences** (R36), each naming a neuron, base or interneuron (D25), and the machine keeps them for
 as long as the activation is open (R45); at every later age the machine calls `connect` instead (§7.1), which
 delivers and asks nothing. A base neuron
 infers from its own connections like any other; what it infers is the marginal over every situation it fires
@@ -1847,8 +1846,8 @@ in, and it is heard only because nothing more specific covers it.
 connect calls and drops its standing inferences (R45), and nothing else — no call marks it and nothing is
 saved twice.
 
-> **R36 — Inference.** One connection read by one activation at age 0: it names a neuron, at whatever height
-> it stands (D25), and carries the strength and the estimate the connection held then. An activation reads every
+> **R36 — Inference.** One connection read by one activation at age 0: it names a neuron, base or
+> interneuron (D25), and carries the strength and the estimate the connection held then. An activation reads every
 > connection its neuron holds, at every offset out to its reach, once, in the frame it fires (§7.2), and never
 > again: what the walk wires or a reward moves afterwards is read by the neuron's next activation. The winner of
 > every dimension is chosen from the inferences and nothing else (R47).
@@ -2041,7 +2040,7 @@ only what happened (R32).
 > Choosing comes from the connections of the neurons standing on the apex, each carrying the reward that
 > arrived averaged over its exposures, and **the machine outputs the best. Nothing else decides it.**
 >
-> **A situation is the apex** (D49): what stands uncovered at the frame, at every height. No neuron stands for
+> **A situation is the apex** (D49): what stands uncovered at the frame, base neurons and interneurons alike. No neuron stands for
 > it whole unless a pattern has covered it, so it is read a neuron at a time: a voter is one activation of it,
 > and what it holds is its own neuron's record of what followed.
 >
@@ -2076,8 +2075,8 @@ only what happened (R32).
 > from its position (R36).
 
 > **R47 — Resolution.** One winner per dimension per position at `f + 1`, action and event alike (R30), and
-> height is not read anywhere in it: a high voter's inference and a base voter's meet on the estimate or the
-> share alone, and a specific situation wins over a general one only by being right about what pays, never by
+> nothing about where a voter stands in the hierarchy is read in it: an interneuron's inference and a base voter's
+> meet on the estimate or the share alone, and a specific situation wins over a general one only by being right about what pays, never by
 > rank.
 >
 > **An action dimension resolves by estimate.** At each position of it, every base action some voter's expansion
@@ -2124,17 +2123,17 @@ only what happened (R32).
 > **R37 — Exploration.** Explore–exploit is resolved without randomness: **the action alphabet
 > is declared in order**, and **a connection whose estimate turns negative wires the next action in that
 > order** — the first one the neuron holds no connection to at that offset — at strength 1 and earnings 0
-> (R31). **The walk runs at every height, and its dimensions are the connection's.** A neuron above the base is
+> (R31). **The walk runs for every neuron, and its dimensions are the connection's.** A neuron above the base is
 > not an alphabet: it was created when a pattern paid, it has no declared order, and nothing could name the next
 > one. The base actions are the one ordered alphabet there is, so what a negative connection wires is base
 > actions, in the dimensions its target acted in, read off the target's expansion (R28): a base action, its own
 > dimension; a pattern, every action dimension its expansion places an action in, one untried base action each;
-> an event, or a pattern that places no action, nothing. A neuron high above the base whose plan hurt therefore tries,
+> an event, or a pattern that places no action, nothing. An interneuron whose plan hurt therefore tries,
 > at that offset, one other action in each dimension the plan acted in, and nothing at any other offset. **What the
-> walk finds, compression names.** The untried action is a base action under a situation at height, placed by
-> the neuron that walked; where it pays it recurs, where it recurs the activations under that situation name
-> it in a pattern (§5.4), and that pattern is a new one at height with the walked action inside it, found as a lesson's
-> action is found, one base action at a time and then named. What a call's variables hold is never searched, it is
+> walk finds, compression names.** The untried action is a base action under a situation an interneuron stands
+> for, placed by the neuron that walked; where it pays it recurs, where it recurs the activations under that
+> situation name it in a pattern (§5.4), and that pattern's child is a new interneuron with the walked action
+> inside it, found as a lesson's action is found, one base action at a time and then named. What a call's variables hold is never searched, it is
 > whatever stands at their positions when the call runs (D41, D44).
 >
 > **The walk is in the same currency as everything else**: an untried action becomes a candidate by becoming a
