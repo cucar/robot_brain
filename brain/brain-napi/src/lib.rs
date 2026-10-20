@@ -73,7 +73,7 @@ pub struct StatsOut {
     pub base_acts: u32,
     pub apex_acts: u32,
     pub apex_cost: f64,
-    pub waves: u32,
+    pub levels: u32,
     pub bids: u32,
     pub accepted: u32,
     pub minted: u32,
@@ -103,7 +103,7 @@ fn stats_out(m: &Machine) -> StatsOut {
     let s = &m.last_stats;
     StatsOut {
         frame: s.frame as f64, base_acts: s.base_acts as u32, apex_acts: s.apex_acts as u32, apex_cost: s.apex_cost,
-        waves: s.waves as u32, bids: s.bids as u32, accepted: s.accepted as u32, minted: s.minted as u32, reused: s.reused as u32,
+        levels: s.levels as u32, bids: s.bids as u32, accepted: s.accepted as u32, minted: s.minted as u32, reused: s.reused as u32,
         retired: s.retired as u32, added: s.added as u32, neurons: s.neurons as u32, patterns: s.patterns as u32,
         connections: s.connections as u32, voters: s.voters as u32, voters_above_base: s.voters_above_base as u32,
         elapsed_ms: s.elapsed_ms,

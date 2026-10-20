@@ -9,11 +9,12 @@ use crate::types::*;
 impl Machine {
     // ───────────────────────────── the index (D36) ─────────────────────────────
 
-    /// What a neuron stands for: its expansion with variables left open, once through each neuron.
+    /// What a neuron stands for (D36): its expansion with variables left open, down to base symbols. No
+    /// line names a neuron built over its own child (D27), so nothing is met twice; the path is a guard.
     pub(crate) fn key_of(&self, n: NeuronId, path: &mut Vec<NeuronId>) -> String {
         let nn = &self.thalamus[n];
         if nn.kind != Kind::Inter { return format!("b{}", n); }
-        if path.contains(&n) { return format!("~{}", n); }
+        if path.contains(&n) || path.len() > 256 { self.cycle_guard.set(self.cycle_guard.get() + 1); return format!("~{}", n); }
         if let Some(v) = nn.value {
             path.push(n);
             let s = format!("V[{}={}]", self.var_key(v.owner, v.var, path), self.key_of(v.member, path));
@@ -28,7 +29,7 @@ impl Machine {
     }
 
     pub(crate) fn line_key(&self, owner: NeuronId, pid: PatternId, path: &mut Vec<NeuronId>) -> String {
-        let Some(nodes) = self.thalamus[owner].function_nodes(pid) else { return format!("?{}:{}", owner, pid) };
+        let Some(Body::Function { nodes, .. }) = self.line(owner, pid).map(|p| &p.body) else { return format!("?{}:{}", owner, pid) };
         let mut parts: Vec<String> = Vec::new();
         for (node, off) in nodes {
             let k = match node {
@@ -42,11 +43,13 @@ impl Machine {
     }
 
     pub(crate) fn var_key(&self, owner: NeuronId, var: PatternId, path: &mut Vec<NeuronId>) -> String {
-        match self.thalamus[owner].pattern(var).map(|p| &p.body) {
+        match self.line(owner, var).map(|p| &p.body) {
+            // a call stands for its relations with the variables left open (D36): a class is named by its
+            // members, not expanded through them
             Some(Body::Class { members, .. }) => {
-                let mut ks: Vec<String> = members.iter().map(|m| self.key_of(m.neuron, path)).collect();
+                let mut ks: Vec<NeuronId> = members.iter().map(|m| m.neuron).collect();
                 ks.sort();
-                format!("C{{{}}}", ks.join(","))
+                format!("C{{{}}}", ks.iter().map(|k| k.to_string()).collect::<Vec<_>>().join(","))
             }
             Some(Body::Parameter { offsets, .. }) => format!("P{:?}", offsets),
             _ => format!("?v{}:{}", owner, var),

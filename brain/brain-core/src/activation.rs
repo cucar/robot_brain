@@ -20,6 +20,8 @@ pub struct Inference {
     pub offset: Offset,
     pub strength: f64,
     pub estimate: f64,
+    /// Struck by the match (R49): it no longer stands.
+    pub struck: bool,
 }
 
 /// An open activation as the machine holds it (D9).
@@ -40,8 +42,12 @@ pub struct Act {
     pub inferences: Vec<Inference>,
     /// The frame it fired in, which is later than its coordinate for a child placed frames back (§6.4).
     pub opened_at: Frame,
-    pub wave: u32,
+    /// The level of its frame it fired at (R26): 0 for what the frame reported.
+    pub level: u32,
+    /// How many patterns deep it stands, a diagnostic the machine never reads.
     pub height: u32,
+    /// A weak activation the report replaced (D40): no longer there for anything.
+    pub gone: bool,
     /// Frames it has been handed by connect calls so far; a child placed frames back catches up (§7.1).
     pub caught_up: Frame,
 }

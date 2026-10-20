@@ -19,7 +19,7 @@ fn main() {
         let pred = w.iter().find(|w| w.dim == dim).map(|w| w.bucket);
         if i + 1 < bytes.len() && pred == Some(bytes[i + 1] as u32) { right += 1; }
     }
-    println!("right {}/{} | neurons {} alive of {} | patterns {} | heights {:?}", right, bytes.len() - 1, m.last_stats.neurons, m.thalamus.len(), m.last_stats.patterns, m.height_counts());
+    println!("right {}/{} | neurons {} alive of {} | patterns {} | heights {:?} | expansions that met a neuron again {}", right, bytes.len() - 1, m.last_stats.neurons, m.thalamus.len(), m.last_stats.patterns, m.height_counts(), m.cycle_guard.get());
     for c in dump.bytes() {
         let id = m.base_neuron(dim, c as u32);
         print!("{}", m.describe_neuron(id));

@@ -7,7 +7,7 @@
 
 use rayon::prelude::*;
 
-use crate::column::{Column, WaveResult, WaveTask};
+use crate::column::{Column, LevelResult, LevelTask};
 use crate::neuron::*;
 use crate::types::*;
 
@@ -22,11 +22,11 @@ impl Region {
 
     pub fn column_count(&self) -> usize { self.columns.len() }
 
-    /// The call (R20) on every column, each with its own tasks, in parallel.
-    pub fn process_wave(&mut self, tasks_by_column: Vec<Vec<WaveTask>>) -> Vec<WaveResult> {
-        let nested: Vec<Vec<WaveResult>> = self.columns.par_iter_mut()
+    /// The call (R20) at one level on every column, each with its own tasks, in parallel.
+    pub fn process_level(&mut self, tasks_by_column: Vec<Vec<LevelTask>>) -> Vec<LevelResult> {
+        let nested: Vec<Vec<LevelResult>> = self.columns.par_iter_mut()
             .zip(tasks_by_column.into_par_iter())
-            .map(|(col, tasks)| col.process_wave(tasks))
+            .map(|(col, tasks)| col.process_level(tasks))
             .collect();
         nested.into_iter().flatten().collect()
     }

@@ -118,35 +118,18 @@ impl Neuron {
                 for anchor in anchors {
                     if !seen.insert(anchor) { continue; }
                     let Some(vb) = self.bind_parameter(row, p, offsets, &anchor, taken) else { continue };
-                    if vb.failed > 0 { continue; }
                     let mut coverage = 0.0;
                     let credited_owner = false;
                     for pj in vb.positions.iter().flatten() { if !taken[*pj] { coverage += row.credit(*pj); } }
-                    let price = row.own_cost + wp + vb.choice;
+                    // a lone parameter's |p| is its positions (D22)
+                    let price = row.own_cost + wp + vb.choice + vb.failed as f64 * log2(offsets.len() as f64);
                     let failed = vb.failed;
                     let entry = CoverEntry { pattern: p.id, place: add(&row.pos, &anchor), nodes: vec![NodeBind { node: Node::Var(p.id), offset: [0; MAX_DIMS], nbs: Vec::new(), var: Some(vb) }], failed, credited_owner, names_owner: credited_owner };
                     out.push(Claim { entry, coverage, price, is_function: false });
                 }
             }
-            Body::Class { members, anchor } => {
-                // alone: at its position from the owner, or from each neighbor of its anchor's neuron (D31, D41)
-                let targets: Vec<Pos> = match anchor.0 {
-                    Node::Owner => vec![anchor.1],
-                    Node::Neuron(n) => (0..row.nbs.len()).filter(|&k| row.nbs[k].neuron == n).map(|k| add(&row.nbs[k].delta, &anchor.1)).collect(),
-                    Node::Var(_) => Vec::new(),
-                };
-                let mut seen: FxHashSet<Pos> = FxHashSet::default();
-                for target in targets {
-                    if !seen.insert(target) { continue; }
-                    let found: Vec<usize> = self.nbs_at(row, &target, None).into_iter().filter(|&j| !taken[j] && row.residual(j) && members.iter().any(|m| m.neuron == row.nbs[j].neuron)).collect();
-                    let Some(&j) = found.first() else { continue };
-                    let choice = p.choice();
-                    let coverage = row.credit(j);
-                    let price = row.own_cost + wp + choice;
-                    let entry = CoverEntry { pattern: p.id, place: add(&row.pos, &target), nodes: vec![NodeBind { node: Node::Var(p.id), offset: target, nbs: Vec::new(), var: Some(VarBind { var: p.id, member: Some(row.nbs[j].neuron), positions: vec![Some(j)], failed: 0, choice }) }], failed: 0, credited_owner: false, names_owner: false };
-                    out.push(Claim { entry, coverage, price, is_function: false });
-                }
-            }
+            // a class is never bid alone: it stands only where a function names it (D31, D41)
+            Body::Class { .. } => {}
         }
         let _ = ctx;
         out
@@ -249,10 +232,9 @@ impl Neuron {
                 }
             }
         }
-        // exact holding (D15): a node that fails means the function does not hold here
-        if !holds_any || failed > 0 { return None; }
-        let _ = p_size;
-        let price = row.own_cost + wp + choices;
+        // each node holds or fails, and each that fails is a correction (D22, §5.2)
+        if !holds_any { return None; }
+        let price = row.own_cost + wp + choices + failed as f64 * log2(p_size as f64);
         let entry = CoverEntry { pattern: p.id, place: add(&row.pos, &anchor), nodes: binds, failed, credited_owner, names_owner };
         Some(Claim { entry, coverage, price, is_function: true })
     }
@@ -266,12 +248,12 @@ impl Neuron {
             if neuron.map_or(false, |n| nb.neuron != n) { continue; }
             if self.round(&nb.delta) == tr { out.push(j); }
         }
-        // the parent named may be matched by the child that covers it
-        if out.is_empty() {
-            if let Some(n) = neuron {
-                for (j, nb) in row.nbs.iter().enumerate() {
-                    if nb.covers.iter().any(|(m, d)| *m == n && self.round(d) == tr) { out.push(j); }
-                }
+        // a child can stand in for its parent: where a pattern names a neuron, a child standing for it at
+        // that offset matches as well (D22, R28)
+        if let Some(n) = neuron {
+            for (j, nb) in row.nbs.iter().enumerate() {
+                if out.contains(&j) { continue; }
+                if nb.stands_for.iter().any(|(m, d)| *m == n && self.round(d) == tr) { out.push(j); }
             }
         }
         out

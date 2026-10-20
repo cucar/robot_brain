@@ -108,13 +108,15 @@ impl Machine {
         Some(round_delta(&delta, &self.radii, shared | 1))
     }
 
+    /// A share of reward into one connection (R33); where its estimate turns negative, the walk (R37).
     pub(crate) fn add_earnings(&mut self, holder: NeuronId, target: NeuronId, off: Offset, share: f64) {
-        let est = {
+        let (before, after) = {
             let c = self.thalamus[holder].connections.entry((target, off)).or_default();
+            let before = c.estimate();
             c.earnings += share;
-            c.estimate()
+            (before, c.estimate())
         };
-        if est < 0.0 { self.walk(holder, target, off); }
+        if after < 0.0 && before >= 0.0 { self.walk(holder, target, off); }
     }
 
     /// R37: a negative estimate wires the next untried base action, in each dimension the target acted in.
@@ -151,7 +153,7 @@ impl Machine {
             for a in f.acts.iter_mut() {
                 if a.opened_at != fno { continue; }
                 let n = &self.thalamus[a.neuron];
-                a.inferences = n.connections.iter().map(|((t, o), c)| Inference { target: *t, offset: *o, strength: c.strength, estimate: c.estimate() }).collect();
+                a.inferences = n.connections.iter().map(|((t, o), c)| Inference { target: *t, offset: *o, strength: c.strength, estimate: c.estimate(), struck: false }).collect();
             }
         }
     }

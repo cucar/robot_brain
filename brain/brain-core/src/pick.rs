@@ -27,27 +27,29 @@ impl Neuron {
 
     pub(crate) fn new_pid(&mut self) -> PatternId { let id = self.next_pid; self.next_pid += 1; id }
 
-    /// Build patterns out of the residual: variables first, then functions (D33). Returns how many were added.
+    /// Build patterns out of the residual: variables first, then functions (D33). Returns how many were
+    /// added. In each stage the seeds are ranked over the residual as it stands and taken in that order; a
+    /// seed that builds nothing changes nothing, so the next in the ranking is the next the rule names, and
+    /// one that builds changes the residual, so the ranking is read again. Every seed is tried.
     pub(crate) fn create(&mut self, ctx: Ctx) -> usize {
         let mut added = 0;
-        let first_pid = self.next_pid;
-        // stage 1: variables; a seed that builds nothing is passed over and the next is tried (D33)
+        // stage 1: variables
         let mut tried: FxHashSet<String> = FxHashSet::default();
         loop {
-            let Some(seed) = self.best_variable_seed(ctx, &tried) else { break };
-            let key = format!("{:?}", seed);
-            tried.insert(key);
-            let built = match seed {
-                VarSeed::Parameter { offset, uses } => self.build_parameter(offset, &uses, ctx),
-                VarSeed::Class { anchor, members, uses } => self.build_class(anchor, members, &uses, ctx),
-            };
-            if built { added += 1; }
+            let ranked = self.ranked_variable_seeds(&tried);
+            let mut built = false;
+            for seed in ranked {
+                tried.insert(format!("{:?}", seed));
+                let ok = match seed {
+                    VarSeed::Parameter { offset, uses } => self.build_parameter(offset, &uses, ctx),
+                    VarSeed::Class { anchor, members, uses } => self.build_class(anchor, members, &uses, ctx),
+                };
+                if ok { added += 1; built = true; break; }
+            }
+            if !built { break; }
         }
-        let new_vars: Vec<PatternId> = self.table.iter().filter(|p| p.is_variable() && p.id >= first_pid).map(|p| p.id).collect();
-        // stage 2: functions. The seeds are ranked once over the residual as it stands; a seed that
-        // builds nothing changes nothing, so the next in the ranking is the next the rule names; one that
-        // builds changes the residual, so the ranking is read again (D33). The rows are indexed by the
-        // coordinates they hold once per call, for the uses of each seed tried.
+        // stage 2: functions, over the rows as the variables rewrite them; the rows are indexed by the
+        // coordinates they hold once per call, for the uses of each seed tried
         let at = self.coordinate_index();
         let mut tried: FxHashSet<(Node, Node, Offset)> = FxHashSet::default();
         loop {
@@ -60,89 +62,89 @@ impl Neuron {
             }
             if !built { break; }
         }
-        // a variable no function names would write what it writes alone, and is not kept (D30)
-        for v in new_vars {
-            let named = self.table.iter().any(|p| matches!(&p.body, Body::Function { nodes, .. } if nodes.iter().any(|(n, _)| *n == Node::Var(v))));
-            if !named {
-                let r = self.remove_pattern(v);
-                for row in self.history.iter_mut() { for c in row.claim.iter_mut() { if matches!(c, Some((x, _)) if *x == v) { *c = None; row.dirty = true; } } }
-                let _ = r;
-                added -= 1;
-            }
-        }
         added
     }
 
-    /// The parameter seed (D47): pairs of residual coordinates holding one neuron, keyed by the offset
-    /// between them; and the class seed: an offset from a node where neurons vary. The one that would
-    /// save most as it stands (D33).
-    pub(crate) fn best_variable_seed(&self, ctx: Ctx, tried: &FxHashSet<String>) -> Option<VarSeed> {
-        let wp = log2((self.table.len() + 1) as f64);
-        // parameter seeds
-        struct PS { uses: FxHashMap<(Pos, Pos), (usize, f64)>, values: FxHashSet<NeuronId> }
+    /// Whether the owner's activation is residual in a row: no entry of the cover was credited it (D19,
+    /// D21), so it may stand in a seed (D47).
+    pub(crate) fn owner_residual(row: &Row) -> bool { row.owner_self.is_none() }
+
+    /// The order D33 takes seeds in: most saved as it stands, then the higher count, then the older
+    /// neuron, then the shorter offset.
+    pub(crate) fn seed_order(a: &(f64, usize, NeuronId, i32, String), b: &(f64, usize, NeuronId, i32, String)) -> std::cmp::Ordering {
+        b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)).then(a.3.cmp(&b.3)).then(a.4.cmp(&b.4))
+    }
+
+    /// The variable seeds (D47), ranked (D33): pairs of residual coordinates holding one neuron, read
+    /// through value neurons, keyed by the offset between them; and offsets from a node where neurons vary.
+    /// What a seed saves as it stands is D22's part of it, what it holds less its choice, summed over the
+    /// uses that hold it; a seed counted fewer than twice seeds nothing.
+    pub(crate) fn ranked_variable_seeds(&self, tried: &FxHashSet<String>) -> Vec<VarSeed> {
+        struct PS { uses: FxHashMap<(Pos, Pos), f64>, values: FxHashSet<NeuronId> }
         let mut ps: FxHashMap<Offset, PS> = FxHashMap::default();
-        // class seeds: (anchor node, offset) -> per coordinate (use) the neuron standing, with credit
-        struct CS { uses: FxHashMap<Pos, (NeuronId, f64, usize)> }
+        struct CS { uses: FxHashMap<Pos, (NeuronId, f64)> }
         let mut cs: FxHashMap<(Node, Offset), CS> = FxHashMap::default();
-        for (i, row) in self.history.iter().enumerate() {
+        for row in self.history.iter() {
             let res: Vec<usize> = (0..row.nbs.len()).filter(|&j| row.residual(j) && row.claim[j].is_none()).collect();
+            let owner_free = Self::owner_residual(row);
             for &j in &res {
                 let cj = row.coord(j);
-                // class: from the owner
-                let off = self.round(&row.nbs[j].delta);
-                cs.entry((Node::Owner, off)).or_insert_with(|| CS { uses: FxHashMap::default() }).uses.entry(cj).or_insert((row.nbs[j].neuron, row.credit(j), i));
+                // class: from the owner, where the owner is residual
+                if owner_free {
+                    let off = self.round(&row.nbs[j].delta);
+                    cs.entry((Node::Owner, off)).or_insert_with(|| CS { uses: FxHashMap::default() }).uses.entry(cj).or_insert((row.nbs[j].neuron, row.credit(j)));
+                }
                 for &k in &res {
                     if k == j { continue; }
                     let ck = row.coord(k);
-                    let d = sub(&cj, &ck);
-                    let off = self.round(&d);
+                    let off = self.round(&sub(&cj, &ck));
                     // class: from a neighbor
-                    cs.entry((Node::Neuron(row.nbs[k].neuron), off)).or_insert_with(|| CS { uses: FxHashMap::default() }).uses.entry(cj).or_insert((row.nbs[j].neuron, row.credit(j), i));
+                    cs.entry((Node::Neuron(row.nbs[k].neuron), off)).or_insert_with(|| CS { uses: FxHashMap::default() }).uses.entry(cj).or_insert((row.nbs[j].neuron, row.credit(j)));
                     // parameter: the first position is the later one
                     if row.value_at(j) != row.value_at(k) { continue; }
                     if !later(&cj, &ck) { continue; }
                     let e = ps.entry(off).or_insert_with(|| PS { uses: FxHashMap::default(), values: FxHashSet::default() });
                     e.values.insert(row.value_at(j));
-                    e.uses.entry((cj, ck)).or_insert((i, row.credit(j) + row.credit(k)));
+                    e.uses.entry((cj, ck)).or_insert(row.credit(j) + row.credit(k));
                 }
             }
         }
-        let mut best: Option<(f64, usize, VarSeed)> = None;
-        let consider = |best: &mut Option<(f64, usize, VarSeed)>, save: f64, count: usize, seed: VarSeed| {
-            let better = match best { None => true, Some((bs, bc, _)) => save > *bs || (save == *bs && count > *bc) };
-            if better { *best = Some((save, count, seed)); }
-        };
-        for (off, e) in &ps {
+        let mut ranked: Vec<((f64, usize, NeuronId, i32, String), VarSeed)> = Vec::new();
+        for (off, e) in ps {
             if e.uses.len() < 2 { continue; }
             let choice = log2(e.values.len() as f64);
-            let mut save = 0.0;
-            for (_, (_, c)) in &e.uses { save += c - choice; }
-            save -= ctx.offset_bits; // as it stands: one offset written
+            let save: f64 = e.uses.values().map(|c| c - choice).sum();
             let mut uses: Vec<(Pos, Pos)> = e.uses.keys().copied().collect();
             uses.sort();
-            let seed = VarSeed::Parameter { offset: *off, uses };
-            if tried.contains(&format!("{:?}", seed)) { continue; }
-            consider(&mut best, save, e.uses.len(), seed);
+            let oldest = e.values.iter().copied().min().unwrap_or(NeuronId::MAX);
+            let seed = VarSeed::Parameter { offset: off, uses };
+            let key = format!("{:?}", seed);
+            if tried.contains(&key) { continue; }
+            let count = match &seed { VarSeed::Parameter { uses, .. } => uses.len(), _ => 0 };
+            ranked.push(((save, count, oldest, off.iter().map(|x| x.abs()).sum(), key), seed));
         }
-        for ((node, off), e) in &cs {
+        for ((node, off), e) in cs {
             if e.uses.len() < 2 { continue; }
-            // the two neurons that stood there most, never together: coordinates are distinct uses here
+            // the two neurons that stood there most; at one coordinate one stands, so never together
             let mut tally: FxHashMap<NeuronId, (usize, f64)> = FxHashMap::default();
-            for (_, (n, c, _)) in &e.uses { let t = tally.entry(*n).or_insert((0, 0.0)); t.0 += 1; t.1 += c; }
+            for (_, (n, c)) in &e.uses { let t = tally.entry(*n).or_insert((0, 0.0)); t.0 += 1; t.1 += c; }
             if tally.len() < 2 { continue; }
             let mut order: Vec<(NeuronId, usize, f64)> = tally.iter().map(|(n, (c, cov))| (*n, *c, *cov)).collect();
             order.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
             let (a, b) = (order[0], order[1]);
             let count = a.1 + b.1;
-            let save = a.2 + b.2 - count as f64 * 1.0 - 2.0 * ctx.neuron_bits;
-            let mut uses: Vec<Pos> = e.uses.iter().filter(|(_, (n, _, _))| *n == a.0 || *n == b.0).map(|(c, _)| *c).collect();
+            // as it stands: what the two cover there, less one bit of choice per use
+            let save = a.2 + b.2 - count as f64;
+            let mut uses: Vec<Pos> = e.uses.iter().filter(|(_, (n, _))| *n == a.0 || *n == b.0).map(|(c, _)| *c).collect();
             uses.sort();
-            let seed = VarSeed::Class { anchor: (*node, *off), members: (a.0, b.0), uses };
-            if tried.contains(&format!("{:?}", seed)) { continue; }
-            consider(&mut best, save, count, seed);
+            let oldest = match node { Node::Neuron(n) => n.min(a.0.min(b.0)), _ => self.id.min(a.0.min(b.0)) };
+            let seed = VarSeed::Class { anchor: (node, off), members: (a.0, b.0), uses };
+            let key = format!("{:?}", seed);
+            if tried.contains(&key) { continue; }
+            ranked.push(((save, count, oldest, off.iter().map(|x| x.abs()).sum(), key), seed));
         }
-        let _ = wp;
-        best.map(|(_, _, s)| s)
+        ranked.sort_by(|x, y| Self::seed_order(&x.0, &y.0));
+        ranked.into_iter().map(|(_, s)| s).collect()
     }
 
     pub(crate) fn build_parameter(&mut self, offset: Offset, uses: &[(Pos, Pos)], ctx: Ctx) -> bool {
@@ -169,28 +171,26 @@ impl Neuron {
         let line = self.line_cost(self.pattern(pid).unwrap(), ctx);
         if benefit <= line { self.table.retain(|p| p.id != pid); return false; }
         // claim the coordinates of its uses
-        self.claim_parameter(pid);
+        self.claim_parameter(pid, &places);
         true
     }
 
-    /// A kept parameter claims the coordinates of its uses (D33): every place in the residual where one
-    /// neuron stands at all its positions.
-    pub(crate) fn claim_parameter(&mut self, pid: PatternId) {
+    /// A kept parameter claims the coordinates of its uses (D33): at each, in every row that saw it, the
+    /// residual positions that hold its value.
+    pub(crate) fn claim_parameter(&mut self, pid: PatternId, places: &[(Pos, Vec<usize>)]) {
         let Some(p) = self.pattern(pid).cloned() else { return };
         let Body::Parameter { offsets, .. } = &p.body else { return };
-        for i in 0..self.history.len() {
-            let row = &self.history[i];
-            let mut binds: Vec<(usize, usize)> = Vec::new();
-            let taken: Vec<bool> = (0..row.nbs.len()).map(|j| !row.residual(j) || row.claim[j].is_some()).collect();
-            let mut anchors: Vec<Pos> = Vec::new();
-            for j in 0..row.nbs.len() { if !taken[j] { anchors.push(row.nbs[j].delta); } }
-            for anchor in anchors {
+        for (first, rows) in places {
+            for &i in rows {
+                let row = &self.history[i];
+                let taken: Vec<bool> = (0..row.nbs.len()).map(|j| !row.residual(j) || row.claim[j].is_some()).collect();
+                let anchor = sub(first, &row.pos);
                 let Some(vb) = self.bind_parameter(row, &p, offsets, &anchor, &taken) else { continue };
-                if vb.failed > 0 { continue; }
-                for (k, pj) in vb.positions.iter().enumerate() { if let Some(x) = pj { if !taken[*x] && !binds.iter().any(|(y, _)| y == x) { binds.push((*x, k)); } } }
+                if vb.positions.iter().flatten().count() < 2 { continue; }
+                let binds: Vec<(usize, usize)> = vb.positions.iter().enumerate().filter_map(|(k, pj)| pj.filter(|x| !taken[*x]).map(|x| (x, k))).collect();
+                let row = &mut self.history[i];
+                for (j, k) in binds { if row.claim[j].is_none() { row.claim[j] = Some((pid, k)); row.dirty = true; } }
             }
-            let row = &mut self.history[i];
-            for (j, k) in binds { if row.claim[j].is_none() { row.claim[j] = Some((pid, k)); row.dirty = true; } }
         }
     }
 
@@ -236,9 +236,9 @@ impl Neuron {
         let mut fs: FxHashMap<(Node, Node, Offset), FS> = FxHashMap::default();
         for (i, row) in self.history.iter().enumerate() {
             // nodes of the row: the owner at zero, residual neighbors, claimed coordinates as variables at their first position
-            // the owner's activation is residual where no entry of the cover is credited it; named where it
-            // is not, it is written and saves nothing
-            let mut nodes: Vec<(Node, Pos, f64)> = vec![(Node::Owner, row.pos, if row.owner_self.is_none() { row.own_cost } else { 0.0 })];
+            // the owner's activation is a node where it is residual (D19, D21, D47)
+            let mut nodes: Vec<(Node, Pos, f64)> = Vec::new();
+            if Self::owner_residual(row) { nodes.push((Node::Owner, row.pos, row.own_cost)); }
             let mut seen_vars: FxHashSet<PatternId> = FxHashSet::default();
             for j in 0..row.nbs.len() {
                 match row.claim[j] {
@@ -277,25 +277,25 @@ impl Neuron {
                 }
             }
         }
-        let mut ranked: Vec<(f64, usize, (Node, Node, Offset), Vec<(Pos, Pos)>)> = Vec::new();
+        let mut ranked: Vec<((f64, usize, NeuronId, i32, String), ((Node, Node, Offset), Vec<(Pos, Pos)>))> = Vec::new();
         for (key, e) in fs {
             if e.uses.len() < 2 || tried.contains(&key) { continue; }
-            // as it stands: covers both, writes the owner, which pattern and no failure; the owner cancels where named
+            // as it stands (D22): covers both nodes, the owner among them where it is one, and writes the
+            // bidder's cost and which pattern, so the bidder cancels where the owner is named; summed over
+            // the uses that hold it
             let mut save = 0.0;
-            let mut count = 0;
             for (_, (i, cov)) in &e.uses {
                 let row = &self.history[*i];
-                let price = if matches!(key.0, Node::Owner) && row.owner_self.is_none() { wp } else { row.own_cost + wp };
-                let s = cov - price;
-                if s > 0.0 { save += s; count += 1; }
+                save += cov - (row.own_cost + wp);
             }
-            if count < 2 { continue; }
-            ranked.push((save, count, key, e.uses.into_keys().collect()));
+            let node_id = |n: &Node| match n { Node::Owner => self.id, Node::Neuron(m) => *m, Node::Var(_) => self.id };
+            let oldest = node_id(&key.0).min(node_id(&key.1));
+            let len: i32 = key.2.iter().map(|x| x.abs()).sum();
+            ranked.push(((save, e.uses.len(), oldest, len, format!("{:?}", key)), (key, e.uses.into_keys().collect())));
         }
         let _ = ctx;
-        // most saved first, then most uses, then the lesser key
-        ranked.sort_by(|x, y| y.0.partial_cmp(&x.0).unwrap_or(std::cmp::Ordering::Equal).then(y.1.cmp(&x.1)).then(x.2.cmp(&y.2)));
-        ranked.into_iter().map(|(_, _, key, pairs)| (key, pairs)).collect()
+        ranked.sort_by(|x, y| Self::seed_order(&x.0, &y.0));
+        ranked.into_iter().map(|(_, k)| k).collect()
     }
 
     /// The rows by the coordinates their neighbors stand at, as `nbs_at` reads them (D6): a neighbor
@@ -364,7 +364,7 @@ impl Neuron {
         let pid = self.new_pid();
         let nodes = canonical(vec![(a, [0; MAX_DIMS]), (b, off)]);
         self.table.push(Pattern { id: pid, body: Body::Function { nodes, child: None } });
-        self.collapse_function(pid, uses, ctx);
+        self.collapse_function(pid, uses, ctx, true);
         let ok = self.pattern(pid).map_or(false, |p| matches!(&p.body, Body::Function { nodes, .. } if nodes.len() >= 2));
         if !ok { self.table.retain(|p| p.id != pid); return false; }
         // merge: an identical line already in the table takes the uses (D43)

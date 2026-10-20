@@ -78,8 +78,8 @@ fn main() {
             let fr = m.frames.back().unwrap();
             let apex: Vec<String> = fr.acts.iter().filter(|a| a.covered_at.is_none()).map(|a| format!("#{}h{}c{}", a.neuron, a.height, m.thalamus[a.neuron].connections.len())).collect();
             let next_up = (PATTERN[(k + 1) % n] > 0.0) as u32;
-            println!("f{:4} cf{} price={} ran={}{} r={:+.1} | apex {:?} waves={} bids={} acc={} minted={} added={} retired={} voters={}/{} | says {:?} est {:.2} -> {}",
-                k + 1, cf + 1, up, action, if lesson { "L" } else { " " }, reward, apex, st.waves, st.bids, st.accepted, st.minted, st.added, st.retired, st.voters_above_base, st.voters,
+            println!("f{:4} cf{} price={} ran={}{} r={:+.1} | apex {:?} levels={} bids={} acc={} minted={} added={} retired={} voters={}/{} | says {:?} est {:.2} -> {}",
+                k + 1, cf + 1, up, action, if lesson { "L" } else { " " }, reward, apex, st.levels, st.bids, st.accepted, st.minted, st.added, st.retired, st.voters_above_base, st.voters,
                 pending, w.map_or(0.0, |w| w.estimate), if pending == Some(next_up) { "ok" } else { "WRONG" });
         }
     }

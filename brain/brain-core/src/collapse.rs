@@ -90,7 +90,8 @@ impl Neuron {
         out
     }
 
-    /// A variable's part (D22) at a place in a row, over all its positions at once.
+    /// A variable's part (D22) at a place in a row, over all its positions at once: what the neighbors it
+    /// holds cost, less its choice, less a failed neighbor per position that does not hold.
     pub(crate) fn var_part_at(&self, row: &Row, v: PatternId, first: &Pos) -> Option<(f64, u32)> {
         let vp = self.pattern(v)?;
         let anchor = sub(first, &row.pos);
@@ -98,39 +99,52 @@ impl Neuron {
         match &vp.body {
             Body::Parameter { offsets, .. } => {
                 let vb = self.bind_parameter(row, vp, offsets, &anchor, &taken)?;
-                if vb.failed > 0 { return None; }
                 let mut c = 0.0;
                 for pj in vb.positions.iter().flatten() { c += row.credit(*pj); }
-                Some((c - vb.choice, 0))
+                Some((c - vb.choice - vb.failed as f64 * log2(offsets.len() as f64), vb.failed))
             }
             Body::Class { members, .. } => {
                 let found: Vec<usize> = self.nbs_at(row, &anchor, None).into_iter().filter(|&j| members.iter().any(|m| m.neuron == row.nbs[j].neuron)).collect();
-                match found.first() { Some(&j) => Some((row.credit(j) - vp.choice(), 0)), None => None }
+                // a class's |x| is one: a failure there costs nothing beyond the choice (D22)
+                match found.first() { Some(&j) => Some((row.credit(j) - vp.choice(), 0)), None => Some((-vp.choice(), 1)) }
             }
             _ => None,
         }
     }
 
+    /// `|p|` (D22): a function's nodes, a class counted once and a parameter at each of its positions.
+    pub(crate) fn p_size(&self, nodes: &[(Node, Offset)]) -> usize {
+        nodes.iter().map(|(n, _)| match n { Node::Var(v) => self.pattern(*v).map_or(1, |q| q.positions()), _ => 1 }).sum()
+    }
+
+    /// Whether a neighbor of a row is built over `c`, or is `c` (D27), as the index stands now.
+    pub(crate) fn built_over(&self, row: usize, nb: usize, c: NeuronId) -> bool {
+        self.is_built_over(self.history[row].nbs[nb].neuron, c)
+    }
+
     // ───────────────────────────── collapse (D27) ─────────────────────────────
 
-    /// Re-decide what a function names over its uses (D27). Returns true when the line changed.
-    pub(crate) fn collapse_function(&mut self, pid: PatternId, uses: &[(Pos, Vec<usize>)], ctx: Ctx) -> bool {
+    /// Re-decide what a function names over its uses (D27): every relation from the reference to a node
+    /// of the uses, decided on its own, taken where what it covers over the uses that count beats a failed
+    /// neighbor in each of the others and its entry in the line. The uses that count for a node are those
+    /// in which its coordinate is not named by another function of the cover; a candidate being created is
+    /// in no cover, so every owned neighbor is skipped and it is built on the residual alone, a coordinate a
+    /// variable holds read as that variable. A line with a child never names a neuron built over it.
+    /// Returns true when the line changed.
+    pub(crate) fn collapse_function(&mut self, pid: PatternId, uses: &[(Pos, Vec<usize>)], ctx: Ctx, creating: bool) -> bool {
         let Some(p) = self.pattern(pid) else { return false };
-        let Body::Function { nodes, .. } = &p.body else { return false };
+        let Body::Function { nodes, child } = &p.body else { return false };
         let nodes = nodes.clone();
+        let child = *child;
         let s = uses.len();
         if s == 0 { return false; }
         let wp = self.which_pattern_bits();
         let names_owner = matches!(nodes.first(), Some((Node::Owner, _)));
-        // candidates keyed by (node, offset from the reference): per use, what the surroundings hold there
-        // and what it is worth; a use where the coordinate is named by another function of the cover is
-        // neither a hold nor a miss for that node
-        let mut holds: FxHashMap<(Node, Offset), FxHashMap<usize, f64>> = FxHashMap::default();
-        let mut skipped: FxHashMap<(Node, Offset), FxHashSet<usize>> = FxHashMap::default();
-        let mut own: Vec<f64> = Vec::with_capacity(s);
-        for (u, (place, rows)) in uses.iter().enumerate() {
-            let latest = rows.iter().copied().max_by_key(|&i| (self.history[i].pos[0], i)).map(|i| self.history[i].own_cost).unwrap_or(0.0);
-            own.push(latest);
+        let owner_built_over = child.map_or(false, |c| self.is_built_over(self.id, c));
+        // candidates keyed by (node, offset from the reference): what the surroundings hold
+        struct Cand { count: usize, covers: f64, skipped: usize }
+        let mut cands: FxHashMap<(Node, Offset), Cand> = FxHashMap::default();
+        for (place, rows) in uses {
             let around = self.surroundings(rows);
             let mut here: FxHashSet<(Node, Offset)> = FxHashSet::default();
             for a in &around {
@@ -139,83 +153,68 @@ impl Neuron {
                 let key = (a.node, off);
                 if here.contains(&key) { continue; }
                 here.insert(key);
-                let is_skipped = a.owned_by.map_or(false, |o| o != pid && self.pattern(o).map_or(false, |q| q.is_function()));
+                // no line names a neuron built over its own child (D27): skipped as an owned neighbor is
+                let circular = match (child, a.node) {
+                    (Some(c), Node::Neuron(m)) => a.nb.map_or(m == c, |j| self.history[a.row].nbs[j].neuron == m && self.built_over(a.row, j, c)) || m == c,
+                    (Some(_), Node::Owner) => owner_built_over,
+                    _ => false,
+                };
+                let owned = match a.node {
+                    // a coordinate a variable holds is that variable's, whichever function names it
+                    Node::Var(_) => false,
+                    _ if creating => a.owned_by.is_some(),
+                    _ => a.owned_by.map_or(false, |o| o != pid && self.pattern(o).map_or(false, |q| q.is_function())),
+                };
                 let credit = match a.node {
                     Node::Var(v) => self.var_part_at(&self.history[a.row], v, &a.coord).map(|(c, _)| c).unwrap_or(0.0).max(0.0),
                     _ => a.credit,
                 };
-                if is_skipped { skipped.entry(key).or_default().insert(u); } else { holds.entry(key).or_default().insert(u, credit); }
+                let c = cands.entry(key).or_insert(Cand { count: 0, covers: 0.0, skipped: 0 });
+                if owned || circular { c.skipped += 1; } else { c.count += 1; c.covers += credit; }
             }
         }
         // the reference node always holds: it is the use
         let reference = nodes[0];
         let mut kept: Vec<(Node, Offset)> = vec![reference];
-        let mut live: Vec<usize> = (0..s).collect();
-        let mut narrowed = false;
-        // what the line saves in each use as it stands: the reference's own credit less the bid's price
-        let mut sav: Vec<f64> = (0..s).map(|u| {
-            let r = match reference.0 { Node::Owner => own[u], _ => holds.get(&reference).and_then(|h| h.get(&u)).copied().unwrap_or(0.0) };
-            r - own[u] - wp
-        }).collect();
-        // the nodes the line has, in their order, then the rest by how often and how much they hold
-        let mut order: Vec<(Node, Offset)> = nodes.iter().skip(1).map(|(n, o)| (*n, *o)).collect();
-        let mut rest: Vec<(Node, Offset)> = holds.keys().copied().filter(|k| !order.contains(k) && *k != reference).collect();
-        rest.sort_by(|a, b| {
-            let (ha, hb) = (holds[a].len(), holds[b].len());
-            let (ca, cb): (f64, f64) = (holds[a].values().sum(), holds[b].values().sum());
-            hb.cmp(&ha).then(cb.partial_cmp(&ca).unwrap_or(std::cmp::Ordering::Equal)).then(a.cmp(b))
-        });
-        order.extend(rest);
-        for key in order {
-            if key == reference || kept.contains(&key) { continue; }
+        let p_now = self.p_size(&nodes).max(2) as f64;
+        let mut keys: Vec<(Node, Offset)> = cands.keys().copied().collect();
+        keys.sort();
+        for key in keys {
+            if key == reference { continue; }
             if matches!(key.0, Node::Owner) && !names_owner && key.1 == [0; MAX_DIMS] { continue; }
             if matches!(key.0, Node::Owner) && names_owner { continue; }
             if let Node::Var(v) = key.0 { if self.pattern(v).is_none() { continue; } }
-            let Some(h) = holds.get(&key) else { continue };
-            let sk = skipped.get(&key);
+            let c = &cands[&key];
+            let counted = s - c.skipped.min(s);
+            if counted == 0 || c.count == 0 { continue; }
             let entry = ctx.offset_bits + match key.0 { Node::Owner => 0.0, Node::Neuron(_) => ctx.neuron_bits, Node::Var(_) => wp };
-            // with the node: the line holds where the node holds or is skipped, and is given up elsewhere
-            let mut gain = 0.0;
-            let mut loss = 0.0;
-            let mut next: Vec<usize> = Vec::new();
-            for &u in &live {
-                if let Some(c) = h.get(&u) { gain += c; next.push(u); }
-                else if sk.map_or(false, |x| x.contains(&u)) { next.push(u); }
-                else { loss += sav[u].max(0.0); }
-            }
-            if next.is_empty() || gain <= entry + loss { continue; }
-            kept.push(key);
-            for &u in &next { if let Some(c) = h.get(&u) { sav[u] += c; } }
-            if next.len() < live.len() { narrowed = true; }
-            live = next;
-        }
-        if kept.len() < 2 {
-            // nothing but the reference: no relation, no function (D15)
-            kept.truncate(1);
+            let fails = (counted - c.count.min(counted)) as f64 * log2(p_now);
+            if c.covers > fails + entry { kept.push(key); }
         }
         let new_nodes = canonical(kept);
         let changed = new_nodes != nodes;
         if changed {
-            // a line that comes to hold in fewer places stands for something narrower: its child keeps its
-            // name, which the lines above name, and lets go what it learned under the places given up
-            let mut child_of = None;
-            if let Some(p) = self.pattern_mut(pid) { if let Body::Function { nodes, child } = &mut p.body { *nodes = new_nodes; if narrowed { child_of = *child; } } }
-            if let Some(c) = child_of { self.narrowed_children.push((pid, c)); }
+            if let Some(p) = self.pattern_mut(pid) { if let Body::Function { nodes, .. } = &mut p.body { *nodes = new_nodes; } }
         }
         changed
     }
 
-    /// Re-decide a parameter's positions and members over its uses (D27).
+    /// Re-decide a parameter's positions and members over its uses (D27): every offset from the first
+    /// position, counted by the uses in which the coordinate there holds the parameter's value, is a
+    /// position while what it covers beats the failures where it disagrees and an offset; its members are
+    /// whatever has stood at its positions. It never takes as a value a neuron built over one of its own
+    /// value neurons.
     pub(crate) fn collapse_parameter(&mut self, pid: PatternId, uses: &[(Pos, Vec<usize>)], ctx: Ctx) -> bool {
         let Some(p) = self.pattern(pid) else { return false };
-        let Body::Parameter { offsets, .. } = &p.body else { return false };
+        let Body::Parameter { offsets, members } = &p.body else { return false };
         let offsets = offsets.clone();
+        let own_values: Vec<NeuronId> = members.iter().filter_map(|m| m.value_neuron).collect();
         let s = uses.len();
         if s == 0 { return false; }
-        // per use: the value at the first position, and every coordinate holding it
         struct Cand { count: usize, covers: f64 }
         let mut cands: FxHashMap<Offset, Cand> = FxHashMap::default();
         let mut member_counts: FxHashMap<NeuronId, usize> = FxHashMap::default();
+        let mut counted_uses = 0usize;
         for (place, rows) in uses {
             let mut here: FxHashSet<Offset> = FxHashSet::default();
             let mut value: Option<NeuronId> = None;
@@ -223,10 +222,15 @@ impl Neuron {
             for &i in rows.iter().rev() {
                 let row = &self.history[i];
                 let anchor = sub(place, &row.pos);
-                for j in self.nbs_at(row, &anchor, None) { value = Some(row.value_at(j)); break; }
+                for j in self.nbs_at(row, &anchor, None) {
+                    if own_values.iter().any(|&vn| self.built_over(i, j, vn)) { continue; }
+                    value = Some(row.value_at(j));
+                    break;
+                }
                 if value.is_some() { break; }
             }
             let Some(value) = value else { continue };
+            counted_uses += 1;
             *member_counts.entry(value).or_default() += 1;
             for &i in rows {
                 let row = &self.history[i];
@@ -243,22 +247,27 @@ impl Neuron {
             }
         }
         let mut kept: Vec<Offset> = vec![[0; MAX_DIMS]];
+        let x = offsets.len().max(2) as f64;
         let mut keys: Vec<Offset> = cands.keys().copied().collect();
         keys.sort();
         for off in keys {
             if off == [0; MAX_DIMS] { continue; }
             let c = &cands[&off];
-            // exact holding: a position is kept only where it holds in every use
-            if c.count == s && c.covers > ctx.offset_bits { kept.push(off); }
+            if c.covers > (counted_uses - c.count.min(counted_uses)) as f64 * log2(x) + ctx.offset_bits { kept.push(off); }
         }
         let changed = kept != offsets;
         if let Some(p) = self.pattern_mut(pid) {
             if let Body::Parameter { offsets, members } = &mut p.body {
                 *offsets = kept;
-                // members: whatever has stood at all its positions within the history (a record)
+                // members: whatever has stood at its positions within the history (a record)
                 for m in members.iter_mut() { m.count = member_counts.get(&m.neuron).copied().unwrap_or(0); }
                 for (n, c) in member_counts { if !members.iter().any(|m| m.neuron == n) { members.push(Member { neuron: n, count: c, value_neuron: None }); } }
-                members.retain(|m| m.count > 0 || m.value_neuron.is_some());
+                // a member no use of the history holds any longer leaves, its value neuron with it (D27, R44)
+                let mut gone: Vec<NeuronId> = Vec::new();
+                for m in members.iter() { if m.count == 0 { if let Some(v) = m.value_neuron { gone.push(v); } } }
+                members.retain(|m| m.count > 0);
+                members.sort_by_key(|m| m.neuron);
+                for v in gone { self.dropped_values.push((pid, v)); }
             }
         }
         changed
@@ -270,6 +279,7 @@ impl Neuron {
         let Some(p) = self.pattern(pid) else { return false };
         let Body::Class { members, anchor } = &p.body else { return false };
         let old: Vec<NeuronId> = members.iter().map(|m| m.neuron).collect();
+        let own_values: Vec<NeuronId> = members.iter().filter_map(|m| m.value_neuron).collect();
         let anchor = *anchor;
         let s = uses.len();
         // the neurons standing at the class's places, and which stood together in one use
@@ -282,6 +292,8 @@ impl Neuron {
                 let target = sub(place, &row.pos);
                 for j in self.nbs_at(row, &target, None) {
                     if row.claim[j].map_or(false, |(v, _)| v != pid) { continue; }
+                    // a variable skips a neuron built over one of its own value neurons (D27)
+                    if own_values.iter().any(|&vn| self.built_over(i, j, vn)) { continue; }
                     let n = row.nbs[j].neuron;
                     if here.contains(&n) { continue; }
                     here.push(n);
@@ -332,7 +344,7 @@ impl Neuron {
         for pid in ids {
             let uses = self.uses_of(pid);
             let kind = match self.pattern(pid).map(|p| &p.body) { Some(Body::Function { .. }) => 0, Some(Body::Parameter { .. }) => 1, Some(Body::Class { .. }) => 2, None => continue };
-            let changed = match kind { 0 => self.collapse_function(pid, &uses, ctx), 1 => self.collapse_parameter(pid, &uses, ctx), _ => self.collapse_class(pid, &uses, ctx) };
+            let changed = match kind { 0 => self.collapse_function(pid, &uses, ctx, false), 1 => self.collapse_parameter(pid, &uses, ctx), _ => self.collapse_class(pid, &uses, ctx) };
             if changed { moved.push(pid); }
         }
         if moved.is_empty() { return; }

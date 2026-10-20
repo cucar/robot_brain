@@ -34,8 +34,7 @@ impl Neuron {
             }
         }
         if e.credited_owner && row.owner_self == Some(e.pattern) { coverage += row.own_cost; }
-        let _ = p_size;
-        let price = row.own_cost + wp + choices;
+        let price = row.own_cost + wp + choices + e.failed as f64 * log2(p_size.max(1) as f64);
         coverage - price
     }
 
@@ -78,9 +77,12 @@ impl Neuron {
                         if v.var != pid { continue; }
                         let Some(place) = nb_place(row, v) else { continue };
                         if !seen.insert(place) { continue; }
+                        // part(x, O): what it holds less its choice, less a failed neighbor per position that
+                        // does not hold, |x| being a parameter's positions and one for a class (D22)
                         let mut c = 0.0;
                         for pj in v.positions.iter().flatten() { if row.owner[*pj] == Some(e.pattern) { c += row.credit(*pj); } }
-                        total += c - v.choice;
+                        let x = self.pattern(pid).map_or(1, |q| q.positions());
+                        total += c - v.choice - v.failed as f64 * log2(x as f64);
                     }
                 }
             }
@@ -88,32 +90,28 @@ impl Neuron {
         total
     }
 
-    /// Retire every pattern whose margin is negative, every parameter left with fewer than two
-    /// positions and every class left with one member (R18, R41).
+    /// Retire every pattern whose margin is strictly negative, every parameter left with fewer than two
+    /// positions, every class left with one member, and a function left with fewer than two nodes (R18,
+    /// R41): all measured on the table as it stands, and retired together.
     pub(crate) fn retire(&mut self, ctx: Ctx) -> Vec<Retired> {
-        let mut out = Vec::new();
-        // one at a time: the worst goes, and the rest are measured again without it, since two lines
-        // covering the same rows each show no margin while the other stands (D30)
-        loop {
-            let mut worst: Option<(PatternId, f64, bool)> = None;
-            for p in &self.table {
-                let degenerate = match &p.body {
-                    Body::Parameter { offsets, .. } => offsets.len() < 2,
-                    Body::Class { members, .. } => members.len() < 2,
-                    Body::Function { nodes, .. } => nodes.len() < 2,
-                };
-                let m = if degenerate { f64::NEG_INFINITY } else { self.margin(p.id, ctx) };
-                if m < 0.0 && worst.map_or(true, |(_, w, _)| m < w) { worst = Some((p.id, m, degenerate)); }
+        let mut doomed: Vec<PatternId> = Vec::new();
+        for p in &self.table {
+            let degenerate = match &p.body {
+                Body::Parameter { offsets, .. } => offsets.len() < 2,
+                Body::Class { members, .. } => members.len() < 2,
+                Body::Function { nodes, .. } => nodes.len() < 2,
+            };
+            if degenerate || self.margin(p.id, ctx) < 0.0 {
+                if ctx.trace {
+                    eprintln!("[why f{} #{}] p{} {} {}: benefit {:.1} line {:.1}", ctx.frame, self.id, p.id, describe_body(&p.body), if degenerate { "degenerate" } else { "margin<0" }, self.benefit(p.id, ctx), self.line_cost(p, ctx));
+                }
+                doomed.push(p.id);
             }
-            let Some((pid, _, degenerate)) = worst else { break };
-            if ctx.trace {
-                let p = self.pattern(pid).unwrap();
-                eprintln!("[why f{} #{}] p{} {} {}: benefit {:.1} line {:.1} uses {}", ctx.frame, self.id, p.id, describe_body(&p.body), if degenerate { "degenerate" } else { "margin<0" }, self.benefit(p.id, ctx), self.line_cost(p, ctx), self.history.iter().filter(|r| r.cover.iter().any(|e| e.pattern == p.id)).count());
-            }
-            out.push(self.remove_pattern(pid));
-            // functions that named a retired variable re-center without it (R18); rows fall dirty
-            self.recognize(ctx);
         }
+        let mut out = Vec::new();
+        for pid in doomed { if self.pattern(pid).is_some() { out.push(self.remove_pattern(pid)); } }
+        // the neurons they held fall to the residual (R18): the rows are covered again
+        if !out.is_empty() { self.recognize(ctx); }
         out
     }
 
@@ -135,7 +133,7 @@ impl Neuron {
             let had = row.cover.iter().any(|e| e.pattern == pid || e.nodes.iter().any(|nb| nb.var.as_ref().map_or(false, |v| v.var == pid)));
             if had { row.dirty = true; }
         }
-        Retired { pattern: pid, child: p.child(), value_neurons, member_only: false }
+        Retired { pattern: pid, child: p.child(), value_neurons, member_only: false, line: Some(p) }
     }
 
 }

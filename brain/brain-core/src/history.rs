@@ -21,9 +21,12 @@ pub struct Nb {
     /// What the activation cost to write (D13).
     pub cost: f64,
     pub value: Option<Value>,
-    /// For a child: what it stands for, its expansion (R28) to base symbols, each as (neuron, offset
-    /// from the owner's activation); a node naming one of those neurons holds at the child (the departure).
+    /// For a child: the base symbols it stands for, its expansion (R28), each as (neuron, offset from the
+    /// owner's activation); as a seed node it is each of them, its cost split equally (D47).
     pub covers: Vec<(NeuronId, Pos)>,
+    /// For a child: every neuron its expansion passes through, interneurons and base symbols, each at its
+    /// offset from the owner's activation; a pattern naming one of them matches the child (D22).
+    pub stands_for: Vec<(NeuronId, Pos)>,
 }
 
 /// The pattern bound to a node where a claimant was taken (D17, D19).

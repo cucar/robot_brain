@@ -3,7 +3,7 @@
 //! `connection`; the machine side (Parts III and V) is `machine`, `activation`, `neighborhood`,
 //! `election`, `index`, `death`, `connect`, `expansion` and `selection`; the dispatch is `thalamus`, `region` and
 //! `column`: the thalamus owns the regions, a region its columns, a column its neurons, and the per-neuron work
-//! of a wave fans out over the columns in parallel.
+//! of a level fans out over the columns in parallel.
 
 pub mod activation;
 pub mod bid;

@@ -40,14 +40,15 @@ it; reading it is seeing it beside the next request.
 |---|---|
 | base events | `add`, `a0`, `a1`, `b0`, `b1`, `end`, `carry` |
 | base actions | `out-0`, `out-1` |
-| the cases | ten functions in `add`'s table, each naming what stands beside the request: the two digits or `end`, and `carry` where one came in; each with a child |
-| the answers | ten functions, in the tables of `out-0` and `out-1`, each naming its case's child a frame before, and `carry` beside it where the case carries; each with a child |
+| the cases | ten functions in `add`'s table, each naming the request and what stands beside it: the two digits or `end`, and `carry` where one came in; each with a child |
+| the answers | ten functions, in the tables of `out-0` and `out-1`, each naming the digit, its case's child a frame before, and `carry` beside it where the case carries; each with a child |
 
 # 4. How it was learned
 
 1. **A request and its column become one neuron.** While one case is taught, the same neurons stand beside `add`
-   every time, so `add`'s table holds a function that names them outright (D47, D27), and its child is that
-   case: `1 + 1` asked, or `0 + 1` asked with a carry. Nothing varied while it was learned, so no variable
+   every time, so `add`'s table holds a function that names `add` and them outright, at offset zero from one
+   another (D47, D27), and its child is that case, fired at `add`'s coordinate: `1 + 1` asked, or `0 + 1`
+   asked with a carry. Nothing varied while it was learned, so no variable
    formed, and what a function names is not open to a variable afterwards (D19). Eight columns give eight
    cases, and the last request gives two more: `end` with a carry, and `end` without.
 2. **A carry tells two cases apart.** `1 + 1` with a carry and `1 + 1` without are two functions. Where `carry`
@@ -56,7 +57,7 @@ it; reading it is seeing it beside the next request.
 3. **The case learns its answer.** In the taught frames the right digit ran one frame after the case and was
    rewarded. The case's child was open and uncovered, so it connected to that digit, with the reward (R31).
 4. **The answer gets its function.** In the digit's history the case's child stands one back in every such row,
-   and `carry` beside it where the column carried, so its table holds a function naming them. From then on the
+   and `carry` beside it where the column carried, so its table holds a function naming the digit and them. From then on the
    case is covered in the frame the answer runs, and in that frame it connects to that function's child, the neuron
    that covered it, with that frame's reward (D10).
 

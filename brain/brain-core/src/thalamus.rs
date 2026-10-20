@@ -8,7 +8,7 @@
 use rayon::prelude::*;
 use std::ops::{Index, IndexMut};
 
-use crate::column::{WaveResult, WaveTask};
+use crate::column::{LevelResult, LevelTask};
 use crate::neuron::*;
 use crate::region::Region;
 use crate::types::*;
@@ -67,21 +67,21 @@ impl Thalamus {
         (0..self.count as NeuronId).map(move |id| &self[id])
     }
 
-    /// The call (R20): route each neuron's task to its column, run the columns of every region in
+    /// The call (R20) at one level: route each neuron's task to its column, run the columns of every region in
     /// parallel, and hand the results back in the order the tasks came.
-    pub fn process_wave(&mut self, tasks: Vec<(NeuronId, Vec<RowInput>, Ctx)>) -> Vec<WaveResult> {
+    pub fn process_level(&mut self, tasks: Vec<(NeuronId, Vec<RowInput>, Ctx)>, built: std::sync::Arc<rustc_hash::FxHashMap<NeuronId, Vec<NeuronId>>>) -> Vec<LevelResult> {
         let order: Vec<NeuronId> = tasks.iter().map(|t| t.0).collect();
         let r = self.regions.len();
-        let mut by_region: Vec<Vec<Vec<WaveTask>>> = (0..r).map(|_| (0..self.columns).map(|_| Vec::new()).collect()).collect();
+        let mut by_region: Vec<Vec<Vec<LevelTask>>> = (0..r).map(|_| (0..self.columns).map(|_| Vec::new()).collect()).collect();
         for (id, rows, ctx) in tasks {
             let (ri, ci, slot) = self.route(id);
-            by_region[ri][ci].push(WaveTask { slot, rows, ctx });
+            by_region[ri][ci].push(LevelTask { slot, rows, built: built.clone(), ctx });
         }
-        let nested: Vec<Vec<WaveResult>> = self.regions.par_iter_mut()
+        let nested: Vec<Vec<LevelResult>> = self.regions.par_iter_mut()
             .zip(by_region.into_par_iter())
-            .map(|(region, tasks)| region.process_wave(tasks))
+            .map(|(region, tasks)| region.process_level(tasks))
             .collect();
-        let mut results: rustc_hash::FxHashMap<NeuronId, WaveResult> = nested.into_iter().flatten().map(|w| (w.neuron, w)).collect();
+        let mut results: rustc_hash::FxHashMap<NeuronId, LevelResult> = nested.into_iter().flatten().map(|w| (w.neuron, w)).collect();
         order.into_iter().filter_map(|id| results.remove(&id)).collect()
     }
 

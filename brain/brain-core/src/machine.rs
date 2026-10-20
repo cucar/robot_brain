@@ -1,4 +1,4 @@
-//! The machine (§2, §3, §6, §7, §8): frames, open activations, the waves with their elections, the
+//! The machine (§2, §3, §6, §7, §8): frames, open activations, the levels with their elections, the
 //! children with their index, the connect and infer calls, and selection.
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -29,7 +29,7 @@ pub struct FrameStats {
     pub base_acts: usize,
     pub apex_acts: usize,
     pub apex_cost: f64,
-    pub waves: usize,
+    pub levels: usize,
     pub bids: usize,
     pub accepted: usize,
     pub minted: usize,
@@ -69,6 +69,9 @@ pub struct Machine {
     pub frames: VecDeque<FrameRec>,
     pub frame_no: Frame,
     pub(crate) pending_weak: Vec<(NeuronId, Pos)>,
+    /// Patterns an inference's expansion completes at the frame ahead, where what it placed was selected:
+    /// they fire weakly there (R30).
+    pub(crate) pending_weak_patterns: Vec<(NeuronId, Pos)>,
     pub max_reach_t: i32,
     /// The interneuron index (D36): what each stands for, to its id.
     pub index: FxHashMap<String, NeuronId>,
@@ -77,6 +80,12 @@ pub struct Machine {
     pub last_stats: FrameStats,
     pub last_winners: Vec<Winner>,
     pub trace: bool,
+    /// Retired lines the ledger holds until every window over what they fired has closed (R38), with
+    /// the frame through which they are kept.
+    pub(crate) retired_lines: FxHashMap<(NeuronId, PatternId), (Pattern, Frame)>,
+    /// Times a descent met a neuron again: never, where no line names a neuron built over its own child
+    /// (D27); counted so that a fault shows.
+    pub cycle_guard: std::cell::Cell<u64>,
 }
 
 impl Machine {
@@ -101,12 +110,15 @@ impl Machine {
             frames: VecDeque::new(),
             frame_no: 0,
             pending_weak: Vec::new(),
+            pending_weak_patterns: Vec::new(),
             max_reach_t: time_radius.max(1),
             index: FxHashMap::default(),
             ledger: Vec::new(),
             last_stats: FrameStats::default(),
             last_winners: Vec::new(),
             trace: std::env::var("UCAR_TRACE").is_ok(),
+            retired_lines: FxHashMap::default(),
+            cycle_guard: std::cell::Cell::new(0),
         }
     }
 
@@ -148,6 +160,12 @@ impl Machine {
 
     pub fn base_neuron(&self, dim: DimId, bucket: u32) -> NeuronId { self.dims[dim as usize].first + bucket }
 
+    /// A line as the machine reads it for expansion and the index: the owner's table, or the ledger's copy
+    /// of a retired line while what it fired is still open (R38).
+    pub(crate) fn line(&self, owner: NeuronId, pid: PatternId) -> Option<&Pattern> {
+        self.thalamus.get(owner).and_then(|n| n.pattern(pid)).or_else(|| self.retired_lines.get(&(owner, pid)).map(|x| &x.0))
+    }
+
     pub(crate) fn base_bits(&self) -> f64 { log2(self.base_count as f64) }
 
     pub(crate) fn reach_for(&self, axes: u8, span: &Pos) -> Pos {
@@ -176,6 +194,7 @@ impl Machine {
     pub fn reset_context(&mut self) {
         self.frames.clear();
         self.pending_weak.clear();
+        self.pending_weak_patterns.clear();
     }
 
     // ───────────────────────────── one frame ─────────────────────────────
@@ -212,14 +231,25 @@ impl Machine {
             if reported.contains(&(dim, pos)) { continue; }
             frame.acts.push(self.new_act(n, pos, base_bits, false, None, [0; MAX_DIMS], 0, 0));
         }
+        // the patterns the expansion completed here weakly, as inputs of the frame like the base (R30, D40)
+        let weak_patterns = std::mem::take(&mut self.pending_weak_patterns);
+        for (n, p) in weak_patterns {
+            let Some(nn) = self.thalamus.get(n) else { continue };
+            if !nn.alive || nn.kind != Kind::Inter { continue; }
+            let mut pos = p;
+            pos[0] = fno as i32;
+            let wp = nn.parents.first().map(|(o, _)| self.thalamus[*o].which_pattern_bits()).unwrap_or(0.0);
+            let span = self.spans[n as usize];
+            frame.acts.push(self.new_act(n, pos, base_bits + wp, false, None, span, 0, 0));
+        }
         stats.base_acts = frame.acts.len();
         self.frames.push_back(frame);
 
-        // the waves (§6, R26)
-        let mut wave: u32 = 0;
+        // the levels (§6, R26)
+        let mut level: u32 = 0;
         let mut pending: Vec<Pending> = Vec::new();
         loop {
-            // activate children bought by the wave before (§6.4)
+            // activate children bought at the level before (§6.4)
             let fired = pending.len();
             for kid in pending.drain(..) {
                 let fr = kid.act.pos[0] as i64;
@@ -228,26 +258,32 @@ impl Machine {
                 let r = ActRef { frame: fr, index: idx };
                 let mut act = kid.act;
                 act.covers = kid.covered.clone();
+                // where the report built the strong activation of a pattern an inference placed weakly, the
+                // weak one is dropped (D40, R30)
+                if let Some(w) = f.acts.iter_mut().find(|w| !w.strong && !w.gone && w.neuron == act.neuron && w.pos == act.pos && w.opened_at == fno) {
+                    if act.strong { w.gone = true; }
+                }
                 f.acts.push(act);
                 for c in kid.covered {
                     if let Some(a) = self.act_mut(c) { if a.coverer.is_none() { a.coverer = Some(r); } }
                 }
             }
-            if wave > 0 && fired == 0 { break; }
-            stats.waves += 1;
-            // process functions (§5), per neuron, with every activation of this wave
-            let (bids, retired, added) = self.call_wave(wave);
+            if level > 0 && fired == 0 { break; }
+            stats.levels += 1;
+            // process functions (§5), per neuron, with every activation of this level
+            let (bids, retired, added) = self.call_level(level);
             stats.bids += bids.len();
             stats.added += added;
             stats.retired += retired.iter().filter(|(_, r)| !r.member_only).count();
             for (owner, r) in retired { self.handle_retired(owner, r); }
             // elect (R24) and create children (R43)
-            let (accepted, minted, reused) = self.elect(wave, bids, &mut pending);
+            let (accepted, minted, reused) = self.elect(level, bids, &mut pending);
             stats.accepted += accepted;
             stats.minted += minted;
             stats.reused += reused;
-            wave += 1;
-            if wave > 64 { break; }
+            level += 1;
+            // nothing caps the depth (R26); a frame this deep means a fault, and is counted as one
+            if level > 1024 { self.cycle_guard.set(self.cycle_guard.get() + 1); break; }
         }
         // wire (R16) and the index (D36)
         self.refresh_index();
@@ -283,20 +319,20 @@ impl Machine {
 
     pub(crate) fn current(&self) -> &FrameRec { self.frames.back().unwrap() }
 
-    pub(crate) fn new_act(&self, n: NeuronId, pos: Pos, cost: f64, strong: bool, fired_by: Option<FiredBy>, span: Pos, wave: u32, height: u32) -> Act {
+    pub(crate) fn new_act(&self, n: NeuronId, pos: Pos, cost: f64, strong: bool, fired_by: Option<FiredBy>, span: Pos, level: u32, height: u32) -> Act {
         let nn = &self.thalamus[n];
         let reach = self.reach_for(nn.axes, &span);
-        Act { neuron: n, kind: nn.kind, axes: nn.axes, pos, cost, strong, span, reach, covered_at: None, coverer: None, covers: Vec::new(), fired_by, inferences: Vec::new(), opened_at: self.frame_no, wave, height, caught_up: pos[0] as i64 }
+        Act { neuron: n, kind: nn.kind, axes: nn.axes, pos, cost, strong, span, reach, covered_at: None, coverer: None, covers: Vec::new(), fired_by, inferences: Vec::new(), opened_at: self.frame_no, level, height, gone: false, caught_up: pos[0] as i64 }
     }
 
     // ───────────────────────────── the call (R20) ─────────────────────────────
 
-    pub(crate) fn call_wave(&mut self, wave: u32) -> (Vec<Bid>, Vec<(NeuronId, Retired)>, usize) {
+    pub(crate) fn call_level(&mut self, level: u32) -> (Vec<Bid>, Vec<(NeuronId, Retired)>, usize) {
         let fno = self.frame_no;
-        // route: the activations of this wave, grouped by neuron, in the order they fired
+        // route: the activations of this level, grouped by neuron, in the order they fired
         let mut by_neuron: FxHashMap<NeuronId, Vec<RowInput>> = FxHashMap::default();
         let mut order: Vec<NeuronId> = Vec::new();
-        let refs: Vec<ActRef> = self.frames.iter().flat_map(|f| f.acts.iter().enumerate().filter(|(_, a)| a.opened_at == fno && a.wave == wave).map(|(i, _)| ActRef { frame: f.no, index: i as u32 }).collect::<Vec<_>>()).collect();
+        let refs: Vec<ActRef> = self.frames.iter().flat_map(|f| f.acts.iter().enumerate().filter(|(_, a)| a.opened_at == fno && a.level == level && !a.gone).map(|(i, _)| ActRef { frame: f.no, index: i as u32 }).collect::<Vec<_>>()).collect();
         for r in refs {
             let nbs = self.neighborhood(r);
             if nbs.is_empty() { continue; }
@@ -306,29 +342,19 @@ impl Machine {
             by_neuron.entry(a.neuron).or_default().push(RowInput { act: r, pos: a.pos, own_cost: a.cost, owner_value, nbs });
         }
         let tasks: Vec<(NeuronId, Vec<RowInput>, Ctx)> = order.iter().map(|&n| (n, by_neuron.remove(&n).unwrap(), self.ctx_for(n))).collect();
+        // what every interneuron is built over as the index stands at this level, for D27 (D36)
+        let built: FxHashMap<NeuronId, Vec<NeuronId>> = if tasks.is_empty() { FxHashMap::default() } else {
+            self.thalamus.iter().filter(|n| n.alive && n.kind == Kind::Inter).map(|n| (n.id, self.through_of(n.id))).collect()
+        };
         // dispatch: every neuron's call runs in its column, the columns in parallel; collect in the order above
-        let results = self.thalamus.process_wave(tasks);
+        let results = self.thalamus.process_level(tasks, std::sync::Arc::new(built));
         let mut bids = Vec::new();
         let mut retired = Vec::new();
         let mut added = 0;
         for w in results {
             let n = w.neuron;
-            // a line that narrowed: a child it shares with another line now stands for something else to
-            // this line, which lets it go and is bought one by its new key (D36, R43); a child of its own
-            // keeps its name, which the lines above name, and forgets what it learned under the places given up
-            for (pid, c) in w.narrowed {
-                if (c as usize) >= self.thalamus.len() { continue; }
-                if self.thalamus[c].parents.len() > 1 {
-                    self.thalamus[c].parents.retain(|p| *p != (n, pid));
-                    if let Some(p) = self.thalamus[n].pattern_mut(pid) { if let Body::Function { child, .. } = &mut p.body { *child = None; } }
-                    if self.trace { eprintln!("[narrowed f{}] #{} p{} lets go of shared child #{}", fno, n, pid, c); }
-                } else {
-                    self.thalamus[c].connections.clear();
-                    if self.trace { eprintln!("[narrowed f{}] #{} forgets its connections", fno, c); }
-                }
-            }
             if self.trace && (!w.bids.is_empty() || !w.retired.is_empty() || w.added > 0) {
-                eprintln!("[call f{} w{} #{}] bids {} retired {} added {}", fno, wave, n, w.bids.len(), w.retired.len(), w.added);
+                eprintln!("[call f{} l{} #{}] bids {} retired {} added {}", fno, level, n, w.bids.len(), w.retired.len(), w.added);
             }
             bids.extend(w.bids);
             retired.extend(w.retired.into_iter().map(|x| (n, x)));

@@ -243,7 +243,7 @@ the reason the arithmetic is the arithmetic, and it is never a term in it.
 > **T1 — The file is a fixed-length code, and its prices move.** Every field costs `log₂` of its alphabet's
 > size however often its value is written (D13). That is not what an entropy coder pays, which prices a value
 > by how often it occurs; and the alphabets themselves grow and shrink over the run: `n` with the machine's
-> population, a table with its entries, a variable with its members and a class with its combinations.
+> population, a table with its entries and a variable with its members.
 > So one pattern priced now and later can get two answers with no change in its rows, and the evaluation
 > records it.
 >
@@ -265,6 +265,26 @@ pricing its patterns as if it did not.
 
 **On D15 — why the two objects can never be one.** Being a center (T5), a pattern is typically a set no
 neighborhood ever was.
+
+**On D15 — why a pattern has no place of its own.** An earlier draft named every neighbor at its offset from
+the owner. A neuron that fires often and sees far looks back on one stretch of the run from many of its
+activations, each a frame later than the last, so the same arrangement stood at `−5` in one row and `−6` in the
+next and shared no entry between them: nothing counted it twice, and nothing could build it. Written as
+relations between its own nodes (D34), the arrangement is one pattern wherever it stands in the window, and the
+rows that saw it are one use (D27). Two more things fall out. Rounding (D6) now falls on where a pattern stands,
+which is never written, and not on what it is: three nodes at `−98`, `−99` and `−100` at radius 10 all rounded
+to `−99` from the owner and lost their order, and at distance 1 from one another they keep it. And the owner's
+own activation becomes one node among the others, named where naming it pays: a pattern that names it covers
+it and holds nowhere else, exactly as every pattern did before, and one that does not is free of the owner's
+place.
+
+**On D34 — why a function is relations and not a star from one node.** A star from one node, that node at zero
+and every other at its offset from it, writes the same offsets a set of relations does, one fewer than the nodes.
+What it adds is a distinguished node, and a distinguished node asks to mean something: where the search starts,
+where the child fires, which node two owners have to agree on. None of those is a fact about the pattern. Where
+the child fires is a fact about the activation, and D53 says it there, on what the bid covered. Written as
+relations, a function has no node that is first, and the question of which node a line is written from is the
+implementation's, as the order two lines are compared in is.
 
 ## 4.2 The cover
 
@@ -566,11 +586,10 @@ every decision a descent on the margin, which is what T7 needs, and it removes t
 grow at no gain. At equality naming saves exactly what it costs, and `x` is left out: the collapse is a
 function of its population and of nothing the pattern already names.
 
-**On D27 — a class's members, worked at one position.** Say each neighbor cost 8 bits to write, and naming a
-neuron in a line costs 8 too. At one back, `a` stood in 5 rows
-of the residual, `b` in 4, `c` in 3 and `d` in 1, and the seed is the relation between `a` and `b`. Its uses are
-the residual neighbors at one back holding a member; its candidates are the neurons that stood there in the other rows,
-in order of count.
+**On D27 — a class's members, worked at one offset.** Say each neighbor cost 8 bits to write, and naming a
+neuron in a line costs 8 too. One back from the owner, `a` stood in 5 uses of the residual, `b` in 4, `c` in 3
+and `d` in 1, and the seed is the relation between `a` and `b` there. Its uses are the residual neighbors one
+back holding a member; its candidates are the neurons that stood there in the other uses, in order of count.
 
 | class | uses | saves per use | entry | net |
 |---|---|---|---|---|
@@ -578,23 +597,24 @@ in order of count.
 | `{a, b, c}` | 12 | 8 − log₂ 3 ≈ 6.4 | 24 | 77 − 24 = **53**: `c` joins |
 | `{a, b, c, d}` | 13 | 8 − log₂ 4 = 6 | 32 | 78 − 32 = **46**: `d` does not, and the collapse ends |
 
-The class is `{a, b, c}`, with twelve uses, and it claims those twelve neighbors. `d`'s row stays residual. Nothing
-counts against `d` here, since no pattern has claimed the offset: it does not pay its way in. The failure appears
-later, when the class stands at one back and `d` stands there instead.
+The class is `{a, b, c}`, with twelve uses, and it claims those twelve neighbors. `d`'s use stays residual.
+Nothing counts against `d` here, since no pattern has claimed the coordinate: it does not pay its way in. The
+failure appears later, when a function names the class one back and `d` stands there instead.
 
 **On D27 — a parameter's positions, worked.** Say each neighbor cost 8 bits to write, naming a neuron in a line
-costs 8, and an offset 2. One back and three back
-hold one neuron in 10 rows of the residual, with 4 different values among them; five back holds the same value
-in 7 of those rows, and two back in 1.
+costs 8, and an offset 2. Two frames two apart hold one neuron in 10 uses of the residual, with 4 different
+values among them; the frame two before the second holds the same value in 7 of those uses, and the frame
+between the first two in 1.
 
 | step | arithmetic | result |
 |---|---|---|
-| the seed: one back and three back | 10 uses × (16 − log₂ 4) = 140; entry 2 × 2 + 4 × 8 = 36 | **104** |
-| five back, 7 of 10 | saves 7 × 8 = 56; costs 3 failures × log₂ 3 ≈ 4.8, and 2 for where | taken, **≈ 153** |
-| two back, 1 of 10 | saves 8; costs 9 failures × log₂ 4 = 18, and 2 | not taken |
+| the seed: two positions, the second at `−2` | 10 uses × (16 − log₂ 4) = 140; entry 2 + 4 × 8 = 34 | **106** |
+| `−4`, 7 of 10 | saves 7 × 8 = 56; costs 3 failures × log₂ 3 ≈ 4.8, and 2 for where | taken, **≈ 155** |
+| `−1`, 1 of 10 | saves 8; costs 9 failures × log₂ 4 = 18, and 2 | not taken |
 
-The parameter spans one, three and five back, with ten uses. A neuron seen only once is its value all the same:
-agreement at its positions is the whole test, and the entry is paid out of the second offset it fills.
+The parameter is three positions, its first and the frames two and four before it, with ten uses, and it holds
+wherever in a window three such frames agree. A neuron seen only once is its value all the same: agreement at its
+positions is the whole test, and the entry is paid out of the second offset it fills.
 
 **On D27 — why an owned neighbor is skipped, and nothing else is.** An activation is never left out of a question
 the design is asking it; this one it has already answered, for that neighbor, by having the neighbor covered.
@@ -736,10 +756,11 @@ answers that used to sit between the two ages.
 **On D33 — variables before functions.** A variable is a fact of its own — these neurons stand in for one
 another, these offsets hold one neuron — and it is priced on its own uses. A function is what
 stays fixed once the variation has been named, so functions are built over the rows as the variables have
-rewritten them, and a function names the variables that hold in its rows. There is no going back on a position:
-once a variable holds it, every function reads it as the variable and none fixes it. Nothing specific is lost
-by that, because the variable's value neuron for a member already is that member standing there: where a class
-of letters stands before `h`, its value neuron for `t` is `th`.
+rewritten them, and a function names the variables that hold in its rows. There is no going back on a
+coordinate: once a variable holds it, every function reads it as the variable and none fixes it. Nothing
+specific is lost by that, because the variable's value neuron for a member already is that member standing
+there: where a function in `h`'s table names a class of letters one back, the class's value neuron for `t`
+stands where the `t` stood, and the function's child is the pair.
 
 **On D33 — why creation runs to exhaustion.** An earlier rule built one candidate per call, on the argument
 that one candidate per call was the rhythm of one election per frame. The election takes any number of bids,
@@ -768,39 +789,43 @@ is declared about an action but its place in the alphabet and, on its channel, t
 **On D41 — the second axis.** A pattern says "these things happened together": an AND, part to whole. A class
 inside it says "one of these happened here": an OR, instance to class. The design had the first axis from the
 start. The second is what "whatever" and "one of these" needed, and the two stand side by side: a class is a
-pattern of one position with its neuron left open, a function names it beside its neighbors, and what it held
-reaches the level above as a value neuron beside the function's child (D45).
+set of neurons with no place of its own, a function names it at an offset beside its neighbors, and what it held
+reaches the level above as a value neuron where the member stood (D45).
 
-**On D41 and D44 — the same structure, opposite meanings.** A class and a parameter hold the same things, a set
-of members and a set of positions, and for a while they were one construct told apart only by how many positions
-it had. That gave "several positions" one meaning, the same neuron at each, and left no way to say that one of
-a set stands at each of several places without it being the same one. They mean opposite things. A class is
-closed on its members and open on how they combine: only a listed neuron fits, and any arrangement of listed
-neurons does. A parameter is open on its members and closed on how they combine: any neuron fits, and only where
-it stands at every position. So the member list is the condition for a class and only a record for a parameter,
-and a thing never seen before is a parameter's value the first time it comes and is no member of any class until
-it has recurred. A class can record everything a parameter covers, since the same neuron at each position is
-one combination among the others, but it cannot mean it: it would turn the new thing away, and it would write a
-choice per position where the parameter writes one.
+**On D41 and D44 — one set each, opposite meanings.** A class and a parameter were for a while one construct, a
+set of members and a set of positions, told apart only by how many positions it had. That gave "several
+positions" one meaning, the same neuron at each, and left no way to say that one of a set stands at each of
+several places without it being the same one. Then each held both sets and meant them oppositely, and the class
+carried a position test and a member test where the parameter carried one. Now each is one set. A class is its
+members, closed on them and open on where: only a listed neuron fits, and a function may name the class at any
+offset, and at several. A parameter is its positions, open on its members and closed on where: any neuron fits,
+and only where it stands at every position. So the member list is the condition for a class and only a record
+for a parameter, and a thing never seen before is a parameter's value the first time it comes and is no member
+of any class until it has recurred. Each has one test: the class its members, the parameter its positions.
 
-**On D41 — why a class's value is the combination.** A class over several positions holds a member at each, and
-what stood has to be said somewhere. One value neuron per position would put several neurons on the frontier for
-one variable, and one per member would lose which stood where. One neuron for the combination says it once, as
-a parameter's value neuron does. Combinations multiply, but only the ones that occur are stored, each as an
-entry that is paid for, and the lesson that holds for every combination has its place already, on the child of
-the function that names the class. The level above would have put the separate members back together anyway.
+**On D41 — why a class has no positions, and its value is the member.** An earlier draft gave a class positions
+of its own, stored every combination of members that had stood at them, and fired one value neuron per
+combination, so that what stood where was said once. The storage was a second mechanism for what the pair
+relation already does: two members that recur together at a distance are a function of those two neurons (D47),
+and uncorrelated members at two places are a class named twice, two choices (D13). Where the class is named is
+the function's business, since a function is what says where things stand; the class says only which set. One
+value neuron per member, fired where the member stood (D45), keeps which stood where in the layout, which costs
+nothing, and gives the level above the member re-labelled by its class at the place it saw it.
 
-**On D27 — why a class's two tests run once each, members first.** The members decide which rows are uses, and the
-uses decide the positions, so each test's answer moves the other's question. Running them to a fixed point
-inside a call would be a loop with no bound the design counts (T4). Once each per call, in a fixed order, is
-deterministic, and the class settles over the calls that follow, as a function's neighbors do under
-re-centering.
+**On D27 — why a use is a place and not a row.** A neuron that fires every frame at radius 100 looks back on one
+stretch of the run from a hundred of its activations before anything covers it. Counted per row, that one event
+is a hundred uses, every arrangement in the stream seems to recur, and the rule that nothing is built on a single
+occurrence (R14) is gone. The history keeps every activation at its coordinate (D18), so the same coordinates
+seen from two rows are told apart from two places that look alike, and count once. What stands around a use is
+the union of what the rows that saw it recorded there, so the owner's activation stands at one offset from the
+use per row, and is named at the offset where that pays or at none.
 
 **On D41 — variables are found on their own.** A variable is a fact about what stands where: this offset keeps
 holding one of a few neurons, these offsets keep holding the same one. That fact does not depend on any
 function. The neuron counts both over its residual, and a variable exists where it pays: found by its own
-collapse, priced on its own uses, covering its own positions, and passing what it held to the level above as a value
-neuron. What stays fixed around it is a function of the same table, which names it.
+collapse, priced on its own uses, a parameter covering its own positions and a class what stands where a
+function names it, and passing what it held to the level above as a value neuron. What stays fixed around it is
+a function of the same table, which names it.
 
 **On D38 — function, class, parameter.** A function is what stays the same around what varies. A parameter is
 its argument: one value handed in and used at every one of its positions, whatever it is. A class is its local
@@ -815,18 +840,23 @@ so every variable grew a function it did not need. Priced against the cover that
 what it adds: the residual it takes, and the calls its variables no longer make. One variable alone adds
 nothing; two in one call save a call.
 
-**On D41 — what speaks for a member never seen.** A variable that stands alone fires its value neuron and
-nothing else, and a member never seen before brings a value neuron with no connections. Nothing is built to
-speak for "this variable held, whatever it held". What speaks is what the bid covered (R46): the owner, and with
-it whatever the world reports in common across the cases, which holds the habit it formed before the variable
-existed. The new value neuron learns from what then runs, and speaks for itself from there on.
+**On D44 — what speaks for a member never seen.** A member never seen before brings a value neuron with no
+connections. Nothing is built to speak for "this variable held, whatever it held" beyond what is already there:
+the child of the function that names the variable, which holds the lesson for every value, and under it what the
+bid covered (R46), with whatever the world reports in common across the cases. The new value neuron learns from
+what then runs, and speaks for itself from there on.
 
-**On D31 — why a bid covers its bidder and does not name it.** A neighborhood holds what stood around an
-activation, and the activation is not around itself: offset zero in every dimension is where it stands. So no
-pattern names it. But a child that replaced what its pattern names and left the bidder standing would leave the
-level above with both, and a function of one neighbor would trade one neuron for one. So every bid covers its bidder
-without naming it, whatever its kind, and the call pays for that by writing its owner. For the first bid of an
-activation the two cancel, which is why a letter and the one before it are two for one.
+**On D31 — why the owner is a thing a pattern names or does not.** A neighborhood holds what stood around an
+activation, and the activation stands at offset zero in every dimension of it. An earlier draft had every bid
+cover its bidder without naming it, since a child that replaced what its pattern names and left the bidder
+standing would leave the level above with both. That tied every pattern to the owner's place, and the same
+arrangement seen from two activations of the owner was two patterns. Now the owner's activation is one node
+among the others (D16). A pattern that names it costs one offset in the line, holds at the owner and nowhere
+else, and covers it, which is every pattern of the earlier draft unchanged. One that does not holds wherever its
+things stand in the window and leaves the owner as it was. The call writes its owner either way, since it has to
+say whose pattern ran (D13); where the pattern names the owner the two cancel, which is why a letter and the one
+before it are two for one, and where it does not, the owner's name is the price of a pattern that belongs to no
+place.
 
 **On D31 — why a function and its variables are one bid.** A function cannot hold where its variables do not, so
 bidding them apart would let the machine buy a function without its arguments. One bid, taken or left whole, has
@@ -844,21 +874,27 @@ variable's says that it happened and what it was.
 it held: one neuron each. A variable has no neuron for "held, whatever the value". A function that names it
 beside a neighbor or another variable has a child that does not depend on the value, and the value neuron
 beside it is the thing that does: the level above can build on the child alone, a lesson for every value, or on
-the child and a value neuron, a lesson for one, and each pays or does not on its own. At one position or at
-several, the member lights up the same way.
+the child and a value neuron, a lesson for one, and each pays or does not on its own. Named at one offset or at
+several, a class fires a value neuron at each, where the member stood.
 
 **On D45 — why a value neuron is not the neuron it stands for.** `P:t` says that `t` stood in `P`, in `p`'s
 table; `t` on the frontier says only that `t` fired. The bid covers `t`, and what is covered is not seen (D10),
 so what stands in its place has to say in what role it stood. A value neuron is otherwise an ordinary neuron:
 created, priced, expanded and deleted by the rules every child obeys.
 
-**On D45 — why it fires at the bidder's coordinate.** Everything one bid puts up stands at one coordinate, siblings
-at offset zero (D26), which is where composition is cheapest, and where the value stood is in the variable's line,
-so expansion puts it back without being told. Two other places were tried and dropped. A value neuron at every
-position its value stood in put activations into frames that had already run, each needing an age and a window of
-its own, and multiplied activations by the positions a parameter spans. A centroid of what a pattern names put a
-child's neighbors on both sides of its coordinate, so a line had offsets into its own future and an inference
-placed a center rather than a completion.
+**On D45 — why a value neuron fires where its value stood.** An earlier rule put everything one bid fired at the
+bidder's coordinate, siblings at offset zero, on the grounds that composition is cheapest there and that where
+the value stood was in the variable's line. Once a class has no positions and a function may name it twice, two
+value neurons at one coordinate could not say which member stood where. Fired where the member stood, a value
+neuron is the member re-labelled by its class, at the place the level above saw it, and the layout says the rest
+for nothing (D13). A parameter has one value however many positions it holds, so its value neuron fires once, at
+its first position. What the earlier rule feared, activations put into frames that had already run, is now what
+any pattern that does not name its owner does with its child, and D9 and §7.1 give such an activation its age
+and the frames it missed. A center in time was tried and dropped: it put a child's nodes on both sides of its
+coordinate, so a line had offsets into its own future and an inference placed a middle rather than a
+completion. In space nothing is ahead or behind, so there the child stands at the center of the box it covers,
+where its span is least (D53), and in time at the box's end, the latest frame covered, so nothing a child
+covers is ahead of it.
 
 **On D45 — why one value neuron per variable and value.** Two variables of one activation that both hold `x`
 are two arguments that happen to be equal, and the level above should hear two things. If it matters that they
@@ -1513,10 +1549,21 @@ line written over another neuron's history may not pay on this one's, and the de
 neuron optimizing its history and the machine its window. The cost is that near-duplicates stay two symbols.
 
 **On R43 — a child with several parents.** Each pattern wired to a child is one neuron's view of what it covers,
-with offsets from that neuron, and the child fires at the coordinate of whichever of them bid. So the same
-child may stand one position over depending on who won, and the level above sees two nearby offsets for one
-thing. That is accepted. A child was never renamed when its one line re-centered (D29); several lines that
-drift apart are the same thing across parents.
+as relations between its nodes, and two lines stating one set of activations are placed at one coordinate by
+the machine (D34, D53), so the level above sees one thing at one place whichever parent won. A pattern that does not name its owner is the common case: every neuron whose window held the place saw
+the same things there, and each bids them at the same coordinate. A child was never renamed when its one line
+re-centered (D29); several lines that drift apart are the same thing across parents.
+
+**On D36 — why the machine indexes interneurons by what they stand for.** Reuse among the board's bids catches
+two owners stating one thing in one frame and nothing else. A stretch that came round a lap ago was stated
+then, by a neuron that has not bid since, and without the index the machine either scans every living
+interneuron and expands each to compare, which is what the first implementation did and what no population of
+any size can afford, or mints a second neuron for the same thing and a third the lap after, which is how a
+repeating stream gained a level every lap. What a neuron stands for is written from its line, each node by what
+it stands for in turn, so it is had in the length of the line and compared in one probe, and it is the same
+whichever owner's line produced it, since a line is relations between nodes and names no owner's place (D34).
+The three indexes were always there: a line names a neuron by id (D2), a frame names a base neuron by its
+symbol (D52), and the third says what an interneuron is in the terms of the two below it.
 
 **On R43 — reuse beyond the tie, priced.** Exact reuse is what the design does; a priced reuse of a near match
 is plausible and is kept here. It is the machine's decision and must be priced from the machine's side, since
@@ -1746,7 +1793,10 @@ nothing needs it in advance.
 > `D + 1` base activations that has occurred at least twice. **The stack is no deeper than the longest stretch
 > that has repeated.** On input with any variety in it that length grows slowly with the run, about as its
 > logarithm, since every step that can vary multiplies the stretches there are and divides how often each comes
-> round. On input that repeats exactly, it grows with the run, a level each time round, and nothing caps it.
+> round. On input that repeats exactly, reuse across frames fires the neuron minted a lap ago rather than a
+> new one for the same stretch (R43, D36), and no chain of children closes on itself, since no line names a
+> neuron built over its own child (D27). How deep the stack grows there is open
+> ([algorithm-evaluation.md](algorithm-evaluation.md)).
 > What it does not do is widen the reach out of proportion: a deep chain sees `R` past what it stands for (D4), not
 > two to the power of its level. A variable loosens "the same stretch" to "the same function, with any value",
 > which is what it is for; the value neuron above it is specific again. The bound rests on T12, and fails

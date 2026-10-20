@@ -5,21 +5,20 @@
 use crate::neuron::*;
 use crate::types::*;
 
-/// One neuron's call for a wave (R20): its rows and the context the machine hands it.
-pub struct WaveTask {
+/// One neuron's call at a level (R20): its rows and the context the machine hands it.
+pub struct LevelTask {
     pub slot: usize,
     pub rows: Vec<RowInput>,
+    pub built: std::sync::Arc<rustc_hash::FxHashMap<NeuronId, Vec<NeuronId>>>,
     pub ctx: Ctx,
 }
 
-/// What one neuron returned from its call: bids, retirements, the count added, and the lines that
-/// narrowed their uses with the child each holds.
-pub struct WaveResult {
+/// What one neuron returned from its call: its bids, everything it retired, and the count added.
+pub struct LevelResult {
     pub neuron: NeuronId,
     pub bids: Vec<Bid>,
     pub retired: Vec<Retired>,
     pub added: usize,
-    pub narrowed: Vec<(PatternId, NeuronId)>,
 }
 
 #[derive(Default)]
@@ -35,13 +34,13 @@ impl Column {
     pub fn len(&self) -> usize { self.neurons.len() }
 
     /// Run the call on every neuron this column was handed rows for.
-    pub fn process_wave(&mut self, tasks: Vec<WaveTask>) -> Vec<WaveResult> {
+    pub fn process_level(&mut self, tasks: Vec<LevelTask>) -> Vec<LevelResult> {
         let mut out = Vec::with_capacity(tasks.len());
         for t in tasks {
             let n = &mut self.neurons[t.slot];
+            n.built = t.built;
             let (bids, retired, added) = n.process(t.rows, t.ctx);
-            let narrowed = std::mem::take(&mut n.narrowed_children);
-            out.push(WaveResult { neuron: n.id, bids, retired, added, narrowed });
+            out.push(LevelResult { neuron: n.id, bids, retired, added });
         }
         out
     }

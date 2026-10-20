@@ -32,17 +32,18 @@ say thirty-two, 5 bits (D13). Alone, with three symbols, nothing here would pay 
 |---|---|
 | base events | `go`, `done` |
 | base action | `tap` |
-| the count | three functions in `tap`'s table, each naming one neighbor a frame back: `go`; `go·tap`; `go·tap²`. Their children `go·tap`, `go·tap²` and `go·tap³`, at levels 1, 2 and 3 |
-| the end | a function in `done`'s table naming `go·tap³` a frame back; its child `go·tap³·done` |
+| the count | three functions in `tap`'s table, each naming the tap and one neighbor a frame back: `go`; `go·tap`; `go·tap²`. Their children `go·tap`, `go·tap²` and `go·tap³`, at levels 1, 2 and 3 |
+| the end | a function in `done`'s table naming `done` and `go·tap³` a frame back; its child `go·tap³·done` |
 
 That is the whole machine: three neurons for the three states of the loop, and one for its end.
 
 # 3. How it was learned
 
-1. **The first tap names the cue.** In `tap`'s history a third of the rows hold `go` one back, and a row of
-   one neighbor carries the relation of the owner with that neighbor (D47). Its collapse is a function naming
-   `go` at `−1` (D27); it pays at its second use against a line of one neuron and one offset (R15); its bid
-   covers `go` and the tap, and the child `go·tap` fires at the tap's frame, one level up (R16, §7.4).
+1. **The first tap names the cue.** In `tap`'s history a third of the rows hold `go` one back, and a tap with
+   the cue before it is two things standing together, a relation (D47). Its collapse is a function naming the
+   tap and `go` at `−1` from it (D27); it pays at its second use against a line of one neuron and one offset
+   (R15); its bid covers `go` and the tap, and the child `go·tap` fires at the tap's frame, the latest the bid
+   covers (D53), one level up (R16, §7.4).
 2. **The second tap names the first child.** Once `go·tap` fires, the next tap sees it one back, since a
    neighbor is whatever stands uncovered within reach, at whatever level (D5). Another third of `tap`'s rows
    come to hold `go·tap` at `−1`, and the same relation gives the function and the child `go·tap²`, covering
@@ -135,7 +136,7 @@ Inside a frame nothing is back to back. Activations of one frame are at temporal
 and co-occur, with no order among them (D5, D26), and one base action runs per action dimension per position in a frame (D8). Three
 taps in one frame are therefore three action dimensions, one channel each (D1): three tappers, `tap-a`,
 `tap-b`, `tap-c`, run together. In `tap-a`'s table the other two stand at offset zero in every row, so a function
-names them and its child, `triple`, covers the three (§7.1); the loop of §4 then runs over triples, `go·triple`,
+names the three and its child, `triple`, covers them (§7.1); the loop of §4 then runs over triples, `go·triple`,
 `go·triple²`, `go·triple³`, and stops the same way. An order within the frame that mattered would mean the
 frame is the wrong tick, and the environment would declare a finer one.
 

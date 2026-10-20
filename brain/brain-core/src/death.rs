@@ -8,7 +8,13 @@ use crate::types::*;
 impl Machine {
     // ───────────────────────────── deaths (R38) ─────────────────────────────
 
-    pub(crate) fn handle_retired(&mut self, owner: NeuronId, r: Retired) {
+    pub(crate) fn handle_retired(&mut self, owner: NeuronId, mut r: Retired) {
+        // the ledger holds the pattern, not a handle to it: what it fired stays expandable until every
+        // window over it has closed (R38)
+        if let Some(line) = r.line.take() {
+            let until = self.frame_no + self.max_reach_t as i64 + 1;
+            self.retired_lines.insert((owner, r.pattern), (line, until));
+        }
         if let Some(c) = r.child {
             if (c as usize) < self.thalamus.len() {
                 self.thalamus[c].parents.retain(|p| *p != (owner, r.pattern));
@@ -40,6 +46,7 @@ impl Machine {
             pending = std::mem::take(&mut self.ledger);
         }
         self.ledger = keep;
+        self.retired_lines.retain(|_, (_, until)| *until >= fno);
     }
 
     pub(crate) fn delete_neuron(&mut self, c: NeuronId) {
@@ -50,9 +57,10 @@ impl Machine {
         if self.index.get(&key) == Some(&c) { self.index.remove(&key); }
         if self.trace { eprintln!("[death f{}] #{}", self.frame_no, c); }
         // its subtree: its own patterns' children with no parent outside
-        let table: Vec<(PatternId, Option<NeuronId>, Vec<NeuronId>)> = self.thalamus[c].table.iter().map(|p| (p.id, p.child(), p.members().iter().filter_map(|m| m.value_neuron).collect())).collect();
-        for (pid, child, values) in table {
-            self.handle_retired(c, Retired { pattern: pid, child, value_neurons: values, member_only: false });
+        let table: Vec<Pattern> = std::mem::take(&mut self.thalamus[c].table);
+        for p in table {
+            let values: Vec<NeuronId> = p.members().iter().filter_map(|m| m.value_neuron).collect();
+            self.handle_retired(c, Retired { pattern: p.id, child: p.child(), value_neurons: values, member_only: false, line: Some(p) });
         }
         self.thalamus[c].table.clear();
         self.thalamus[c].history.clear();

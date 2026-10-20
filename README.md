@@ -6,7 +6,7 @@ implementation of **UCAR** (Universal Compression with Actions and Rewards), the
 
 The machine is defined by two alphabets, the events it can observe and the actions it can execute. Every
 symbol, base or learned, is a **neuron**. Each frame the world reports what was observed, what ran and what
-it earned; the machine compresses the frame in waves, the neurons that fired bidding the patterns of their
+it earned; the machine compresses the frame one level at a time, the neurons that fired bidding the patterns of their
 tables and an election taking the bids that shorten the file; what no bid covers is the **apex**, the
 machine's state, and from it the machine infers the frame ahead, one winner per dimension, actions by
 reward estimate and events by share of voters. There are no training epochs, no gradients and no labels:
@@ -62,7 +62,7 @@ UCAR_DUMP=1 cargo run --release -p brain-core --example simple -- 100 256 6
 |------|------------|
 | `docs/algorithm.md` | The specification: definitions **D** and rules **R**, which together are the machine. |
 | `docs/algorithm-*.md` | Worked cases (text, alternation, copy, equal, hit, loop, addition, MNIST, stocks), the remarks, the evaluation and the implementation plan. |
-| `brain/brain-core` | The machine in Rust, one file per type. The neuron side (Parts II and IV): `neuron` (the table, history and the `process functions` call), `pattern`, `history`, `cover` (recognition), `collapse`, `margin`, `pick`, `merge`, `bid`, `connection`. The machine side (Parts III and V): `machine` (the frame loop and waves), `activation`, `neighborhood`, `election`, `index`, `death`, `connect`, `expansion`, `selection`. The dispatch: `thalamus` owns the regions and routes a neuron id to its column, `region` fans its columns out in parallel with Rayon, `column` owns a partition of the neurons and runs their calls. `offsets` is D6 and `types` the alphabet, channels and policies. |
+| `brain/brain-core` | The machine in Rust, one file per type. The neuron side (Parts II and IV): `neuron` (the table, history and the `process functions` call), `pattern`, `history`, `cover` (recognition), `collapse`, `margin`, `pick`, `merge`, `bid`, `connection`. The machine side (Parts III and V): `machine` (the frame loop and its levels), `activation`, `neighborhood`, `election`, `index`, `death`, `connect`, `expansion`, `selection`. The dispatch: `thalamus` owns the regions and routes a neuron id to its column, `region` fans its columns out in parallel with Rayon, `column` owns a partition of the neurons and runs their calls. `offsets` is D6 and `types` the alphabet, channels and policies. |
 | `brain/brain-core/examples` | `simple` (the six-bar cycle) and `text` (a letter stream, dumping the tables asked for). |
 | `brain/brain-core/tests` | Behavioral tests: a repeated pair, varied predecessors, prediction over passes, weak activations, and the cycle settling. |
 | `brain/brain-napi` | The N-API binding: the `Brain` class. |
@@ -85,7 +85,7 @@ const ch = m.declareChannel({
 const out = m.processFrame(new Int32Array([ch.eventDim, 1, 0, 0, ch.actionDim, 1, 0, 0]),
                            [{ reward: 0.9, channels: [ch.channelId], frames: 1 }]);
 out.winners;   // what the machine infers for the frame ahead, one per dimension
-out.stats;     // waves, bids, accepted, minted, reused, retired, added, neurons, patterns, voters
+out.stats;     // levels, bids, accepted, minted, reused, retired, added, neurons, patterns, voters
 ```
 
 | Option | Default | Meaning |
@@ -115,15 +115,11 @@ lists them.
 
 ## Status
 
-The implementation follows the specification on the `wavefront` branch of the docs, with four deliberate
-departures stated at the top of `neuron.rs`: a node naming a neuron also holds where a child stands that
-covers an activation of that neuron; holding is exact, with nothing priced for a failed node; the collapse
-admits nodes one at a time and may narrow a line's uses to where a node holds; and base activations
-reported in one frame are neighbors of one another. With these the six-bar cycle is right from lap 11 and
-frozen from lap 94 at `H` 256 and radius 6, and ten fixed digit images are all recognized from episode 25.
-[docs/ucar-results.md](docs/ucar-results.md) records what the machine does on the cycle, on ten images,
-on MNIST proper and on a letter stream, the readings that were tried, what the traces show, and what is
-not implemented yet.
+The implementation follows [docs/algorithm.md](docs/algorithm.md) as it stands on the `wavefront` branch
+(f8d7f5d), with no departures; the spec documents under `docs/` are that branch's. On the six-bar cycle it
+freezes with one bar wrong at every radius from 3 to 12 and every `H` tried, and right only at radius 2
+with `H` 256 or 1024. [docs/ucar-results.md](docs/ucar-results.md) records what the machine does on the
+cycle, on MNIST and on text, the mechanism behind the cycle's wrong bar, and what is not implemented.
 
 ## Documentation
 

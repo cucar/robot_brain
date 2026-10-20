@@ -1,20 +1,6 @@
 //! One neuron (§4, §5): its table, its history and its connections, and the `process functions`
-//! call (R20) that reads them: refresh, recognize, delete, create, merge, return.
-//!
-//! The departures from the document are deliberate and marked:
-//! - A node naming a neuron holds where that neuron stands at its offset, or where a child stands that
-//!   covers an activation of that neuron at the offset (the child's expansion, R28, read at the row).
-//!   Matching (D22), seeding (D47) and the collapse (D27) read it the same way, and the bid then covers
-//!   the child. A history row records the apex alone, as D18 says.
-//! - Holding is exact (D15): a function holds only where every node holds and a variable only where every
-//!   position holds; nothing is priced for a failed node, since nothing fails (against D22's failure term).
-//! - The collapse admits nodes one at a time, and a node that holds in only some of the line's uses is
-//!   taken where what it covers there beats what the line saves in the uses given up (D27 under D15);
-//!   the uses given up fall to the residual. A line that narrows this way keeps its child's name, which
-//!   the lines above name, and the child forgets its connections; a child the line shared with another
-//!   line is let go, and the line is bought one by its new key (D36, R43).
-//! - Base activations reported in one frame are neighbors of one another (`neighborhood.rs`), where D5
-//!   admits only earlier waves.
+//! call (R20) that reads them: refresh, recognize, delete, create, merge, return. It follows
+//! docs/algorithm.md as written, with no departures.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -71,18 +57,23 @@ pub struct Neuron {
     pub radii: Vec<i32>,
     /// Value neurons of members dropped from a variable since the last call, with the variable (R38).
     pub(crate) dropped_values: Vec<(PatternId, NeuronId)>,
-    /// Children of lines that came to hold in fewer places since the last call: a child stands for what
-    /// its line names (D36), so what it learned under the places the line gave up is let go (R31).
-    pub(crate) narrowed_children: Vec<(PatternId, NeuronId)>,
+    /// What every interneuron is built over (D36), as the machine's index stood when this call's level
+    /// began, each a sorted list: no line names a neuron built over its own child (D27).
+    pub built: std::sync::Arc<FxHashMap<NeuronId, Vec<NeuronId>>>,
 }
 
 impl Neuron {
     pub fn base(id: NeuronId, kind: Kind, dim: DimId, bucket: u32, channel: ChannelId, axes: u8, h: usize, radii: Vec<i32>) -> Self {
-        Neuron { id, kind, dim: Some(dim), bucket, channel: Some(channel), axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: format!("b{}", id), radii, dropped_values: Vec::new(), narrowed_children: Vec::new() }
+        Neuron { id, kind, dim: Some(dim), bucket, channel: Some(channel), axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: format!("b{}", id), radii, dropped_values: Vec::new(), built: Default::default() }
     }
 
     pub fn inter(id: NeuronId, axes: u8, h: usize, radii: Vec<i32>) -> Self {
-        Neuron { id, kind: Kind::Inter, dim: None, bucket: 0, channel: None, axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: String::new(), radii, dropped_values: Vec::new(), narrowed_children: Vec::new() }
+        Neuron { id, kind: Kind::Inter, dim: None, bucket: 0, channel: None, axes, alive: true, table: Vec::new(), next_pid: 0, history: Vec::new(), h, connections: FxHashMap::default(), parents: Vec::new(), value: None, key: String::new(), radii, dropped_values: Vec::new(), built: Default::default() }
+    }
+
+    /// Whether `x` is `c` or built over it: what `x` stands for passes through `c` (D27, D36).
+    pub(crate) fn is_built_over(&self, x: NeuronId, c: NeuronId) -> bool {
+        x == c || self.built.get(&x).map_or(false, |v| v.binary_search(&c).is_ok())
     }
 
     pub fn pattern(&self, pid: PatternId) -> Option<&Pattern> { self.table.iter().find(|p| p.id == pid) }
@@ -139,7 +130,7 @@ impl Neuron {
         let added = self.create(ctx);
         // merge (§5.5)
         retired.extend(self.merge());
-        for (pid, vn) in std::mem::take(&mut self.dropped_values) { retired.push(Retired { pattern: pid, child: None, value_neurons: vec![vn], member_only: true }); }
+        for (pid, vn) in std::mem::take(&mut self.dropped_values) { retired.push(Retired { pattern: pid, child: None, value_neurons: vec![vn], member_only: true, line: None }); }
         if ctx.trace {
             for p in self.table.iter().filter(|p| p.id >= before) { eprintln!("[add f{} #{}] p{} {} margin {:.1}", ctx.frame, self.id, p.id, describe_body(&p.body), self.margin(p.id, ctx)); }
             for r in retired.iter().filter(|r| !r.member_only) { eprintln!("[retire f{} #{}] p{} child={:?}", ctx.frame, self.id, r.pattern, r.child); }

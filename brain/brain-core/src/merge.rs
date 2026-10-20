@@ -64,7 +64,7 @@ impl Neuron {
             let idx = self.index_of(pid).unwrap();
             let p = self.table.remove(idx);
             let child = if moved_child { None } else { p.child() };
-            out.push(Retired { pattern: pid, child, value_neurons: retired_values, member_only: false });
+            out.push(Retired { pattern: pid, child, value_neurons: retired_values, member_only: false, line: Some(p) });
         }
         out
     }
