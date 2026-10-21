@@ -4,13 +4,13 @@
 use crate::neuron::*;
 use crate::types::*;
 
-/// Which pattern fired an activation and what its variables held (§6.4).
+/// Which function fired an activation, and its arguments: per variable place, the neuron bound there and
+/// its activation (§6.4, D37).
 #[derive(Clone, Debug)]
 pub struct FiredBy {
     pub owner: NeuronId,
     pub pattern: PatternId,
-    /// Per variable named: (variable, member, value neuron).
-    pub values: Vec<(PatternId, NeuronId, Option<NeuronId>)>,
+    pub args: Vec<(usize, NeuronId, ActRef)>,
 }
 
 /// One standing inference (R45): a connection as it was read at age 0.
@@ -36,6 +36,8 @@ pub struct Act {
     pub span: Pos,
     pub reach: Pos,
     pub covered_at: Option<u32>,
+    /// The age at which an accepted bid bound it in a variable (D10, D24): credited, and still on the apex.
+    pub bound_at: Option<u32>,
     pub coverer: Option<ActRef>,
     pub covers: Vec<ActRef>,
     pub fired_by: Option<FiredBy>,

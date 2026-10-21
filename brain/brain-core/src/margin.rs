@@ -1,139 +1,98 @@
 //! Margin and retirement (D30, R18, R41).
 
-use rustc_hash::{FxHashSet};
-
 use crate::neuron::*;
 use crate::types::*;
 
 impl Neuron {
     // ───────────────────────────── margin and retirement (D30, R18, R41) ─────────────────────────────
 
-    /// What a pattern saves over the history less its line (D30).
-    pub fn margin(&self, pid: PatternId, ctx: Ctx) -> f64 {
-        let Some(p) = self.pattern(pid) else { return 0.0 };
-        self.benefit(pid, ctx) - self.line_cost(p, ctx)
+    /// What a function is worth over the history less its entry in the table (D30).
+    pub fn margin(&self, fid: PatternId, ctx: Ctx) -> f64 {
+        let Some(f) = self.function(fid) else { return 0.0 };
+        self.benefit(fid, ctx) - self.entry(f, ctx)
     }
 
+    /// What one entry of a row's cover saves (D22), read with the row's owners as they stand: what it was
+    /// credited, less the bidder, which function, its choices and its failures.
     pub(crate) fn entry_savings(&self, row: &Row, e: &CoverEntry) -> f64 {
-        let wp = self.which_pattern_bits();
+        let wf = self.which_function_bits();
         let mut coverage = 0.0;
-        let mut choices = 0.0;
-        let mut p_size = 0u32;
-        for nb in &e.nodes {
-            match &nb.var {
-                Some(v) => {
-                    let vp = self.pattern(v.var);
-                    p_size += vp.map_or(1, |q| q.positions() as u32);
-                    choices += v.choice;
-                    for pj in v.positions.iter().flatten() { if row.owner[*pj] == Some(e.pattern) { coverage += row.credit(*pj); } }
-                }
-                None => {
-                    p_size += 1;
-                    for &j in &nb.nbs { if row.owner[j] == Some(e.pattern) { coverage += row.credit(j); } }
-                }
-            }
-        }
-        if e.credited_owner && row.owner_self == Some(e.pattern) { coverage += row.own_cost; }
-        let price = row.own_cost + wp + choices + e.failed as f64 * log2(p_size.max(1) as f64);
-        coverage - price
+        let mut seen: Vec<usize> = Vec::new();
+        for b in &e.binds { for &j in &b.nbs { if row.owner[j] == Some(e.function) && !seen.contains(&j) { seen.push(j); coverage += row.credit(j); } } }
+        if e.credited_owner && row.owner_self == Some(e.function) { coverage += row.own_cost; }
+        let p = self.function(e.function).map_or(1, |f| f.p_size().max(1));
+        coverage - (row.own_cost + wf + e.choice + e.failed as f64 * log2(p as f64))
     }
 
-    /// A row's cover savings as it stands (D22 summed), or without one pattern (D30).
-    pub(crate) fn cover_savings(&self, i: usize, without: Option<PatternId>, ctx: Ctx) -> f64 {
+    /// What a cover saves over a row (D22 summed), with its owners as that cover would set them.
+    pub(crate) fn savings_of_cover(&self, i: usize, cover: &[CoverEntry]) -> f64 {
         let row = &self.history[i];
-        match without {
-            None => row.cover.iter().map(|e| self.entry_savings(row, e)).sum(),
-            Some(x) => {
-                if !row.cover.iter().any(|e| e.pattern == x || e.nodes.iter().any(|nb| nb.var.as_ref().map_or(false, |v| v.var == x))) {
-                    return row.cover.iter().map(|e| self.entry_savings(row, e)).sum();
-                }
-                let cover = self.greedy_cover_without(i, Some(x), ctx);
-                self.savings_of_cover(i, &cover)
-            }
+        let mut tmp = row.clone();
+        let n = tmp.nbs.len();
+        tmp.owner = vec![None; n];
+        tmp.owner_self = None;
+        for e in cover {
+            if e.credited_owner && tmp.owner_self.is_none() { tmp.owner_self = Some(e.function); }
+            for b in &e.binds { for &j in &b.nbs { if tmp.owner[j].is_none() { tmp.owner[j] = Some(e.function); } } }
         }
+        cover.iter().map(|e| self.entry_savings(&tmp, e)).sum()
     }
 
-    pub(crate) fn benefit(&self, pid: PatternId, ctx: Ctx) -> f64 {
-        let Some(p) = self.pattern(pid) else { return 0.0 };
+    /// The benefit of a function (D30): over the rows it covers, what the cover saves with it less what the
+    /// cover the row would have without it saves.
+    pub(crate) fn benefit(&self, fid: PatternId, ctx: Ctx) -> f64 {
         let mut total = 0.0;
-        if p.is_function() {
-            // each use once, in its latest row
-            let mut seen: FxHashSet<Pos> = FxHashSet::default();
-            for i in (0..self.history.len()).rev() {
-                let row = &self.history[i];
-                let places: Vec<Pos> = row.cover.iter().filter(|e| e.pattern == pid).map(|e| e.place).collect();
-                if places.is_empty() { continue; }
-                if places.iter().all(|pl| seen.contains(pl)) { continue; }
-                for pl in &places { seen.insert(*pl); }
-                total += self.cover_savings(i, None, ctx) - self.cover_savings(i, Some(pid), ctx);
-            }
-        } else {
-            let mut seen: FxHashSet<Pos> = FxHashSet::default();
-            for i in (0..self.history.len()).rev() {
-                let row = &self.history[i];
-                for e in &row.cover {
-                    for nb in &e.nodes {
-                        let Some(v) = &nb.var else { continue };
-                        if v.var != pid { continue; }
-                        let Some(place) = nb_place(row, v) else { continue };
-                        if !seen.insert(place) { continue; }
-                        // part(x, O): what it holds less its choice, less a failed neighbor per position that
-                        // does not hold, |x| being a parameter's positions and one for a class (D22)
-                        let mut c = 0.0;
-                        for pj in v.positions.iter().flatten() { if row.owner[*pj] == Some(e.pattern) { c += row.credit(*pj); } }
-                        let x = self.pattern(pid).map_or(1, |q| q.positions());
-                        total += c - v.choice - v.failed as f64 * log2(x as f64);
-                    }
-                }
-            }
+        for i in self.rows_of(fid) {
+            let row = &self.history[i];
+            let with: f64 = row.cover.iter().map(|e| self.entry_savings(row, e)).sum();
+            let without = self.greedy_cover(i, Some(fid), ctx);
+            total += with - self.savings_of_cover(i, &without);
         }
         total
     }
 
-    /// Retire every pattern whose margin is strictly negative, every parameter left with fewer than two
-    /// positions, every class left with one member, and a function left with fewer than two nodes (R18,
-    /// R41): all measured on the table as it stands, and retired together.
+    /// Retire every function whose margin is strictly negative, measured on the table as it stands and
+    /// retired together, and every class no function uses or left with one member (R18, R41).
     pub(crate) fn retire(&mut self, ctx: Ctx) -> Vec<Retired> {
         let mut doomed: Vec<PatternId> = Vec::new();
-        for p in &self.table {
-            let degenerate = match &p.body {
-                Body::Parameter { offsets, .. } => offsets.len() < 2,
-                Body::Class { members, .. } => members.len() < 2,
-                Body::Function { nodes, .. } => nodes.len() < 2,
-            };
-            if degenerate || self.margin(p.id, ctx) < 0.0 {
-                if ctx.trace {
-                    eprintln!("[why f{} #{}] p{} {} {}: benefit {:.1} line {:.1}", ctx.frame, self.id, p.id, describe_body(&p.body), if degenerate { "degenerate" } else { "margin<0" }, self.benefit(p.id, ctx), self.line_cost(p, ctx));
-                }
-                doomed.push(p.id);
+        for f in &self.functions {
+            if f.p_size() == 0 || self.margin(f.id, ctx) < 0.0 {
+                if ctx.trace { eprintln!("[why f{} #{}] p{} {}: benefit {:.1} entry {:.1}", ctx.frame, self.id, f.id, describe_function(f), self.benefit(f.id, ctx), self.entry(f, ctx)); }
+                doomed.push(f.id);
             }
         }
         let mut out = Vec::new();
-        for pid in doomed { if self.pattern(pid).is_some() { out.push(self.remove_pattern(pid)); } }
-        // the neurons they held fall to the residual (R18): the rows are covered again
+        for fid in doomed { out.push(self.remove_function(fid)); }
+        out.extend(self.drop_dead_classes());
         if !out.is_empty() { self.recognize(ctx); }
         out
     }
 
-    /// Delete a pattern from the table; its covers fall to the residual.
-    pub(crate) fn remove_pattern(&mut self, pid: PatternId) -> Retired {
-        let idx = self.index_of(pid).unwrap();
-        let p = self.table.remove(idx);
-        let value_neurons: Vec<NeuronId> = p.members().iter().filter_map(|m| m.value_neuron).collect();
-        // functions naming the variable lose the node
-        for q in self.table.iter_mut() {
-            if let Body::Function { nodes, .. } = &mut q.body {
-                if nodes.iter().any(|(n, _)| *n == Node::Var(pid)) {
-                    let keep: Vec<(Node, Offset)> = nodes.iter().copied().filter(|(n, _)| *n != Node::Var(pid)).collect();
-                    *nodes = canonical(keep);
-                }
+    /// Delete the classes no function uses or that are left with one member (R41); the places that used
+    /// one are re-decided at their function's next collapse, and a function left with nothing besides the
+    /// owner goes.
+    pub(crate) fn drop_dead_classes(&mut self) -> Vec<Retired> {
+        let dead: Vec<PatternId> = self.classes.iter().filter(|c| c.members.len() < 2 || !self.functions.iter().any(|f| f.uses_class(c.id))).map(|c| c.id).collect();
+        if dead.is_empty() { return Vec::new(); }
+        self.classes.retain(|c| !dead.contains(&c.id));
+        let mut hit: Vec<PatternId> = Vec::new();
+        for f in self.functions.iter_mut() {
+            if f.places.iter().any(|(p, _)| matches!(p, Place::Class(k) if dead.contains(k))) {
+                f.places.retain(|(p, _)| !matches!(p, Place::Class(k) if dead.contains(k)));
+                f.canonicalize();
+                hit.push(f.id);
             }
         }
-        for row in self.history.iter_mut() {
-            let had = row.cover.iter().any(|e| e.pattern == pid || e.nodes.iter().any(|nb| nb.var.as_ref().map_or(false, |v| v.var == pid)));
-            if had { row.dirty = true; }
-        }
-        Retired { pattern: pid, child: p.child(), value_neurons, member_only: false, line: Some(p) }
+        for row in self.history.iter_mut() { if row.cover.iter().any(|e| hit.contains(&e.function)) { row.dirty = true; } }
+        let empty: Vec<PatternId> = self.functions.iter().filter(|f| f.p_size() == 0).map(|f| f.id).collect();
+        empty.into_iter().map(|fid| self.remove_function(fid)).collect()
     }
 
+    /// Delete a function from the table; what it held falls to the residual.
+    pub(crate) fn remove_function(&mut self, fid: PatternId) -> Retired {
+        let idx = self.functions.iter().position(|f| f.id == fid).unwrap();
+        let f = self.functions.remove(idx);
+        for row in self.history.iter_mut() { if row.cover.iter().any(|e| e.function == fid) { row.dirty = true; } }
+        Retired { pattern: fid, child: f.child, line: Some(f) }
+    }
 }

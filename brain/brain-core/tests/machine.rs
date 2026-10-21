@@ -1,7 +1,7 @@
 //! Behavioral tests on the machine: what forms over a letter stream (algorithm-text.md), the six-bar
 //! cycle (algorithm-stocks.md), and the weak activation rule (D40).
 use brain_core::machine::Machine;
-use brain_core::neuron::{Body, Node};
+use brain_core::neuron::Place;
 use brain_core::types::*;
 
 fn stream(m: &mut Machine, dim: DimId, text: &str) -> Vec<Option<u32>> {
@@ -23,29 +23,27 @@ fn a_repeated_pair_gets_a_function_and_a_child() {
     let a = m.base_neuron(dim, b'a' as u32);
     let nb = &m.thalamus[b];
     // b's table names the owner and a at -1 (D47, D27), and the election gave it a child (R16)
-    let f = nb.table.iter().find(|p| matches!(&p.body, Body::Function { nodes, .. } if nodes.iter().any(|(n, o)| *n == Node::Neuron(a) && o[0] == -1) && nodes.iter().any(|(n, _)| *n == Node::Owner)));
+    let f = nb.functions.iter().find(|f| f.places.iter().any(|(p, o)| *p == Place::Fixed(a) && o[0] == -1));
     assert!(f.is_some(), "b should name a at -1: {}", m.describe_neuron(b));
-    assert!(f.unwrap().child().is_some(), "the pattern should have been bought a child: {}", m.describe_neuron(b));
+    assert!(f.unwrap().child.is_some(), "the function should have been bought a child: {}", m.describe_neuron(b));
     assert!(m.height_counts().len() >= 2);
 }
 
-/// Different letters stand before h (algorithm-text.md §2). Under D27 and D33 as written each letter
-/// that recurs is named outright by a function before a class over two of them pays, since a function
-/// needs one pair twice and a class needs two members twice; so h holds a function per predecessor.
+/// Different letters stand before h (algorithm-text.md §2): h's table holds a function naming h and a
+/// class at -1 whose members are the letters that recurred there (D38, D41, D47), and it was bought.
 #[test]
-fn varied_predecessors_are_each_named() {
+fn varied_predecessors_form_a_class() {
     let mut m = Machine::new(64, Policy::all_on(), 1);
     let ch = m.declare_channel("text", Some(("letter", 256)), None, &[]);
     let dim = m.channels[ch as usize].event.unwrap();
     stream(&mut m, dim, "th ch sh wh th ch sh wh th ch sh wh th ch sh wh ");
     let h = m.base_neuron(dim, b'h' as u32);
     let nh = &m.thalamus[h];
-    let named: Vec<NeuronId> = nh.table.iter().filter_map(|p| match &p.body {
-        Body::Function { nodes, .. } => nodes.iter().find(|(n, o)| matches!(n, Node::Neuron(_)) && o[0] == -1).map(|(n, _)| if let Node::Neuron(x) = n { *x } else { 0 }),
-        _ => None,
-    }).collect();
-    assert!(named.len() >= 4, "h should name its predecessors at -1: {}", m.describe_neuron(h));
-    for p in &nh.table { assert!(p.child().is_some(), "every line should have been bought: {}", m.describe_neuron(h)); }
+    let f = nh.functions.iter().find(|f| f.places.iter().any(|(p, o)| matches!(p, Place::Class(_)) && o[0] == -1));
+    assert!(f.is_some(), "h should hold a class at -1: {}", m.describe_neuron(h));
+    let k = f.unwrap().places.iter().find_map(|(p, _)| if let Place::Class(k) = p { Some(*k) } else { None }).unwrap();
+    assert!(nh.class(k).unwrap().members.len() >= 2, "the class should hold the letters before h: {}", m.describe_neuron(h));
+    assert!(f.unwrap().child.is_some(), "the function should have been bought: {}", m.describe_neuron(h));
 }
 
 #[test]

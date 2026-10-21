@@ -185,78 +185,74 @@ impl Machine {
         for (r, k) in strikes { if let Some(a) = self.act_mut(r) { a.inferences[k].struck = true; } }
     }
 
-    /// The match of one inference completing at `at` (R49): the inferred call neuron's line, one expansion
-    /// down, placed back from the completion; each node in a frame that has happened credits what stands
-    /// at its offset, credits less an offset where it stands elsewhere within reach, and charges a failed
-    /// neighbor where it stands nowhere; a variable is bound from what stands at its positions and charges
-    /// its choice. Proposed when the credit exceeds which pattern and the charges. None where nothing of
-    /// the line has happened yet, or the target has no line to read.
+    /// The match of one inference completing at `at` (R49): the inferred call neuron's function, one
+    /// expansion down, placed back from the completion; each fixed node in a frame that has happened
+    /// credits what stands at its offset, credits less an offset where it stands elsewhere within reach,
+    /// and charges a failed node where it stands nowhere; a variable is bound from what stands at its places
+    /// that have happened and charges its choice, a place holding nothing it could take charging a failed
+    /// node. Proposed when the credit exceeds which function and the charges. None where nothing of the
+    /// function has happened yet, or the target has no function to read.
     pub(crate) fn match_one(&self, target: NeuronId, at: Pos, apex: &FxHashMap<Frame, Vec<(NeuronId, Pos, f64)>>, now: Frame) -> Option<bool> {
         let t = self.thalamus.get(target)?;
-        if t.kind != Kind::Inter || t.value.is_some() { return None; }
+        if t.kind != Kind::Inter { return None; }
         let &(owner, pid) = t.parents.first()?;
-        let p = self.line(owner, pid)?;
-        let Body::Function { nodes, .. } = &p.body else { return None };
+        let f = self.line(owner, pid)?;
         let on = &self.thalamus[owner];
-        let wp = on.which_pattern_bits();
-        let p_size: usize = nodes.iter().map(|(n, _)| match n { Node::Var(v) => self.line(owner, *v).map_or(1, |q| q.positions()), _ => 1 }).sum();
-        let fail = log2(p_size.max(1) as f64);
+        let wf = on.which_function_bits();
+        let fail = log2(f.p_size().max(1) as f64);
         let reach = self.reach_for(t.axes, &self.spans[target as usize]);
         let offset_bits = crate::offsets::offset_bits(&reach, &self.radii, t.axes);
-        let mut center = [0i32; MAX_DIMS];
-        for d in 1..self.radii.len() {
-            let lo = nodes.iter().map(|(_, o)| o[d]).min().unwrap_or(0);
-            let hi = nodes.iter().map(|(_, o)| o[d]).max().unwrap_or(0);
-            center[d] = lo + (hi - lo) / 2;
-        }
-        let place = |off: &Offset| { let mut q = at; q[0] += off[0]; for d in 1..MAX_DIMS { q[d] += off[d] - center[d]; } q };
         let same_group = |a: &Pos, b: &Pos| round_delta(&sub(a, &at), &self.radii, t.axes) == round_delta(&sub(b, &at), &self.radii, t.axes);
         let mut credit = 0.0;
         let mut charge = 0.0;
         let mut judged = 0;
-        for (node, off) in nodes {
-            let q = place(off);
+        for (place, off) in f.places.iter().skip(1) {
+            let q = add(&at, off);
             if q[0] as i64 > now { continue; }
-            match node {
-                // the bidder is on neither side: it is ahead
-                Node::Owner => continue,
-                Node::Neuron(m) => {
+            match place {
+                Place::Owner | Place::Param(_) => {}
+                Place::Fixed(m) => {
                     judged += 1;
                     let Some(list) = apex.get(&(q[0] as i64)) else { charge += fail; continue };
                     if let Some((_, _, c)) = list.iter().find(|(n, p, _)| n == m && same_group(p, &q)) { credit += c; }
-                    else if let Some((_, _, c)) = self.frames.iter().filter(|f| (now - f.no) <= reach[0] as i64).flat_map(|f| apex.get(&f.no).into_iter().flatten()).find(|(n, p, _)| n == m && (0..self.radii.len()).all(|d| (p[d] - q[d]).abs() <= reach[d])) { credit += c - offset_bits; }
+                    else if let Some((_, _, c)) = self.frames.iter().filter(|fr| (now - fr.no) <= reach[0] as i64).flat_map(|fr| apex.get(&fr.no).into_iter().flatten()).find(|(n, p, _)| n == m && (0..self.radii.len()).all(|d| (p[d] - q[d]).abs() <= reach[d])) { credit += c - offset_bits; }
                     else { charge += fail; }
                 }
-                Node::Var(v) => {
-                    let Some(vp) = self.line(owner, *v) else { continue };
+                Place::Class(k) => {
+                    let Some(c) = on.class(*k) else { continue };
                     judged += 1;
-                    charge += vp.choice();
-                    match &vp.body {
-                        Body::Class { members, .. } => {
-                            let found = apex.get(&(q[0] as i64)).and_then(|l| l.iter().find(|(n, p, _)| members.iter().any(|mm| mm.neuron == *n) && same_group(p, &q)));
-                            match found { Some((_, _, c)) => credit += c, None => charge += fail }
-                        }
-                        Body::Parameter { offsets, .. } => {
-                            let mut seen: Vec<(NeuronId, f64)> = Vec::new();
-                            let mut holes = 0;
-                            for o in offsets {
-                                let r = add(&q, o);
-                                if r[0] as i64 > now { continue; }
-                                match apex.get(&(r[0] as i64)).and_then(|l| l.iter().find(|(_, p, _)| *p == r)) { Some((n, _, c)) => seen.push((self.follow(*n), *c)), None => holes += 1 }
-                            }
-                            let mut tally: FxHashMap<NeuronId, usize> = FxHashMap::default();
-                            for (n, _) in &seen { *tally.entry(*n).or_default() += 1; }
-                            let value = tally.iter().max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0))).map(|(n, _)| *n);
-                            for (n, c) in &seen { if Some(*n) == value { credit += c; } else { charge += fail; } }
-                            charge += holes as f64 * fail;
-                        }
-                        _ => {}
-                    }
+                    charge += c.choice();
+                    let found = apex.get(&(q[0] as i64)).and_then(|l| l.iter().find(|(n, p, _)| c.has(*n) && same_group(p, &q)));
+                    match found { Some((_, _, x)) => credit += x, None => charge += fail }
+                }
+            }
+        }
+        // parameters: the value is what stands at most of the places that have happened (D44)
+        for (k, param) in f.params.iter().enumerate() {
+            let mut seen: Vec<Vec<(NeuronId, f64)>> = Vec::new();
+            for qi in f.param_places(k as u32) {
+                let q = add(&at, &f.places[qi].1);
+                if q[0] as i64 > now { continue; }
+                seen.push(apex.get(&(q[0] as i64)).map(|l| l.iter().filter(|(_, p, _)| same_group(p, &q)).map(|(n, _, c)| (*n, *c)).collect()).unwrap_or_default());
+            }
+            if seen.is_empty() { continue; }
+            judged += 1;
+            charge += param.choice();
+            let mut tally: FxHashMap<NeuronId, usize> = FxHashMap::default();
+            for at_place in &seen {
+                let mut once: Vec<NeuronId> = Vec::new();
+                for (n, _) in at_place { if !once.contains(n) { once.push(*n); *tally.entry(*n).or_default() += 1; } }
+            }
+            let value = tally.iter().max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0))).map(|(n, _)| *n);
+            for at_place in &seen {
+                match value.and_then(|v| at_place.iter().find(|(n, _)| *n == v)) {
+                    Some((_, c)) => credit += c,
+                    None => charge += fail,
                 }
             }
         }
         if judged == 0 { return None; }
-        Some(credit > wp + charge)
+        Some(credit > wf + charge)
     }
 
 }

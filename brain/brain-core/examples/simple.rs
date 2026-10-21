@@ -59,11 +59,11 @@ fn main() {
             }
             println!("{}", line);
             let base_ids: Vec<NeuronId> = vec![m.base_neuron(ev, 0), m.base_neuron(ev, 1), m.base_neuron(ac, 0), m.base_neuron(ac, 1)];
-            for id in base_ids.into_iter().filter(|&id| !m.thalamus[id].table.is_empty()) {
+            for id in base_ids.into_iter().filter(|&id| !m.thalamus[id].functions.is_empty()) {
                 print!("{}", m.describe_neuron(id).lines().filter(|l| !l.contains("->")).collect::<Vec<_>>().join("\n"));
                 println!();
             }
-            for nn in m.thalamus.iter().filter(|x| x.alive && x.kind == Kind::Inter && !x.table.is_empty()) {
+            for nn in m.thalamus.iter().filter(|x| x.alive && x.kind == Kind::Inter && !x.functions.is_empty()) {
                 print!("{}", m.describe_neuron(nn.id).lines().filter(|l| !l.contains("->")).map(|l| l.replace("parents=", "par=")).collect::<Vec<_>>().join("\n"));
                 println!();
             }
@@ -95,11 +95,11 @@ fn main() {
     if std::env::var("UCAR_LEAK").is_ok() {
         for nn in m.thalamus.iter().filter(|x| x.alive && x.kind == Kind::Inter) {
             let open = m.frames.iter().any(|f| f.acts.iter().any(|a| a.neuron == nn.id));
-            println!("#{} parents={:?} ledger={} open={} H={} table={} value={}", nn.id, nn.parents, m.ledger.contains(&nn.id), open, nn.history.len(), nn.table.len(), nn.value.is_some());
+            println!("#{} parents={:?} ledger={} open={} H={} table={}", nn.id, nn.parents, m.ledger.contains(&nn.id), open, nn.history.len(), nn.functions.len());
         }
     }
     if std::env::var("UCAR_DUMP").is_ok() {
-        for nn in m.thalamus.iter().filter(|x| x.alive && (!x.table.is_empty() || x.kind == Kind::Inter)) {
+        for nn in m.thalamus.iter().filter(|x| x.alive && (!x.functions.is_empty() || x.kind == Kind::Inter)) {
             print!("{}", m.describe_neuron(nn.id));
         }
     }

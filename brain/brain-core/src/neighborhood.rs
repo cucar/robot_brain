@@ -19,7 +19,7 @@ impl Machine {
             for (i, b) in f.acts.iter().enumerate() {
                 let r = ActRef { frame: f.no, index: i as u32 };
                 if r == me || b.gone { continue; }
-                // both on the apex (R27)
+                // both on the apex (R27): what a bid bound stays there (D10)
                 if b.covered_at.is_some() { continue; }
                 if !self.cfg.policy.past[a.kind as usize][b.kind as usize] { continue; }
                 let shared = a.axes & b.axes;
@@ -32,12 +32,14 @@ impl Machine {
                     if delta[d].abs() > a.reach[d] { ok = false; break; }
                 }
                 if !ok { continue; }
-                let value = self.thalamus[b.neuron].value;
                 // a child stands in for what it stands for (D22, D47): every node of its expansion (R28)
                 let (covers, stands_for) = if b.kind == Kind::Inter {
                     let mut base = Vec::new();
                     let mut all = Vec::new();
                     self.expand_into(b.neuron, b.pos, &mut Vec::new(), &mut base, Some(&mut all), b.fired_by.as_ref());
+                    // one that stands for `a` itself is built over it, not beside it: a weak pattern placed at
+                    // `a`'s coordinate (R30) is where the call `a`'s bid would buy fires, a level above (D53)
+                    if base.iter().chain(all.iter()).any(|(n, p)| *n == a.neuron && *p == a.pos) { continue; }
                     // what it stands for counts inside the box the neighborhood spans, as every node does (D15)
                     let inside = |p: &Pos| {
                         let dt = a.pos[0] - p[0];
@@ -46,14 +48,14 @@ impl Machine {
                     (base.into_iter().filter(|(_, p)| inside(p)).map(|(n, p)| (n, sub(&p, &a.pos))).collect(),
                      all.into_iter().filter(|(_, p)| inside(p)).map(|(n, p)| (n, sub(&p, &a.pos))).collect())
                 } else { (Vec::new(), Vec::new()) };
-                out.push(Nb { act: r, neuron: b.neuron, delta, cost: b.cost, value, covers, stands_for });
+                out.push(Nb { act: r, neuron: b.neuron, delta, cost: b.cost, covers, stands_for });
             }
         }
         out
     }
 
-    /// Every neuron what `n` stands for passes through (D36), over every line wired to it, down to base
-    /// symbols: sorted, without `n` itself.
+    /// Every neuron what `n` stands for passes through (D36), over every function wired to it, down to base
+    /// symbols, the variables left open: sorted, without `n` itself.
     pub(crate) fn through_of(&self, n: NeuronId) -> Vec<NeuronId> {
         let mut seen: rustc_hash::FxHashSet<NeuronId> = rustc_hash::FxHashSet::default();
         let mut stack = vec![n];
@@ -61,19 +63,13 @@ impl Machine {
             let Some(xn) = self.thalamus.get(x) else { continue };
             if xn.kind != Kind::Inter { continue; }
             let push = |m: NeuronId, seen: &mut rustc_hash::FxHashSet<NeuronId>, stack: &mut Vec<NeuronId>| { if m != n && seen.insert(m) { stack.push(m); } };
-            if let Some(v) = xn.value {
-                push(v.member, &mut seen, &mut stack);
-                continue;
-            }
             for &(owner, pid) in &xn.parents {
-                let Some(p) = self.line(owner, pid) else { continue };
-                let Body::Function { nodes, .. } = &p.body else { continue };
-                for (node, _) in nodes {
-                    match node {
-                        Node::Owner => push(owner, &mut seen, &mut stack),
-                        Node::Neuron(m) => push(*m, &mut seen, &mut stack),
-                        // a call neuron stands for its relations with the variables left open (D36)
-                        Node::Var(_) => {}
+                let Some(f) = self.line(owner, pid) else { continue };
+                for (place, _) in &f.places {
+                    match place {
+                        Place::Owner => push(owner, &mut seen, &mut stack),
+                        Place::Fixed(m) => push(*m, &mut seen, &mut stack),
+                        Place::Class(_) | Place::Param(_) => {}
                     }
                 }
             }

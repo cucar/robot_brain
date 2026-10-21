@@ -1,110 +1,142 @@
-//! What a neuron names (D15, D16, D38): nodes, functions, classes and parameters, and their lines.
+//! What a neuron names (D15, D16, D34, D38, D41, D44): functions, each the owner's activation with fixed
+//! nodes and variables at offsets from it, and the classes its functions use.
 
-
-use crate::neuron::*;
 use crate::types::*;
 
+/// One place of a function (D16, D38): the owner's activation at offset zero, a fixed node, a class used
+/// as a variable, or one place of a parameter of the function.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
-pub enum Node {
+pub enum Place {
     Owner,
-    Neuron(NeuronId),
-    Var(PatternId),
+    Fixed(NeuronId),
+    Class(PatternId),
+    /// A parameter of this function, by its index in the function's parameters.
+    Param(u32),
 }
 
-/// A value neuron's value as a neighbor carries it (D7, D45): its variable and the member, followed
-/// through value neurons to a neuron that is not one.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct Value {
-    pub owner: NeuronId,
-    pub var: PatternId,
-    pub member: NeuronId,
-}
-
-
-#[derive(Clone, Debug)]
+/// A member of a class or a parameter, with how many uses it stood in (D41, D44).
+#[derive(Clone, Debug, PartialEq)]
 pub struct Member {
     pub neuron: NeuronId,
     pub count: usize,
-    pub value_neuron: Option<NeuronId>,
 }
 
-#[derive(Clone, Debug)]
-pub enum Body {
-    /// A set of relations connecting its nodes (D15, D34), written as each node's offset from the
-    /// reference node, `nodes[0]`, which stands at offset zero: the owner where the function names it,
-    /// else the node latest in time.
-    Function { nodes: Vec<(Node, Offset)>, child: Option<NeuronId> },
-    /// Its members and nothing else (D41); `anchor` is the seed's offset from its node, the coordinates
-    /// it stands at before any function names it (D27).
-    Class { members: Vec<Member>, anchor: (Node, Offset) },
-    /// Its offsets between positions, the first at zero (D44), and its members as a record.
-    Parameter { offsets: Vec<Offset>, members: Vec<Member> },
+/// A parameter (D44): the places of its function that hold one and the same neuron, and as a record the
+/// neurons that have stood at all of them.
+#[derive(Clone, Debug, Default)]
+pub struct Param {
+    pub members: Vec<Member>,
 }
 
+/// A function (D15, D38): the owner's activation at offset zero and its other places at their offsets
+/// from it, written rounded (D6); its parameters; its child, a call neuron (D48).
 #[derive(Clone, Debug)]
-pub struct Pattern {
+pub struct Function {
     pub id: PatternId,
-    pub body: Body,
+    /// `places[0]` is the owner at offset zero; the rest in canonical order.
+    pub places: Vec<(Place, Offset)>,
+    pub params: Vec<Param>,
+    pub child: Option<NeuronId>,
 }
 
-impl Pattern {
-    pub fn is_function(&self) -> bool { matches!(self.body, Body::Function { .. }) }
-    pub fn is_variable(&self) -> bool { !self.is_function() }
-    pub fn child(&self) -> Option<NeuronId> { if let Body::Function { child, .. } = &self.body { *child } else { None } }
-    pub fn members(&self) -> &[Member] {
-        match &self.body { Body::Class { members, .. } | Body::Parameter { members, .. } => members, _ => &[] }
-    }
-    pub fn members_mut(&mut self) -> &mut Vec<Member> {
-        match &mut self.body { Body::Class { members, .. } | Body::Parameter { members, .. } => members, _ => unreachable!() }
-    }
-    pub fn positions(&self) -> usize {
-        match &self.body { Body::Parameter { offsets, .. } => offsets.len(), _ => 1 }
-    }
-    pub fn member(&self, n: NeuronId) -> Option<&Member> { self.members().iter().find(|m| m.neuron == n) }
+/// A class (D41): a set of neurons the table holds, one of which stands where a function uses it.
+#[derive(Clone, Debug)]
+pub struct Class {
+    pub id: PatternId,
+    pub members: Vec<Member>,
+}
+
+impl Class {
+    pub fn has(&self, n: NeuronId) -> bool { self.members.iter().any(|m| m.neuron == n) }
     /// Which member: `log₂ |K|` (D13).
-    pub fn choice(&self) -> f64 { log2(self.members().len() as f64) }
+    pub fn choice(&self) -> f64 { log2(self.members.len() as f64) }
     /// The most frequent member, the oldest on a tie (R28).
-    pub fn frequent_member(&self) -> Option<NeuronId> {
-        let mut best: Option<&Member> = None;
-        for m in self.members() {
-            if best.map_or(true, |b| m.count > b.count || (m.count == b.count && m.neuron < b.neuron)) { best = Some(m); }
-        }
-        best.map(|m| m.neuron)
-    }
+    pub fn frequent(&self) -> Option<NeuronId> { frequent(&self.members) }
 }
 
-/// A connection (D25): exposures and what they earned.
-
-pub fn describe_body(b: &Body) -> String {
-    let node = |n: &Node| match n { Node::Owner => "me".to_string(), Node::Neuron(x) => format!("#{}", x), Node::Var(v) => format!("p{}", v) };
-    match b {
-        Body::Function { nodes, child } => format!("F[{}] child={}", nodes.iter().map(|(n, o)| format!("{}@{}", node(n), o[0])).collect::<Vec<_>>().join(" "), child.map_or("-".to_string(), |c| format!("#{}", c))),
-        Body::Class { members, anchor } => format!("C{{{}}} at {}@{}", members.iter().map(|m| format!("#{}x{}{}", m.neuron, m.count, m.value_neuron.map_or(String::new(), |v| format!("=#{}", v)))).collect::<Vec<_>>().join(","), node(&anchor.0), anchor.1[0]),
-        Body::Parameter { offsets, members } => format!("P[{}] {{{}}}", offsets.iter().map(|o| o[0].to_string()).collect::<Vec<_>>().join(","), members.iter().map(|m| format!("#{}x{}{}", m.neuron, m.count, m.value_neuron.map_or(String::new(), |v| format!("=#{}", v)))).collect::<Vec<_>>().join(",")),
-    }
+impl Param {
+    /// Which member: `log₂ |K|` over the record, the value counted where it is new (D13, D44).
+    pub fn choice(&self) -> f64 { log2(self.members.len().max(1) as f64) }
 }
 
+pub fn frequent(members: &[Member]) -> Option<NeuronId> {
+    let mut best: Option<&Member> = None;
+    for m in members {
+        if best.map_or(true, |b| m.count > b.count || (m.count == b.count && m.neuron < b.neuron)) { best = Some(m); }
+    }
+    best.map(|m| m.neuron)
+}
 
-/// The canonical form of a function's nodes (D34, D43): the owner first where named, else the node
-/// latest in time, at offset zero; the rest sorted by offset then node.
-pub fn canonical(nodes: Vec<(Node, Offset)>) -> Vec<(Node, Offset)> {
-    if nodes.is_empty() { return nodes; }
-    let ref_idx = match nodes.iter().position(|(n, _)| *n == Node::Owner) {
-        Some(i) => i,
-        None => {
-            let mut best = 0;
-            for i in 1..nodes.len() {
-                let (n, o) = nodes[i];
-                let (bn, bo) = nodes[best];
-                if o > bo || (o == bo && n < bn) { best = i; }
-            }
-            best
+impl Function {
+    pub fn new(id: PatternId, rest: Vec<(Place, Offset)>, params: Vec<Param>) -> Self {
+        let mut f = Function { id, places: vec![(Place::Owner, [0; MAX_DIMS])], params, child: None };
+        f.places.extend(rest);
+        f.canonicalize();
+        f
+    }
+
+    /// `|p|` (D22): what the function names besides the owner, a class once per place and a parameter
+    /// once per place it ties.
+    pub fn p_size(&self) -> usize { self.places.len().saturating_sub(1) }
+
+    pub fn fixed_count(&self) -> usize { self.places.iter().filter(|(p, _)| matches!(p, Place::Fixed(_))).count() }
+    pub fn class_places(&self) -> usize { self.places.iter().filter(|(p, _)| matches!(p, Place::Class(_))).count() }
+    pub fn uses_class(&self, k: PatternId) -> bool { self.places.iter().any(|(p, _)| *p == Place::Class(k)) }
+
+    /// The places of parameter `k`, by index into `places`.
+    pub fn param_places(&self, k: u32) -> Vec<usize> {
+        self.places.iter().enumerate().filter(|(_, (p, _))| *p == Place::Param(k)).map(|(i, _)| i).collect()
+    }
+
+    /// One canonical form (D34, D43): the owner first, the rest sorted by offset then place, parameters
+    /// renumbered in the order their first place appears, a parameter tying fewer than two places dropped
+    /// with its place, and duplicate places merged.
+    pub fn canonicalize(&mut self) {
+        let mut rest: Vec<(Place, Offset)> = self.places.iter().copied().filter(|(p, _)| *p != Place::Owner).collect();
+        // a parameter left with one place is nothing (R41)
+        let mut counts: Vec<usize> = vec![0; self.params.len()];
+        for (p, _) in &rest { if let Place::Param(k) = p { if (*k as usize) < counts.len() { counts[*k as usize] += 1; } } }
+        rest.retain(|(p, _)| match p { Place::Param(k) => counts.get(*k as usize).map_or(false, |c| *c >= 2), _ => true });
+        // one node per place and kind
+        rest.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
+        rest.dedup();
+        // renumber parameters by first appearance
+        let mut order: Vec<u32> = Vec::new();
+        for (p, _) in &rest { if let Place::Param(k) = p { if !order.contains(k) { order.push(*k); } } }
+        let old = std::mem::take(&mut self.params);
+        let mut params: Vec<Param> = Vec::new();
+        for k in &order { params.push(old.get(*k as usize).cloned().unwrap_or_default()); }
+        for (p, _) in rest.iter_mut() {
+            if let Place::Param(k) = p { *k = order.iter().position(|x| x == k).unwrap() as u32; }
         }
+        // sort again with the new numbering, so identical functions compare equal
+        rest.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
+        self.params = params;
+        self.places = vec![(Place::Owner, [0; MAX_DIMS])];
+        self.places.extend(rest);
+    }
+
+    /// The body with no child and no records, for comparing two functions (D43).
+    pub fn shape(&self) -> &[(Place, Offset)] { &self.places }
+}
+
+pub fn describe_function(f: &Function) -> String {
+    let place = |p: &Place| match p {
+        Place::Owner => "me".to_string(),
+        Place::Fixed(n) => format!("#{}", n),
+        Place::Class(k) => format!("C{}", k),
+        Place::Param(k) => format!("P{}", k),
     };
-    let base = nodes[ref_idx].1;
-    let mut rest: Vec<(Node, Offset)> = nodes.iter().enumerate().filter(|(i, _)| *i != ref_idx).map(|(_, (n, o))| (*n, sub(o, &base))).collect();
-    rest.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
-    let mut out = vec![(nodes[ref_idx].0, [0; MAX_DIMS])];
-    out.extend(rest);
-    out
+    let params: Vec<String> = f.params.iter().enumerate().map(|(k, p)| format!("P{}{{{}}}", k, p.members.iter().map(|m| format!("#{}x{}", m.neuron, m.count)).collect::<Vec<_>>().join(","))).collect();
+    format!("F[{}]{} child={}", f.places.iter().map(|(p, o)| format!("{}@{}", place(p), fmt_off(o))).collect::<Vec<_>>().join(" "),
+        if params.is_empty() { String::new() } else { format!(" {}", params.join(" ")) },
+        f.child.map_or("-".to_string(), |c| format!("#{}", c)))
+}
+
+pub fn describe_class(c: &Class) -> String {
+    format!("C{}{{{}}}", c.id, c.members.iter().map(|m| format!("#{}x{}", m.neuron, m.count)).collect::<Vec<_>>().join(","))
+}
+
+fn fmt_off(o: &Offset) -> String {
+    if o[1] == 0 && o[2] == 0 { o[0].to_string() } else { format!("{:?}", o) }
 }

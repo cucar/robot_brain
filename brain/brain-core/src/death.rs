@@ -21,12 +21,6 @@ impl Machine {
                 if self.thalamus[c].parents.is_empty() && !self.ledger.contains(&c) { self.ledger.push(c); }
             }
         }
-        for v in r.value_neurons {
-            if (v as usize) < self.thalamus.len() {
-                self.thalamus[v].parents.retain(|p| *p != (owner, r.pattern));
-                if self.thalamus[v].parents.is_empty() && !self.ledger.contains(&v) { self.ledger.push(v); }
-            }
-        }
     }
 
     /// Delete every child on the ledger whose last window has closed (R38); a deleted neuron's subtree
@@ -57,12 +51,11 @@ impl Machine {
         if self.index.get(&key) == Some(&c) { self.index.remove(&key); }
         if self.trace { eprintln!("[death f{}] #{}", self.frame_no, c); }
         // its subtree: its own patterns' children with no parent outside
-        let table: Vec<Pattern> = std::mem::take(&mut self.thalamus[c].table);
-        for p in table {
-            let values: Vec<NeuronId> = p.members().iter().filter_map(|m| m.value_neuron).collect();
-            self.handle_retired(c, Retired { pattern: p.id, child: p.child(), value_neurons: values, member_only: false, line: Some(p) });
+        let functions: Vec<Function> = std::mem::take(&mut self.thalamus[c].functions);
+        for f in functions {
+            self.handle_retired(c, Retired { pattern: f.id, child: f.child, line: Some(f) });
         }
-        self.thalamus[c].table.clear();
+        self.thalamus[c].classes.clear();
         self.thalamus[c].history.clear();
         self.thalamus[c].connections.clear();
         // scrub it from every pattern and saved activation that names it

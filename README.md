@@ -116,10 +116,12 @@ lists them.
 ## Status
 
 The implementation follows [docs/algorithm.md](docs/algorithm.md) as it stands on the `wavefront` branch
-(f8d7f5d), with no departures; the spec documents under `docs/` are that branch's. On the six-bar cycle it
-freezes with one bar wrong at every radius from 3 to 12 and every `H` tried, and right only at radius 2
-with `H` 256 or 1024. [docs/ucar-results.md](docs/ucar-results.md) records what the machine does on the
-cycle, on MNIST and on text, the mechanism behind the cycle's wrong bar, and what is not implemented.
+(873967e); the spec documents under `docs/` are that branch's. Where the text leaves a choice open the
+implementation allows failed nodes everywhere at their error-correction cost and collapses over the rows where
+every place holds; [docs/ucar-results.md](docs/ucar-results.md) lists these choices. On the six-bar cycle it
+never settles: functions are added and retired every lap and the last ten laps are 30 to 57 right of 60
+depending on radius and `H`. The results file records what the machine does on the cycle, on MNIST and on
+text, and the mechanisms read from the traces.
 
 ## Documentation
 

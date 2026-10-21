@@ -1,180 +1,176 @@
 # UCAR on the wavefront specification: implementation and results
 
 What `brain/brain-core` implements of [algorithm.md](algorithm.md) as it stands on the `wavefront` branch at
-f8d7f5d, with no departures, what is not there yet, and what the machine does on the six-bar cycle, on MNIST
-and on text. The cycle numbers are from `cargo run --release -p brain-core --example simple`; the others from
-the Node jobs named with them.
+873967e, the choices made where the text leaves one open, and what the machine does on the six-bar cycle, on
+MNIST and on text. The cycle numbers are from `cargo run --release -p brain-core --example simple`; the others
+from the Node jobs named with them. The previous implementation, of f8d7f5d, is commit 56de737 on this branch;
+its numbers are given beside the new ones.
 
 ## What is implemented
 
-The neuron (`neuron.rs`), Parts II and IV:
+The neuron, Parts II and IV, one file per part:
 
-- A pattern as a set of relations over nodes (D15, D16, D34): a function is its nodes with their offsets
-  from a reference node, the owner's activation where it names it and otherwise the node latest in time,
-  written in one canonical order for merging (D43) and for the index (D36). A class is its members (D41). A
-  parameter is its offsets from its first position, with its members as a record (D44).
-- The history (D18): `H` rows, each the activation's coordinate, its own cost, and its neighbors at exact
-  offsets with what each cost, its cover (D17), owners (D19) and the coordinates its variables claim.
-- Recognition as the greedy cover (D28) over each row: every function at every place one of its nodes
-  holds, the owner anchoring it where named (§5.2), with its variables, each node holding or failing and
-  each failure priced at `log₂ |p|`; then every parameter alone on what no function took (D31). A class is
-  never a claimant alone. Measured by D22, with the coarse-offset groups of D26. Where a pattern names a
-  neuron, a child standing for that neuron at that offset matches as well, and is credited once (D22).
-- Uses as places (D27): the coordinates a pattern's nodes stand at, counted once however many rows saw
-  them, the latest row credited.
-- The collapse per kind (D27): a function decides every candidate relation on its own over the seed's
-  uses, taken where what it covers beats a failed neighbor in each use it misses and its entry; the uses
-  that count are those where no other function names the coordinate, and a candidate being created skips
-  every owned neighbor. A parameter decides its positions, a class its members with the widening term. A
-  line with a child never names a neuron built over that child, and a variable never takes one built over
-  its own value neurons.
-- The three seed relations (D47), a child on the apex a node as itself and as each base symbol it stands
-  for within the owner's reach, its cost split equally; the owner's activation a node where nothing was
-  credited it. The two-stage pick with variables first and the claims they leave (D33), seeds ranked by
-  D22's savings as they stand summed over their uses, every seed with two uses tried; candidates priced by
-  the exact difference between a use's cover with the candidate in it and as it stands (R14, R15).
-- Margin (D30) as the difference with and without the pattern over its uses, every pattern with a
-  negative margin retired together (R18, R41), merging (D43, §5.5), and the return: one bid per function
-  with its variables, functions that share a variable together as one bid, and one per parameter alone
-  (D31, R21).
+- `pattern.rs`: a function is the owner's activation at offset zero and its other places at rounded offsets
+  from it (D15, D16), each a fixed node, a class the table holds, or one place of a parameter of the
+  function (D38, D41, D44), written in one canonical order for merging (D43) and for the index (D36). A class
+  is a set of members, each with how many uses it stood in. A parameter belongs to its function, ties two or
+  more of its places, and keeps as a record the neurons that have stood at all of them within the history.
+- `history.rs`: `H` rows, each the activation's coordinate, its own cost, and its neighbors at exact offsets
+  with what each cost; a child neighbor also carries the base symbols and neurons it stands for (D22, D47).
+  Each row keeps its cover and, per neighbor, the function credited with it and whether it covers or binds
+  it (D19, D10).
+- `cover.rs`: recognition as the greedy cover (D28) of each row by the table's functions, each measured by
+  D22 with nothing besides it taken: the owner where nothing took it, each fixed node covering what stands at
+  its offset (or a child standing in for it), each class binding a member at its place, each parameter
+  binding the neuron at most of its places, the latest on a tie; every place that holds nothing it could take
+  is a failed node at `log₂ |p|`. The price is the bidder, which function, which member per class place and
+  once per parameter, and the failed nodes.
+- `collapse.rs`: the collapse (D27) decides each place among a fixed node, a class of the table, a new class,
+  a parameter tying it to a place already in, and nothing, by what it covers over the uses less a failed node
+  in each use it misses and its entry. A class is valued over the uses and over the rows widening to it adds.
+  Class members are re-decided over every place that uses the class, with the widening term
+  `uses · log₂(|K'| / |K|)`. A function with a child never names a neuron built over it. Re-centering runs
+  the collapse on every function whose rows changed (D29).
+- `margin.rs`: margin as what the cover saves with the function less the greedy cover without it, over the
+  rows it covers, less its entry (D30); every negative margin retired together; a class no function uses, or
+  left with one member, deleted (R18, R41).
+- `merge.rs`: identical classes and identical functions merged into the older (D43).
+- `pick.rs`: the relation index (D47) over the residual, of three kinds (node to node, the owner at one end
+  or not; same to same; node to open, from the two neurons that stood at a place most), a child counted as
+  itself and as each base symbol it stands for at an equal share of its cost; ranked by D22's savings of the
+  relation as a whole function (D33), then count, older neuron, shorter offset; each tried in that order and
+  grown by the collapse; kept where the cover with it saves more than as it stands by more than its entry
+  and the entries of the classes it made (R14, R15).
+- `bid.rs`: a bid for every function that pays against the activation's neighborhood with nothing taken,
+  in the cover or not (D31, R21).
 
-The machine (`machine.rs`), Parts III and V:
+The machine, Parts III and V:
 
-- Base neurons by declaration (D52), the interneuron index by what each stands for (D36), with keys
-  recomputed after each frame's levels and lines whose child comes to stand for what another neuron does
-  rewired to it.
-- Neighborhoods (D5, D7): every activation in the same frame or an earlier one, within reach in every
-  shared dimension, both on the apex, the past table of the policy applied (D50).
-- Levels (R26): activate, call, elect, create, until a level fires nothing, the neurons' calls of one level
-  dispatched over columns in parallel. The election is D28 over the board with R22's measure, failed nodes
-  priced, and R24's tie-break; credit once, never revisited (R23).
-- Children placed at the latest frame covered and the center of the box in space (D53), with their span
-  read from what their nodes stood for (D4); value neurons where the member stood; reuse through the index
-  before anything is minted (R43, R16); the death ledger and the subtree rule, the ledger holding a retired
-  line readable until every window over what it fired has closed (R38).
-- Connections written by the connect call to the apex of each frame within reach, the last connection to
-  the coverer (D10, R31), rewards shaped by span and scoped by channel (R33), the walk when an estimate
-  turns negative (R37); a child placed frames back is handed the frames it missed (§7.1).
-- Inference at age 0 (R36), standing inferences (R45) and the match that strikes them (R49), expansion
-  down to base symbols (R28), the electorate falling through covers (R46, R48), resolution by estimate and
-  by share (R47), weak activations that last their frame (D40, R40), and a pattern an inference's expansion
-  completes at the frame ahead firing weakly there where what it placed was selected (R30).
+- `election.rs`: the election is D28 over the board (R22, R24): the coverage set credits each activation once,
+  as covered or as bound (D24). The child fires at its bidder's coordinate (D53), costing the bidder, which
+  function and its failed nodes; its arguments are what stood in its variables, which stay on the apex. A
+  child is reused through the index before one is minted (R16, R43). Span per neuron from its functions (D4).
+- `expansion.rs`: the owner at the child's coordinate, each other place at its offset (R28); a fixed node
+  expands to its neuron, a variable to its argument; a call with no argument given reads the arguments off
+  its activation where one stands there, and is otherwise bound as an inferred call: a parameter from what
+  stands at those of its places that have happened, a class to its most frequent member.
+- `index.rs`: keys with the variables left open (D36), recomputed after every frame, an interneuron that comes
+  to stand for what an older one does rewired to it.
+- `neighborhood.rs`, `connect.rs`, `selection.rs`, `death.rs`: as before, over the new functions; the match
+  (R49) reads fixed nodes, classes and parameters as the table in R49 says.
+- The dispatch is unchanged: regions of columns, each level's calls fanned out over the columns with Rayon,
+  the election, wiring and ledger sequential.
 
-## What changed from the previous version
+## Choices made where the text leaves one open
 
-The previous version (16f8f22) departed from the spec in four ways and carried three fixes the spec
-did not ask for. This one removes them: holding tolerates failed nodes at `log₂ |p|` each (D22); the
-collapse decides each relation on its own and never narrows a line's uses (D27), and nothing is done to a
-narrowed line's child; a class is never bid alone; retirement takes every negative margin together (R18);
-a variable no function names is not dropped at the end of the pick but retired by its margin; seeds are
-ranked by D22's savings over every use. Two departures are in the spec now and were widened to its words:
-a child stands in for any node of its expansion (D22, D47), and every apex activation of a frame is
-adjacent to the others (D5). New in the spec and implemented: no line names a neuron built over its own
-child (D27, D29), no once-per-descent rule in expansion, the index or the span (R28, D4). Never
-implemented before and implemented now: the match (R49), shared-variable bids (D31), weak firing of a
-completed pattern (R30), the ledger holding retired lines (R38), and the walk only when an estimate turns
-negative (R37).
-
-Five faults of the implementation were found and fixed while testing this version:
-
-- **The seed estimate counted the owner twice.** A function seed naming the owner counted the owner's cost
-  as covered and left the bidder's cost off the price, so every owner seed looked one activation better
-  than D22 says.
-- **Stand-ins reached past the box.** A child's base symbols were neighbors at any offset, so a base neuron
-  of reach 6 named offsets of 7 and beyond, which D15 forbids (a pattern fits inside the box its
-  neighborhood spans).
-- **A stand-in carried its child's span.** Where a child stood in for a base symbol the line named, the
-  new child's span took the stand-in's whole span, so on a repeating input each lap added a lap: spans
-  reached 894 frames at lap 150 and reach with them. D4 reads the span of what the line names, a base
-  symbol's being zero.
-- **D27 read a snapshot.** Whether a neighbor is built over a line's child was saved in the row when the row
-  was recorded, so a neighbor that came to be built over the child later passed the check, and a circular
-  definition formed. It is now read from the index as it stands when each level begins.
-- **Index keys expanded classes.** A class was written into a key through each member's own key, so a
-  function naming a class whose member is built over the function's child gave a key that contains itself.
-  A call stands for its relations with the variables left open (D36); a class is now named by its members.
-
-## Not implemented, or simplified
-
-- Lines re-center in parallel within a level, each against the index as the level began, so two lines
-  re-centering in one level can still close a circular definition between them; expansion stops where it
-  meets a neuron again and counts it. On text it happened 11 times in 4,175 frames.
-- Keys for the index are recomputed for every living interneuron after each frame; nothing is incremental.
-- The owner's reach in prices (D13) is read from the largest span any activation of the neuron has had.
-- No backup or persistence. The dispatch is parallel: the thalamus owns regions, a region its columns, a
-  column its partition of the neurons by id, and the call of a level fans out over the columns with Rayon;
-  the election, wiring and ledger run sequentially on what comes back.
+- **Failed nodes everywhere.** A function holds in a row with some places failed, each at `log₂ |p|`, in
+  recognition, in bids and on the board. A function bids where it pays against the whole neighborhood
+  with nothing taken.
+- **Uses of the collapse are the rows where every place holds** (D27's words). Without this, re-centering
+  over every row a function covers, failed ones included, collapsed every new function to nothing within a
+  frame.
+- **Widening.** A class place is valued over the function's uses and over every other row where the rest
+  of the function holds and a candidate stands unowned at the place (D27: "the function then holds in rows
+  it did not").
+- **A weak executed pattern at the owner's coordinate is not its neighbor.** R30 fires it at the frame's
+  level 0, where the owner's own row sees it at offset zero standing for the owner itself; tables then named
+  their own call at offset zero. An interneuron whose expansion places the owner's activation is left out of
+  the owner's neighborhood.
 
 ## The six-bar cycle
 
 One channel, a binary price move and own/out, the `eventsToActions` policy, the world running the right
-action where the machine is silent, the reward the bar's return signed by the action, scoped to the channel
-and the frame. At `H` 256 and radius 6, over 150 laps:
+action where the machine is silent, the reward the bar's return signed by the action. Over 150 laps,
+right answers in the last ten laps, of 60:
 
-| laps | right per bar, of 10 | added | retired |
-|------|----------------------|-------|---------|
-| 1-10 | 3 0 8 8 9 10 | 6 | 0 |
-| 11-20 | 10 0 10 10 10 10 | 0 | 0 |
-| 21-150 | 10 0 10 10 10 10 | 0 to 10 | 0 to 11 |
+| `H` \ radius | 2 | 3 | 6 | 12 |
+|---|---|---|---|---|
+| 64 | 30 | 39 | 43 | 45 |
+| 256 | 30 | 47 | 53 | 57 |
+| 1024 | 30 | 36 | 50 | 56 |
 
-The bar decided at bar 1 is wrong in every lap; the other five are right from lap 11. Over 300 laps:
+Over 500 laps at `H` 256: radius 12, 83.1% overall and 54 of 60 in the last ten laps; radius 6, 75.1% and 45
+of 60. Nothing settles: at radius 12 the run added 2,643 functions and retired 2,546, about five of each per
+lap, and minted 1,379 neurons to keep 11 alive. The previous implementation froze with one bar wrong (50 of
+60) at every radius from 3 to 12.
 
-| `H` \ radius | 2 | 3 | 4 | 6 | 8 | 12 |
-|---|---|---|---|---|---|---|
-| 64 | frozen, one bar wrong | frozen, one bar wrong | frozen, one bar wrong | frozen, one bar wrong | frozen, one bar wrong | frozen, one bar wrong |
-| 256 | all right from lap 201 | frozen, one bar wrong | frozen, one bar wrong | frozen, one bar wrong | frozen, one bar wrong | frozen, one bar wrong |
-| 1024 | all right from lap 263 | frozen, one bar wrong | frozen, one bar wrong | frozen, one bar wrong | frozen, one bar wrong | frozen, one bar wrong |
+**Why it churns.** Two things, both read from `UCAR_TRACE`:
 
-The previous version, with its departures, was right from lap 11 at radius 6 for every `H` of 64 or more.
+1. *The collapse and the margin price a function over different rows.* The collapse decides a place over the
+   uses, the rows where every place holds, and adds it where it pays there. The margin is taken over every row
+   the function covers, failed ones included. A place added for the uses raises `|p|` and is one more failed
+   node in every other covered row, so the next margin is below the entry and the function is retired: for
+   instance `F[me #0@-4 #1@-3]`, built at margin +5.5, re-centered to `F[me #0@-4 #1@-3 #307@-1]` over its 12
+   uses, then benefit 9.5 against entry 19.5. Each rebuild mints its child anew.
+2. *A class of the whole alphabet pays at every offset.* A neighbor costs `log₂` of all neurons; stating
+   which member of a class costs `log₂ |K|`. With two event neurons a class of both costs one bit and covers
+   two, so the collapse turns most places into "either symbol here", and the call neuron of such a function
+   says nothing about the phase.
 
-**Why bar 1 stays wrong.** The cycle is up, down, down, up, up, down. The up neuron fires at bars 1, 4
-and 5. Its first line names the base symbols at −1, −3, −4 and −6 from it, and those are the same before
-bar 1 and before bar 4; the two differ at −2 and −5. So one line, and one child, stands for both bars, and
-the child's connection to "up" averages a gain after bar 4 with a loss after bar 1, +0.51. Four things keep
-it there, each as the specification says:
-
-1. On the apex at bar 1 stands one activation within reach, the child of the frame before; everything
-   earlier was covered by the frame after it. The line's base symbols are all matched through that child
-   standing in for them (D22), so the bid covers it, and nothing in the row is left residual.
-2. With nothing residual, nothing seeds (D47): no second line can form in the up neuron's table.
-3. Re-centering cannot add what tells the bars apart. The children at −1, −2 and −5 are each built over
-   the line's own child, and a line never names a neuron built over its own child (D27). The base symbols
-   at −2 and −5 reach the line only as a child's stand-ins, at a share of its cost under a bit, which never
-   pays for the failed node it costs in the other bar's uses.
-4. The child's estimate for "up" is positive, so it never turns negative and the walk never wires "down"
-   (R37).
-
-At radius 2 the line that fits both bars cannot form, since −3 and beyond are out of reach, and the bars are
-told apart by lines over the two frames before.
+At radius 2, nothing forms at all: eight functions in 150 laps, every bar's answer from the base
+connections alone, 30 of 60.
 
 ## MNIST
 
-**Ten images, one per digit, 7×7, 500 episodes** (`H` 2048, radius 1, the digit taught on the first
-episode only): 6 of 10 at episode 25, 8 of 10 from episode 100 to 500, the 5 answered as 6 and the 8 as 2
-throughout, about 30 lines added and retired every episode. The previous version had all ten from episode 25.
+**Ten images, one per digit, 7×7, 500 episodes** (`apps/mnist/jobs/mnist.js --image-size 7 --per-class 1
+--teach 10 --test 10 --episodes 500`, `H` 2048): 7 of 10 from episode 50 to 500, the 9, 2 and 8 wrong; from
+episode 50 on nothing changes (32 neurons, 43 functions, 110 connections). The three wrong images' answers
+walk among digits with estimates near zero. The previous implementation had 8 of 10.
 
-**10,000 images, 7×7, one episode** (`H` 2048, the first 200 taught), 500 test images: per 1,000 training
-images 14.2, 11.8, 12.1, 12.2, 13.7, 15.6, 11.6, 12.3, 14.3 and 12.1% of those it answered; on test 11.6% of
-the 467 it answered. Chance is 10%. The previous version had 20.8% on the same test.
+**Why the 9 stays wrong** (`UCAR_TRACE`, episode 55). At the 9 the electorate is one child of height 2,
+`#27`, and four ink pixels the bids bound, which stay on the apex and vote (D10, R46). The four pixels are the
+one ink neuron, whose connections are one set over every image: digit 9 at −0.56. `#27` has connections to
+nine digits and none to 9; three of them were wired by the walk and never ran, so they sit at 0.00. Resolution
+takes the share-weighted estimate per digit (R47): digit 9 has only the ink neuron's −0.56, and the digits
+`#27` names at 0.00 beat it, so 9 never runs, never connects, and the walk, which wires a new action only when
+an estimate turns negative (R37), never reaches it, since the zero estimates never move.
+
+The tables are nearly all parameters. An image has one ink neuron, so a parameter over a set of places is
+"ink at all of these", the same as fixed nodes there, but its entry is an offset per place where a fixed node
+costs a neuron besides, and its record holds one member, so its choice is free (D44: "a parameter costs
+nothing beyond its relations").
+
+**10,000 images, 7×7, one episode** (`--per-class 1000 --teach 200 --test 500`, `H` 2048): 17.8% of the 9,642 training images it answered, falling from about 20% over the first 1,200 to
+17.8% by the end; on test 13.3% of the 467 it answered (62 of 500). Chance is 10%. The previous
+implementation had 11.6% on the same test. Training took 18 minutes, the time per image rising from 12 ms
+to about 150 ms; the run ended with 81 neurons and 118 functions.
 
 ## Text
 
-`apps/text/jobs/text.js` on `apps/text/data/test.txt` (127 bytes), `H` 256, radius 1: 21.1, 61.1, 67.5,
-69.0 and 80.2% of next bytes right over five passes; the previous version had 20 and 78% on its first two.
-The letter stream `th ch sh wh` four times: 29 of 47.
+`apps/text/jobs/text.js` on `test.txt` (127 bytes), `H` 256, radius 1, next byte right over twelve passes:
+17.9, 67.5, 72.2, 66.7, 57.9, 56.3, 52.4, 53.2, 54.8, 50.8, 50.8 and 47.6%. It peaks at the third pass and
+falls while the apex keeps shrinking (5.2 bits a frame on the first pass, 1.8 on the ninth). The previous
+implementation had 21, 61, 68, 69 and 80% over five.
 
-`abramov_summary.txt` (2 KB, its ASCII characters) streamed twice through the text example: 737 of 4,175
-right, 17.7%, the second pass no better than the first, which alone was 18.6% through the Node job. Late
-frames take up to 12 seconds: the pick tries every seed with two uses (D33), and an interneuron with a
-long history holds several hundred, of which almost none builds.
+The letter stream `th ch sh wh` four times (`examples/text.rs`): 31 of 47 (previously 29). `h`'s table
+holds a class at −1 of the letters before it where none of them recurred alone first; where `t` recurs before
+the others have stood, `t` gets its own function first and the others' rows are owned before a class can
+seed, so which forms depends on arrival order (`varied_predecessors_form_a_class` passes or fails with the
+pick's order).
+
+`abramov_summary.txt` (2 KB), two passes: 17.3% and 20.7% (previously 17.7% over two), 3.3 and 6.5 seconds.
+
+## Tests
+
+`cargo test --release -p brain-core`: three of five pass. `six_bar_cycle_settles` fails (53 of 60 in the
+last ten laps), and `varied_predecessors_form_a_class` fails at the end of the stream, where the class at −1
+has no child and the predecessors are named by their own functions.
+
+## Not implemented, or simplified
+
+- Keys for the index and spans are recomputed for every living interneuron after each frame.
+- The owner's reach in prices (D13) is read from its span as its functions stand.
+- A parameter's record is refreshed from the whole history at each call; a change in it does not re-cover
+  rows already covered.
+- No backup or persistence.
 
 ## Running it
 
 ```bash
 cd brain
-cargo test --release -p brain-core                       # five behavioral tests, the cycle among them
+cargo test --release -p brain-core
 cargo run --release -p brain-core --example simple -- 150 256 6
-UCAR_TRACE=1 cargo run --release -p brain-core --example simple -- 40 256 6               # adds, retires with reasons, deaths, cascades
+UCAR_TRACE=1 cargo run --release -p brain-core --example simple -- 40 256 6               # adds, collapses, retires with reasons
 UCAR_DUMP=1  cargo run --release -p brain-core --example simple -- 150 256 6              # every table at the end
 cargo run --release -p brain-core --example text -- "th ch sh wh th ch sh wh th ch sh wh th ch sh wh " 1 64 h
 ```
