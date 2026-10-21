@@ -23,7 +23,7 @@ for reward.** Instrument both and plot them against each other. If they move tog
 mechanically. If they do not, the coupling between compression and reward is where to look, and it is the
 assumption everything else rests on.
 
-The standing metric is **what the apex costs to write per frame (D14), paired with the dictionary size that bought
+The standing metric is **what the apex costs to write per frame (§3.9), paired with the dictionary size that bought
 it**. It should fall with exposure on recurring data: early structure is provisional, re-centering consolidates it,
 and R18 takes what is left.
 
@@ -209,7 +209,7 @@ says nothing about the slack on real frames, and since apex-neurons-per-frame is
 real structure are conflated in it. **Diagnostic:** solve one small window exactly (ILP) and compare, which
 locates the realized slack inside the `H(n)` ceiling.
 
-**The composition gap.** Both scopes price in one currency against the file (D14), and the neuron's sum and the
+**The composition gap.** Both scopes price in one currency against the file (§3.9), and the neuron's sum and the
 machine's are taken over different sets and are meant to differ (D22). What remains is that candidates are
 *generated* locally: a demand no neuron proposes is a symbol the election never gets to consider, and no neuron
 proposes one whose value lies in what it would let a *different* neuron stop paying for. Distinct from election

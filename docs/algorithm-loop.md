@@ -42,8 +42,8 @@ That is the whole machine: three neurons for the three states of the loop, and o
 1. **The first tap names the cue.** In `tap`'s history a third of the rows hold `go` one back, and a tap with
    the cue before it is two things standing together, a relation (D47). Its collapse is a function naming the
    tap and `go` at `−1` from it (D27); it pays at its second use against a line of one neuron and one offset
-   (R15); its bid covers `go` and the tap, and the child `go·tap` fires at the tap's frame, the latest the bid
-   covers (D53), one level up (R16, §7.4).
+   (R15); its bid covers `go` and the tap, and the child `go·tap` fires at the tap's frame, its owner's (D53),
+   one level up (R16, §7.4).
 2. **The second tap names the first child.** Once `go·tap` fires, the next tap sees it one back, since a
    neighbor is whatever stands uncovered within reach, at whatever level (D5). Another third of `tap`'s rows
    come to hold `go·tap` at `−1`, and the same relation gives the function and the child `go·tap²`, covering
@@ -123,10 +123,11 @@ that knows what came after it.
 # 7. The count as data
 
 Show a digit beside `go`, `go 3` or `go 5`, meaning tap that many times, and the machine does it the way
-[algorithm-copy.md](algorithm-copy.md) crosses from a digit to a write. `go`'s table holds a class of the digits
-beside it (D41), and its value neurons `go:3`, `go:5` are what the first tap sees one back. The chain is then
-per value, `go:3·tap`, `go:3·tap²`, `go:3·tap³`, ending in `done`, and `go:5` has a chain of five, with nothing
-shared between them but the base tap. Each count is learned from its own runs, a count never shown has no chain,
+[algorithm-copy.md](algorithm-copy.md) crosses from a digit to a write. `go`'s table holds a function with a
+class over the digits beside it (D41), and what the first tap sees one back is its child with the digit
+bound beside it. The chain is then per digit: a tap that sees the child and a bound `3` names both, and
+`go·3·tap`, `go·3·tap²`, `go·3·tap³` end in `done`, while `5` has a chain of five, with nothing shared between
+them but the base tap. Each count is learned from its own runs, a count never shown has no chain,
 and nothing in the machine says that five is more than three. That is the limit the design is honest about: it
 has no arithmetic. A count is a length, and a length is learned by seeing it.
 

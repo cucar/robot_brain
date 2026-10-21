@@ -48,12 +48,12 @@ it; reading it is seeing it beside the next request.
 1. **A request and its column become one neuron.** While one case is taught, the same neurons stand beside `add`
    every time, so `add`'s table holds a function that names `add` and them outright, at offset zero from one
    another (D47, D27), and its child is that case, fired at `add`'s coordinate: `1 + 1` asked, or `0 + 1`
-   asked with a carry. Nothing varied while it was learned, so no variable
-   formed, and what a function names is not open to a variable afterwards (D19). Eight columns give eight
+   asked with a carry. Nothing varied while it was learned, so no variable formed, and what a function names as a
+   fixed node is not open to another function's variable afterwards (D19). Eight columns give eight
    cases, and the last request gives two more: `end` with a carry, and `end` without.
 2. **A carry tells two cases apart.** `1 + 1` with a carry and `1 + 1` without are two functions. Where `carry`
    stands, the one that names it covers more and is taken; where it does not, the one that names it would be
-   written with a failed neighbor, and the other is taken (D28).
+   priced with a failed node, and the other is taken (D28).
 3. **The case learns its answer.** In the taught frames the right digit ran one frame after the case and was
    rewarded. The case's child was open and uncovered, so it connected to that digit, with the reward (R31).
 4. **The answer gets its function.** In the digit's history the case's child stands one back in every such row,
@@ -100,11 +100,11 @@ next.
 # 6. Taught in another order
 
 Had the columns been mixed from the first lesson, the digits beside `add` would have varied before any case
-recurred, and variables are built first (D33): `add`'s table would hold a class for each digit, and one function
-over them. What fires then is one child for every column, with a value neuron for each digit beside it, and no
-neuron for the column as a whole. The cases are then told apart a frame later. Each function in an answer
-digit's table names the value neurons that stood one back, and each value neuron infers the children of the
-functions that have covered it. Each inferred child is matched against what stood (R49), and one whose function
+recurred, and the collapse would widen the digits' places into classes (D27): `add`'s table would hold one
+function with a class per digit. What fires then is one child for every column, with the digits bound
+beside it, and no neuron for the column as a whole. The cases are then told apart a frame later. Each function
+in an answer digit's table names the child and the bound digits that stood one back, and each bound digit
+infers the children of the functions it has stood beside. Each inferred child is matched against what stood (R49), and one whose function
 names a digit that did not stand is proposed all the same, since the digit it finds credits more than the one
 failure charges; so every child either digit was ever covered by is proposed, the one whose function names both
 digits takes both their shares where every other takes one, and its digit runs by share (R47). That route has been reasoned through and not run

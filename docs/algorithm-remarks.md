@@ -237,7 +237,7 @@ situation turns on. Among the whole base alphabet every base symbol costs the sa
 is also what the frontier needs said: the frontier is a list of the symbols present, and each has to be picked
 out of everything that could have been listed, its dimension included.
 
-**On D14 — why `L` never appears in the arithmetic.** `L` is what the differences are differences *in*; it is
+**On 3.4 — why `L` never appears in the arithmetic.** `L` is what the differences are differences *in*; it is
 the reason the arithmetic is the arithmetic, and it is never a term in it.
 
 > **T1 — The file is a fixed-length code, and its prices move.** Every field costs `log₂` of its alphabet's
