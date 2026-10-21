@@ -116,7 +116,7 @@ impl Machine {
             ledger: Vec::new(),
             last_stats: FrameStats::default(),
             last_winners: Vec::new(),
-            trace: std::env::var("UCAR_TRACE").is_ok(),
+            trace: false,
             retired_lines: FxHashMap::default(),
             cycle_guard: std::cell::Cell::new(0),
         }

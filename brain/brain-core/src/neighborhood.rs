@@ -45,13 +45,24 @@ impl Machine {
                         let dt = a.pos[0] - p[0];
                         dt >= 0 && dt <= a.reach[0] && (1..self.radii.len()).all(|d| shared & (1 << d) == 0 || (p[d] - a.pos[d]).abs() <= a.reach[d])
                     };
-                    (base.into_iter().filter(|(_, p)| inside(p)).map(|(n, p)| (n, sub(&p, &a.pos))).collect(),
-                     all.into_iter().filter(|(_, p)| inside(p)).map(|(n, p)| (n, sub(&p, &a.pos))).collect())
+                    (base.into_iter().filter(|(_, p)| inside(p)).map(|(n, p)| (n, sub(&p, &a.pos), self.cost_at(n, &p, b.cost))).collect(),
+                     all.into_iter().filter(|(_, p)| inside(p)).map(|(n, p)| (n, sub(&p, &a.pos), self.cost_at(n, &p, b.cost))).collect())
                 } else { (Vec::new(), Vec::new()) };
                 out.push(Nb { act: r, neuron: b.neuron, delta, cost: b.cost, covers, stands_for });
             }
         }
         out
+    }
+
+    /// What an activation of `n` at `p` cost at its own level (D13): the one that fired there; a base symbol
+    /// that is not in the frames costs a neuron, and anything else no more than the child standing for it.
+    pub(crate) fn cost_at(&self, n: NeuronId, p: &Pos, child: f64) -> f64 {
+        let fired = self.frames.iter().find(|f| f.no == p[0] as i64).and_then(|f| f.acts.iter().find(|a| !a.gone && a.neuron == n && a.pos == *p));
+        match fired {
+            Some(a) => a.cost.min(child),
+            None if self.thalamus[n].kind != Kind::Inter => self.base_bits().min(child),
+            None => child,
+        }
     }
 
     /// Every neuron what `n` stands for passes through (D36), over every function wired to it, down to base

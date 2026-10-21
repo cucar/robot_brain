@@ -24,7 +24,4 @@ fn main() {
         let id = m.base_neuron(dim, c as u32);
         print!("{}", m.describe_neuron(id));
     }
-    if std::env::var("UCAR_DUMP").is_ok() {
-        for nn in m.thalamus.iter().filter(|x| x.alive && x.kind == Kind::Inter) { print!("{}", m.describe_neuron(nn.id)); }
-    }
 }

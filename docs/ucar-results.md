@@ -94,7 +94,7 @@ of 60. Nothing settles: at radius 12 the run added 2,643 functions and retired 2
 lap, and minted 1,379 neurons to keep 11 alive. The previous implementation froze with one bar wrong (50 of
 60) at every radius from 3 to 12.
 
-**Why it churns.** Two things, both read from `UCAR_TRACE`:
+**Why it churns.** Two things, both read from the machine's trace:
 
 1. *The collapse and the margin price a function over different rows.* The collapse decides a place over the
    uses, the rows where every place holds, and adds it where it pays there. The margin is taken over every row
@@ -117,7 +117,7 @@ connections alone, 30 of 60.
 episode 50 on nothing changes (32 neurons, 43 functions, 110 connections). The three wrong images' answers
 walk among digits with estimates near zero. The previous implementation had 8 of 10.
 
-**Why the 9 stays wrong** (`UCAR_TRACE`, episode 55). At the 9 the electorate is one child of height 2,
+**Why the 9 stays wrong** (the machine's trace, episode 55). At the 9 the electorate is one child of height 2,
 `#27`, and four ink pixels the bids bound, which stay on the apex and vote (D10, R46). The four pixels are the
 one ink neuron, whose connections are one set over every image: digit 9 at −0.56. `#27` has connections to
 nine digits and none to 9; three of them were wired by the walk and never ran, so they sit at 0.00. Resolution
@@ -170,7 +170,5 @@ has no child and the predecessors are named by their own functions.
 cd brain
 cargo test --release -p brain-core
 cargo run --release -p brain-core --example simple -- 150 256 6
-UCAR_TRACE=1 cargo run --release -p brain-core --example simple -- 40 256 6               # adds, collapses, retires with reasons
-UCAR_DUMP=1  cargo run --release -p brain-core --example simple -- 150 256 6              # every table at the end
 cargo run --release -p brain-core --example text -- "th ch sh wh th ch sh wh th ch sh wh th ch sh wh " 1 64 h
 ```

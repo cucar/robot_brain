@@ -94,7 +94,15 @@ impl Neuron {
     pub(crate) fn measure(&self, row: &Row, f: &Function, taken: &[bool], owner_taken: bool, wf: f64) -> Option<Claim> {
         let mut binds: Vec<PlaceBind> = Vec::new();
         let mut args: Vec<(usize, NeuronId)> = Vec::new();
-        let mut credited: FxHashSet<usize> = FxHashSet::default();
+        // what each neighbor has been credited so far: never more than it cost (D22)
+        let mut credited: FxHashMap<usize, f64> = FxHashMap::default();
+        let credit_of = |j: usize, c: f64, coverage: &mut f64, credited: &mut FxHashMap<usize, f64>| -> f64 {
+            let so_far = credited.entry(j).or_insert(0.0);
+            let x = c.min(row.nbs[j].cost - *so_far).max(0.0);
+            *so_far += x;
+            if !taken[j] { *coverage += x; }
+            c
+        };
         let mut coverage = 0.0;
         let mut choice = 0.0;
         let mut failed = 0u32;
@@ -106,18 +114,18 @@ impl Neuron {
                     let found = self.nbs_at(row, off, Some(*n));
                     if found.is_empty() { failed += 1; continue; }
                     holds_any = true;
-                    for &j in &found { if !taken[j] && credited.insert(j) { coverage += row.credit(j); } }
-                    binds.push(PlaceBind { place: pi, nbs: found });
+                    let credit: Vec<f64> = found.iter().map(|&j| { let c = self.match_credit(row, j, *n, off); credit_of(j, c, &mut coverage, &mut credited) }).collect();
+                    binds.push(PlaceBind { place: pi, nbs: found, credit });
                 }
                 Place::Class(k) => {
                     let Some(c) = self.class(*k) else { failed += 1; continue };
                     choice += c.choice();
                     let cands: Vec<usize> = self.nbs_at(row, off, None).into_iter().filter(|&j| c.has(row.nbs[j].neuron)).collect();
-                    let pick = cands.iter().copied().find(|&j| !taken[j] && !credited.contains(&j)).or_else(|| cands.first().copied());
+                    let pick = cands.iter().copied().find(|&j| !taken[j] && !credited.contains_key(&j)).or_else(|| cands.first().copied());
                     let Some(j) = pick else { failed += 1; continue };
                     holds_any = true;
-                    if !taken[j] && credited.insert(j) { coverage += row.credit(j); }
-                    binds.push(PlaceBind { place: pi, nbs: vec![j] });
+                    let c = credit_of(j, row.nbs[j].cost, &mut coverage, &mut credited);
+                    binds.push(PlaceBind { place: pi, nbs: vec![j], credit: vec![c] });
                     args.push((pi, row.nbs[j].neuron));
                 }
             }
@@ -143,13 +151,13 @@ impl Neuron {
             for (x, &pi) in pl.iter().enumerate() {
                 let pick = value.and_then(|v| {
                     let cands: Vec<usize> = per[x].iter().copied().filter(|&j| row.nbs[j].neuron == v).collect();
-                    cands.iter().copied().find(|&j| !taken[j] && !credited.contains(&j)).or_else(|| cands.first().copied())
+                    cands.iter().copied().find(|&j| !taken[j] && !credited.contains_key(&j)).or_else(|| cands.first().copied())
                 });
                 match pick {
                     Some(j) => {
                         holds_any = true;
-                        if !taken[j] && credited.insert(j) { coverage += row.credit(j); }
-                        binds.push(PlaceBind { place: pi, nbs: vec![j] });
+                        let c = credit_of(j, row.nbs[j].cost, &mut coverage, &mut credited);
+                        binds.push(PlaceBind { place: pi, nbs: vec![j], credit: vec![c] });
                         args.push((pi, row.nbs[j].neuron));
                     }
                     None => failed += 1,
@@ -165,6 +173,15 @@ impl Neuron {
         Some(Claim { entry: CoverEntry { function: f.id, binds, args, failed, credited_owner, choice }, coverage, price })
     }
 
+    /// What a fixed node naming `n` at `off` is credited for neighbor `j` (D22): its cost where `j` is `n`
+    /// itself; where `j` is a child standing in for `n`, what `n` cost there at its own level, so a parent
+    /// standing in is credited by its level and not by the child's.
+    pub(crate) fn match_credit(&self, row: &Row, j: usize, n: NeuronId, off: &Offset) -> f64 {
+        let nb = &row.nbs[j];
+        if nb.neuron == n && self.round(&nb.delta) == *off { return nb.cost; }
+        nb.stands_for.iter().filter(|(m, d, _)| *m == n && self.round(d) == *off).map(|(_, _, c)| *c).fold(0.0, f64::max).min(nb.cost)
+    }
+
     /// The neighbors standing at an offset from the owner's activation: every one whose exact offset falls
     /// in the written offset's group (D6, D26). Where a neuron is named, a child standing for it at that
     /// offset matches as well (D22, R28).
@@ -177,7 +194,7 @@ impl Neuron {
         if let Some(n) = neuron {
             for (j, nb) in row.nbs.iter().enumerate() {
                 if out.contains(&j) { continue; }
-                if nb.stands_for.iter().any(|(m, d)| *m == n && self.round(d) == *off) { out.push(j); }
+                if nb.stands_for.iter().any(|(m, d, _)| *m == n && self.round(d) == *off) { out.push(j); }
             }
         }
         out

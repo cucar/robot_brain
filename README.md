@@ -47,13 +47,11 @@ world runs the right action wherever the machine is silent, and pays the bar's r
 node apps/stocks/jobs/cycle.js --cycles 100 --h 256 --radius 6
 ```
 
-The same test runs without Node from the Rust crate, with a trajectory line every few laps and a dump of
-every table at the end:
+The same test runs without Node from the Rust crate, with a trajectory line every ten laps:
 
 ```bash
 cd brain
 cargo run --release -p brain-core --example simple -- 100 256 6
-UCAR_DUMP=1 cargo run --release -p brain-core --example simple -- 100 256 6
 ```
 
 ## Layout

@@ -26,8 +26,8 @@ fn main() {
     let mut stats = vec![(0usize, 0usize); n];
     let mut last10 = vec![(0usize, 0usize); n];
     let (mut lessons, mut added, mut retired) = (0, 0, 0);
-    // a trajectory line every UCAR_WINDOW laps: right answers per bar in the window, and churn
-    let window: usize = std::env::var("UCAR_WINDOW").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
+    // a trajectory line every ten laps: right answers per bar in the window, and churn
+    let window: usize = 10;
     let mut win = vec![0usize; n];
     let (mut wmint, mut wadd, mut wret, mut wreuse) = (0, 0, 0, 0);
     let t0 = std::time::Instant::now();
@@ -50,24 +50,6 @@ fn main() {
         let w = winners.iter().find(|w| w.dim == ac);
         pending = w.map(|w| w.bucket);
         if !lesson && action == up { win[cf] += 1; }
-        if std::env::var("UCAR_LAP").is_ok() && (k + 1) % n == 0 {
-            let lap = (k + 1) / n;
-            let mut line = format!("lap {:3} | apex per bar:", lap);
-            for f in m.frames.iter().filter(|f| f.no > (k + 1 - n) as i64) {
-                let apex: Vec<String> = f.acts.iter().filter(|a| a.covered_at.is_none()).map(|a| format!("#{}", a.neuron)).collect();
-                line.push_str(&format!(" {}", apex.join("+")));
-            }
-            println!("{}", line);
-            let base_ids: Vec<NeuronId> = vec![m.base_neuron(ev, 0), m.base_neuron(ev, 1), m.base_neuron(ac, 0), m.base_neuron(ac, 1)];
-            for id in base_ids.into_iter().filter(|&id| !m.thalamus[id].functions.is_empty()) {
-                print!("{}", m.describe_neuron(id).lines().filter(|l| !l.contains("->")).collect::<Vec<_>>().join("\n"));
-                println!();
-            }
-            for nn in m.thalamus.iter().filter(|x| x.alive && x.kind == Kind::Inter && !x.functions.is_empty()) {
-                print!("{}", m.describe_neuron(nn.id).lines().filter(|l| !l.contains("->")).map(|l| l.replace("parents=", "par=")).collect::<Vec<_>>().join("\n"));
-                println!();
-            }
-        }
         if (k + 1) % (window * n) == 0 {
             let hc = m.height_counts();
             println!("laps {:4}-{:4} | right/bar {:?} of {} | minted {:3} reused {:3} added {:3} retired {:3} | alive neurons {:3} patterns {:3} | max height {:2} | {:.1}s",
@@ -92,15 +74,4 @@ fn main() {
     let st = &m.last_stats;
     println!("overall optimal {}/{} = {:.1}% | last 10 cycles {}/{} = {:.1}% | lessons {} | neurons {} alive of {} minted | patterns {} alive, {} added, {} retired | heights {:?}",
         to, to + ts, 100.0 * to as f64 / (to + ts).max(1) as f64, lo, lo + ls, 100.0 * lo as f64 / (lo + ls).max(1) as f64, lessons, st.neurons, m.thalamus.len(), st.patterns, added, retired, m.height_counts());
-    if std::env::var("UCAR_LEAK").is_ok() {
-        for nn in m.thalamus.iter().filter(|x| x.alive && x.kind == Kind::Inter) {
-            let open = m.frames.iter().any(|f| f.acts.iter().any(|a| a.neuron == nn.id));
-            println!("#{} parents={:?} ledger={} open={} H={} table={}", nn.id, nn.parents, m.ledger.contains(&nn.id), open, nn.history.len(), nn.functions.len());
-        }
-    }
-    if std::env::var("UCAR_DUMP").is_ok() {
-        for nn in m.thalamus.iter().filter(|x| x.alive && (!x.functions.is_empty() || x.kind == Kind::Inter)) {
-            print!("{}", m.describe_neuron(nn.id));
-        }
-    }
 }

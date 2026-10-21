@@ -24,17 +24,17 @@ impl Machine {
         let mut coverage = 0.0;
         let mut strong = false;
         let free = |a: &Act| !a.gone && a.covered_at.is_none() && a.bound_at.is_none();
-        let mut take = |r: ActRef, bind: bool, covered: &mut Vec<ActRef>, bound: &mut Vec<ActRef>| {
+        let mut take = |r: ActRef, credit: Option<f64>, bind: bool, covered: &mut Vec<ActRef>, bound: &mut Vec<ActRef>| {
             if covered.contains(&r) || bound.contains(&r) { return; }
             let Some(a) = self.act(r) else { return };
             if a.strong { strong = true; }
             if !free(a) { return; }
-            coverage += a.cost;
+            coverage += credit.map_or(a.cost, |c| c.min(a.cost));
             if bind { bound.push(r); } else { covered.push(r); }
         };
-        take(bid.bidder, false, &mut covered, &mut bound);
-        for r in &bid.covers { take(*r, false, &mut covered, &mut bound); }
-        for (_, r, _) in &bid.binds { take(*r, true, &mut covered, &mut bound); }
+        take(bid.bidder, None, false, &mut covered, &mut bound);
+        for (k, r) in bid.covers.iter().enumerate() { take(*r, bid.cover_credit.get(k).copied(), false, &mut covered, &mut bound); }
+        for (_, r, _) in &bid.binds { take(*r, None, true, &mut covered, &mut bound); }
         (coverage, bid.price(), covered, bound, strong)
     }
 

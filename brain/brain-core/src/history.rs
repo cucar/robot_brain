@@ -18,11 +18,14 @@ pub struct Nb {
     /// What the activation cost (D13).
     pub cost: f64,
     /// For a child: the base symbols it stands for, its expansion (R28), each as (neuron, offset from the
-    /// owner's activation); in the relation index it is each of them, its cost split equally (D47).
-    pub covers: Vec<(NeuronId, Pos)>,
+    /// owner's activation, what that symbol's activation cost at its own level); in the relation index it
+    /// is each of them (D47).
+    pub covers: Vec<(NeuronId, Pos, f64)>,
     /// For a child: every neuron its expansion passes through, interneurons and base symbols, each at its
     /// offset from the owner's activation; a function naming one of them matches the child (D22).
-    pub stands_for: Vec<(NeuronId, Pos)>,
+    /// Each with what that neuron's activation cost at its own level: a function naming it is credited
+    /// that, not the child's cost.
+    pub stands_for: Vec<(NeuronId, Pos, f64)>,
 }
 
 /// What one place of a function took in a row (D17, D19): for a fixed node the neighbors it covers, for
@@ -31,6 +34,9 @@ pub struct Nb {
 pub struct PlaceBind {
     pub place: usize,
     pub nbs: Vec<usize>,
+    /// Per neighbor taken, what the place is credited for it: its cost, or where a child stands in for the
+    /// node the function names, what that node costs at its own level.
+    pub credit: Vec<f64>,
 }
 
 /// One function taken into a row's cover (D17), with what stood in its variables (D37).
@@ -64,7 +70,6 @@ pub struct Row {
 
 impl Row {
     pub(crate) fn residual(&self, j: usize) -> bool { self.owner[j].is_none() }
-    pub(crate) fn credit(&self, j: usize) -> f64 { self.nbs[j].cost }
     pub(crate) fn coord(&self, j: usize) -> Pos { add(&self.pos, &self.nbs[j].delta) }
 }
 

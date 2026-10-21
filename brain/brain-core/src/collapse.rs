@@ -40,10 +40,7 @@ impl Neuron {
         for (j, nb) in row.nbs.iter().enumerate() {
             let owned = if creating { row.owner[j].is_some() } else { row.owner[j].map_or(false, |o| Some(o) != fid) };
             out.push(Around { off: self.round(&nb.delta), neuron: nb.neuron, cost: nb.cost, j, owned, standin: false });
-            if !nb.covers.is_empty() {
-                let share = nb.cost / nb.covers.len() as f64;
-                for (m, d) in &nb.covers { out.push(Around { off: self.round(d), neuron: *m, cost: share, j, owned, standin: true }); }
-            }
+            for (m, d, c) in &nb.covers { out.push(Around { off: self.round(d), neuron: *m, cost: *c, j, owned, standin: true }); }
         }
         out
     }

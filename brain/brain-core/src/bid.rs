@@ -15,6 +15,9 @@ pub struct Bid {
     pub child: Option<NeuronId>,
     /// The activations its fixed nodes stand on: what an accepted bid covers besides the bidder.
     pub covers: Vec<ActRef>,
+    /// Per covered activation, what the bid is credited for it: its cost, or by the level of the node a child
+    /// stood in for (D22).
+    pub cover_credit: Vec<f64>,
     /// Per variable place, the activation bound there and its neuron: what an accepted bid binds (D10).
     pub binds: Vec<(usize, ActRef, NeuronId)>,
     pub failed: u32,
@@ -58,17 +61,27 @@ impl Neuron {
                 let Some(c) = self.measure(row, f, &free, false, wf) else { continue };
                 if !(c.coverage > c.price) { continue; }
                 let mut covers: Vec<ActRef> = Vec::new();
+                let mut cover_credit: Vec<f64> = Vec::new();
                 let mut binds: Vec<(usize, ActRef, NeuronId)> = Vec::new();
                 for b in &c.entry.binds {
                     match f.places[b.place].0 {
-                        Place::Fixed(_) => { for &j in &b.nbs { let a = row.nbs[j].act; if !covers.contains(&a) { covers.push(a); } } }
+                        Place::Fixed(_) => {
+                            for (x, &j) in b.nbs.iter().enumerate() {
+                                let a = row.nbs[j].act;
+                                let c = b.credit.get(x).copied().unwrap_or(row.nbs[j].cost);
+                                match covers.iter().position(|r| *r == a) {
+                                    Some(k) => cover_credit[k] = (cover_credit[k] + c).min(row.nbs[j].cost),
+                                    None => { covers.push(a); cover_credit.push(c.min(row.nbs[j].cost)); }
+                                }
+                            }
+                        }
                         _ => { for &j in &b.nbs { binds.push((b.place, row.nbs[j].act, row.nbs[j].neuron)); } }
                     }
                 }
                 let failed_places: Vec<usize> = (1..f.places.len()).filter(|pi| !c.entry.binds.iter().any(|b| b.place == *pi)).collect();
                 out.push(Bid {
                     owner: self.id, bidder: row.act, bidder_pos: row.pos, bidder_cost: row.own_cost,
-                    function: f.id, child: f.child, covers, binds, failed: c.entry.failed, failed_places,
+                    function: f.id, child: f.child, covers, cover_credit, binds, failed: c.entry.failed, failed_places,
                     p_size: f.p_size().max(1) as u32, which_function_bits: wf, choice: c.entry.choice,
                 });
             }

@@ -17,8 +17,17 @@ impl Neuron {
     pub(crate) fn entry_savings(&self, row: &Row, e: &CoverEntry) -> f64 {
         let wf = self.which_function_bits();
         let mut coverage = 0.0;
-        let mut seen: Vec<usize> = Vec::new();
-        for b in &e.binds { for &j in &b.nbs { if row.owner[j] == Some(e.function) && !seen.contains(&j) { seen.push(j); coverage += row.credit(j); } } }
+        let mut credited: Vec<(usize, f64)> = Vec::new();
+        for b in &e.binds {
+            for (x, &j) in b.nbs.iter().enumerate() {
+                if row.owner[j] != Some(e.function) { continue; }
+                let c = b.credit.get(x).copied().unwrap_or(row.nbs[j].cost);
+                let k = match credited.iter().position(|(i, _)| *i == j) { Some(k) => k, None => { credited.push((j, 0.0)); credited.len() - 1 } };
+                let add = c.min(row.nbs[j].cost - credited[k].1).max(0.0);
+                credited[k].1 += add;
+                coverage += add;
+            }
+        }
         if e.credited_owner && row.owner_self == Some(e.function) { coverage += row.own_cost; }
         let p = self.function(e.function).map_or(1, |f| f.p_size().max(1));
         coverage - (row.own_cost + wf + e.choice + e.failed as f64 * log2(p as f64))

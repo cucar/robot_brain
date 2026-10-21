@@ -60,10 +60,7 @@ impl Neuron {
             for (j, nb) in row.nbs.iter().enumerate() {
                 if !row.residual(j) { continue; }
                 nodes.push((nb.neuron, self.round(&nb.delta), nb.cost, true));
-                if !nb.covers.is_empty() {
-                    let share = nb.cost / nb.covers.len() as f64;
-                    for (m, d) in &nb.covers { nodes.push((*m, self.round(d), share, false)); }
-                }
+                for (m, d, c) in &nb.covers { nodes.push((*m, self.round(d), *c, false)); }
             }
             let mut seen: FxHashSet<Relation> = FxHashSet::default();
             let mut add = |rel: Relation, save: f64, value: Option<NeuronId>, index: &mut FxHashMap<Relation, Tally>| {
