@@ -226,16 +226,18 @@ frontier as a full neuron; the level above could cover it and count ten bits sav
 could do it again. A class holding everything that could stand at a position looked like the best saving in the
 table, and it narrowed nothing. Counting a symbol at what it cost removes all of that with one rule and no
 special case. A class of everything covers what it writes and saves nothing. A level that renames the one below
-saves nothing. And a class is credited for exactly as much as it narrows, at the base against the base alphabet
-and above it against whatever the symbol was chosen from. Categories still nest: a class the level above builds
-over some of a class's value neurons is a sub-category, and it pays where it leaves some of them out.
+saves nothing. And a class is credited for exactly as much as it narrows, against whatever the symbol was chosen
+from. Categories still nest: a class the level above builds over some of a class's value neurons is a
+sub-category, and it pays where it leaves some of them out.
 
-**On D13 — why a base symbol is chosen among the whole base alphabet.** The alternative is its own dimension's
-values, and then a dimension with one value costs nothing: a request, a carry, an inked pixel. A symbol that
-costs nothing saves nothing when it is covered, so nothing would ever name it, and those are the symbols a
-situation turns on. Among the whole base alphabet every base symbol costs the same and none costs nothing. It
-is also what the frontier needs said: the frontier is a list of the symbols present, and each has to be picked
-out of everything that could have been listed, its dimension included.
+**On D13 — why a base neuron is chosen among every neuron.** The alternative is its own dimension's values,
+and then a dimension with one value costs nothing: a request, a carry, an inked pixel. A symbol that costs
+nothing saves nothing when it is covered, so nothing would ever name it, and those are the symbols a situation
+turns on. Among every neuron the machine holds, each costs the same and none costs nothing. It is also what the
+frontier needs said: the frontier is a list of what stands on it, base neurons beside interneurons, and each has
+to be picked out of everything that could have stood there, its dimension included. A base neuron is not
+priced among the base neurons alone, for the same reason: what stands on the frontier was not chosen from them
+alone.
 
 **On 3.4 — why `L` never appears in the arithmetic.** `L` is what the differences are differences *in*; it is
 the reason the arithmetic is the arithmetic, and it is never a term in it.
@@ -939,7 +941,7 @@ wrong. The one price that gets both right is Shannon's: a class's occurrence cos
 and what it covers is counted at what that cost to write (D13), so where it holds it saves the difference, how
 much narrower it is than what could have stood there. The everything-class saves nothing; a class of one is an
 ordinary neighbor; and the specific pattern rises above the general one by exactly the bits it settles. Every
-field is priced the same way, `log₂` of its own alphabet: a base symbol among the base alphabet, an offset among
+field is priced the same way, `log₂` of its own alphabet: a neuron among every neuron the machine holds, an offset among
 its buckets, a pattern among its table's entries, a member among its variable's. That is a fixed-length code
 with one alphabet per kind of field, not a variable-length one: nothing about how often a value occurs enters.
 
@@ -951,7 +953,7 @@ member should not pay for a choice on every occurrence. It bought nothing: every
 the choice of which pattern for all the others, so ten members split into ten functions cost what the class cost,
 and the class's value neuron for a member is already the neuron the function's child would have been. A parameter
 spanning several offsets saves a whole neuron at every offset after the first, since its member is paid once, and
-that is the alternation. Nothing about this is a rule about alphabets: where the base alphabet has two symbols,
+that is the alternation. Nothing about this is a rule about alphabets: where the machine holds two neurons,
 a class of both covers one bit and writes one bit, saves nothing, and is never built.
 
 **On D12 — the file keeps the member.** A class's occurrence pays for which member stood, `log₂|K|` bits, so
@@ -1988,11 +1990,11 @@ action's worth changes, the neuron that notices is a new child with fresh connec
 
 ---
 
-**On Part VI — the equal case rests on a small alphabet.** The copy in that case is a parameter over a digit's
-own slot, so the digit has to stand on the apex when the answer is said. It does, because with twelve base
-neurons a class of the ten digits saves a quarter of a bit each time it covers a digit and never pays its line
+**On Part VI — the equal case rests on a small machine.** The copy in that case is a parameter over a digit's
+own slot, so the digit has to stand on the apex when the answer is said. It does, because with fifteen
+neurons a class of the ten digits saves about six tenths of a bit each time it covers a digit and never pays its line
 within the history
-the case keeps. A wider alphabet makes the same class pay, the request's bid then covers the digits through it,
+the case keeps. A larger machine makes the same class pay, the request's bid then covers the digits through it,
 and what stands at their slots is the classes' value neurons. The copy still holds, because a parameter reads a
 value neuron as its variable's value (D44, D45): the value neuron is what the copy function's child covers, and the digit
 under it is what the two positions agree on. What changes is who votes: the covered digits are silent (D10), and their

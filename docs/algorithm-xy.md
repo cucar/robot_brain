@@ -87,7 +87,7 @@ simply stop holding four letters and start holding one neuron.
 
 # 6. The price
 
-Say the base alphabet has thirty-two symbols, so a letter costs 5 bits, and say `p` costs 5 as well.
+Say the machine holds thirty-two neurons, so a letter costs 5 bits, and so does `p`.
 `P` and `P′` each hold sixteen letters as members, every letter that has stood two apart, so which member
 costs 4; and `p` holds two functions, `alternation` and the one over the class, so which of them costs 1
 (D13).

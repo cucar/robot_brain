@@ -263,7 +263,7 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
 ([algorithm.md](algorithm.md), Part VI). What is still open, in the order it bites:
 
 - **The worked cases have not been re-priced.** Every symbol is now counted at what it cost to write, a base
-  symbol among the base alphabet and anything above it at what its bid wrote (D13). The cases were traced for
+  neuron among every neuron the machine holds and anything above it at what its bid wrote (D13). The cases were traced for
   whether each pattern still pays, and each does, but only the alternating pair carries numbers. What the new
   prices do to how soon a pattern forms is not measured: a table line names neurons among all the machine
   holds, and an occurrence now saves only what its neighbors cost, so a pattern needs more repetitions within

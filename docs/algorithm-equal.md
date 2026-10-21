@@ -41,8 +41,9 @@ which is the diagonal memorized and not equality learned. Two positions of one d
 in time, is where a parameter holds.
 
 **Why the digits stand bare.** Each of the four slots holds a different digit from one request to the next, so
-each is a class candidate in `run`'s table (D41). With twelve base neurons a class over the ten
-digits saves `log₂ 12 − log₂ 10`, about a quarter of a bit, each time it binds one, against a class that names
+each is a class candidate in `run`'s table (D41). With fifteen neurons, the twelve base neurons,
+`EQUAL`, `ANSWER-C` and `ANSWER-D`, a class over the ten digits saves `log₂ 15 − log₂ 10`, about six tenths of a
+bit, each time it binds one, against a class that names
 ten neurons; the history is kept short of the length at which that pays (D30, R4), and no class forms. Bound
 or bare, a digit stays on the apex and votes (D10); what the classes change is which functions stand over
 the request. The case shows the bare regime because it is the one a short history gives.
@@ -157,22 +158,23 @@ regime.
 
 # 5. The price
 
-The alphabet is the twelve base neurons here, so a base symbol costs `log₂ 12 ≈ 3.6` bits. `run`'s table holds
+The machine holds fifteen neurons here, the twelve base neurons, `EQUAL`, `ANSWER-C` and `ANSWER-D`, so a neuron
+costs `log₂ 15 ≈ 3.9` bits. `run`'s table holds
 one function, so which of them costs nothing, and `P` chooses a member at `log₂ 10 ≈ 3.3` (D13).
 
 | the request, priced as | bits |
 |---|---|
-| flat: five base symbols | 17.9 |
-| `equal`, equal request: `run`, one member for `a` and `b`; `c` and `d` as themselves | 14.1 |
-| `equal`, unequal request: `run`, one member, one place failed; `a` not bound | covers 7.2 for 7.9 — not taken |
+| flat: five base symbols | 19.5 |
+| `equal`, equal request: `run`, one member for `a` and `b`; `c` and `d` as themselves | 15.0 |
+| `equal`, unequal request: `run`, one member, one place failed; `a` not bound | covers 7.8 for 8.2 — not taken |
 
 `say`'s table holds two functions, so which of them costs `1`, and a copy parameter chooses among ten at `3.3`. A
-`from-c` call covers `say` and `EQUAL`, at what its own call cost, `6.9`, and binds the digit `c` and the
-answer, `17.7` bits in all, for `say`, which function and one choice, `7.9`: it saves about `10` bits on an
+`from-c` call covers `say` and `EQUAL`, at what its own call cost, `7.2`, and binds the digit `c` and the
+answer, `19.0` bits in all, for `say`, which function and one choice, `8.2`: it saves about `11` bits on an
 equal request in the bare regime, where `c` stood bare and no earlier bid was credited it. `from-d` on an
-unequal request covers `run` where `from-c` covered `EQUAL`, and saves about `6.5`. Either saving is positive,
+unequal request covers `run` where `from-c` covered `EQUAL`, and saves about `7.4`. Either saving is positive,
 which is all the election asks (R22, R24). Once `same` binds `c` at the request, it is credited there (R23)
-and `from-c` is credited only the answer, 3.6 less; it still pays.
+and `from-c` is credited only the answer, 3.9 less; it still pays.
 
 # 6. What this case leans on
 

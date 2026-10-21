@@ -491,8 +491,7 @@ covered (D10), and expansion puts it back (R28).
 >
 > | Field | Cost | The alphabet |
 > |---|---|---|
-> | a base symbol | `log₂ B` | the `B` base neurons the machine declares (D1): every bucket of every event and action dimension |
-> | a neuron, named in a table | `log₂ n` | the `n` neurons the machine holds |
+> | a neuron | `log₂ n` | the `n` neurons the machine holds, base neurons and interneurons alike |
 > | an offset | `log₂ b` per dimension, summed | the `b` buckets of that dimension at the owner's reach `r` (D6): `offsets(r) + 1` in time and `2 · offsets(r) + 1` in any other |
 > | which function | `log₂ \|functions\|` | the owner's functions |
 > | which class | `log₂ \|classes\|` | the owner's classes, one of which a variable uses; nothing with one class |
@@ -500,24 +499,24 @@ covered (D10), and expansion puts it back (R28).
 > | which node failed | `log₂ \|p\|` | the `\|p\|` nodes the function names |
 
 `n` is the machine's count of its neurons, the base neurons and every neuron above them together. It starts
-at `B`, is raised when a neuron is created and lowered when one is deleted, and the machine hands it to every
-neuron with its call (R20). It prices only the naming of a neuron in a table, which points into the whole
-machine. `B` is the size of the base alphabet and never moves (D1), and every other alphabet is the owner's
-own: its functions, its classes and their members.
+at the count of base neurons the machine declares (D1). It is raised when a neuron is created and lowered when
+one is deleted, and the machine hands it to every neuron with its call (R20). **Every neuron costs the same to
+name**, a base neuron as much as an interneuron. Every other alphabet is the owner's own: its functions, its
+classes and their members.
 
 **An activation costs what it would take to state**, and it is the same wherever the activation is counted:
 
 | Activation | Its fields |
 |---|---|
-| a base activation | a base symbol |
+| a base activation | a neuron |
 | a call neuron | what its bidder cost, which function, and which node failed per node that did not hold |
 | an activation bound in a variable | its variable's choice: which member; for a parameter, paid once for all its places, so the others cost nothing |
 
 The machine keeps the cost with the activation, and a saved neighborhood keeps it with each neighbor (D18).
 
 **Covering an activation saves exactly what it cost.** So a child that only renames what it covers saves
-nothing. And a class that admitted every base symbol would price a bound symbol at `log₂ B`, which is
-what it cost bare.
+nothing. And a class that admitted every neuron would price a bound neuron at `log₂ n`, which is what it cost
+bare.
 
 **Each kind pays for what it says.** A function says which nodes and the offsets between them, once, and
 each occurrence says only that it happened: the owner, which of its functions, and what stands in each variable.

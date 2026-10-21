@@ -23,8 +23,8 @@ one per frame: what the loop counts is frames.
 (§3.5), shows `done` in the fourth, and shows nothing for a while. Then again. A dozen runs are enough for every
 line below to pay.
 
-The channel is one of several the machine holds, so a base symbol is priced among an alphabet of some size,
-say thirty-two, 5 bits (D13). Alone, with three symbols, nothing here would pay for its own line.
+The channel is one of several the machine holds, so a neuron is priced among a population of some size, say
+thirty-two neurons, 5 bits (D13). Alone, with this channel's few neurons, nothing here would pay for its own line.
 
 # 2. The neurons
 

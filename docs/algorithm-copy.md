@@ -40,8 +40,9 @@ executes what the machine outputs, and pays what was right and what was wrong.
 
 1. **The digits stand bare at first.** `run` fires beside the digit and sees it at offset zero (D26), a
    different one each time. An offset from a node where neurons vary is a node-to-open relation (D34, D47), and
-   with twelve base neurons a class over the ten digits saves `log₂ 12 − log₂ 10`, about a quarter of a
-   bit, each time it binds one, against a class that names ten neurons (D13, D30). Until the history holds
+   a class over the ten digits saves `log₂ n − log₂ 10` each time it binds one, against a class that names
+   ten neurons (D13, D30). With thirteen neurons, the twelve base neurons and `WROTE`, that is about four
+   tenths of a bit. Until the history holds
    enough requests for that to pay, `shown` does not form, and the digit and `run` stand bare on the apex.
 2. **The copy is a parameter.** `say` fires in the next frame and sees the request's frame at `−1`: `run`,
    and the digit shown; and beside itself at `0`, the digit said. In every taught request the same digit stands
@@ -105,18 +106,20 @@ Show a `9` that `C` has never admitted, and the first table runs: `shown` fails,
 
 # 5. The price
 
-The alphabet is the twelve base neurons here, so a base symbol costs `log₂ 12 ≈ 3.6` bits. `say`'s table holds
-two patterns, so which of them costs `1`, and `W` chooses a member at `log₂ 10 ≈ 3.3` (D13).
+While the digits stand bare the machine holds thirteen neurons, the twelve base neurons and `WROTE`, so a neuron
+costs `log₂ 13 ≈ 3.7` bits. Once `shown` pays it holds fourteen, with `SHOWN`, and a neuron costs
+`log₂ 14 ≈ 3.8`. `say`'s table holds two patterns, so which of them costs `1`, and `W` chooses a member at
+`log₂ 10 ≈ 3.3` (D13).
 
 | the answer, priced as | bits |
 |---|---|
-| flat: `say` and a digit | 7.2 |
-| `write`: `say`, which function, one member; `run` covered and the two digits bound | 7.9 for three symbols besides `say`, 10.7: saves 2.8 |
-| `write` over `SHOWN`: `say`, which function, one member; `SHOWN` covered at what its call cost, `run` and one member, 6.9, and the said digit bound; the shown digit was credited to `shown` already (R23) | 7.9 for `SHOWN` and the said digit, 10.5: saves 2.6 |
+| flat: `say` and a digit | 7.4 |
+| `write`: `say`, which function, one member; `run` covered and the two digits bound | 8.0 for `say` and three symbols besides, 14.8: saves 6.8 |
+| `write` over `SHOWN`: `say`, which function, one member; `SHOWN` covered at what its call cost, `run` and one member, 7.1, and the said digit bound; the shown digit was credited to `shown` already (R23) | 8.1 for `say`, `SHOWN` and the said digit, 14.7: saves 6.6 |
 
 `shown` in `run`'s table covers `run` and binds the digit for `run`'s name, no function choice with one function
-in the table, and one member: it saves a quarter of a bit a request, and `C` names ten neurons, so it pays only
-when the history holds some hundred and fifty requests. That is the one number this case turns on, and it is `H`
+in the table, and one member: it saves about four tenths of a bit a request, and `C` names ten neurons, so it pays
+only when the history holds some hundred requests. That is the one number this case turns on, and it is `H`
 (R4).
 
 # 6. What this case leans on
