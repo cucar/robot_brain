@@ -37,6 +37,8 @@ impl Machine {
         let Some(f) = self.line(owner, pid) else { return };
         path.push(n);
         for (pi, (place, off)) in f.places.iter().enumerate() {
+            // a recognized call recovers what its bid covered and bound, and a failed place took nothing
+            if fired_by.map_or(false, |fb| fb.failed.contains(&pi)) { continue; }
             let q = add(&at, off);
             match place {
                 Place::Owner => self.expand_into(owner, q, path, base, all.as_deref_mut(), None),

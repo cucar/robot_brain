@@ -111,7 +111,7 @@ impl Machine {
         self.spans[child as usize] = span;
         let cost = bid.bidder_cost + bid.which_function_bits + bid.failed as f64 * log2(bid.p_size.max(1) as f64);
         let args: Vec<(usize, NeuronId, ActRef)> = bid.binds.iter().map(|(p, r, n)| (*p, *n, *r)).collect();
-        let fb = FiredBy { owner: bid.owner, pattern: bid.function, args };
+        let fb = FiredBy { owner: bid.owner, pattern: bid.function, args, failed: bid.failed_places.clone() };
         let act = self.new_act(child, bid.bidder_pos, cost, strong, Some(fb), span, level, height);
         if self.trace { eprintln!("[fire f{}] #{} at {:?} from #{} p{} cost {:.1} span {:?}", self.frame_no, child, bid.bidder_pos, bid.owner, bid.function, cost, span); }
         (Some(Pending { act, covered: covered.to_vec() }), minted, reused)

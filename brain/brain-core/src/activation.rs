@@ -11,6 +11,8 @@ pub struct FiredBy {
     pub owner: NeuronId,
     pub pattern: PatternId,
     pub args: Vec<(usize, NeuronId, ActRef)>,
+    /// The places that failed (D22): nothing of them was covered or bound, so expansion places nothing there.
+    pub failed: Vec<usize>,
 }
 
 /// One standing inference (R45): a connection as it was read at age 0.

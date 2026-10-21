@@ -45,6 +45,22 @@ impl Machine {
     /// for one thing the younger's functions are rewired to the older (D43, R43). Spans follow (D4).
     pub(crate) fn refresh_index(&mut self) {
         let ids: Vec<NeuronId> = self.thalamus.iter().filter(|n| n.alive && n.kind == Kind::Inter).map(|n| n.id).collect();
+        // a child stands for one thing (D36): a parent whose function re-centered into something else than what
+        // the child stands for is no longer its parent (D29), and is wired below to the neuron that stands for
+        // what it now is, or gets a child of its own at its next accepted bid
+        let mut detached: Vec<(NeuronId, PatternId)> = Vec::new();
+        for &id in &ids {
+            let parents = self.thalamus[id].parents.clone();
+            if parents.len() < 2 { continue; }
+            let first = self.child_key(parents[0].0, parents[0].1);
+            for &(owner, pid) in &parents[1..] {
+                if self.child_key(owner, pid) != first {
+                    self.thalamus[id].parents.retain(|p| *p != (owner, pid));
+                    if let Some(f) = self.thalamus[owner].function_mut(pid) { if f.child == Some(id) { f.child = None; } }
+                    detached.push((owner, pid));
+                }
+            }
+        }
         let mut index: FxHashMap<String, NeuronId> = FxHashMap::default();
         let mut rewire: Vec<(NeuronId, NeuronId)> = Vec::new();
         for &id in &ids {
@@ -63,6 +79,13 @@ impl Machine {
                 if !self.thalamus[old].parents.contains(&(owner, pid)) { self.thalamus[old].parents.push((owner, pid)); }
             }
             if !self.ledger.contains(&young) { self.ledger.push(young); }
+        }
+        for (owner, pid) in detached {
+            let key = self.child_key(owner, pid);
+            if let Some(&n) = self.index.get(&key) {
+                self.thalamus[owner].wire_child(pid, n);
+                if !self.thalamus[n].parents.contains(&(owner, pid)) { self.thalamus[n].parents.push((owner, pid)); }
+            }
         }
         // spans, from the patterns as they now stand (D4)
         let mut memo: FxHashMap<NeuronId, Pos> = FxHashMap::default();

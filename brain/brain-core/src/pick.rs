@@ -165,15 +165,14 @@ impl Neuron {
         let mut benefit = 0.0;
         let mut joins: Vec<(usize, Vec<CoverEntry>)> = Vec::new();
         for i in 0..self.history.len() {
-            {
-                let row = &self.history[i];
-                let free = vec![false; row.nbs.len()];
-                match self.measure(row, &f, &free, false, wf) { Some(c) if c.coverage > c.price => {}, _ => continue }
-            }
-            let with = self.greedy_cover(i, None, ctx);
-            if !with.iter().any(|e| e.function == fid) { continue; }
-            let as_is: f64 = { let row = &self.history[i]; row.cover.iter().map(|e| self.entry_savings(row, e)).sum() };
-            let diff = self.savings_of_cover(i, &with) - as_is;
+            // the row's cover as it stands with the candidate in it, owning only the residual it names (R14)
+            let row = &self.history[i];
+            let taken: Vec<bool> = row.owner.iter().map(|o| o.is_some()).collect();
+            let Some(c) = self.measure(row, &f, &taken, row.owner_self.is_some(), wf) else { continue };
+            if !(c.coverage > c.price) { continue; }
+            let mut with = row.cover.clone();
+            with.push(c.entry);
+            let diff = self.savings_of_cover(i, &with) - self.savings_of_cover(i, &row.cover);
             if diff > 0.0 { benefit += diff; joins.push((i, with)); }
         }
         let made: f64 = self.classes.iter().filter(|c| !classes_before.contains(&c.id) && f.uses_class(c.id)).map(|c| self.class_entry(c, ctx)).sum();

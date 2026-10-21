@@ -18,6 +18,8 @@ pub struct Bid {
     /// Per variable place, the activation bound there and its neuron: what an accepted bid binds (D10).
     pub binds: Vec<(usize, ActRef, NeuronId)>,
     pub failed: u32,
+    /// The places that failed, by index into the function's places.
+    pub failed_places: Vec<usize>,
     pub p_size: u32,
     pub which_function_bits: f64,
     pub choice: f64,
@@ -63,9 +65,10 @@ impl Neuron {
                         _ => { for &j in &b.nbs { binds.push((b.place, row.nbs[j].act, row.nbs[j].neuron)); } }
                     }
                 }
+                let failed_places: Vec<usize> = (1..f.places.len()).filter(|pi| !c.entry.binds.iter().any(|b| b.place == *pi)).collect();
                 out.push(Bid {
                     owner: self.id, bidder: row.act, bidder_pos: row.pos, bidder_cost: row.own_cost,
-                    function: f.id, child: f.child, covers, binds, failed: c.entry.failed,
+                    function: f.id, child: f.child, covers, binds, failed: c.entry.failed, failed_places,
                     p_size: f.p_size().max(1) as u32, which_function_bits: wf, choice: c.entry.choice,
                 });
             }

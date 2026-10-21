@@ -39,14 +39,14 @@ impl Neuron {
     }
 
     /// The benefit of a function (D30): over the rows it covers, what the cover saves with it less what the
-    /// cover the row would have without it saves.
-    pub(crate) fn benefit(&self, fid: PatternId, ctx: Ctx) -> f64 {
+    /// same cover saves without it.
+    pub(crate) fn benefit(&self, fid: PatternId, _ctx: Ctx) -> f64 {
         let mut total = 0.0;
         for i in self.rows_of(fid) {
-            let row = &self.history[i];
-            let with: f64 = row.cover.iter().map(|e| self.entry_savings(row, e)).sum();
-            let without = self.greedy_cover(i, Some(fid), ctx);
-            total += with - self.savings_of_cover(i, &without);
+            // without it, what it held falls to the residual unless another function of the cover names it
+            let cover = &self.history[i].cover;
+            let without: Vec<CoverEntry> = cover.iter().filter(|e| e.function != fid).cloned().collect();
+            total += self.savings_of_cover(i, cover) - self.savings_of_cover(i, &without);
         }
         total
     }
