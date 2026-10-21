@@ -782,29 +782,29 @@ differ, and are meant to:
 One procedure appears twice in the design — once inside a neuron, over its own table, and once inside the
 machine, over a frame's bids. It is stated here and cited from both.
 
-> **D28 — Greedy cover.** The operation that covers a set of activations with **claimants**, each a set of
-> named neurons read against one of those activations, and credits each covered neuron to exactly one claimant.
+> **D28 — Greedy cover.** The operation that covers a set of activations with **functions**, each read against one of
+> those activations, and credits each covered neuron to exactly one function.
 > It repeats:
 >
-> 1. **Measure** every claimant not yet taken against the still-uncovered neurons of its activation: its coverage
+> 1. **Measure** every function not yet taken against the still-uncovered neurons of its activation: its coverage
 >    is what the still-uncovered neurons of its activation it covers cost, the activation itself among them, and
 >    its price is the fields of its occurrence there (D22).
 > 2. **Take** the one with the highest `coverage / price` if `coverage > price`, and **stop** otherwise. It joins
 >    its activation's cover (D17) and becomes the owner (D19) of the neurons it was measured on, which leave the
 >    uncovered set; the round repeats from 1.
 >
-> **What it returns is the covers and the owners.** A cover is the claimants taken for that activation (D17);
-> the owner of a covered neuron is the claimant of the round that took it (D19), so each is credited once; what
+> **What it returns is the covers and the owners.** A cover is the functions taken for that activation (D17);
+> the owner of a covered neuron is the function of the round that took it (D19), so each is credited once; what
 > no round took is the residual (D21). `price` is fixed by what fired and cannot change between rounds;
 > `coverage` only falls.
 
 **The two callers differ in what they cover and in how they break ties, in nothing else.** Each states its
 tie-break where it runs (D15, R24).
 
-| caller                     | claimants | to cover                      |
+| caller                     | functions | to cover                      |
 |----------------------------|---|-------------------------------|
 | neuron - recognition (§5.2) | each function, against each activation | the residual of the history (D21) |
-| machine - election (R24)  | bids | the board (§6.2) |
+| machine - election (R24)  | this frame's bids (D31) | the board (§6.2) |
 
 ## 4.7 Bid
 
@@ -1054,26 +1054,40 @@ below the most activations a neuron can have in one frame.
 
 ## 5.2 Recognize
 
-Recognition is the procedure that chooses a cover for an activation's neighborhood (D17): the greedy cover
-(D28) over the residual of the history (D21). It covers the whole residual, not the frame's activations alone:
-every activation of the history whose residual changed since the last call is covered again, the frame's new
-ones and those a retired or evicted pattern left neighbors uncovered in, and an activation nothing touched
-keeps its cover, so the call's work is in what changed and not in `H`. The frame's own activations are always
-among them. Their covers are the neuron's own accounting; what the election sees is every function that fits
-them, in the cover or not (D31, §5.6).
+Recognition chooses a cover for an activation's neighborhood (D17). It is the greedy cover (D28), run over the
+residual of the history (D21), not over the frame's activations alone. A call covers the activations whose
+residual changed:
 
-**A function fits at the owner where every fixed node holds and every variable holds: a class where a member
-stands at its place, a parameter where one neuron stands at all the places it ties.** A parameter
-takes whatever neuron stands there, member or not, and one that was not a member is one from that row on. A
-class takes members only (D27). Measuring a function against a neighborhood, each node it names holds or
-fails (D22), and each that fails is a correction; where a failed node would have stood follows from its
-relation to any node that holds. Every function of the table is a claimant, and takes the activation itself
-with its neighbors (D20). What stands in its variables is what the bid carries as arguments (D31).
+- the frame's new activations;
+- the activations a retired or evicted pattern left neighbors uncovered in.
 
-**Cold start is silence.** A pattern covering no activations names nothing, and a neuron with an
-empty table covers nothing and bids nothing.
+Every other activation keeps its cover. So the call's work is in what changed, not in `H`.
 
-Every pattern whose covered activations changed, by eviction or by cover, re-centers (D29).
+**Holding and failing.** Measured against a neighborhood, each node a function names holds or fails:
+
+| Node | Holds where |
+|---|---|
+| the owner's activation | always |
+| a fixed node | its neuron stands at its offset |
+| a class | a member stands at its place; it takes members only (D27) |
+| a parameter | its value stands at the place; it takes any neuron, and one that was not a member is one from that row on |
+
+A node that fails is a correction (D22). Where it would have stood follows from its relation to any node that
+holds.
+
+**Fitting.** A function fits where its savings are positive (D22): what it covers there is worth more than its
+price. Its failed nodes are part of the price. The election could never accept a function that does not fit,
+since on the board a bid covers no more than its neighborhood holds (R22).
+
+**Cover and bids.** Every function of the table competes in the cover, and takes the activation
+itself with its neighbors (D20). The cover is the neuron's own accounting. The election sees every function
+that fits, in the cover or not (D31, §5.6). What stands in a function's variables is what its bid carries as
+dependencies (D31).
+
+**Cold start is silence.** A pattern covering no activations names nothing. A neuron with an empty table
+covers nothing and bids nothing.
+
+**Re-centering.** Every pattern whose covered activations changed, by eviction or by cover, re-centers (D29).
 
 ## 5.3 Delete
 
@@ -1340,7 +1354,7 @@ election stops at the first that does not pay. **The election does not minimize 
 returns a good solution, not a proved minimum. **Every neuron a bid covers ends up credited to exactly one
 bid**, which is what stops an activation being paid for twice.
 
-> **R24 — The election is D28, run by the machine.** The claimants are this frame's bids and what they cover is
+> **R24 — The election is D28, run by the machine.** The functions are this frame's bids and what they cover is
 > the **free set**: every activation on the frontier (R27), at its own full coordinate — frame and position — that
 > some bid names and no earlier election has credited (R23).
 >
