@@ -74,7 +74,10 @@ impl Machine {
             let Some((i, _, _)) = best else { break };
             let bid = remaining.remove(i);
             let (cov, price, covered, bound, strong) = self.measure_bid(&bid);
-            if self.trace { eprintln!("[accept f{} l{}] #{} p{} at {:?} cov {:.1} price {:.1} failed {} covers {} binds {}", fno, level, bid.owner, bid.function, bid.bidder_pos, cov, price, bid.failed, covered.len(), bound.len()); }
+            if self.trace {
+                let show = |rs: &[ActRef]| rs.iter().filter_map(|r| self.act(*r).map(|a| format!("#{}@{}={:.1}", a.neuron, a.pos[0], a.cost))).collect::<Vec<_>>().join(" ");
+                eprintln!("[accept f{} l{}] #{} p{} at {:?} cov {:.1} price {:.1} (bidder {:.1} which {:.1} choice {:.1} failed {}) covers [{}] binds [{}]", fno, level, bid.owner, bid.function, bid.bidder_pos, cov, price, bid.bidder_cost, bid.which_function_bits, bid.choice, bid.failed, show(&covered), show(&bound));
+            }
             accepted += 1;
             // credit, once (R23): what it covers leaves the apex, what it binds stays (D10, D24)
             for r in &covered { if let Some(a) = self.act_mut(*r) { if a.covered_at.is_none() { a.covered_at = Some((fno - r.frame) as u32); } } }

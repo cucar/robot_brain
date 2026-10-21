@@ -166,7 +166,8 @@ impl Machine {
         self.thalamus.get(owner).and_then(|n| n.function(pid)).or_else(|| self.retired_lines.get(&(owner, pid)).map(|x| &x.0))
     }
 
-    pub(crate) fn base_bits(&self) -> f64 { log2(self.base_count as f64) }
+    /// What a base activation costs (D13): a neuron, `log₂ n` of the neurons the machine holds now.
+    pub(crate) fn base_bits(&self) -> f64 { log2(self.alive as f64) }
 
     pub(crate) fn reach_for(&self, axes: u8, span: &Pos) -> Pos {
         let mut r = [0; MAX_DIMS];
