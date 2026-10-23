@@ -81,7 +81,7 @@ frame only via its **own** routing match, in which case it votes and error-check
 accrual that Phase B's machinery already handles.
 
 The one remaining activation case — a shared neuron routing-matched from several parents at different depths in
-one sweep — is activated **at each depth** (the multi-depth `neuron_states` holds it across levels), and
+one frame — is activated **at each depth** (the multi-depth `neuron_states` holds it across levels), and
 needs **no** separate Phase-D inhibition set.
 
 ### Cross-frame accrual
@@ -96,11 +96,11 @@ reconciliation across frames either.
 
 Like a mint, the lookup **installs** the erroring neurons' routing → R for the next time their context recurs
 ([neuron.rs](../brain/brain-core/src/neuron.rs)); it does **not** activate R this frame. So there is
-no "inject R at a deeper level mid-sweep" problem — R is active this frame only if its own routing
+no "inject R at a deeper level partway up" problem — R is active this frame only if its own routing
 independently matched.
 
 The one place a shared neuron lands at **multiple depths in one frame** is multi-parent **routing**: under
-reuse, R can be routing-matched from several parents at different levels in one sweep
+reuse, R can be routing-matched from several parents at different levels in one frame
 (`activate_*_pattern(pattern_id, level+1)` from each), activating it at each level. The multi-depth
 the multi-depth `neuron_states` **holds** a neuron active at several levels and each
 activation is **processed at its depth** (not collapsed); no extra inhibition set is needed.
@@ -121,9 +121,9 @@ activation is **processed at its depth** (not collapsed); no extra inhibition se
   gains the new routing entry with independent strength; its connection set accumulates.
 - **MNIST + stocks**: neuron count drops further vs the no-reuse baseline; accuracy ≥ baseline.
 - **Profile**: per-request reuse lookup adds **< 20%** per-frame.
-- **Termination**: heavy cross-frame reuse still terminates — the level-sweep terminates as today
+- **Termination**: heavy cross-frame reuse still terminates — the level loop terminates as today
   ([brain.rs](../brain/brain-core/src/brain.rs)), and reuse only adds routing entries (fired next
-  frame), so it cannot extend the current frame's sweep.
+  frame), so it cannot extend the current frame's climb.
 
 ---
 
