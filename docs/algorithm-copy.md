@@ -48,12 +48,12 @@ executes what the machine outputs, and pays what was right and what was wrong.
    and the digit shown; and beside itself at `0`, the digit said. In every taught request the same digit stands
    at `−1` and at `0`: a same-to-same relation (D34, D47), and the pick grows a function from it, `write`, over
    `say` and a parameter `W` tying the two places (D33, D27). The collapse then finds `run` a frame back in
-   every use and adds it as a fixed node. `W` costs which member once and covers the said digit in full. It is
+   every use and adds it as a fixed node. `W` writes the digit once, a choice among every neuron, and its two places share that cost. It is
    open on its members, so a digit never shown before is its value the first time, and a member from then on
    (D44).
 3. **What the call looks like.** `write` names `say`, its owner, so its child `WROTE` fires at `say`'s
    coordinate (D53), covering `say` and `run`. The shown digit and the said digit stand in `W`'s two places,
-   bound: priced as one member, and still on the apex (D10, §6.4).
+   bound: the digit is written once, each place at half of it, and both stay on the apex (D10, §6.4).
 4. **The request learns its answer.** `run` is covered in the frame the answer runs and connects once to the
    neuron that covered it, `WROTE`, one frame ahead, with that frame's reward (D10). The shown digit is bound,
    not covered, so it goes on connecting to `WROTE` every time it is shown (R31). Before `write` existed, `say`
@@ -108,14 +108,16 @@ Show a `9` that `C` has never admitted, and the first table runs: `shown` fails,
 
 While the digits stand bare the machine holds thirteen neurons, the twelve base neurons and `WROTE`, so a neuron
 costs `log₂ 13 ≈ 3.7` bits. Once `shown` pays it holds fourteen, with `SHOWN`, and a neuron costs
-`log₂ 14 ≈ 3.8`. `say`'s table holds two patterns, so which of them costs `1`, and `W` chooses a member at
-`log₂ 10 ≈ 3.3` (D13).
+`log₂ 14 ≈ 3.8`. The channel is laid out over time alone, so no position is written. A call costs its child
+and its error correction. `write` names three places besides its owner, `run` and `W`'s two, so with none
+failed its error correction is `log₂ 4 = 2`. `W` writes the digit once, a choice among every neuron, and its
+two places share that cost (D13).
 
 | the answer, priced as | bits |
 |---|---|
 | flat: `say` and a digit | 7.4 |
-| `write`: `say`, which function, one member; `run` covered and the two digits bound | 8.0 for `say` and three symbols besides, 14.8: saves 6.8 |
-| `write` over `SHOWN`: `say`, which function, one member; `SHOWN` covered at what its call cost, `run` and one member, 7.1, and the said digit bound; the shown digit was credited to `shown` already (R23) | 8.1 for `say`, `SHOWN` and the said digit, 14.7: saves 6.6 |
+| `write`: `WROTE`, `W`'s binding and the error correction; `say` and `run` covered and the two digits bound | 9.4 for `say`, `run` and the two digits, 14.8: saves 5.4 |
+| `write` over `SHOWN`: `WROTE`, `W`'s binding and the error correction; `say` and `SHOWN` covered, `SHOWN` at what its record costs, its child and an error correction of `1`, 4.8; the said digit bound, and the shown digit bound, at its binding in `C`, 3.3 | 9.6 for `say`, `SHOWN` and the two digits, 15.8: saves 6.1 |
 
 `shown` in `run`'s table covers `run` and binds the digit for `run`'s name, no function choice with one function
 in the table, and one member: it saves about four tenths of a bit a request, and `C` names ten neurons, so it pays

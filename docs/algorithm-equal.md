@@ -66,9 +66,9 @@ the request. The case shows the bare regime because it is the one a short histor
    `equal`, whose collapse ties the two slots in a parameter `P` (D33, D27). Agreement is its whole test,
    so a digit never seen equal before is `P`'s value the first time it is, and a member from then on.
 2. **The branch is whether `P` holds.** In an equal request `equal`'s bid covers `run` and binds `a` and `b` for
-   the price of one member, and is taken: its child `EQUAL` fires at slot `0`, `run`'s coordinate (D53), and
+   one binding, a choice among every neuron shared by the two places, and is taken: its child `EQUAL` fires at slot `0`, `run`'s coordinate (D53), and
    `a`, `b`, `c` and `d` all stand on the apex, the first two bound (D10). In an unequal request `P`'s two
-   places disagree, its value is the digit at the later place and the other is a failed node (D44), the bid no
+   places disagree, its value is the digit at the earlier place and the other is an absence (D44), the bid no
    longer covers more than it costs, and nothing is taken: `run` and all four digits stand bare. Two
    situations, told apart by what stands at slot `0`.
 3. **The answer sees the situation by what stands.** `say` fires at slot `0` of the next frame and sees the
@@ -79,7 +79,8 @@ the request. The case shows the bare regime because it is the one a short histor
 4. **The copies are parameters.** In every equal request the digit at slot `3` a frame back is the digit
    beside `say` now, and in every unequal one the digit at slot `4` is: two same-to-same relations in `say`'s
    table (D47). The pick grows a function from each over `say`, and each collapse ties the two places in a
-   parameter, `Pc` and `Pd` (D33, D27), costs which member once, and covers the answer in full. A
+   parameter, `Pc` and `Pd` (D33, D27). Each writes its digit once, a choice among every neuron, and its two
+   places share that cost. A
    parameter is open on its members, so a digit never answered before is copied the first time it is
    shown.
 5. **The functions find the situation.** The collapse of the function with `Pc` finds `EQUAL` a frame before
@@ -88,7 +89,7 @@ the request. The case shows the bare regime because it is the one a short histor
    `say` and `EQUAL` and binds `c` and the answer, and `ANSWER-C` fires at slot `0` of the answer's frame,
    `say`'s coordinate (D53); `from-d` covers `run` where `from-c` covered `EQUAL` and binds `d`, and `ANSWER-D`
    fires at the same place. Which is taken is which parameter holds: the other's two places disagree, so it takes
-   the digit at its first place as its value and is charged a failed node at the other (D44), and the bid that
+   the digit at its first place as its value and is charged an absence at the other (D44), and the bid that
    holds covers more for less and is taken first (D22, D28).
 6. **The situation learns its answer.** In the taught frames `ANSWER-C` fired over `EQUAL` and `ANSWER-D` over
    `run`. Each is covered in the frame the answer runs, and connects once to the neuron that covered it, with
@@ -159,22 +160,23 @@ regime.
 # 5. The price
 
 The machine holds fifteen neurons here, the twelve base neurons, `EQUAL`, `ANSWER-C` and `ANSWER-D`, so a neuron
-costs `log₂ 15 ≈ 3.9` bits. `run`'s table holds
-one function, so which of them costs nothing, and `P` chooses a member at `log₂ 10 ≈ 3.3` (D13).
+costs `log₂ 15 ≈ 3.9` bits. The slot dimension has five positions, so a position costs `log₂ 5 ≈ 2.3`, and a
+bare activation `6.2`. A call costs its child, its position and its error correction. A parameter writes its
+digit once, a choice among every neuron, `3.9`, and its places share that cost (D13).
 
 | the request, priced as | bits |
 |---|---|
-| flat: five base symbols | 19.5 |
-| `equal`, equal request: `run`, one member for `a` and `b`; `c` and `d` as themselves | 15.0 |
-| `equal`, unequal request: `run`, one member, one place failed; `a` not bound | covers 7.8 for 8.2 — not taken |
+| flat: five base symbols | 31.1 |
+| `equal`, equal request: `EQUAL`, `P`'s binding shared by `a` and `b`, and an error correction of `log₂ 3`; `c` and `d` as themselves | 24.2 |
+| `equal`, unequal request: one place failed, an error correction of `log₂ 3 + 1`; `a` not bound | covers 12.5 for 12.7 — not taken |
 
-`say`'s table holds two functions, so which of them costs `1`, and a copy parameter chooses among ten at `3.3`. A
-`from-c` call covers `say` and `EQUAL`, at what its own call cost, `7.2`, and binds the digit `c` and the
-answer, `19.0` bits in all, for `say`, which function and one choice, `8.2`: it saves about `11` bits on an
-equal request in the bare regime, where `c` stood bare and no earlier bid was credited it. `from-d` on an
-unequal request covers `run` where `from-c` covered `EQUAL`, and saves about `7.4`. Either saving is positive,
-which is all the election asks (R22, R24). Once `same` binds `c` at the request, it is credited there (R23)
-and `from-c` is credited only the answer, 3.9 less; it still pays.
+A copy function names three places besides its owner, so with none failed its error correction is `log₂ 4 = 2`.
+A `from-c` call covers `say` and `EQUAL`, at what `EQUAL`'s record costs, `7.8`, and binds the digit `c` and
+the answer, `26.5` bits in all, for `ANSWER-C`, its position, `Pc`'s binding and the error correction, `12.1`:
+it saves about `14` bits on an equal request in the bare regime, where `c` stood bare. `from-d` on an unequal
+request covers `run` where `from-c` covered `EQUAL`, and saves about `12.8`. Either saving is positive, which is
+all the election asks (R22, R24). Once `same` binds `c` at the request, `c` costs its binding in `Q`,
+`log₂ 10 ≈ 3.3`, and `from-c` is credited that for it, 2.9 less; it still pays.
 
 # 6. What this case leans on
 

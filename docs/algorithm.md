@@ -213,9 +213,15 @@ bidder's, and never an average over what it covers.
 > own child (D27), so what a neuron stands for never contains itself and is finite. **No two interneurons
 > stand for the same thing.** An accepted bid whose pattern has no child is wired to the interneuron that stands
 > for what its child would, whether that neuron bid this frame, fired frames ago or has not fired within any
-> open window, and a new one is created only where none does (R16, R43). A function that re-centers changes what its
-> child stands for (D29), and where that is what another interneuron stands for, the function is wired to that
-> neuron: merging, across owners (D43).
+> open window, and a new one is created only where none does (R16, R43).
+>
+> For each interneuron the index keeps its definition and its parents. A parent is a neuron, and the index
+> keeps which of its functions points at the interneuron. A neuron becomes a parent when update child points one
+> of its functions at the interneuron (§4.1). It stops being one when that function detaches or retires.
+>
+> An interneuron's definition is set by an accepted bid. A bid sets it when the bid's function differs from the
+> interneuron's definition, or the interneuron is new. In one frame only the first such bid the election accepted
+> sets it. A later one is compared against that.
 
 **A function is a pointer to a child, and a child is a neuron.** The two are made apart. A neuron adds a
 **function** to its own table, which may enter a cover at once, and bids it with no child. The first time a
@@ -456,18 +462,37 @@ offset, with one activation dimension and a reach of 1:
 > activation still writes nothing and connects to nothing; only its coverer learns what ran. That is the whole
 > of inhibition in the design.
 >
-> **Bound is not covered.** An activation standing in a variable of an accepted bid (D38) is **bound**: the file
-> prices it through the call, as its variable's choice (D13), but nothing else changes. It stays on the apex, it is
-> a neighbor, it is heard, and it connects to what follows. A call hides what is the same on every occasion, its
-> owner and its fixed nodes, and leaves visible what varies.
+> **Bound is half covered.** An activation standing in a variable of an accepted bid (D38) is **bound**. The call
+> covers its position: the function's relation says where it stands, so its position is no longer in the file.
+> Its neuron is not covered: it is written as it was, a neuron (D12, D13). It stays on the apex, it is a
+> neighbor, it is heard, and it connects to what follows. A call hides what is the same on every occasion, its
+> owner and its fixed nodes, and leaves visible what varies. A parameter binds each of its places the same way.
 
 ## 3.7 File
 
 > **D12 — File.** Two parts, both spanning the whole run. **The dictionary**: every neuron's table, its
-> functions and the classes they use (D38). **The transcript**: the apex of every frame (D10) — each accepted
-> bid counted as its call: its owner and which of its functions, what stands in each of its variables, and the
-> fixed nodes that did not hold (error correction); and each bare neuron standing as itself. Pictured as text,
-> the dictionary is a line per pattern and the transcript a line per frame.
+> functions and the classes they use (D38). A function's body is written there once, and nowhere else.
+> **The transcript**: the apex of every frame (D49), each activation as its **record**:
+>
+> | Entry | Its record |
+> |---|---|
+> | a bare neuron | present; the neuron; its position |
+> | a call | present; its child; its position |
+> | an activation bound in a variable | present; the neuron; its position, less what the call fixes: the function's relation says where it stands |
+> | an absence | absent; the neuron a call placed that did not stand; its position |
+>
+> Pictured as text, the dictionary is a line per pattern and the transcript a list of entries.
+
+**A variable covers a position, and nothing else.** The call fixes where each of its variables stands, by the
+function's relations, so a value's position is not written again. Which neuron stood there is written as it
+was, a neuron. A call compresses its function's body: its owner and its fixed nodes are written in the
+dictionary once, and each call writes none of them. The values in its variables stay on the apex and in the
+transcript.
+
+**An error is an absence.** A call places every node its function names. A node that did not stand is an entry
+of its own, at the coordinate where it should have stood: absent, and the neuron. The decoder expands every
+call, then removes every neuron an absence names. Whatever stood there instead is on the apex, uncovered, and
+is written as itself. So a wrong neuron costs an absence and a neuron, and nothing there costs an absence alone.
 
 **Both types are in it.** An action the machine executed is a neuron that fired (D8), and it stands in the
 file exactly as an observed event does, compressed by the same patterns (D5).
@@ -479,8 +504,8 @@ not run (R32).
 **It holds nothing about the search either.** Populations, estimates and margins are the machine's and
 never the file's, because expanding an apex neuron needs the patterns and nothing else.
 
-**It holds the arguments.** What stands in a variable is priced as the variable's choice (D13), bound and not
-covered (D10), and expansion puts it back (R28).
+**It holds the values.** What stands in a variable is written as its neuron (D13), its position covered by the
+call (D10), and expansion puts it back at its place (R28).
 
 ## 3.8 Prices
 
@@ -492,51 +517,61 @@ covered (D10), and expansion puts it back (R28).
 > | Field | Cost | The alphabet |
 > |---|---|---|
 > | a neuron | `log₂ n` | the `n` neurons the machine holds, base neurons and interneurons alike |
+> | a position | per activation dimension, summed | in time, the offsets back to the previous entry of the transcript, `offsets(r) + 1` at the activation's neuron's reach `r` in time (D4, D6); in any other dimension, the positions of the layout the activation stands in (D3) |
 > | an offset | `log₂ b` per dimension, summed | the `b` buckets of that dimension at the owner's reach `r` (D6): `offsets(r) + 1` in time and `2 · offsets(r) + 1` in any other |
-> | which function | `log₂ \|functions\|` | the owner's functions |
 > | which class | `log₂ \|classes\|` | the owner's classes, one of which a variable uses; nothing with one class |
-> | which member | `log₂ \|K\|` | the members of the class or parameter `K` |
-> | which node failed | `log₂ \|p\|` | the `\|p\|` nodes the function names |
+> | present or absent | `1` | the two kinds of entry (D12) |
 
 `n` is the machine's count of its neurons, the base neurons and every neuron above them together. It starts
 at the count of base neurons the machine declares (D1). It is raised when a neuron is created and lowered when
 one is deleted, and the machine hands it to every neuron with its call (R20). **Every neuron costs the same to
-name**, a base neuron as much as an interneuron. Every other alphabet is the owner's own: its functions, its
-classes and their members.
+name**, a base neuron as much as an interneuron. Every other alphabet is a table's own: its classes and
+their members.
 
-**An activation costs what it would take to state**, and it is the same wherever the activation is counted:
+**The error correction** is an absence per node a call placed that did not stand (D12): present or absent, a
+neuron and a position, the same fields as the activation that failed to be there. A call where every node held
+pays nothing to say so. A call where every node failed pays an absence per node and covers only its bidder, so
+its savings are negative and it never fits (D22).
+
+**An activation costs what its record takes to state** (D12), and it is the same wherever the activation is
+counted:
 
 | Activation | Its fields |
 |---|---|
-| a base activation | a neuron |
-| a call neuron | what its bidder cost, which function, and which node failed per node that did not hold |
-| an activation bound in a variable | its variable's choice: which member; for a parameter, paid once for all its places, so the others cost nothing |
+| a base activation | present or absent; a neuron; its position |
+| a call | present or absent; a neuron, its child; its position |
+| an activation bound in a variable | present or absent; a neuron; its position less what the call fixes |
+| an absence | present or absent; a neuron; its position |
 
 The machine keeps the cost with the activation, and a saved neighborhood keeps it with each neighbor (D18).
 
 **Covering an activation saves exactly what it cost.** So a child that only renames what it covers saves
-nothing. And a class that admitted every neuron would price a bound neuron at `log₂ n`, which is what it cost
-bare.
+nothing. A bound activation costs its neuron, and covering it later saves its neuron and no more.
 
 **Each kind pays for what it says.** A function says which nodes and the offsets between them, once, and
-each occurrence says only that it happened: the owner, which of its functions, and what stands in each variable.
-Where it stood is not said, since the layout is not priced. A class says which set, once, and leaves which
-member to each occurrence. A parameter says which places agree, once, and leaves which neuron to each
-occurrence, paid once however many places it ties.
+each occurrence says only that it happened: its child and its position, with an absence per node that did not
+hold. Where it stood is
+said once, as the call's position, and every node it names stands at its offset from there. So a call covers
+the positions of everything it names, its variables' included. A class says which set may stand at a place,
+once. A parameter says which places agree, once. Neither writes which neuron stood there: that is written as
+it was.
 
-**The layout is not priced.** Where a neuron stands is its place in the transcript, and how many things stand
-at one place or follow one instance is the layout's; no field says either. **Nothing about frequency enters**:
-a field costs the same however often it is used.
+**Where an activation stands is written.** The transcript lists what stood, and silence is what it does not
+list, so each entry says where it stood, in every activation dimension. Time is written as an offset back to
+the previous entry, in the alphabet patterns use for time (D6). Every other activation dimension is written as
+a position in the layout. How many things stand at one place, or follow one instance, needs no field: each is
+an entry of its own. **Nothing
+about frequency enters**: a field costs the same however often it is used.
 
 ## 3.9 File length
 
 The file's length `L` is two sums (D13): over every neuron's table, what its functions and classes cost, which
 is the dictionary; and over the activations on the frontier, what each costs, which is the transcript. There is
-one reading of it. A call is its owner, which of its functions, what stands in each variable and its failed
-nodes, and what the call fired stands on the frontier at exactly that. A neuron above counts a child at what it
-cost below, so nothing is saved by naming it again and nothing is gained by counting it twice. The election
-takes activations off the frontier at their cost and puts a call in their place at its price (R22), and a
-neuron's margin does the same over its own history (D30). Nothing computes `L`: every quantity the design uses
+one reading of it. A call is its child and its position, with an absence per node it placed that did not
+stand, and what the call fired stands on the frontier at exactly that. What it bound stands on the frontier as its neuron, its position covered. A
+neuron above counts a child at what it cost below, so nothing is saved by naming it again and nothing is gained
+by counting it twice. The election takes activations off the frontier at their cost, and puts a call in their
+place at its price (R22). A neuron's margin does the same over its own history (D30). Nothing computes `L`: every quantity the design uses
 is a **difference**, which is finite however long the run is.
 
 ## 3.10 Parameters
@@ -572,7 +607,7 @@ it is used.
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------|
 | create neuron           | The machine creates it when an accepted bid needs one and none can be reused, holding nothing: a call neuron for a function. | R16, R43 |
 | process functions       | At its level: everything structural for the activations that fired this frame.                                                                             | §5, R20    |
-| wire child to function  | Once the frame's last level has run, the machine points each function at the child it created or chose for it.                                             | R16, R17 |
+| update child            | The machine calls a neuron with three things: one of its functions, that function's child, and that interneuron's definition. If the definition is the function, the neuron points the function at the child. Otherwise the neuron either adapts the function to the definition or detaches the function from the child, whichever leaves the larger margin. It returns what it did. The machine uses that to keep the child's parents in the interneuron index. | D36, R16, R43 |
 | delete pattern neighbor | The machine removes a neuron that no longer exists from every pattern and saved activation that names it.                                                          | R38        |
 | connect                 | After the frame's last level, reaching every open activation at age 1 and beyond: it delivers what stood on the apex this frame and any reward, and collects nothing.                                   | §7.1       |
 | infer                   | After the frame's last level, reaching every activation at age 0: it delivers nothing and collects what the activation infers.                                                                        | §7.2       |
@@ -586,16 +621,16 @@ Part V covers selection, where the machine chooses among those inferences one wi
 
 > **R1 — One decision point: the frame it fires.** A neuron is called once per level it fires at, for every
 > activation of that level together, each at age 0, and everything structural happens in that call: it refreshes
-> its history, recognizes the frame's neighborhoods, retires what no longer pays, builds every candidate that
-> pays, merges what became identical, and returns the bids of each activation together with everything it retired
+> its history, fits the frame's rows, re-centers what they changed, builds every candidate that pays, merges
+> what became identical, retires what no longer pays, and returns the bids of each activation together with everything it retired
 > (R20).
 
 ## 4.2 History
 
 > **D18 — History.** A neuron's record of its own activations: the last `H` of them, oldest first, each at its
 > coordinate, holding the neighborhood it observed in the frame it fired (D7), each neighbor at its exact
-> offset (D6) and with what it cost, and the activation's own cost beside them, since a cover is
-> credited the activation too (D13, D20). It is the evidence every structural decision
+> offset (D6) and with what it cost, and the activation's own cost beside them, since a function
+> covers the activation too (D13, D22). It is the evidence every structural decision
 > the neuron makes is read over, and it holds nothing else: the neuron's connections are not in the history and
 > `H` does not bound them (R31).
 >
@@ -611,7 +646,7 @@ Part V covers selection, where the machine chooses among those inferences one wi
 ## 4.3 Patterns
 
 > **D32 — Table.** A neuron holds one **patterns table**, **the table** for short: its functions (D38), and the
-> classes its functions use as variables (D41), each with its members. Recognition reads it (D28); adding, retiring
+> classes its functions use as variables (D41), each with its members. Fit reads it (D54); adding, retiring
 > and merging write it (R15, R18, D43).
 
 > **D16 — Node.** What a function names: a neuron (D2), a variable (D38), or the owner's own activation, which
@@ -635,9 +670,9 @@ Part V covers selection, where the machine chooses among those inferences one wi
 > one relation fewer than nodes, the rest following. A function fits inside the box a neighborhood spans (D5).
 > Every function names the owner's activation among its nodes, so it holds at the owner and nowhere else:
 > where the activations around the owner satisfy every relation it writes. A function is the collapse of the
-> rows it covers (D27), moves as they move (D29), and promotes one child, a call neuron (R16). Its `id` is its
+> rows it fits (D27), moves as they move (D29), and promotes one child, a call neuron (R16). Its `id` is its
 > creation order within its owner's table, a handle that survives re-centering. It breaks one tie: where two of
-> the owner's functions measure the same in recognition (D28), the older `id` is taken. The election never
+> the owner's functions measure the same in a row's cost (D30), the older `id` is taken. The election never
 > reads it.
 >
 > **A pattern is not a neighborhood.** A neighborhood is what one activation saw where it fired, saved once and
@@ -666,8 +701,8 @@ alone, and promotes no child: what stands in it stays on the apex, bound (D10).
 >
 > | Variable | Fixed, priced once | Open, priced on each occurrence | What it covers |
 > |---|---|---|---|
-> | a class (D41) | which class of the table: a set of neurons, its members | which member stands there, `log₂ \|K\|` | nothing; the member stands bound (D10) |
-> | a parameter (D44) | which places of the function agree, as same-to-same relations | which neuron stands at all of them, `log₂ \|K\|` | nothing; the neuron stands bound at each place, paid once |
+> | a class (D41) | which class of the table: a set of neurons, its members | nothing: the member is written as itself | its position; the member stands bound (D10) |
+> | a parameter (D44) | which places of the function agree, as same-to-same relations | nothing: the neuron is written as itself at each place | the position at each place; the neuron stands bound at each (D10) |
 >
 > **The two types are closed in opposite ways.** A class is closed on its members and open on where: a
 > neuron that is not a member does not fit, and any function of the table may use the class at any place. A
@@ -678,8 +713,8 @@ alone, and promotes no child: what stands in it stays on the apex, bound (D10).
 >
 > **Every function names the owner's activation.** It stands at offset zero in every neighborhood (D26), so a
 > function holds at the owner and covers it: the bidder and the fixed nodes are covered together, and what
-> stands in the variables is bound (D10). On every occurrence a bid is priced as its owner and which of its functions,
-> what stands in each variable, and which of the nodes it names did not hold (D22). A function holds nothing
+> stands in the variables is bound (D10). On every occurrence a bid is priced as its child and its
+> position, with an absence per node that did not hold (D13, D22). A function holds nothing
 > but its nodes and relations: no branch, no loop. What branches is which function fires; what loops is the
 > frame; what a variable held is on the apex, bound beside the call neuron.
 
@@ -689,7 +724,7 @@ alone, and promotes no child: what stands in it stays on the apex, bound (D10).
 > in place of one another: two neurons that have stood together where the class is used are never both members.
 >
 > **Its value**, at a place, is the member that stood there, which stays on the apex, bound (D10). Where no
-> member stands at a place the class is used, that is a failed node (D22), and the variable does not hold there.
+> member stands at a place the class is used, that is an absence (D22), and the variable does not hold there.
 >
 > **A class is not a neuron.** It is made by a function's collapse when a place pays as a class and no
 > class of the table fits it (D27), grows and shrinks on its members by the collapse of any function that uses
@@ -700,13 +735,14 @@ alone, and promotes no child: what stands in it stays on the apex, bound (D10).
 > **D44 — Parameter.** A variable of one function that ties two or more of its **places** together: **the same one
 > stands at all of these places**, whichever it is. It is written as same-to-same relations between the places
 > (D34), one fewer than places, and the relations compose. Beside it the function keeps its **members**, the
-> neurons that have stood at all of its places within the history. The list is a record and not a condition: it
-> prices which member (D13) and says nothing about what may stand. In the table a parameter costs nothing
-> beyond its relations.
+> neurons that have stood at all of its places within the history. The list is a record and not a condition. It
+> says nothing about what may stand, and it prices nothing (D13). In the table a parameter costs nothing beyond
+> its relations.
 >
-> **Its value** is the neuron that stood at its places, which stays on the apex at each of them, bound (D10).
-> Where the places disagree, the value is the neuron at most of them, the latest on a tie, and every place that
-> holds something else is a failed node (D22).
+> **Its value** is the neuron that stood at its places. It stays on the apex, bound, at each of them, written as
+> itself (D10).
+> Where the places disagree, the value is the neuron at the earliest of its places, the smaller position on a
+> tie, and every place that holds something else is an absence (D22).
 >
 > **It is open on its members and closed on where.** Any neuron fits, seen before or not, and only where it
 > stands at every place: a thing that comes for the first time is the parameter's value the first time, and is a
@@ -718,83 +754,88 @@ alone, and promotes no child: what stands in it stays on the apex, bound (D10).
 > come, it takes its value from what stands at the first and places it at the second. That is how a value is
 > carried forward in time, and it is the whole of copying.
 
-## 4.4 Cover
+## 4.4 Fit
 
-What this section defines is shared: a neuron reads it over its own history and the machine over a frame.
+A neuron reads its table against its rows. This section defines what it finds there.
 
-A neuron explains each activation's neighborhood with patterns from its table. This section defines that
-explanation: the cover, the owner of each neighbor, and the two readings of that, the coverage and the
-residual. Every price in the design (D13) is counted off them.
-
-> **D17 — Cover.** One per activation: the set of functions chosen to explain its neighborhood. A function
-> names a set of nodes (D15), so it explains a subset of the neighbors of the neighborhood.
-
-> **D19 — Owner.** One per neighbor of the activation: the pattern of the cover credited with it. A neighbor no
-> pattern of the cover names has no owner. Over the activation the owners are a map keyed by its neighbors,
-> each a neuron at its coordinate: it has the shape of the neighborhood, what fired, and beside each entry which
-> pattern is paid for it (the owner). A neighbor that stands in a variable is owned by the function the variable
-> belongs to. The owner's own activation is in the map too, owned by the first function of the cover (D38).
-
-> **D20 — Coverage.** What one pattern of the cover is credited with: the neighbors it owns (D19), and the
-> activation itself where no pattern taken before it was credited it (D28).
-
-> **D21 — Residual.** What no pattern of the cover is credited with: the neighbors with no owner (D19).
+> **D54 — Fit.** A function fits a row where its savings there are positive (D22): what its nodes that hold cost
+> is more than its record and its absences. A row is read as it stands: each neighbor is the neuron at its
+> offset, a child on the apex is a neuron as itself, and the owner's activation is itself at offset zero.
+> Nothing in a row is reserved: two functions of one table may fit one row on the same neighbors.
+>
+> **Uses.** The rows a function fits are its **uses**. They are what the collapse reads (D27), what re-centering
+> watches (D29), and where the function is bid (D31).
+>
+> **Holding and failing.** Measured against a row, each node a function names holds or fails:
+>
+> | Node | Holds where |
+> |---|---|
+> | the owner's activation | always |
+> | a fixed node | its neuron stands at its offset, or a child standing on the apex stands for it there (D22) |
+> | a class | a member stands at its place; it takes members only (D27) |
+> | a parameter | its value stands at the place; it takes any neuron, and one that was not a member is one from that row on |
+>
+> A node that fails is an absence (D12). Where it would have stood follows from its relation to any node that
+> holds.
 
 ## 4.5 Savings
 
-> **D22 — Savings.** What one function `p` saves over one activation's neighborhood `O`: what it is credited
-> with (D20), less what it costs, the fields of its occurrence (D13).
+> **D22 — Savings.** What one function `p` saves over one row `O`: what it covers there, less what it costs
+> there, the fields of its occurrence (D13).
 >
 > | | |
 > |---|---|
-> | coverage | what the neighbors of `O` that `p` covers cost, and the activation itself where nothing was credited it first |
-> | price | what its bidder cost, which function, which member per variable, and `log₂ \|p\|` per node it names that did not hold |
+> | coverage | the owner's activation and each fixed node that holds, a neuron and a position each; and the position of each place a variable holds at |
+> | price | its record (D12): its child and its position; and an absence per node that did not hold |
 > | savings | coverage less price |
 >
-> `|p|` is the count of what the function names: its fixed nodes, each class once and each parameter
-> once per place it ties. A neighbor in a variable counts toward the coverage at what it cost, since the call
-> replaces that cost by the variable's choice, which is on the price side.
+> A neighbor in a variable counts toward the coverage at its position only: the call covers where it stands,
+> and its neuron is still written.
 >
 > What a function names holds or fails: a fixed node fails when its neuron is absent, a class where no
 > member stands at its place (D41), a parameter at each place where what stands differs from its value
 > (D44), and the owner's activation never, since it is there wherever the owner reads.
 >
-> **A child can stand in for its parent.** Where a function names the parent, the child can match as well (R28).
-> The bid then covers the child, and pays its cost once.
+> **A child holds a node it stands for, and is not covered by it.** Where a function names a neuron at a
+> place, and a child standing on the apex stands for that neuron there (D47), the node holds. The function is
+> credited nothing for it, and the child is not covered. The child's record already writes that neuron, and the
+> call's record does not write the child. So a match inside a child is a condition the function meets, and a
+> function saves only what it takes off the apex.
 
-**What a function fires on the apex stands in for what it covers and binds**; that is what it saves, and that is
-the coverage. What it costs is its occurrence's fields. What the bidder cost is on both sides and cancels,
-for the first function taken; for the rest it is on the price side alone (D22). A neuron the function does not
-name is not in the account at all: it costs what it cost whether the function exists or not.
+**What a function fires on the apex stands in for what it covers**; that is what it saves, and that is the
+coverage. What it costs is its record. The owner's activation is on the coverage side and the child on the price
+side, and where the owner is a base neuron each costs a neuron and a position, so the two cancel. On the board
+a bidder is credited once, to the first bid of it accepted (R24); after that the child is on the price side
+alone. A neuron the function does not name is not in the account at all: it costs what it cost whether the
+function exists or not.
 
 **This is the only valuation in the design**, and it is read over three different sets, so the three numbers
 differ, and are meant to:
 
 | Read by                               | Over                  | Against                                  | Settles                            |
 |---------------------------------------|-----------------------|------------------------------------------|------------------------------------|
-| a neuron, in recognition (D28, D30)   | its functions         | the residual of its history              | its covers                         |
+| a neuron, in its margin (D28, D30)    | its functions         | each row of its history                  | its table                          |
 | the machine, in the election (R22, R24) | this frame's bids   | the board                                | what is credited, and so the file  |
 | the machine, in the match (R49)       | one inferred function | the frames it reaches back into          | whether the inference is proposed  |
 
 ## 4.6 Greedy cover
 
-One procedure appears twice in the design — once inside a neuron, over its own table, and once inside the
-machine, over a frame's bids. It is stated here and cited from both.
+One rule decides what a set of bids writes for a set of activations. The election runs it over the board, and
+a neuron runs it over a row to price its table (D30). It is stated here and cited from both.
 
-> **D28 — Greedy cover.** The operation that covers a set of activations with **functions**, each read against one of
-> those activations, and credits each covered neuron to exactly one function.
-> It repeats:
+> **D28 — Greedy cover.** The operation that covers a set of activations with **functions**, each read against
+> one of those activations, and pays each covered neuron to exactly one function. It repeats:
 >
 > 1. **Measure** every function not yet taken against the still-uncovered neurons of its activation: its coverage
->    is what the still-uncovered neurons of its activation it covers cost, the activation itself among them, and
->    its price is the fields of its occurrence there (D22).
-> 2. **Take** the one with the highest `coverage / price` if `coverage > price`, and **stop** otherwise. It joins
->    its activation's cover (D17) and becomes the owner (D19) of the neurons it was measured on, which leave the
->    uncovered set; the round repeats from 1.
+>    is what the still-uncovered neurons it covers cost, the activation itself among them, and its price is the
+>    fields of its occurrence there (D22).
+> 2. **Take** the one with the highest `coverage / price` if `coverage > price`, and **stop** otherwise. It is
+>    paid for the neurons it was measured on. Those it covers leave the uncovered set. Those it binds stay in it
+>    at their neuron's cost, since only their position is covered, so a later round may cover them (D10). The
+>    round repeats from 1.
 >
-> **What it returns is the covers and the owners.** A cover is the functions taken for that activation (D17);
-> the owner of a covered neuron is the function of the round that took it (D19), so each is credited once; what
-> no round took is the residual (D21). `price` is fixed by what fired and cannot change between rounds;
+> **What it returns is what was written and by whom**: the functions taken, what each was paid for, and what no
+> round took, which stands as itself. `price` is fixed by what fired and cannot change between rounds;
 > `coverage` only falls.
 
 **The two callers differ in what they cover and in how they break ties, in nothing else.** Each states its
@@ -802,86 +843,92 @@ tie-break where it runs (D15, R24).
 
 | caller                     | functions | to cover                      |
 |----------------------------|---|-------------------------------|
-| neuron - recognition (§5.2) | each function, against each activation | the residual of the history (D21) |
+| neuron - margin (D30) | the functions of its table that fit the row (D54) | the row, whole; priced and kept nowhere |
 | machine - election (R24)  | this frame's bids (D31) | the board (§6.2) |
 
 ## 4.7 Bid
 
 > **D31 — Bid.** What an activation offers the machine: every function of its neuron's table that fits its
-> neighborhood (D7), whether or not the neuron's own cover took it (D17). Competing explanations of one
+> neighborhood (D54). Competing explanations of one
 > neighborhood are all bid, and the election picks among them (R24).
 >
 > **A function is bid whole.** The machine takes it or leaves it, its variables with it: it cannot hold where they
 > do not.
 >
-> **A bid carries what its function names, and where each node stood.** It names the offset at which each node
-> was found, read off the neighborhood with the owner at zero (D7), and what stands in each variable. The machine
-> resolves the offsets against the bidder's coordinate and credits the activations standing there (R22). An
-> accepted bid covers its bidder and its fixed nodes, the bidder credited once, to the first bid of that
-> activation the election accepts (R24), and binds what stands in its variables (D10).
+> **A bid carries its function, and the machine finds the rest.** The function's relations say where each node
+> stands from the bidder, so the machine reads what stands in each variable off the board itself (R22). An accepted bid covers
+> its bidder and its fixed nodes, the bidder credited once, to the first bid of that activation the election
+> accepts (R24), and binds what stands in its variables (D10).
 >
 > | Component   | Description                                                                      |
 > |-------------|----------------------------------------------------------------------------------|
 > | function    | the id of the function bid; an id is its creation order (D15) |
 > | relations   | the function's relations and variables, as they stand in the table (D12) |
-> | offsets     | per node that stood, where it stood, the owner at zero                           |
 > | child       | the id of the child the function promotes; none until a bid of it has been accepted (R16) |
-> | arguments   | per variable, the neuron that stood, and where (D37) |
+>
+> **Resolving a bid.** The machine places the owner at the bidder's coordinate and each place at its offset
+> from it. A coarse offset spans a group of exact offsets (D6), and the place is read over every activation in
+> the group. A fixed node holds where its neuron stands there, or a child standing for it (D22). A class place
+> holds where a member stands there. A parameter's value is the neuron standing at the earliest of its places,
+> the smaller position on a tie, and it holds at each place where that neuron stands (D44). Where several activations could
+> answer one place, the one not yet covered is taken first, then the one nearest the owner, then the earlier
+> coordinate (R24). What stands in each variable on that occasion is the call's arguments (D37). Expansion
+> reads a call back by the same rule (R28).
 
 ## 4.8 Relations
 
-> **D47 — Relation index.** What a neuron counts over the residual of its history (D21): every relation (D34)
-> its rows hold, each counted by the rows that hold it. The ends are neighbors at their coordinates and the
-> owner's activation (D16). The index is updated when a row is admitted, when a row is
-> evicted, and when a neighbor's coverage changes. Each kind of relation is the evidence for one type of
-> pattern:
+> **D47 — Relation index.** What a neuron counts over its history (D18): every relation (D34) its rows hold,
+> each counted by the rows that hold it, owned or not. The ends are neighbors at their coordinates and the
+> owner's activation (D16). The index is updated when a row is admitted and when a row is evicted. Each kind of
+> relation is the evidence for one type of pattern:
 >
 > | Kind | What stands | Counted by | Evidence for |
 > |---|---|---|---|
 > | node to node | `a` and `b` at `δ` from each other | the rows that hold the pair at `δ` | a function of the two, or a fixed node joining one |
 > | same to same | `n` at `c`, and `n` at `c + δ` | the rows that hold one neuron at both ends, whichever neuron | a parameter tying the two places |
-> | node to open | `a` at `δ` from `c` in one row, `b` at `δ` from `c` in another, never both in one row | the residual neighbors holding either there, `a` and `b` being the two that have stood there most | a class at `δ` from `c`, of `a` and `b` (D41) |
+> | node to open | `a` at `δ` from `c` in one row, `b` at `δ` from `c` in another, never both in one row | the neighbors holding either there, `a` and `b` being the two that have stood there most | a class at `δ` from `c`, of `a` and `b` (D41) |
 >
-> The first and the third hold between nodes of any kind, the owner's activation among them. A coordinate bound
-> in a variable of a function of the cover is read as that variable's, and as nothing else.
+> The first and the third hold between nodes of any kind, the owner's activation among them.
 >
-> **A child can stand in for its parents here too.** A child on the apex is a neighbor as itself, and as each
-> of the base symbols it stands for, each at its own offset (R28). Its cost is split equally among them.
+> **A child stands for what is under it.** A child on the apex is a neighbor as itself, and as each of the base
+> symbols it stands for, each at its own offset (R28). As itself it costs what it cost. As a base symbol under it
+> it costs nothing: that symbol is written in the child's record. So a relation through a base symbol under a
+> child says where a function holds, and never what it would save (D22).
 
 The owner stands in every row at offset zero, so one neighbor that keeps standing at one offset from it is a
 node-to-node relation with the owner, and a function of the two. At the base, in a stream of text, that is what
 every row carries.
 
 How the index is laid out is the implementation's. What it holds is not: a relation's count is the number of
-rows of the history whose residual holds it.
+rows of the history that hold it.
 
 ## 4.9 Collapse
 
-> **D27 — Collapse.** The operation that grows a relation of the index (D47) into a function, and re-decides
-> what a function names once it exists. The relation sets the function's **uses**, the rows of the history that
-> hold it, and everything the function names is decided by its price over those uses (D22), from the uses
-> alone. What a neighbor is worth is always what it cost (D13), read from the saved neighborhood.
+> **D27 — Collapse.** The operation that grows a seed (D33) into a function, and re-decides what a function
+> names once it exists. It reads the function's **uses** (D54), whole rows, and everything the function names
+> is decided by its price over those uses (D22), from the uses alone. What a neighbor is worth is always what it
+> cost (D13), read from the saved neighborhood.
 >
-> **The uses.** A row is a use of the function where every fixed node holds and every variable holds: a member at
-> each place a class is used, one neuron at every place a parameter ties (D41, D44). Each row is read
-> in nodes (D33): a coordinate bound in a variable of another function of the cover is that function's, any other
-> neighbor is the neuron standing there, and the owner's activation is itself, at offset zero. Widening a place
-> into a variable widens the uses: the function then holds in rows it did not, and the rest of its body is
-> re-decided over them.
+> **The uses.** For a function of the table, the uses are the rows it fits as it stands before the collapse
+> (D54). For a candidate, they are the rows that hold its seed (D33). Each use is read as it stands: every
+> neighbor is the neuron at its offset, a child on the apex is a neuron as itself, a base symbol under a child
+> holds a node there and is worth nothing (D47), and the owner's activation is itself at offset zero. Nothing
+> in a use is skipped because another function names it. Two functions of one table may read the same neighbor
+> in the same row and both name it; which of them is paid for it is settled in the margin (D30) and on the
+> board (R24), never here.
 >
-> **A place.** A candidate is a place at offset `δ` from a node already in the function, and the collapse
-> decides what to name there among four options, each priced the same way. The uses that count are those in
-> which the coordinate at `δ` is not owned by another function of the cover (D19). Let `s` be their number.
+> **A place.** A place is an offset `δ` from a node already in the function, and the collapse decides what to
+> name there, over the uses, among four options:
 >
-> | Option | Covers | Fails in | Costs in the table |
+> | Option | Covers, in each use where it holds | Holds where | Entry |
 > |---|---|---|---|
-> | a fixed node `x` | what `x` cost in each use where `x` stands | the other `s − count(x)` uses | a neuron and an offset |
-> | a class | what stood in each use where a member of the class stands, paying which member there | the other uses | which class, plus the members a new class names |
-> | a parameter, tying `δ` to a place already in | what stood at `δ` in each use where it is the same neuron as at that place, paying nothing more for the choice | the other uses | an offset |
-> | nothing | nothing | nothing | nothing |
+> | a fixed node `x` | what `x` costs: a neuron and a position | `x` stands at `δ` | a neuron and an offset |
+> | a class | the position | a member stands at `δ` | which class, plus the members a new class names |
+> | a parameter tying `δ` to a place already in | the position | the same neuron stands at both | an offset |
+> | nothing | nothing | everywhere | nothing |
 >
-> The option taken is the one with the largest value of what it covers over the uses, less `log₂ \|p\|` per
-> failure, less its entry in the table.
+> The option taken is the one with the largest value of what it covers over the uses, less an absence (D13) for
+> each use where it does not hold, less its entry. A node that holds in few uses is worth less than nothing.
 > A class's members are decided with it: a candidate member is a neuron that has stood at the place and
 > never in a use together with a member there, counted wherever the class is used, and the candidates are
 > taken in order of that count, each while what it covers beats a neuron's entry and the wider choice it gives
@@ -897,10 +944,8 @@ rows of the history whose residual holds it.
 > places are decided in, and a node may enter by its relation to any node already in, since relations compose
 > and the function is the same whichever is written (D34).
 >
-> **A coordinate in a variable is that variable's.** Once a function of the cover binds a coordinate in a variable, every
-> other function reads what stands there as that variable: it names that function's child or leaves the
-> coordinate alone, and it never names the neuron standing there. What stood there is not lost by that: it is
-> on the apex, bound (D10). A neighbor another function of the cover owns is skipped (D19).
+> **After the collapse** the function's fit is re-read over every row (D54). Where its uses changed, it
+> re-centers again at the next call (D29). One collapse per function per call.
 >
 > **A function never names a neuron built over its own child.** A neuron is built over a child when what it
 > stands for passes through that child (D36): a function over the child, or over a neuron built over it. A
@@ -909,73 +954,73 @@ rows of the history whose residual holds it.
 
 The collapse is the only operation that decides what a pattern names. It runs in two places:
 
-- **Re-centering** (§4.10, D29) collapses the rows an existing function covers, at every call.
-- **Creating** (§5.4, D33) collapses a relation of the index into a function. A candidate is in no cover, so
-  every owned neighbor is skipped and it is built on the residual alone.
+- **Re-centering** (§4.10, D29) collapses a function of the table over its uses.
+- **Creating** (§5.4, D33) collapses a seed into a function, over the rows that hold the seed.
 
-Skipping owned neighbors is what keeps patterns apart: a pattern grows only into the residual, never into what
-another pattern owns, so two patterns covering the same activations cannot converge on one set of neighbors.
+**Competition is what keeps patterns apart.** Two functions that come to name the same neighbors are priced
+against each other in the margin (D30). The one that explains no row best falls below its entry and is retired
+(R18), and identical ones merge (D43).
 
 **Every place is decided by the same uses.** A row says something at every offset from the owner, a neuron or
-a silence, so the outermost place is decided over the same `s` as the one beside the owner, less only the uses
-skipped there. Each function's collapse has its own `s`; nothing is pooled across functions, and no threshold,
+a silence, so the outermost place is decided over the same `s` as the one beside the owner. Each function's collapse has its own `s`; nothing is pooled across functions, and no threshold,
 smoothing or probability estimate enters.
 
 ## 4.10 Re-centering
 
-> **D29 — Re-centering.** The operation that re-decides what a pattern names (D15) once the rows it covers have
-> changed: the oldest evicted when the history is full (D18), or a new one admitted and covered with it (D28).
-> It runs the collapse (D27) over the rows the pattern now covers (residual included), and updates the owners
-> (D19) to what the pattern now holds. A place may widen into a variable or narrow to a fixed node here, and the
-> uses widen or narrow with it. It never takes a neuron built over the pattern's own child (D27).
+> **D29 — Re-centering.** The operation that re-decides what a function of the table names (D15) once its uses
+> have changed (D54): a use evicted when the history is full (D18), or an admitted row it fits. It runs the
+> collapse (D27) over the uses as they stand. A place may widen into a variable or narrow to a fixed node here,
+> and the uses widen or narrow with it. It never takes a neuron built over the function's own child (D27).
 
 ## 4.11 Margin
 
 > **D30 — Margin.** What a function is worth over the history, less its entry in the table (D15). It is priced
-> against what would cover its neighbors without it, never against nothing.
+> against what the table does without it, never against nothing.
 >
 > | | |
 > |---|---|
-> | benefit of `f` | the sum, over the rows `f` covers, of what the cover saves with `f` in it less what it saves without `f` (D22) |
+> | the cost of a row | what the election would write for it from this table: the greedy cover (D28) of the row by the functions that fit it (D54), each taken function at its price there, and what no function covers at its own cost |
+> | benefit of `f` | the sum, over the rows of the history, of the row's cost without `f` in the table less its cost with `f` |
 > | cost of `f` | its entry in the table (D15) |
 > | margin of `f` | benefit less cost |
 >
-> **Without `f`**, its fixed nodes and what stood in its variables fall to the residual, unless another function of
-> the cover names them. So a function is worth what it adds over the cover without it. A class has no margin of
-> its own: it is worth what the functions using it are worth with it in them, and it goes when none uses it
-> (R41).
+> **Without `f`**, the row is written by the rest of the table, so another function may take what `f` held. A
+> function is worth what it adds over the best the table does without it. Where another function does better
+> in a row, `f` is worth nothing there. A class has no margin of its own: it is worth what the functions using
+> it are worth with it in them, and it goes when none uses it (R41).
+>
+> **Both costs are computed when the margin is asked, and kept nowhere.** The neuron holds no cover and no
+> owner. This is the one place the election's arithmetic runs inside a neuron, and it is a price.
 >
 > It is the difference in the file (§3.9) between the file with the function and the file without it, and both
 > terms are sums over what the neuron already holds.
 
 A pattern is added only when its margin is strictly positive (R15) and retired only when strictly negative (R18).
 
-## 4.12 Greedy pick
+## 4.12 Seeds
 
-> **D33 — Greedy pick.** The operation that builds new functions out of the residual of the history (D21). It
-> takes the relations of the index (D47) one at a time, best first, and grows each into a function by the
-> collapse (D27).
+> **D33 — Seed.** A relation of the index (D47) that no function of the table writes between the same nodes at
+> the same offset, counted in two or more rows. A relation a function writes is that function's: re-centering
+> is where it grows (D29). A relation outside every function starts a new one, and that includes a relation
+> lying inside ground an existing function fits.
 >
-> | Relation | Grows into | Kept when |
-> |---|---|---|
-> | node to node | a function over the two nodes, the owner among them where it is one | its margin is positive (D30): over each row, what the cover saves with it in it less what it saves as it stands, where that is positive |
-> | same to same | a function over the owner and a parameter tying the two places | the same |
-> | node to open | a function over the owner and a class at the place | the same |
+> | Relation | Grows into |
+> |---|---|
+> | node to node | a function over the two nodes, the owner among them where it is one |
+> | same to same | a function over the owner and a parameter tying the two places |
+> | node to open | a function over the owner and a class at the place |
 >
-> It repeats:
+> Every seed is tried, once per call, in this order:
 >
-> 1. **Order** the untried relations by what each would save as it stands: D22's savings of the relation taken
->    as a whole function, summed over the rows that hold it. A relation counted in fewer than two rows is not
->    tried.
-> 2. **Take** the first. Ties go to the higher count, then to the older neuron, declaration order at the base
->    and creation order above it, then to the shorter offset.
-> 3. **Grow** it by the collapse (D27), which decides every other place, fixed, variable or nothing.
-> 4. **Keep** it if its margin is positive. A kept function joins the covers it was priced on, owning what it
->    names there and binding what stands in its variables (D19).
+> 1. **Order** the seeds by what each would save as it stands: D22's savings of the relation taken as a whole
+>    function, summed over the rows that hold it. Ties go to the higher count, then to the older neuron,
+>    declaration order at the base and creation order above it, then to the shorter offset.
+> 2. **Grow** each by the collapse (D27) over the rows that hold it, which decides every other place, fixed,
+>    variable or nothing.
+> 3. **Keep** it if its margin is positive (D30, R15). A kept one is in the table for every seed after it.
 >
-> The pick ends when every relation has been tried or no residual is left. It reads each residual row in nodes
-> (D16): a coordinate bound in a variable of a function of the cover as that variable's, any other neighbor as the
-> neuron there, and the owner's activation as itself. It returns the functions added, and the classes they made.
+> Nothing is consumed, so nothing shrinks and nothing stops early. It returns the functions added, and the
+> classes they made.
 
 A node-to-open relation whose members do not pay as a class grows a function over the owner and the
 neuron that stood there most, as a fixed node, if that pays.
@@ -986,7 +1031,7 @@ neuron that stood there most, as a fixed node, if that pays.
 >
 > | Kind | Identical when | The kept one takes |
 > |---|---|---|
-> | function | the same nodes, variables and relations | the others' covered rows |
+> | function | the same nodes, variables and relations | the others' child, where it has none (§5.5) |
 > | class | the same members | the others' places in the functions that use them |
 
 Relations compose (D34), so two functions that write different relations over the same nodes, but fix the same
@@ -1031,122 +1076,80 @@ Nine cases are worked by hand on these definitions, listed in Part VI.
 > has a neighbor is not called; such an activation is still open (D9) and on the apex (R27) like any uncovered
 > activation.
 >
-> | Step               | Description                                                                                                       |
-> |--------------------|-------------------------------------------------------------------------------------------------------------------|
-> | refresh history    | Evict as many of the oldest activations as the frame's need, then admit the frame's.                              |
-> | recognize          | Cover the residual of the history with the table's functions, and re-center every function whose evidence changed. |
-> | delete             | Retire every function whose margin is negative, and every class no function uses or left with one member. |
-> | create             | Build functions: grow each from a relation of the index by the collapse, price it. |
-> | merge              | Compare everything added or re-centered this call against its table, exactly; keep the oldest of each identical group and retire the rest. |
-> | return             | The bids of each of the frame's activations, a function with what stands in its variables, each with where its nodes stood; and everything retired. |
+> | Step            | Description                                                                                                   |
+> |-----------------|---------------------------------------------------------------------------------------------------------------|
+> | refresh history | Evict the oldest rows as the frame needs, admit the frame's rows, and update the index (D47).                   |
+> | fit             | Match every function of the table against each admitted row (D54).                                             |
+> | re-center       | Collapse every function whose uses changed over its uses, and re-read its fit (D29).                           |
+> | create          | Grow every seed by the collapse, best first, and add each whose margin is positive (D33, R15).                  |
+> | merge           | Compare everything added or re-centered this call against the table, exactly; keep the oldest of each identical group and retire the rest (D43). |
+> | retire          | Price every function's margin against the table as it now stands, and retire every negative one, and every class no function uses or left with one member (R18). |
+> | return          | The bids of each of the frame's activations, every function that fits its row; and everything retired.         |
 
 The call runs before the election (R24).
 
 ## 5.1 Refresh history
 
-The history holds `H` activations (D18). A frame bringing `A` activations evicts the `A` oldest once the history is
-full, and fewer before, as many as it takes to make room; every pattern of an evicted cover loses it. The frame's
-activations then join the history, whole (D7) and wholly residual (D21). A frame bringing more activations of one
+The history holds `H` activations (D18). A frame bringing `A` activations evicts the `A` oldest once the
+history is full, and fewer before, as many as it takes to make room. The frame's activations then join the
+history, whole (D7). The index follows the rows: every relation in an admitted row counts one more, and in an
+evicted row one less (D47). Nothing else touches it. A frame bringing more activations of one
 neuron than `H` fills the history with the first `H` of them, in the order the input lays them out, and the rest
 are not recorded; the machine reports it. `H` is the designer's to pick (R4), and a report says it was picked
 below the most activations a neuron can have in one frame.
 
-## 5.2 Recognize
+## 5.2 Fit
 
-Recognition chooses a cover for an activation's neighborhood (D17). It is the greedy cover (D28), run over the
-residual of the history (D21), not over the frame's activations alone. A call covers the activations whose
-residual changed:
+Every function of the table is matched against each admitted row, and the rows it fits join its uses (D54).
+Nothing is chosen here. There is no cover, and nothing in a row is reserved for any function: a function is
+either in a row or it is not. The election sees every function that fits the frame's row (D31,
+§5.7), and it could never accept one that does not, since on the board a bid covers no more than its
+neighborhood holds (R22).
 
-- the frame's new activations;
-- the activations a retired or evicted pattern left neighbors uncovered in.
+**Cold start is silence.** A function with no uses names nothing. A neuron with an empty table bids nothing.
 
-Every other activation keeps its cover. So the call's work is in what changed, not in `H`.
+## 5.3 Re-center
 
-**Holding and failing.** Measured against a neighborhood, each node a function names holds or fails:
-
-| Node | Holds where |
-|---|---|
-| the owner's activation | always |
-| a fixed node | its neuron stands at its offset |
-| a class | a member stands at its place; it takes members only (D27) |
-| a parameter | its value stands at the place; it takes any neuron, and one that was not a member is one from that row on |
-
-A node that fails is a correction (D22). Where it would have stood follows from its relation to any node that
-holds.
-
-**Fitting.** A function fits where its savings are positive (D22): what it covers there is worth more than its
-price. Its failed nodes are part of the price. The election could never accept a function that does not fit,
-since on the board a bid covers no more than its neighborhood holds (R22).
-
-**Cover and bids.** Every function of the table competes in the cover, and takes the activation
-itself with its neighbors (D20). The cover is the neuron's own accounting. The election sees every function
-that fits, in the cover or not (D31, §5.6). What stands in a function's variables is what its bid carries as
-dependencies (D31).
-
-**Cold start is silence.** A pattern covering no activations names nothing. A neuron with an empty table
-covers nothing and bids nothing.
-
-**Re-centering.** Every pattern whose covered activations changed, by eviction or by cover, re-centers (D29).
-
-## 5.3 Delete
-
-> **R18 — Retire.** After the frame's activations are recognized and the patterns re-centered (R20), retire
-> every pattern whose margin (D30) is strictly negative. Retiring is deletion from the table (D32). The pattern leaves that instant: it stops competing for a place in
-> any cover, and the neurons it held fall to the residual (D21), where the next call's recognition may re-cover
-> them (R20). A class no function uses any longer is deleted with the last (R41). The retired functions go on
-> the return (§5.6), and the machine deletes their children (§6.5). The neuron keeps no retired state.
+Every function whose uses changed this call, by an eviction or an admission, collapses over its uses (D29), and
+its fit is re-read over every row. A function with a node that holds nowhere still has uses, since the absence
+is paid and the savings may stay positive, so it re-centers rather than standing still.
 
 ## 5.4 Create
 
-The greedy pick (D33) runs over the residual of the history: each function is grown from a relation of the
-index by the collapse and priced by its margin. Each that pays joins the table and the covers it was priced
-on. Every relation is tried.
+Every seed is grown by the collapse and priced by its margin, best first (D33). Each that pays joins the table.
 
-> **R14 — Candidate.** A candidate `C` is what one round of the greedy pick builds (D33): the collapse of its
-> over the rows whose residual holds the relation it grows from (D27). Nothing seeds it from outside, and
-> nothing grows it a neighbor at a time. The relation is in every one of those rows and is counted in at least
-> two (D33), so **nothing is ever built on a single occurrence**, and the collapse takes the relation where it
-> pays there. Everything else `C` names holds, in the residual, in enough of them to pay for itself: D27 skips
-> what another function names as it does everywhere, so **a candidate is built on the residual**.
-> The relation is what the table is failing on most, and the collapse settles every other node at once — the
-> relation chooses the rows, and the rows decide every node.
+> **R14 — Candidate.** A candidate `C` is what one seed grows into (D33): the collapse of the seed over the rows
+> that hold it (D27). Nothing seeds it from outside, and nothing grows it a neighbor at a time. The seed is in
+> every one of those rows and is counted in at least two, so **nothing is ever built on a single occurrence**.
+> Everything else `C` names holds in enough of those rows to pay for itself. **A candidate is built on whole
+> rows**: a neighbor another function names is read like any other, since `C` competes for it in the margin
+> (D30). The seed chooses the rows, and the rows decide every node.
 >
 > **Only what a pattern names is built, because that is all a pattern is.** What the child will be followed by
 > is the child's own connections, formed by the child's own activations once it exists (D25). Nothing about it is
 > decided here and nothing about it is priced.
 >
-> **The same history under the same covers yields the same `C`.** Covers are carried by the activations (D17),
-> so the residual, and with it the index, is a function of the ring and the covers it carries together.
+> **The same history yields the same `C`.** The index counts whole rows (D47), so it is a function of the ring
+> alone.
 >
-> **What `C` is worth.** Against a row, `C` is worth what it adds to the cover that stands there (D30): what
-> the row's cover saves with `C` in it less what it saves as it stands (D22), and `0` where that is negative,
-> since `C` joins a cover only where it pays (D28).
-> With `C` in the cover, `C` owns the residual neighbors it names, and binds what stands in its variables.
-> **A candidate is never credited what another function names.** A
-> neuron a function already names is not `C`'s to take — a candidate that fits a stretch of the run beautifully earns nothing
-> for it if something already accounts for it.
->
-> **The floor is the cover test and belongs to pricing only.** An activation whose cover `C` would not join contributes
-> nothing to the benefit: a candidate has to be able to reach an activation before it pays in it.
+> **What `C` is worth** is its margin (D30): over each row, the row's cost without `C` less its cost with `C`,
+> where that is positive. A function that explains a row better than the one that got there first is paid for
+> it there, and the other is not.
 >
 > **What it is not.** It finds a local best and not the best `C` — choosing the pattern set is the
 > facility-location problem and is not solvable exactly at any useful size. What it has instead is no free
 > choice anywhere in it.
 
-> **R15 — Add test.** The margin (D30) of a candidate, which is in no cover: it is credited what it adds to
-> each activation's cover (R14), and only in the activations where it pays. Its benefit is the sum of those
-> savings over the history, and it is committed when the benefit exceeds its entry in the table (D15).
-> **An accepted candidate joins the cover of every activation where its savings are positive**, as the owner of
-> the residual it names there (D19), so its margin at birth is what the test counted.
+> **R15 — Add test.** The margin (D30) of a candidate: it is committed when its benefit over the history exceeds
+> its entry in the table (D15). It then joins the table, its uses are the rows it fits (D54), and it is in the
+> table for every seed tried after it and for every margin priced after it.
 >
 > **An accepted add shortens the file**, against the table it was priced on.
 >
-> **The test is offline and complete.** Every activation in the ring has a whole neighborhood, so the question is
-> asked over the same evidence the cover will use when `C` next competes for one. Nothing here is decided on half
-> an activation and nothing later can hand `C` less than the test counted.
+> **The test is offline and complete.** Every activation in the ring has a whole neighborhood, so the question
+> is asked over the same evidence the margin will use when `C` is priced again.
 >
-> **The pick tries every relation** (D33). What a candidate that does not pay leaves uncovered is the next
-> call's residual, and its relation is tried again then.
+> **Every seed is tried** (D33). A seed whose candidate did not pay is tried again at the next call.
 
 > **R16 — What a child is at birth.** The neuron proposes, the election decides, and the machine creates. A
 > function is the neuron's own: it is added, used in covers and bid on the neuron's evidence alone. A function
@@ -1159,23 +1162,23 @@ on. Every relation is tried.
 >
 > **A neuron may hold many children, and they do not contend.** Each covers the part of an activation its
 > function owns, and several of them may be promoted at one coordinate (D8). What they share is a parent and a
-> coordinate, not a place on the board. **A child may have many parents**: every function wired to it promotes
-> it, each from its own neuron's position (R43).
+> coordinate, not a place on the board. **A child may have many parents**: every neuron with a function
+> pointing at it promotes it, each from its own position (R43).
 >
-> **Release is the reverse**: the parent retires, the machine reclaims. The retired patterns go on the return
+> **Release is the reverse**: the parent's function retires, the machine reclaims. The retired patterns go on the return
 > (R20). A retired pattern that never had a child leaves nothing to reclaim, and one whose child other patterns
 > still promote leaves the child alone (R38).
 >
-> **Creating and wiring are separate, and only wiring waits.** The machine creates or chooses the child the
+> **Creating and updating are separate, and only updating waits.** The machine creates or chooses the child the
 > moment the bid is accepted — an id, its parent and an empty table — which is all the frame needs to activate
-> it, at the coordinate the machine places its activation at (D53), and call it (R17). Once the frame's last level has run it points every pattern
-> at the child created or chosen for it, in one pass over its own alphabet, and after the frame's connect and
-> infer calls it reclaims every retired pattern's child now due (R38). Nothing in the frame reads that pointer
-> except a later bid, so **the wait costs nothing**.
+> it, at the coordinate the machine places its activation at (D53), and call it (R17). Once the frame's last
+> level has run, it calls update child for every function whose bid won a child, and for every parent of an
+> interneuron whose definition changed (§4.1, §6). After the frame's connect and infer calls it reclaims every
+> retired pattern's child now due (R38). Nothing in the frame reads the pointer except a later bid, so **the
+> wait costs nothing**.
 
-> **R17 — A pattern added in a call is bid in it.** The candidate joins the parent's table and the covers
-> it was priced on in the call (R15), so every activation of the frame it fits bids it (R20, D31), with no
-> child, and the bid competes like any other. If it wins, the machine gives the function a child, reused or new
+> **R17 — A pattern added in a call is bid in it.** The candidate joins the parent's table in the call (R15), so
+> every activation of the frame whose row it fits bids it (R20, D31), with no child, and the bid competes like any other. If it wins, the machine gives the function a child, reused or new
 > (R43), activates it at the next level and calls it there. A new child records its first neighborhood there and
 > nothing more: its table is empty, and a candidate needs two neighborhoods (R14). If it loses, there is no child; the pattern stays in the
 > table on its own margin (D30) and is bid again whenever it is in a cover.
@@ -1192,7 +1195,7 @@ on. Every relation is tried.
 
 ## 5.5 Merge
 
-Recognition re-centers, and creation adds, so either can leave two patterns in the table that are the same: two
+Re-centering and creation can each leave two patterns in the table that are the same: two
 functions with the same nodes, variables and relations, or two classes with the same members.
 Merging compares everything added or re-centered this call against its own table, exactly (D43), and keeps
 the oldest of each identical group, the lowest creation order, and with it the oldest child the group holds,
@@ -1201,23 +1204,57 @@ A newer neuron with a history is never dropped for an older function with none. 
 
 | identical | kept | retired |
 |---|---|---|
-| functions | the oldest, taking the others' covered rows, and, where it has no child, the child of the oldest of them that has one | the newer functions; a child no kept function points to dies when its last open activation's window closes (R38) |
+| functions | the oldest, and, where it has no child, the child of the oldest of them that has one | the newer functions; a child no kept function points to dies when its last open activation's window closes (R38) |
 | classes | the oldest, taking the others' places in the functions that use them | the newer classes |
 
-What merging retires goes on the return with everything else retired this call (§5.6), so the machine deletes
+What merging retires goes on the return with everything else retired this call (§5.7), so the machine deletes
 the children on its ordinary pass.
 
-## 5.6 Return
+## 5.6 Retire
+
+> **R18 — Retire.** After the frame's rows are fitted, the functions re-centered and the seeds tried (R20),
+> price every function's margin against the table as it now stands (D30), and retire every one that is strictly
+> negative. Retiring is deletion from the table (D32). The function leaves that instant: it is bid no more, and
+> the rows it fitted are written by the rest of the table. A class no function uses any longer is deleted with
+> the last (R41). The retired functions go on the return (§5.7), and the machine deletes their children (§6.5).
+> The neuron keeps no retired state.
+
+Retiring comes after creating, so a short function and a longer one over the same ground are priced against
+each other in the call the longer one is born, and the one that explains no row best leaves then.
+
+## 5.7 Return
 
 The call returns two lists: **the bids** of each of the frame's activations (D31, R21), and **everything
 retired** this call, by deletion (R18) or by merging (§5.5). A bid is a function of the table: its id, its
-relations and variables, its child, what stands in each variable, and where each node stood (D31). A function that
+relations and variables, and its child (D31). A function that
 has never won a bid has no child, and its bid says so: if it is accepted the machine gives it a child, reused or
-new (R16, R43), and wires it by the wire call (§4.1). A function retired is named by its id, and the machine
+new (R16, R43), and points it there by the update child call (§4.1). A function retired is named by its id, and the machine
 deletes its child, if it has one, when it is due (R18).
 
 > **R21 — Bids of an activation.** An activation sends one bid (D31) per function of its neuron's table that
-> fits its neighborhood, with what stands in its variables. An activation no function fits sends nothing.
+> fits its neighborhood. An activation no function fits sends nothing.
+
+## 5.8 Cost of the call
+
+What one call costs, with `H` rows in the history, `A` rows admitted this frame, `N` neighbors per row, `F`
+functions in the table, `P` places per function, `K` members per class, `S` seeds tried, and `U` the uses of
+a function, at most `H`:
+
+| Step | Work | What it is |
+|---|---|---|
+| refresh history | `A · N²` | every relation of each admitted or evicted row (D47) |
+| fit | `A · F · P` | each function against each admitted row (D54) |
+| re-center | `F · U · N · (P + K)` | per function whose uses changed, each candidate place over its uses, four options (D27); then its fit re-read, `H · P` |
+| create | `S · U · (N · (P + K) + F · P)` | per seed, the collapse over the rows that hold it, then its margin: a row's cost with and without it, over those rows (D33, D30) |
+| merge | `(F + S) · P` | a canonical form per added or re-centered function, compared by lookup (D43) |
+| retire | `F² · P · U` | per function, a row's cost with and without it over its uses; a row's cost is a greedy cover, `F · P` (D30, D28) |
+| return | `A · F · P` | the fits of the frame's rows (D31) |
+
+Retire and create dominate. Everything scales with `H`, `F`, `N` and `S`, and nothing with the run. Fit and
+return are incremental in `A`; re-centering, create and retire read uses, which are `O(H)`. The margin is the
+cost center: a row's cost is a greedy cover of the row by the whole table, and every margin asks for it twice
+per row. The benefit is zero in a row a function does not fit, so only its uses count. What of this is cached,
+and how, is the implementation's.
 
 # Part III — Past and present: the machine
 
@@ -1247,7 +1284,7 @@ Then, once the last level has run:
 
 | Step              | Description                                                                                                   |
 |-------------------|---------------------------------------------------------------------------------------------------------------|
-| wire children     | Point every function whose bid won a child this frame at it (R16).                                           |
+| update children   | Call update child for every function whose bid won a child this frame. Then, for every interneuron marked changed, write its new definition to the interneuron index, and call update child for each of its parents, with the function of that parent that points at the child (§4.1, D36). |
 | delete children   | After the frame's connect and infer calls (§7), delete every child that is due (R38).                        |
 
 ## 6.1 Process levels
@@ -1273,19 +1310,20 @@ argument the call was given, and one over the child and a bound activation holds
 
 ## 6.2 Election
 
-> **R22 — What a bid covers, and what it costs.** The neuron sends the bid, its function and what stands in
-> each variable (D31), and nothing else. The machine holds the frame, so it reads that one object against what fired
-> and derives both numbers.
+> **R22 — What a bid covers, and what it costs.** The neuron sends the bid, its function (D31), and nothing
+> else. The machine holds the frame, so it reads that one object against what fired and derives both numbers.
 >
 > | | |
 > |---|---|
-> | the bid | its function, its child or none, what stands in each variable, and where each node stood, the owner at zero (D31) |
-> | coverage | the activations it covers that fired and no earlier bid was credited (D24), its bidder among them, and the activations it binds, each at what it cost |
-> | price | the fields of its call (D22): what its bidder cost, which function, which member per variable, and which of the neurons it names in those same frames did not fire |
+> | the bid | its function, and its child or none (D31); the machine resolves where each node stands and what each variable binds |
+> | coverage | the activations it covers that stand on the apex (D24), its bidder among them, each at what it costs there; and the positions of the activations it binds |
+> | price | its record (D12, D22): its child and its position; and an absence for each neuron it names in those same frames that did not stand |
 >
-> The bid's offsets are resolved against the bidder's coordinate, so the machine finds each node where the bid
-> says it stood. Coverage less price is the savings over stating what it covers flat, D22's expression over the
-> machine's population.
+> The machine resolves the bid from the bidder's coordinate by D31's rule. Coverage less price is the savings
+> over stating what it covers flat, D22's expression over the machine's population.
+>
+> **A position is covered once.** A bid that binds an activation whose position an earlier accepted bid covered
+> is credited nothing for it (D10, D24).
 >
 > **A neuron that fired and the bid does not name belongs to neither side.** It stands in the file as itself if
 > nothing covers it (D23), and the same way if this child is promoted, since the child does not name it — its own
@@ -1294,12 +1332,12 @@ argument the call was given, and one over the child and a bound activation holds
 >
 > **Coverage changes the credit and never the price.** A neuron the bid names that fired and another bid
 > already covers is credited to no one and charged nothing: it fired, so it was never among the neurons named
-> and absent. A neuron the bid names that did not fire is charged a failed neighbor whether or not another neuron is
+> and absent. A neuron the bid names that did not fire is charged an absence whether or not another neuron is
 > right at that coordinate — another neuron's expansion being right there does not make this one's wrong name free. **What a
 > pattern gets wrong about a frame is a fact about the two, and ownership does not move it.**
 >
 > **This is the neuron's arithmetic over the machine's population, and the number is not the neuron's.** The
-> neuron took the pattern into its cover, or offered it, on its own residual (R20); the machine tallies on a
+> neuron offered the function on its own history (R20); the machine tallies on a
 > board where earlier frames' credit stands (R23) and this frame's other bids contend (R24). The two numbers
 > differ, and are meant to (D22).
 >
@@ -1314,13 +1352,15 @@ one: a bid arrives as a definition, and everything it is worth this frame the ma
 >
 > | | |
 > |---|---|
-> | credited to | the accepted bid that was credited the activation, by covering it or by binding it (R22); one per activation, and a settled activation never changes it |
-> | covered | whether that bid covered the activation, so that it left the apex, or bound it, so that it stays (D10) |
+> | credited to | the accepted bid that was last credited the activation, by covering it or by binding it (R22) |
+> | covered | whether that bid covered the activation, so that it left the apex, or bound it, so that it stays with its position covered (D10) |
 >
-> **Credit is what blocks later payment, and coverage is what hides.** An activation credited once is in no
-> later bid's coverage, covered or bound: a bid that names it afterward is neither paid for it nor charged a
-> failure for it, since it fired. A bound activation stays on the apex and is a neighbor to every later bid,
-> and it is paid for all the same.
+> **Credit is what blocks later payment, and coverage is what hides.** A covered activation is settled. It is in
+> no later bid's coverage: a bid that names it afterward is neither paid for it nor charged a failure for it,
+> since it fired. A bound activation stays on the apex at its neuron's cost and is a neighbor to every later
+> bid. A later bid that covers it is credited its neuron, which is all that is left of it in the file. A later
+> bid that binds it again is credited nothing, since its position is covered already (D10).
+> So every bit of an activation is paid for once.
 > **An activation is named by its full coordinate**, dimension and position together, so two activations of one
 > neuron at two positions never contend. The coverage set spans one frame more than the longest reach in time
 > among the neurons the machine holds — no bid reaches further back — and the box every other activation
@@ -1328,14 +1368,14 @@ one: a bid arrives as a definition, and everything it is worth this frame the ma
 > frame in each action channel, for the shares a reward sends back (R33). **The machine holds nothing on the
 > scale of the run.**
 >
-> The record is about **credit**: an activation is a fact that needs paying for exactly once, so it is settled
-> once and never revisited (R23). It is not about naming: a child expands to everything its function names,
+> The record is about **credit**: an activation is a fact that needs paying for exactly once, so a covered one is
+> settled and never revisited (R23). It is not about naming: a child expands to everything its function names,
 > credited or not (R24).
 
-> **R23 — This frame's bids against the board as it stands.** Only neurons no earlier frame's election has
-> credited are in play, so an activation already paid for is not paid for twice. **No earlier promotion is ever
-> re-scored.** Within the electing frame an activation is credited once, to the first accepted bid that names it
-> (R24), and never moves.
+> **R23 — This frame's bids against the board as it stands.** Only what stands on the apex is in play: a bare
+> activation at its cost, and a bound one at its neuron's cost. So no bit of an activation is paid for twice. **No
+> earlier promotion is ever re-scored.** Within the electing frame an activation is covered once, by the first
+> accepted bid that covers it (R24), and never moves.
 >
 > **Earlier bidders have priority.** A bid at `f` wins a neuron at `f − 2` before a better bid at `f + 1` can
 > name it, because the earlier election settled it and nothing re-elects the past. That is the price of never
@@ -1355,18 +1395,17 @@ bid**, which is what stops an activation being paid for twice.
 
 > **R24 — The election is D28, run by the machine.** The functions are this frame's bids and what they cover is
 > the **free set**: every activation on the frontier (R27), at its own full coordinate — frame and position — that
-> some bid names and no earlier election has credited (R23).
+> some bid names and no earlier election has covered, a bound one at its neuron's cost (R23).
 >
-> Bids arrive naming where each node stood, the owner at zero (D31), so each is resolved on the board by the
-> bidder's coordinate before the first round.
+> Each bid is resolved on the board from its bidder's coordinate before the first round (D31).
 > `price` is R22's. **Two bids that measure the same are told apart in this order**: a bid carrying a child
 > before one carrying none; between two with children, the older child; between two with none, the older
 > bidder; and between two activations of one neuron, the earlier coordinate, the earlier frame first and then
 > the smaller position, the dimensions in the order the machine declares them (D1). Older is the smaller id
 > (D2). Then D28 runs, and what it takes are the accepted bids.
 >
-> **The bound is structural.** A bid's price includes what its bidder cost, so a bid is taken only when it
-> covers more than that: at least one neighbor beside the bidder. Each round takes one bid, so the rounds are
+> **The bound is structural.** A bid's price includes its child, a neuron, so a bid over a base bidder is
+> taken only when it covers more than that: at least one neighbor beside the bidder. Each round takes one bid, so the rounds are
 > never more than the bids.
 >
 > **A bid that never reached the top held nothing.** There is nothing to hand back and nothing to settle:
@@ -1374,7 +1413,8 @@ bid**, which is what stops an activation being paid for twice.
 >
 > **Ownership is a partition of the neurons the accepted bids name**, and that is the whole of the
 > inhibition — no bid is ever edited or forbidden, and **overlap is legal and priced**: a bid that names an activation
-> an earlier round credited gains nothing for it and pays nothing for it (R22). **Held by an accepted bid** and
+> an earlier round covered gains nothing for it and pays nothing for it. One that covers a bound activation gains
+> its neuron's cost, and one that binds it again gains nothing (D10, R22). **Held by an accepted bid** and
 > **named by an accepted bid** are therefore the same set, so coverage, credit and the apex frontier (R27) are
 > one question with one answer.
 >
@@ -1411,12 +1451,17 @@ Every accepted bid whose function has no child is given one. A bid that lost is 
 > **Otherwise the machine creates one**: an id, its parent and an empty table (R16), its first activation at
 > the bidder's coordinate (D53).
 >
-> **Nothing is sent back.** The function stays the neuron's own and keeps re-centering on its own history
-> (D29); only the pointer is shared. Functions wired to one child may drift apart, as one function drifts over
-> time, and the child stands for all of them. The neuron optimizes its history and the machine its window.
+> **Nothing is sent back during the levels.** The function stays the neuron's own and keeps re-centering on its
+> own history (D29); only the pointer is shared. A function that drifts from the definition of the interneuron
+> it points at sets that definition when its bid is next accepted (D36). The neuron optimizes its history and
+> the machine its window.
+>
+> **The machine keeps track of definitions.** For every accepted bid, the machine compares the bid's function
+> with the definition of the interneuron it points at, in the interneuron index. Where the bid sets the
+> definition (D36), the machine marks the interneuron changed and keeps the new definition until update children.
 
-Once the frame's last level has run, the machine points every function at the child created or chosen for it,
-by the wire call (§4.1).
+Once the frame's last level has run, the machine calls update child for every function whose bid won a child,
+and for every parent of an interneuron marked changed (§4.1).
 
 ## 6.4 Activate children
 
@@ -1462,7 +1507,7 @@ settled, so it is recorded in the `connect` call instead (R31).
 
 ## 6.5 Delete children
 
-> **R38 — A child dies when its last parent has retired and the last window over it closes.** A pattern the
+> **R38 — A child dies when the last function pointing at it has retired and the last window over it closes.** A pattern the
 > neuron retired (R18) names a child the machine still holds, unless no bid of it was ever accepted and there
 > is nothing to delete (R16). The machine wired every pattern that promotes the child (R43), so it knows when
 > the retired one was the last; while another remains the child lives and only the retired pattern goes. The
@@ -1825,24 +1870,24 @@ only what happened (R32).
 > |---|---|
 > | a neighbor standing at its offset | credits what it cost |
 > | a neighbor standing within reach at another offset | credits what it cost, and charges an offset (D13) |
-> | a neighbor standing nowhere within reach | charges a failed node, `log₂ \|p\|` |
-> | a variable | bound from what stands at its places that have happened (D44), charging its choice; a place holding nothing it could take charges a failed node |
+> | a neighbor standing nowhere within reach | charges an absence (D13) |
+> | a variable | bound from what stands at its places that have happened (D44), crediting their positions; a place holding nothing it could take charges an absence |
 >
 > An offset is read as D6 reads it: exact within the radius, and beyond it as its whole group, composed down the
 > expansion as the placement is, so a neighbor named at a coarse offset stands at its offset anywhere in the
 > group. A neighbor found at a different distance is a correction that says where, and it costs what an offset
 > costs, near or far: what makes a near miss cheap is that within the group it costs nothing.
 >
-> **The test.** The inference is proposed when what the placed nodes credit exceeds which function and what
-> they charge, and struck otherwise. That is D22's test with the bidder on neither side, since the bidder is
-> ahead.
+> **The test.** The inference is proposed when what the placed nodes credit exceeds what they charge, absences
+> included, and struck otherwise. That is D22's test with the bidder on neither side, since the bidder
+> is ahead.
 >
 > **What it decides.** Proposed, the inference's placements ahead contend for their positions (R46, R47).
 > Struck, it leaves the standing inferences (R45). An inference that was proposed and stops matching as its
 > placements come due is struck then, which is the whole of how a plan ends before its span does.
 >
-> **Where it stands among the three.** Recognition reads a pattern against the neighborhood its owner saw and
-> chooses covers (§5.2). The election reads bids against the board and credits them (R24). The match reads one
+> **Where it stands among the three.** A neuron reads a function against its own rows and prices its table
+> (D30). The election reads bids against the board and credits them (R24). The match reads one
 > inferred pattern against the frames it points back into and admits or strikes it. The prices are the same;
 > the questions are not.
 
@@ -1990,7 +2035,7 @@ Nine cases, each worked by hand in a file of its own; each follows the definitio
 | Loop | [algorithm-loop.md](algorithm-loop.md) | Shown a cue, the machine taps in each of the next three frames and then stops. There is no counter: each tap's table names what stood a frame back, so the states of the loop are three children each built over the one before, each connected to the one after it and the last to the event the world shows at the end. Stopping is a thing that follows and not an absence, since speaking falls through the cover; taught to stop on a cue instead of a count, the same machine is a while loop. |
 | MNIST | [algorithm-mnist.md](algorithm-mnist.md) | An image channel with two spatial dimensions and a binary pixel dimension, 256 buckets or three channels for color later; patches at the base, odd shapes closed on the frontier, a digit action taught by demonstration. |
 | Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument with own and disown as its actions, under a policy where an action is no one's neighbor and only events and patterns connect, to actions alone; patterns over frames; a world that runs the right action wherever the machine has none; and a reward scoped to the channel and the frame, each frame. |
-| Text | [algorithm-text.md](algorithm-text.md) | A stream of letters at reach 1: at the base a class over the letters that stand before each letter, the letter bound beside the pair's call neuron; words of any length from children and letters on the frontier, a frequent doubled letter as a function in its own letter's table and a rare one as a parameter a level up. |
+| Text | [algorithm-text.md](algorithm-text.md) | A stream of letters at reach 1: at the base a class over the letters that stand before each letter, the letter bound beside the pair's call neuron; words of any length from children and letters on the frontier, a frequent doubled letter as a function in its own letter's table. |
 
 # 10. Further reading
 

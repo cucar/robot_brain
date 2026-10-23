@@ -57,14 +57,8 @@ and the chain above starts from there; [algorithm-xy.md](algorithm-xy.md) is a s
 own neighbor at any offset but zero (D26). The owner and `l` at `−1` is a seed in `l`'s table (D47), and once
 the pair has come round twice the collapse makes it a function, `ll`, with a child (D33, D27). The same
 happens for `oo` in `o`'s table and `ss` in `s`'s. A doubled letter that comes often is covered by its own
-letter's function, once per kind of doubling, and each occurrence pays the owner's name and which pattern.
-
-A parameter covers all doublings with one function, but every occurrence then pays which member besides
-(D13). For a dozen kinds that each recur, the functions are cheaper, so that is what the pick builds first, and
-their children cover the doubled letters before anything above could see them. What a parameter catches
-is the doubling too rare to have earned a function: a level up, in the table of a child that sees two frames
-back, two adjacent frames holding one and the same letter in use after use is a same-to-same relation, and the
-function grown from it ties the two places in a parameter (D44); the doubled letter stays bound at both.
+letter's function, once per kind of doubling, and each occurrence pays its child and its error correction (D13).
+A doubling too rare to earn a function stays as two letters on the frontier, as any rare pair does.
 
 # 5. What the frontier holds after a sentence
 

@@ -54,8 +54,7 @@ grows a function from it (D33).
 
 The collapse grows the relation into a function over `p` (D27). It ties one back and three back in a parameter
 variable, `P`. At two back and four back, the other same-to-same relation, it ties a second parameter, `P′`,
-since that covers the two letters there for one member in every use, where a fixed node would fail in most of
-them. Nothing is left to name as a fixed node:
+since that writes the two letters there once in every use, where a fixed node would fail in most of them. Nothing is left to name as a fixed node:
 
 | Question | Answer |
 |---|---|
@@ -87,26 +86,26 @@ simply stop holding four letters and start holding one neuron.
 
 # 6. The price
 
-Say the machine holds thirty-two neurons, so a letter costs 5 bits, and so does `p`.
-`P` and `P′` each hold sixteen letters as members, every letter that has stood two apart, so which member
-costs 4; and `p` holds two functions, `alternation` and the one over the class, so which of them costs 1
-(D13).
+Say the machine holds thirty-two neurons, so a letter costs 5 bits, and so does `p`. The stream is laid out
+over time alone, so no position is written. A call costs its child and its error correction. `alternation`
+names four places besides its owner, so with none failed its error correction is `log₂ 5 ≈ 2.3`. Each
+parameter writes its letter once, a choice among every neuron, 5 bits, and its two places share that (D13).
 
 | priced as | bits |
 |---|---|
 | a pair, flat: `p` and four letters, each at what it cost | 5 × 5 = 25 |
-| by `alternation`: `p`, which function, and two members | 5 + 1 + 4 + 4 = 14 |
+| by `alternation`: its child, two bindings and the error correction | 5 + 5 + 5 + 2.3 = 17.3 |
 
-Without the function a pair costs 25 bits, and `alternation` prices it at 14, saving 11 on every one. Its
-entry in the table is two parameters, an offset each: at `R = 4` and a reach of 4 an offset in time is one
-of five, zero and the four exact distances, about 2.3 bits (D6), so under 5 bits, paid once, and it pays at its
+Without the function a pair costs 25 bits, and `alternation` prices it at 17.3, saving 7.7 on every one. Its
+entry in the table is an offset per relation, four of them: at `R = 4` and a reach of 4 an offset in time is one
+of five, zero and the four exact distances, about 2.3 bits (D6), so about 9.3 bits, paid once, and it pays at its
 second occurrence. The variables' members are a record and cost nothing in the table (D13). A letter new to a variable
 is its value the first time it passes, since agreeing at both places is the whole test (D27), and is a member
 from then on.
 
-What the call fires stands on the frontier at what it costs: `alternation` at 6 bits, the owner and
-which function, at `p`'s frame; the four letters stay bound, the first of each pair at 4 bits, which member,
-and the second at nothing. Whatever covers them later saves that and no more (D13).
+What the call fires stands on the frontier at what it costs: `alternation`'s child at 7.3 bits, the child and
+its error correction, at `p`'s frame; the four letters stay bound, each at 2.5 bits, its share of its parameter's
+binding. Whatever covers them later saves that and no more (D13).
 
 # 7. The return and the election
 
@@ -129,7 +128,7 @@ ran, and what it was given. Nothing about `s` or `t` had to be learned first: ea
 this row.
 
 `s, t, u, t, p` does not fit fully: `P` holds `t` at both its places, but `P′` holds `s` at two back and `u` at
-four back. Its value there is the letter at the later place, `s`, and four back is a failed node (D44, D22).
+four back. Its value there is the letter at the earlier place, `u`, and two back is an absence (D44, D22).
 
 `x, y, x, y, p` arrives and `p` sees `xyxy` one back and nothing else (§2). `alternation` does not hold, since
 nothing stands at its variables' places; the function over the class holds, `p` sends it, its child fires at

@@ -64,9 +64,8 @@ before it, `COMING` at the body (D5). Once it exists its bid covers `COMING` in 
 that frame `COMING` connects to its child, with that frame's reward (D10). Inferred, that child expands to its
 bidder, `hit`, which is output (R28, R30).
 
-`coming` pays because `T` ties two places and its member is paid once: `approaching` and two activations of
-the thing are priced as `approaching`, which of its functions, and one member, a choice among the things `T`
-has held.
+`coming` pays because `T` ties two places and writes the thing once: `approaching` and two activations of the
+thing are priced as `COMING` and one binding, a choice among every neuron, which the two places share.
 
 **How `T` came to be.** Whatever came at the body stood in `approaching`'s residual at `(0, +2)` and, a frame
 earlier, at `(0, +4)`: a same-to-same relation, one and the same neuron at both in each use, whatever it was
