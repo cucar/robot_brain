@@ -1,6 +1,7 @@
 //! What a neuron names (D15, D16, D34, D38, D41, D44): functions, each the owner's activation with fixed
 //! nodes and variables at offsets from it, and the classes its functions use.
 
+use crate::history::ActRef;
 use crate::types::*;
 
 /// One place of a function (D16, D38): the owner's activation at offset zero, a fixed node, a class used
@@ -37,6 +38,8 @@ pub struct Function {
     pub places: Vec<(Place, Offset)>,
     pub params: Vec<Param>,
     pub child: Option<NeuronId>,
+    /// Its uses (D54): the rows it fits, by the owner's activation, oldest first.
+    pub uses: Vec<ActRef>,
 }
 
 /// A class (D41): a set of neurons the table holds, one of which stands where a function uses it.
@@ -48,15 +51,8 @@ pub struct Class {
 
 impl Class {
     pub fn has(&self, n: NeuronId) -> bool { self.members.iter().any(|m| m.neuron == n) }
-    /// Which member: `log₂ |K|` (D13).
-    pub fn choice(&self) -> f64 { log2(self.members.len() as f64) }
     /// The most frequent member, the oldest on a tie (R28).
     pub fn frequent(&self) -> Option<NeuronId> { frequent(&self.members) }
-}
-
-impl Param {
-    /// Which member: `log₂ |K|` over the record, the value counted where it is new (D13, D44).
-    pub fn choice(&self) -> f64 { log2(self.members.len().max(1) as f64) }
 }
 
 pub fn frequent(members: &[Member]) -> Option<NeuronId> {
@@ -69,7 +65,7 @@ pub fn frequent(members: &[Member]) -> Option<NeuronId> {
 
 impl Function {
     pub fn new(id: PatternId, rest: Vec<(Place, Offset)>, params: Vec<Param>) -> Self {
-        let mut f = Function { id, places: vec![(Place::Owner, [0; MAX_DIMS])], params, child: None };
+        let mut f = Function { id, places: vec![(Place::Owner, [0; MAX_DIMS])], params, child: None, uses: Vec::new() };
         f.places.extend(rest);
         f.canonicalize();
         f
@@ -128,9 +124,9 @@ pub fn describe_function(f: &Function) -> String {
         Place::Param(k) => format!("P{}", k),
     };
     let params: Vec<String> = f.params.iter().enumerate().map(|(k, p)| format!("P{}{{{}}}", k, p.members.iter().map(|m| format!("#{}x{}", m.neuron, m.count)).collect::<Vec<_>>().join(","))).collect();
-    format!("F[{}]{} child={}", f.places.iter().map(|(p, o)| format!("{}@{}", place(p), fmt_off(o))).collect::<Vec<_>>().join(" "),
+    format!("F[{}]{} child={} uses={}", f.places.iter().map(|(p, o)| format!("{}@{}", place(p), fmt_off(o))).collect::<Vec<_>>().join(" "),
         if params.is_empty() { String::new() } else { format!(" {}", params.join(" ")) },
-        f.child.map_or("-".to_string(), |c| format!("#{}", c)))
+        f.child.map_or("-".to_string(), |c| format!("#{}", c)), f.uses.len())
 }
 
 pub fn describe_class(c: &Class) -> String {

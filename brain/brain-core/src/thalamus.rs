@@ -69,13 +69,13 @@ impl Thalamus {
 
     /// The call (R20) at one level: route each neuron's task to its column, run the columns of every region in
     /// parallel, and hand the results back in the order the tasks came.
-    pub fn process_level(&mut self, tasks: Vec<(NeuronId, Vec<RowInput>, Ctx)>, built: std::sync::Arc<rustc_hash::FxHashMap<NeuronId, Vec<NeuronId>>>) -> Vec<LevelResult> {
+    pub fn process_level(&mut self, tasks: Vec<(NeuronId, Vec<RowInput>, Ctx)>, shared: std::sync::Arc<Shared>) -> Vec<LevelResult> {
         let order: Vec<NeuronId> = tasks.iter().map(|t| t.0).collect();
         let r = self.regions.len();
         let mut by_region: Vec<Vec<Vec<LevelTask>>> = (0..r).map(|_| (0..self.columns).map(|_| Vec::new()).collect()).collect();
         for (id, rows, ctx) in tasks {
             let (ri, ci, slot) = self.route(id);
-            by_region[ri][ci].push(LevelTask { slot, rows, built: built.clone(), ctx });
+            by_region[ri][ci].push(LevelTask { slot, rows, shared: shared.clone(), ctx });
         }
         let nested: Vec<Vec<LevelResult>> = self.regions.par_iter_mut()
             .zip(by_region.into_par_iter())

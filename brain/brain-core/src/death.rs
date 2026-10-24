@@ -18,6 +18,8 @@ impl Machine {
         if let Some(c) = r.child {
             if (c as usize) < self.thalamus.len() {
                 self.thalamus[c].parents.retain(|p| *p != (owner, r.pattern));
+                // merged: the function that took its place points at the child now (§5.5)
+                if let Some(h) = r.heir { if !self.thalamus[c].parents.contains(&(owner, h)) { self.thalamus[c].parents.push((owner, h)); } }
                 if self.thalamus[c].parents.is_empty() && !self.ledger.contains(&c) { self.ledger.push(c); }
             }
         }
@@ -47,13 +49,17 @@ impl Machine {
         if !self.thalamus[c].alive { return; }
         self.thalamus[c].alive = false;
         self.alive -= 1;
+        self.definitions.remove(&c);
+        self.def_classes.remove(&c);
+        self.redefined.remove(&c);
+        self.won.retain(|w| w.2 != c && w.0 != c);
         let key = self.thalamus[c].key.clone();
         if self.index.get(&key) == Some(&c) { self.index.remove(&key); }
         if self.trace { eprintln!("[death f{}] #{}", self.frame_no, c); }
         // its subtree: its own patterns' children with no parent outside
         let functions: Vec<Function> = std::mem::take(&mut self.thalamus[c].functions);
         for f in functions {
-            self.handle_retired(c, Retired { pattern: f.id, child: f.child, line: Some(f) });
+            self.handle_retired(c, Retired { pattern: f.id, child: f.child, line: Some(f), heir: None });
         }
         self.thalamus[c].classes.clear();
         self.thalamus[c].history.clear();

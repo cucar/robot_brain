@@ -9,7 +9,7 @@ use crate::types::*;
 pub struct LevelTask {
     pub slot: usize,
     pub rows: Vec<RowInput>,
-    pub built: std::sync::Arc<rustc_hash::FxHashMap<NeuronId, Vec<NeuronId>>>,
+    pub shared: std::sync::Arc<Shared>,
     pub ctx: Ctx,
 }
 
@@ -38,7 +38,7 @@ impl Column {
         let mut out = Vec::with_capacity(tasks.len());
         for t in tasks {
             let n = &mut self.neurons[t.slot];
-            n.built = t.built;
+            n.shared = t.shared;
             let (bids, retired, added) = n.process(t.rows, t.ctx);
             out.push(LevelResult { neuron: n.id, bids, retired, added });
         }

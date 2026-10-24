@@ -18,8 +18,8 @@ impl Machine {
     /// variable to its argument, down to base symbols, which go to `base`; every neuron the descent passes
     /// through below the root, interneurons included, goes to `all` where it is asked for. A call with no
     /// arguments given is read off the activation of it standing at `at` where there is one, and bound as
-    /// an inferred call otherwise. No function names a neuron built over its own child (D27), so a descent
-    /// never meets a neuron again; the path is a guard and is counted.
+    /// an inferred call otherwise. A descent passes through a neuron once: one met again on its own descent,
+    /// as on a chain closed on itself, ends it there, so a closed chain expands to one turn (R28).
     pub(crate) fn expand_into(&self, n: NeuronId, at: Pos, path: &mut Vec<NeuronId>, base: &mut Vec<(NeuronId, Pos)>, mut all: Option<&mut Vec<(NeuronId, Pos)>>, fired_by: Option<&FiredBy>) {
         if base.len() > 4096 { return; }
         let Some(nn) = self.thalamus.get(n) else { return };

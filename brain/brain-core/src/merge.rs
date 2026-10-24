@@ -29,7 +29,7 @@ impl Neuron {
             }
             self.classes.retain(|c| c.id != k);
         }
-        // functions: the oldest takes the newer's covered rows, and its child where it has none
+        // functions: the oldest keeps its child, and takes the oldest child of the group where it has none
         let ids: Vec<PatternId> = self.functions.iter().map(|f| f.id).collect();
         for fid in ids {
             if self.function(fid).is_none() { continue; }
@@ -37,18 +37,12 @@ impl Neuron {
             let newer_child = self.function(fid).and_then(|f| f.child);
             let mut moved_child = false;
             if let (Some(c), Some(k)) = (newer_child, self.function_mut(keep)) { if k.child.is_none() { k.child = Some(c); moved_child = true; } }
-            for row in self.history.iter_mut() {
-                if !row.cover.iter().any(|e| e.function == fid) { continue; }
-                if row.cover.iter().any(|e| e.function == keep) { row.cover.retain(|e| e.function != fid); row.dirty = true; continue; }
-                for e in row.cover.iter_mut() { if e.function == fid { e.function = keep; } }
-                for o in row.owner.iter_mut() { if *o == Some(fid) { *o = Some(keep); } }
-                if row.owner_self == Some(fid) { row.owner_self = Some(keep); }
-            }
             let idx = self.functions.iter().position(|f| f.id == fid).unwrap();
             let f = self.functions.remove(idx);
-            out.push(Retired { pattern: fid, child: if moved_child { None } else { f.child }, line: Some(f) });
+            self.unsettled.remove(&fid);
+            self.refit(keep, ctx);
+            out.push(Retired { pattern: fid, child: f.child, line: Some(f), heir: if moved_child { Some(keep) } else { None } });
         }
-        let _ = ctx;
         out
     }
 }

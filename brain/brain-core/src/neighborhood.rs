@@ -32,7 +32,7 @@ impl Machine {
                     if delta[d].abs() > a.reach[d] { ok = false; break; }
                 }
                 if !ok { continue; }
-                // a child stands in for what it stands for (D22, D47): every node of its expansion (R28)
+                // a child stands for what is under it (D47, D54): every node of its expansion (R28)
                 let (covers, stands_for) = if b.kind == Kind::Inter {
                     let mut base = Vec::new();
                     let mut all = Vec::new();
@@ -45,49 +45,15 @@ impl Machine {
                         let dt = a.pos[0] - p[0];
                         dt >= 0 && dt <= a.reach[0] && (1..self.radii.len()).all(|d| shared & (1 << d) == 0 || (p[d] - a.pos[d]).abs() <= a.reach[d])
                     };
-                    (base.into_iter().filter(|(_, p)| inside(p)).map(|(n, p)| (n, sub(&p, &a.pos), self.cost_at(n, &p, b.cost))).collect(),
-                     all.into_iter().filter(|(_, p)| inside(p)).map(|(n, p)| (n, sub(&p, &a.pos), self.cost_at(n, &p, b.cost))).collect())
+                    (base.into_iter().filter(|(_, p)| inside(p)).map(|(n, p)| (n, sub(&p, &a.pos))).collect(),
+                     all.into_iter().filter(|(_, p)| inside(p)).map(|(n, p)| (n, sub(&p, &a.pos))).collect())
                 } else { (Vec::new(), Vec::new()) };
-                out.push(Nb { act: r, neuron: b.neuron, delta, cost: b.cost, covers, stands_for });
+                // as it stands: a bound activation is its neuron, its position covered (D10, D24)
+                let (cost, pos) = if b.bound_at.is_some() { (b.cost - b.pos_bits, 0.0) } else { (b.cost, b.pos_bits) };
+                out.push(Nb { act: r, neuron: b.neuron, delta, cost, pos, covers, stands_for });
             }
         }
         out
-    }
-
-    /// What an activation of `n` at `p` cost at its own level (D13): the one that fired there; a base symbol
-    /// that is not in the frames costs a neuron, and anything else no more than the child standing for it.
-    pub(crate) fn cost_at(&self, n: NeuronId, p: &Pos, child: f64) -> f64 {
-        let fired = self.frames.iter().find(|f| f.no == p[0] as i64).and_then(|f| f.acts.iter().find(|a| !a.gone && a.neuron == n && a.pos == *p));
-        match fired {
-            Some(a) => a.cost.min(child),
-            None if self.thalamus[n].kind != Kind::Inter => self.base_bits().min(child),
-            None => child,
-        }
-    }
-
-    /// Every neuron what `n` stands for passes through (D36), over every function wired to it, down to base
-    /// symbols, the variables left open: sorted, without `n` itself.
-    pub(crate) fn through_of(&self, n: NeuronId) -> Vec<NeuronId> {
-        let mut seen: rustc_hash::FxHashSet<NeuronId> = rustc_hash::FxHashSet::default();
-        let mut stack = vec![n];
-        while let Some(x) = stack.pop() {
-            let Some(xn) = self.thalamus.get(x) else { continue };
-            if xn.kind != Kind::Inter { continue; }
-            let push = |m: NeuronId, seen: &mut rustc_hash::FxHashSet<NeuronId>, stack: &mut Vec<NeuronId>| { if m != n && seen.insert(m) { stack.push(m); } };
-            for &(owner, pid) in &xn.parents {
-                let Some(f) = self.line(owner, pid) else { continue };
-                for (place, _) in &f.places {
-                    match place {
-                        Place::Owner => push(owner, &mut seen, &mut stack),
-                        Place::Fixed(m) => push(*m, &mut seen, &mut stack),
-                        Place::Class(_) | Place::Param(_) => {}
-                    }
-                }
-            }
-        }
-        let mut v: Vec<NeuronId> = seen.into_iter().collect();
-        v.sort_unstable();
-        v
     }
 
 }

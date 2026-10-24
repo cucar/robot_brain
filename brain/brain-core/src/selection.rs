@@ -156,18 +156,19 @@ impl Machine {
         let fno = self.frame_no;
         // the apex of each open frame (D24), each activation with what it stands for: itself, and for a
         // child every base symbol its expansion places, at its share of the child's cost (D22, D47)
-        let mut apex: FxHashMap<Frame, Vec<(NeuronId, Pos, f64)>> = FxHashMap::default();
+        let mut apex: FxHashMap<Frame, Vec<(NeuronId, Pos, f64, f64)>> = FxHashMap::default();
         for f in self.frames.iter() {
             let list = apex.entry(f.no).or_default();
             for b in f.acts.iter() {
                 if b.gone || !Self::on_apex_at(b, f.no) || b.pos[0] as i64 != f.no { continue; }
-                list.push((b.neuron, b.pos, b.cost));
+                let (cost, pos) = if b.bound_at.is_some() { (b.cost - b.pos_bits, 0.0) } else { (b.cost, b.pos_bits) };
+                list.push((b.neuron, b.pos, cost, pos));
+                // a child holds what it stands for, and is worth nothing for it (D22, D47)
                 if b.kind == Kind::Inter {
                     let mut base = Vec::new();
                     let mut all = Vec::new();
                     self.expand_into(b.neuron, b.pos, &mut Vec::new(), &mut base, Some(&mut all), b.fired_by.as_ref());
-                    let share = b.cost / base.len().max(1) as f64;
-                    for (n, p) in all { list.push((n, p, if self.thalamus[n].kind == Kind::Inter { b.cost } else { share })); }
+                    for (n, p) in all { list.push((n, p, 0.0, 0.0)); }
                 }
             }
         }
@@ -186,22 +187,21 @@ impl Machine {
     }
 
     /// The match of one inference completing at `at` (R49): the inferred call neuron's function, one
-    /// expansion down, placed back from the completion; each fixed node in a frame that has happened
-    /// credits what stands at its offset, credits less an offset where it stands elsewhere within reach,
-    /// and charges a failed node where it stands nowhere; a variable is bound from what stands at its places
-    /// that have happened and charges its choice, a place holding nothing it could take charging a failed
-    /// node. Proposed when the credit exceeds which function and the charges. None where nothing of the
-    /// function has happened yet, or the target has no function to read.
-    pub(crate) fn match_one(&self, target: NeuronId, at: Pos, apex: &FxHashMap<Frame, Vec<(NeuronId, Pos, f64)>>, now: Frame) -> Option<bool> {
+    /// expansion down, placed back from the completion; each fixed node in a frame that has happened credits
+    /// what stands at its offset, credits that less an offset where it stands elsewhere within reach, and
+    /// charges an absence where it stands nowhere; a variable is bound from what stands at its places that
+    /// have happened, crediting their positions, a place holding nothing it could take charging an absence.
+    /// Proposed when the credit exceeds the charges. None where nothing of the function has happened yet,
+    /// or the target has no function to read.
+    pub(crate) fn match_one(&self, target: NeuronId, at: Pos, apex: &FxHashMap<Frame, Vec<(NeuronId, Pos, f64, f64)>>, now: Frame) -> Option<bool> {
         let t = self.thalamus.get(target)?;
         if t.kind != Kind::Inter { return None; }
         let &(owner, pid) = t.parents.first()?;
         let f = self.line(owner, pid)?;
         let on = &self.thalamus[owner];
-        let wf = on.which_function_bits();
-        let fail = log2(f.p_size().max(1) as f64);
         let reach = self.reach_for(t.axes, &self.spans[target as usize]);
         let offset_bits = crate::offsets::offset_bits(&reach, &self.radii, t.axes);
+        let absence = |n: NeuronId| self.record_for(t.axes, &self.spans.get(n as usize).copied().unwrap_or([0; MAX_DIMS])).0;
         let same_group = |a: &Pos, b: &Pos| round_delta(&sub(a, &at), &self.radii, t.axes) == round_delta(&sub(b, &at), &self.radii, t.axes);
         let mut credit = 0.0;
         let mut charge = 0.0;
@@ -213,46 +213,35 @@ impl Machine {
                 Place::Owner | Place::Param(_) => {}
                 Place::Fixed(m) => {
                     judged += 1;
-                    let Some(list) = apex.get(&(q[0] as i64)) else { charge += fail; continue };
-                    if let Some((_, _, c)) = list.iter().find(|(n, p, _)| n == m && same_group(p, &q)) { credit += c; }
-                    else if let Some((_, _, c)) = self.frames.iter().filter(|fr| (now - fr.no) <= reach[0] as i64).flat_map(|fr| apex.get(&fr.no).into_iter().flatten()).find(|(n, p, _)| n == m && (0..self.radii.len()).all(|d| (p[d] - q[d]).abs() <= reach[d])) { credit += c - offset_bits; }
-                    else { charge += fail; }
+                    let here = apex.get(&(q[0] as i64)).and_then(|l| l.iter().filter(|(n, p, _, _)| n == m && same_group(p, &q)).map(|(_, _, c, _)| *c).fold(None, |b: Option<f64>, c| Some(b.map_or(c, |x| x.max(c)))));
+                    if let Some(c) = here { credit += c; }
+                    else if let Some((_, _, c, _)) = self.frames.iter().filter(|fr| (now - fr.no) <= reach[0] as i64).flat_map(|fr| apex.get(&fr.no).into_iter().flatten()).find(|(n, p, _, _)| n == m && (0..self.radii.len()).all(|d| (p[d] - q[d]).abs() <= reach[d])) { credit += c - offset_bits; }
+                    else { charge += absence(*m); }
                 }
                 Place::Class(k) => {
                     let Some(c) = on.class(*k) else { continue };
                     judged += 1;
-                    charge += c.choice();
-                    let found = apex.get(&(q[0] as i64)).and_then(|l| l.iter().find(|(n, p, _)| c.has(*n) && same_group(p, &q)));
-                    match found { Some((_, _, x)) => credit += x, None => charge += fail }
+                    let found = apex.get(&(q[0] as i64)).and_then(|l| l.iter().find(|(n, p, _, _)| c.has(*n) && same_group(p, &q)));
+                    match found { Some((_, _, _, pos)) => credit += pos, None => charge += absence(c.frequent().unwrap_or(owner)) }
                 }
             }
         }
-        // parameters: the value is what stands at most of the places that have happened (D44)
-        for (k, param) in f.params.iter().enumerate() {
-            let mut seen: Vec<Vec<(NeuronId, f64)>> = Vec::new();
-            for qi in f.param_places(k as u32) {
-                let q = add(&at, &f.places[qi].1);
-                if q[0] as i64 > now { continue; }
-                seen.push(apex.get(&(q[0] as i64)).map(|l| l.iter().filter(|(_, p, _)| same_group(p, &q)).map(|(n, _, c)| (*n, *c)).collect()).unwrap_or_default());
-            }
-            if seen.is_empty() { continue; }
+        // parameters: the value is the neuron at the earliest of the places that have happened (D44)
+        for k in 0..f.params.len() as u32 {
+            let mut places: Vec<Pos> = f.param_places(k).iter().map(|&qi| add(&at, &f.places[qi].1)).filter(|q| q[0] as i64 <= now).collect();
+            places.sort();
+            if places.is_empty() { continue; }
             judged += 1;
-            charge += param.choice();
-            let mut tally: FxHashMap<NeuronId, usize> = FxHashMap::default();
-            for at_place in &seen {
-                let mut once: Vec<NeuronId> = Vec::new();
-                for (n, _) in at_place { if !once.contains(n) { once.push(*n); *tally.entry(*n).or_default() += 1; } }
-            }
-            let value = tally.iter().max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0))).map(|(n, _)| *n);
-            for at_place in &seen {
-                match value.and_then(|v| at_place.iter().find(|(n, _)| *n == v)) {
-                    Some((_, c)) => credit += c,
-                    None => charge += fail,
+            let value = places.iter().find_map(|q| apex.get(&(q[0] as i64)).and_then(|l| l.iter().find(|(_, p, _, _)| same_group(p, q)).map(|(n, _, _, _)| *n)));
+            for q in &places {
+                match value.and_then(|v| apex.get(&(q[0] as i64)).and_then(|l| l.iter().find(|(n, p, _, _)| *n == v && same_group(p, q)))) {
+                    Some((_, _, _, pos)) => credit += pos,
+                    None => charge += absence(value.unwrap_or(owner)),
                 }
             }
         }
         if judged == 0 { return None; }
-        Some(credit > wf + charge)
+        Some(credit > charge)
     }
 
 }

@@ -5,7 +5,6 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
 use crate::neuron::*;
-use crate::offsets::*;
 use crate::thalamus::Thalamus;
 use crate::types::*;
 
@@ -75,6 +74,14 @@ pub struct Machine {
     pub max_reach_t: i32,
     /// The interneuron index (D36): what each stands for, to its id.
     pub index: FxHashMap<String, NeuronId>,
+    /// Per interneuron, its definition (D36): the function that set it, with its owner.
+    pub(crate) definitions: FxHashMap<NeuronId, (NeuronId, Function)>,
+    /// Per interneuron, the members of the classes its definition uses, as they stood when it was set.
+    pub(crate) def_classes: FxHashMap<NeuronId, Vec<(PatternId, Vec<NeuronId>)>>,
+    /// The interneurons an accepted bid redefined this frame, the first such bid's function each (D36).
+    pub(crate) redefined: FxHashMap<NeuronId, (NeuronId, Function, Vec<(PatternId, Vec<NeuronId>)>)>,
+    /// Every function whose bid won a child this frame, with the child (§6).
+    pub(crate) won: Vec<(NeuronId, PatternId, NeuronId)>,
     /// Children whose last parent retired, waiting for their windows to close (R38).
     pub ledger: Vec<NeuronId>,
     pub last_stats: FrameStats,
@@ -83,8 +90,7 @@ pub struct Machine {
     /// Retired lines the ledger holds until every window over what they fired has closed (R38), with
     /// the frame through which they are kept.
     pub(crate) retired_lines: FxHashMap<(NeuronId, PatternId), (Function, Frame)>,
-    /// Times a descent met a neuron again: never, where no line names a neuron built over its own child
-    /// (D27); counted so that a fault shows.
+    /// Times a descent met a neuron again, as it does once per turn of a chain closed on itself.
     pub cycle_guard: std::cell::Cell<u64>,
 }
 
@@ -113,6 +119,10 @@ impl Machine {
             pending_weak_patterns: Vec::new(),
             max_reach_t: time_radius.max(1),
             index: FxHashMap::default(),
+            definitions: FxHashMap::default(),
+            def_classes: FxHashMap::default(),
+            redefined: FxHashMap::default(),
+            won: Vec::new(),
             ledger: Vec::new(),
             last_stats: FrameStats::default(),
             last_winners: Vec::new(),
@@ -166,9 +176,6 @@ impl Machine {
         self.thalamus.get(owner).and_then(|n| n.function(pid)).or_else(|| self.retired_lines.get(&(owner, pid)).map(|x| &x.0))
     }
 
-    /// What a base activation costs (D13): a neuron, `log₂ n` of the neurons the machine holds now.
-    pub(crate) fn base_bits(&self) -> f64 { log2(self.alive as f64) }
-
     pub(crate) fn reach_for(&self, axes: u8, span: &Pos) -> Pos {
         let mut r = [0; MAX_DIMS];
         for d in 0..self.radii.len() { if axes & (1 << d) != 0 { r[d] = span[d] + self.radii[d]; } }
@@ -177,8 +184,8 @@ impl Machine {
 
     pub(crate) fn ctx_for(&self, n: NeuronId) -> Ctx {
         let nn = &self.thalamus[n];
-        let reach = self.reach_for(nn.axes, &self.spans[n as usize]);
-        Ctx { neuron_bits: log2(self.alive as f64), offset_bits: offset_bits(&reach, &self.radii, nn.axes), frame: self.frame_no, trace: self.trace }
+        let _ = nn;
+        Ctx { neuron_bits: log2(self.alive as f64), frame: self.frame_no, trace: self.trace }
     }
 
     pub fn act(&self, r: ActRef) -> Option<&Act> {
@@ -207,7 +214,6 @@ impl Machine {
         self.frame_no += 1;
         let fno = self.frame_no;
         let mut stats = FrameStats { frame: fno, ..Default::default() };
-        let base_bits = self.base_bits();
 
         // the frame's base activations: strong where the world reported, weak where only an inference placed (D40)
         let mut frame = FrameRec { no: fno, rewards, ..Default::default() };
@@ -220,7 +226,7 @@ impl Machine {
             if !reported.insert((inp.dim, pos)) { continue; }
             let n = dim.first + inp.bucket;
             let idx = frame.acts.len() as u32;
-            frame.acts.push(self.new_act(n, pos, base_bits, true, None, [0; MAX_DIMS], 0, 0));
+            frame.acts.push(self.new_act(n, pos, true, None, [0; MAX_DIMS], 0, 0));
             if dim.kind == Kind::Action { frame.actions_ran.push((dim.channel, ActRef { frame: fno, index: idx })); }
         }
         let weak = std::mem::take(&mut self.pending_weak);
@@ -230,7 +236,7 @@ impl Machine {
             let mut pos = p;
             pos[0] = fno as i32;
             if reported.contains(&(dim, pos)) { continue; }
-            frame.acts.push(self.new_act(n, pos, base_bits, false, None, [0; MAX_DIMS], 0, 0));
+            frame.acts.push(self.new_act(n, pos, false, None, [0; MAX_DIMS], 0, 0));
         }
         // the patterns the expansion completed here weakly, as inputs of the frame like the base (R30, D40)
         let weak_patterns = std::mem::take(&mut self.pending_weak_patterns);
@@ -239,9 +245,8 @@ impl Machine {
             if !nn.alive || nn.kind != Kind::Inter { continue; }
             let mut pos = p;
             pos[0] = fno as i32;
-            let wp = nn.parents.first().map(|(o, _)| self.thalamus[*o].which_function_bits()).unwrap_or(0.0);
             let span = self.spans[n as usize];
-            frame.acts.push(self.new_act(n, pos, base_bits + wp, false, None, span, 0, 0));
+            frame.acts.push(self.new_act(n, pos, false, None, span, 0, 0));
         }
         stats.base_acts = frame.acts.len();
         self.frames.push_back(frame);
@@ -286,8 +291,8 @@ impl Machine {
             // nothing caps the depth (R26); a frame this deep means a fault, and is counted as one
             if level > 1024 { self.cycle_guard.set(self.cycle_guard.get() + 1); break; }
         }
-        // wire (R16) and the index (D36)
-        self.refresh_index();
+        // update children (§6, R16) and the index (D36)
+        self.update_children();
 
         // connect and infer (§7)
         self.connect_all();
@@ -320,10 +325,13 @@ impl Machine {
 
     pub(crate) fn current(&self) -> &FrameRec { self.frames.back().unwrap() }
 
-    pub(crate) fn new_act(&self, n: NeuronId, pos: Pos, cost: f64, strong: bool, fired_by: Option<FiredBy>, span: Pos, level: u32, height: u32) -> Act {
+    /// An activation of `n` at `pos`, costing its record (D12, D13): present or absent, its neuron, and its
+    /// position at its span.
+    pub(crate) fn new_act(&self, n: NeuronId, pos: Pos, strong: bool, fired_by: Option<FiredBy>, span: Pos, level: u32, height: u32) -> Act {
         let nn = &self.thalamus[n];
         let reach = self.reach_for(nn.axes, &span);
-        Act { neuron: n, kind: nn.kind, axes: nn.axes, pos, cost, strong, span, reach, covered_at: None, bound_at: None, coverer: None, covers: Vec::new(), fired_by, inferences: Vec::new(), opened_at: self.frame_no, level, height, gone: false, caught_up: pos[0] as i64 }
+        let (cost, pos_bits) = self.record_for(nn.axes, &span);
+        Act { neuron: n, kind: nn.kind, axes: nn.axes, pos, cost, pos_bits, strong, span, reach, covered_at: None, bound_at: None, coverer: None, covers: Vec::new(), fired_by, inferences: Vec::new(), opened_at: self.frame_no, level, height, gone: false, caught_up: pos[0] as i64 }
     }
 
     // ───────────────────────────── the call (R20) ─────────────────────────────
@@ -339,15 +347,14 @@ impl Machine {
             if nbs.is_empty() { continue; }
             let a = self.act(r).unwrap();
             if !by_neuron.contains_key(&a.neuron) { order.push(a.neuron); }
-            by_neuron.entry(a.neuron).or_default().push(RowInput { act: r, pos: a.pos, own_cost: a.cost, nbs });
+            let own_cost = if a.bound_at.is_some() { a.cost - a.pos_bits } else { a.cost };
+            by_neuron.entry(a.neuron).or_default().push(RowInput { act: r, pos: a.pos, own_cost, nbs });
         }
         let tasks: Vec<(NeuronId, Vec<RowInput>, Ctx)> = order.iter().map(|&n| (n, by_neuron.remove(&n).unwrap(), self.ctx_for(n))).collect();
-        // what every interneuron is built over as the index stands at this level, for D27 (D36)
-        let built: FxHashMap<NeuronId, Vec<NeuronId>> = if tasks.is_empty() { FxHashMap::default() } else {
-            self.thalamus.iter().filter(|n| n.alive && n.kind == Kind::Inter).map(|n| (n.id, self.through_of(n.id))).collect()
-        };
+        // the spans (D4) and the window as the index stands at this level
+        let shared = Shared { spans: self.spans.clone(), window: self.window() };
         // dispatch: every neuron's call runs in its column, the columns in parallel; collect in the order above
-        let results = self.thalamus.process_level(tasks, std::sync::Arc::new(built));
+        let results = self.thalamus.process_level(tasks, std::sync::Arc::new(shared));
         let mut bids = Vec::new();
         let mut retired = Vec::new();
         let mut added = 0;
@@ -381,7 +388,7 @@ impl Machine {
     pub fn describe_neuron(&self, id: NeuronId) -> String {
         let n = &self.thalamus[id];
         let mut s = match n.kind {
-            Kind::Inter => format!("#{} inter parents={:?} key={}", id, n.parents, n.key),
+            Kind::Inter => format!("#{} inter parents={:?} key={} definition={}", id, n.parents, n.key, self.definitions.get(&id).map_or("-".to_string(), |(o, f)| format!("#{} {}", o, describe_function(f)))),
             _ => format!("#{} {:?} dim{} b{}", id, n.kind, n.dim.unwrap(), n.bucket),
         };
         s.push_str(&format!(" span={:?} H={} conns={}\n", self.spans[id as usize], n.history.len(), n.connections.len()));

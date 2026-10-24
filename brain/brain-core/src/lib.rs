@@ -1,5 +1,5 @@
 //! UCAR: the machine of docs/algorithm.md. One file per type: the neuron side (Parts II and IV) is
-//! `neuron`, `pattern`, `history`, `cover`, `collapse`, `margin`, `pick`, `merge`, `bid` and
+//! `neuron`, `pattern`, `history`, `fit`, `collapse`, `margin`, `pick`, `merge`, `bid` and
 //! `connection`; the machine side (Parts III and V) is `machine`, `activation`, `neighborhood`,
 //! `election`, `index`, `death`, `connect`, `expansion` and `selection`; the dispatch is `thalamus`, `region` and
 //! `column`: the thalamus owns the regions, a region its columns, a column its neurons, and the per-neuron work
@@ -11,7 +11,7 @@ pub mod collapse;
 pub mod column;
 pub mod connect;
 pub mod connection;
-pub mod cover;
+pub mod fit;
 pub mod death;
 pub mod election;
 pub mod expansion;

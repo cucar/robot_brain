@@ -33,7 +33,10 @@ pub struct Act {
     pub kind: Kind,
     pub axes: u8,
     pub pos: Pos,
+    /// What its record costs (D12, D13).
     pub cost: f64,
+    /// The part of `cost` that is its position: what a variable binding it covers (D10).
+    pub pos_bits: f64,
     pub strong: bool,
     pub span: Pos,
     pub reach: Pos,
