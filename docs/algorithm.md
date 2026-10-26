@@ -273,25 +273,17 @@ read.
 
 ## 3.4 Spacetime
 
-> **D4 — Reach.** The farthest a neuron sees, in each activation dimension (D1): its span plus the radius `R`
-> of that dimension, in positions.
+> **D4 — Reach.** How far an activation sees, in each activation dimension (D1). A base activation sees `R`, the
+> radius of that dimension. An interneuron's activation sees `R` beyond the farthest base symbol it stands for
+> (D36), measured from where it stands (D53). In space it stands at the centroid of what it covers and binds, so
+> it sees about half of what it stands for each way, and `R` more. In time it stands at the frame it fires in, the
+> latest, so it sees back over all of what it stands for, and `R` more. Where what it stands for comes back to an
+> interneuron already expanded, it stops there (D36), and so does its reach.
 >
-> | | |
-> |---|---|
-> | span of a base neuron | `0` |
-> | span of an interneuron | the largest, over its functions and every node each names, of that node's distance from where the call stands (D53) plus the node's own neuron's span |
-> | reach | the span plus `R`, per activation dimension |
->
-> The span is how far the farthest base activation under the neuron lies from its activation's coordinate, read
-> off its functions: it moves only when a function is added to it (R43). Measured from where the call stands, it
-> is about half a shape's extent each way, not the whole extent from one end. A neuron sees `R` beyond the farthest node it stands for. A base neuron
-> stands for nothing but itself and sees `R`; an interneuron over a pair of adjacent positions sees `R + 1`; an interneuron
-> whose coverage ends where another's begins sees that interneuron's coordinate, one past its span, which is how two
-> adjacent coverages are joined into one by an interneuron above them. An interneuron over one more letter sees one position
-> further. In space the reach runs either way; in time it runs back, and the same number
-> runs forward as the activation's window (D9). The reach is a bound, not a distance: a neuron sees every
-> distance up to it, exact within `R` and rounded to one significant digit beyond when written (D6). `reach_t`
-> is this reach in the time dimension, the neuron's window.
+> In space the reach runs either way; in time it runs back, and the same number runs forward as the activation's
+> window (D9). An activation sees every distance up to its reach, exact within `R` and rounded to one significant
+> digit beyond when written (D6). `reach_t` is the reach in time, the activation's
+> window.
 
 > **D6 — Offsets.** The offset between two activations is the difference of their coordinates, one component per
 > activation dimension they share (D1, D2). A neighborhood keeps it exact (D18). Written, in a pattern (D15), in a
@@ -513,7 +505,7 @@ interneuron is granted (R16, R24).
 > | By | Reaches |
 > |---|---|
 > | a function | its interneuron, and back, for expansion (R28) |
-> | a neuron and a relation from it (D34) | every function that names that neuron at a node with that relation from it |
+> | a relation (D34), its far end a neuron, a class or a parameter | every function that writes it |
 > | what an interneuron stands for | the interneuron, for reuse when a stretch comes round (R43) |
 >
 > **The same relations are the same function.** A function is its set of relations, each written from the older of
@@ -521,11 +513,19 @@ interneuron is granted (R16, R24).
 > function has one interneuron. An interneuron may hold more than one function where a stretch comes round (R43):
 > it fires for each, and an activation of it is expanded through the one that fired it.
 >
-> **A function names other interneurons by id.** A chain may come round to one of its own interneurons, so a function
-> may name a neuron built over its own interneuron, and its references may form a ring. **What an interneuron stands
-> for** is its expansion (R28): its function's nodes with the variables left open, each node in turn for what it
-> stands for, down to base symbols. Read along a ring, it stops where it meets an interneuron already on its path,
-> so a ring stands for one turn.
+> **A function names other interneurons by id**, and through them it may come back to its own: a function whose node
+> is the interneuron that fired a frame before, whose function names the one before that, and so on, can reach its
+> own interneuron again. **What an interneuron stands for** is its expansion (R28): its function's nodes with the
+> variables left open, each node in turn for what it stands for, down to base symbols. Where that comes back to an
+> interneuron already expanded, it stops there.
+>
+> **The index is searched by what an interneuron would stand for** (R43): a function's expansion, read back from
+> where its call would stand. The search finds an interneuron when three things hold: reading that expansion back,
+> it meets the interneuron within the interneuron's own length; over exactly that length the two expansions are the
+> same; and the meeting is not where the call would stand. That is how something that comes round again finds the
+> interneuron it had the first time. A search by relations alone would not find it: a function whose node is the
+> interneuron that fired a frame before names a different interneuron every frame, while what it stands for, over
+> that length, is the same.
 
 **A function and its interneuron are one entry.** The machine holds both in its dictionary. No neuron holds a
 function or points at an interneuron: a neuron records what it sees and returns it (§5), and the machine groups, matches and keeps
@@ -679,7 +679,7 @@ frequency enters**: a number costs the same however often it is used.
 
 > **D54 — Fit.** A function fits where writing what it names through it costs less than writing it bare: its
 > savings there are positive (D22). It is read against a row of a neuron's history, to price the function (D30),
-> and against the board, to match it (R51). Each node is read as it stands: every neighbor is the neuron at its
+> and against what an activation returned, to find it (R53). Each node is read as it stands: every neighbor is the neuron at its
 > offset, and an interneuron on the apex is a neuron as itself. Nothing is reserved: two functions may fit on the same
 > neighbors. The rows of a neuron's history a function fits are its **uses** there.
 >
@@ -799,7 +799,8 @@ it is used.
 | infer             | After the frame's last level, reaching every activation at age 0: it delivers nothing and collects what the activation infers. | §7.2 |
 
 In `activate` a neuron records and returns, in the frame it fires. In recognition the machine groups
-what neurons return, generalizes, prunes, matches and elects, and asks a neuron to count. In `connect` and `infer` a neuron learns what
+what each neuron returns, finds it in the index, generalizes, elects, allocates and prunes, and asks a neuron to
+count. In `connect` and `infer` a neuron learns what
 followed and infers what comes next. In selection the machine chooses among those inferences one winner per
 dimension.
 
@@ -892,7 +893,7 @@ Nine cases are worked by hand on these definitions, listed in Part VI.
 > | refresh index   | Add the relations of the admitted rows, and take away those of the evicted ones (D47).               |
 > | return          | The relations of every activation handed in, in one return, divided by activation (R21).            |
 
-The call runs before the machine groups and matches (R50, R51).
+The call runs before the machine groups and finds (R50, R53).
 
 ## 5.1 Refresh history
 
@@ -973,12 +974,18 @@ frame reported, each after it over what the level before accepted, until a level
 | Step       | Description |
 |------------|-------------|
 | activate   | Fire every interneuron the level below accepted, where what it covers stands (D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations. |
-| group      | For each activation, group its relations into functions of fixed nodes, and add the new ones that pay to the dictionary (R50). |
-| generalize | Where a function grouping added and another of the dictionary differ only in which neurons stand at some nodes, make the function with variables there, and add it where it pays (R52). |
-| prune      | Price every function whose evidence changed at this level, and drop each that no longer pays (R18). |
-| match      | For each activation, find every function of the dictionary that holds on the board: fixed nodes where they stand, a class where a member stands, a parameter where one neuron stands at all its nodes, and the relations that did not come true (R51). |
-| elect      | Cover the board with the matched functions, by the greedy cover (R24). An accepted function covers its fixed nodes and binds what stands in its variables. |
+| recognize  | One activation at a time, the three steps below. Every activation is visited, so every function the level can build is built before any is placed. The dictionary changes only here, between one activation and the next. |
+| elect      | Place every function recognize gave on the board, and take them best first, the highest coverage over price each round, stopping when the board is covered (R24). |
 | allocate   | Give each accepted function with no interneuron one, reused where a stretch comes round (R43), allocated otherwise where a neuron is free (R16). It fires at the next level. |
+| prune      | Price every function whose evidence changed at this level, and drop each that no longer pays (R18). |
+
+For each activation, recognize is:
+
+| Step       | Description |
+|------------|-------------|
+| group      | Group the relations it returned into functions of fixed nodes, and keep each that pays (R50). |
+| find       | Read each kept function's relations in the index, exactly, through every class the far neuron is a member of, and through a parameter. An interneuron writing all of them is that function. One writing some is a partial match, the rest its errors. None writing all: the function is new and joins the dictionary (R53). |
+| generalize | Make, from each new function and each partial match that has its offsets, the function that fits both, and add it where it pays (R52). |
 
 Then, once the last level has run:
 
@@ -1002,12 +1009,15 @@ argument the call was given, and one over the interneuron and a bound activation
 > neuron: a neuron fires at whatever level accepts its function, and one neuron may fire at different levels of
 > different frames.
 >
-> **Within a level the order is activate, group, generalize, prune, match, elect, allocate**, and it cannot be
-> otherwise: what fires is what the level before accepted; what neurons return is what is grouped; what grouping
-> adds is what is generalized; the dictionary is priced once both have added to it; matching reads the dictionary
-> as it then stands; the matched functions are what the election is over; and an interneuron is allocated only
-> for a function the election accepted (R16). Nothing in that
-> order leaves the level or the frame.
+> **Within a level the order is activate, recognize, elect, allocate, prune**, and within recognize, for one
+> activation at a time, group, find, generalize. It cannot be otherwise: what fires is what the level before
+> accepted; what a neuron returns is what is grouped; whether a grouped function is new is known only once it is
+> looked up, and the lookup is what finds the dictionary's functions it fits and the partners it is generalized
+> with; the election is over everything recognize found or built, since a function built from the last activation
+> may cover the board better than any found from the first, so nothing is placed until every activation has been
+> recognized; an interneuron is allocated only for a function the election accepted (R16); and the dictionary is
+> priced once the level has added to it. Nothing in that order leaves the level or the frame, and nothing reads
+> the dictionary while it changes: it changes in recognize, between one activation and the next.
 >
 > Every neuron runs the same rule at its own reach (D4). **Compression is spatio-temporal for every neuron, in
 > one pass**: a function may name neighbors in its own frame, in earlier ones, beside it in space, or in a mix.
@@ -1041,15 +1051,34 @@ argument the call was given, and one over the interneuron and a bound activation
 > written, in the rows that hold both groups, and gives up the rows that hold only one; the cost of the history
 > says which way that comes out.
 >
-> Each group left is a function whose nodes are all fixed: the activation and the neighbors it pins.
-> The machine rewrites each relation from the older of its two nodes (D15) and looks the function up in the
-> dictionary. The same relations are the same function, and anything else is new. A new function joins the
-> dictionary where its margin is positive (D30), and has no interneuron until it is accepted (R16). The work is bounded
-> by the activation's own relations.
+> Each group left is a function whose nodes are all fixed: the activation and the neighbors it pins. Merging
+> priced only merges, so each group left is priced once on its own, by its margin (D30), and kept where that is
+> positive. The machine rewrites each kept group's relations from the older of their two nodes (D15) and hands it
+> to find (R53). The work is bounded by the activation's own relations.
 
-> **R52 — Generalizing.** Right after grouping, wherever a function grouping added and another function of the
-> dictionary have the same relations and differ only in which neuron stands at some of their nodes, the machine
-> makes the function that fits both:
+> **R53 — Finding.** For each function grouping kept, the machine reads each of its relations in the index (D36),
+> three ways: the relation as it is, `(a, b, δ)`; through every class `K` that has `b` as a member, `(a, K, δ)`;
+> and through a parameter, `(a, P, δ)`, since a parameter admits any neuron. Each reading gives the interneurons
+> whose function writes that relation, and one relation's readings are taken together as one set.
+>
+> | The interneurons in | Are |
+> |---|---|
+> | every relation's set | the function itself: it is already in the dictionary, and nothing more is done with it |
+> | some relations' sets | **partial matches**: dictionary functions that fit the observed one in part; the relations of theirs that nothing observed fits are their errors (D22) |
+> | no set | nothing |
+>
+> Where no interneuron is in every set, the function is **new**. It joins the dictionary, with no interneuron until
+> it is accepted (R16), and is generalized at once (R52) with those partial matches that have its offsets at every
+> relation and differ only in which neuron stands at some nodes. A function with no relation in common is never
+> reached, and R52 could make nothing of it. A class is read where a member is observed, and a parameter where
+> the same neuron is observed at every relation it ties; so a dictionary function with variables is fit by an
+> observed one the way D54 reads it, and this is where variables are matched. Everything find gives, the function
+> itself, each partial match with its errors, and the new function, goes to the election once every activation
+> of the level has been recognized (R24).
+
+> **R52 — Generalizing.** For each new function and each partial match find gave it with its offsets (R53), two
+> functions that differ only in which neuron stands at some of their nodes, the machine makes the function that
+> fits both, before the next activation is grouped, and what it makes goes to the election with the rest:
 >
 > - where they have the same neuron, that node is fixed;
 > - where they differ, and two or more such nodes hold the same neuron within each function, those nodes are one
@@ -1071,19 +1100,9 @@ one number.
 > history it is read over leaves the dictionary. A class no function uses any longer goes with it. Its interneuron
 > is decommissioned when due (R38).
 
-> **R51 — Matching.** For each activation, the machine reaches through the index (D36) every function of the
-> dictionary that names the activation's neuron at a node, fixed or as a member of a class there. It puts the
-> activation at that node and reads each relation of the function against what the neuron returned, composing
-> where a relation joins two of its neighbors (D15), a variable by whatever stands at its offset (D54). A function
-> is a candidate where its savings are positive: the numbers its true relations cover, less its record, one number
-> per relation that did not come true, and one per value (D22). That is partial matching with error correction,
-> done by counting.
->
-> What matching finds is what the election chooses among (R24).
-
 ## 6.2 Election
 
-> **D31 — Placing a function.** A function matched for an activation this level (R51) is placed on the board, at
+> **D31 — Placing a function.** A function find gave for an activation (R53) is placed on the board, at
 > the activations it would cover. Competing explanations of the same activations are all placed, and
 > the election picks among them (R24). The same function placed over the same activations from two activations is
 > placed once.
@@ -1133,7 +1152,7 @@ one number.
 > **This is a price for one placement, not for the function.** The entry in the dictionary is weighed by the one test
 > (D30) and appears nowhere in this price and nowhere in the election.
 
-**The election proposes nothing.** Every function it chooses among comes from matching (R51). The election only
+**The election proposes nothing.** Every function it chooses among comes from find (R53). The election only
 accepts or declines one: it never edits a function, merges two, or invents a third. What it does do is *measure*
 one, and everything a function is worth on the board this frame the machine works out itself (R22).
 
@@ -1182,17 +1201,20 @@ election stops at the first that does not pay. **The election does not minimize 
 returns a good solution, not a proved minimum. **Every neuron a function covers ends up credited to exactly
 one function**, which is what stops an activation being paid for twice.
 
-> **R24 — The election is D28, run by the machine.** The functions are those matched at this level, less any that would
-> need a neuron when none is free (R16), and what they cover is
-> the **free set**: every activation on the frontier (R27), at its own full coordinate — frame and position — that
-> some matched function names and no earlier election has covered, a bound one at its neuron's cost (R23).
+> **R24 — The election is D28, run by the machine.** The functions are everything recognize found or built at
+> this level (R53, R52), less any that would need a neuron when none is free (R16), and what they cover is the
+> **free set**: every activation on the frontier (R27), at its own full coordinate, frame and position, that some
+> placed function names and no earlier election has covered, a bound one at its neuron's cost (R23).
 >
-> Each function is placed on the board before the first round (D31). `price` is R22's. **Two placements that
-> measure the same are told apart in this order**: a function with an interneuron before one without; between two with
-> interneurons, the older interneuron; between two without, the function that joined the dictionary first; and between two
-> placements of one function, the earlier coordinate, the earlier frame first and then the smaller position, the
-> dimensions in the order the machine declares them (D1). Older is earlier allocated (D2). Then D28 runs, and what
-> it takes are the accepted functions.
+> Each function is placed on the board before the first round (D31), and `price` is R22's. Then D28 runs: the
+> highest `coverage / price` first, each while `coverage > price` against the board as it then stands, and it
+> stops when nothing on the board is left that a placed function could cover for less than it costs.
+>
+> **Two placements that measure the same are told apart in this order**: a function with
+> an interneuron before one without; between two with interneurons, the older interneuron; between two without,
+> the function that joined the dictionary first; and between two placements of one function, the earlier
+> coordinate, the earlier frame first and then the smaller position, the dimensions in the order the machine
+> declares them (D1). Older is earlier allocated (D2).
 >
 > **The bound is structural.** A function's price includes its call's record, so it is taken only when it covers
 > more than one activation's record: at least two nodes. Each round takes one function, so the rounds are never
@@ -1236,12 +1258,8 @@ Every accepted function with no interneuron is given one where a neuron is free.
 > Grouping, generalizing and pruning have already run within the level, before matching (R26).
 
 > **R43 — Reuse.** An accepted function fires its own interneuron where it has one. Where it has none, the
-> machine looks for an interneuron that already stands for what its interneuron would (D36), wherever it is: one that
-> fired this frame, frames ago, or not within any open window. Where one does, the function is added to it, and
-> the interneuron fires. That is how a stretch that comes round again fires the neuron allocated when it first
-> came round, and not a new one above it. It is also how a chain closes on itself: what a new link would stand for,
-> read back along its own chain, meets the chain's own interneuron a turn back over the same stretch, and the new link is
-> that interneuron. From then on each link's function is already in the dictionary, and the chain is a ring.
+> machine looks it up in the interneuron index, by what its interneuron would stand for (D36). Where one already
+> stands for that, the function is added to it, and that interneuron fires. Otherwise the machine allocates one.
 >
 > **Otherwise the machine allocates one** (R16): a free neuron, its first activation where what it covers stands
 > (D53). Where none is free the function was not in the election (R24).
@@ -1313,14 +1331,16 @@ and `U` the uses of a function:
 
 | Step | Work |
 |---|---|
-| group | per activation, up to `G²` merges, each an intersection of row lists |
-| generalize | per function grouping added, each function with the same relations, `L` nodes compared |
+| group | per activation, up to `G²` merges, each an intersection of row lists; then one margin per group kept |
+| find | per kept function, one index read per relation, widened by the classes its far neuron is in; one count per interneuron reached |
+| generalize | per new function, each partial match with its offsets, `L` nodes compared |
+| elect | the functions recognize gave, a greedy cover over the board, stopping when it is covered |
 | prune | per function whose evidence changed, writing its `U` uses with and without it; writing a row is a greedy cover |
-| match | per activation, `F · L` relations read |
-| elect | the matched functions, a greedy cover over the board |
 
-Grouping and pruning dominate. Everything is bounded by what the level changed and by `H`, and nothing scales with
-the run. What is cached, and how, is the implementation's.
+Grouping and pruning dominate. Within recognize nothing waits on anything but the activation before it, and the
+dictionary is read only between its changes; the election waits for recognize, since the best function may be the
+last one built. Everything is bounded by what the level changed and by `H`, and nothing scales with the
+run. What is cached, and how, is the implementation's.
 
 # Part IV — Future: a neuron
 
@@ -1575,8 +1595,9 @@ only what happened (R32).
 > **R28 — Expansion.** A neuron above the base is not yet anything in the base alphabet. Expanding it recovers
 > what its function covered and bound: the nodes its function names, the one that fired the activation (§6.4), each
 > at its offset from where the call stands, by the relations (D15, D34) — offsets compose because each is a
-> difference of activation coordinates (D2) — repeated down to base symbols. Along a ring it stops where it meets
-> an interneuron already on its path, so a ring expands to one turn (D36). A fixed node expands to its neuron; a variable expands to its argument, the neuron bound there (D37).
+> difference of activation coordinates (D2) — repeated down to base symbols. Each activation is expanded through
+> the function that fired it (§6.4), so expansion follows what actually fired, frame by frame, back to where it
+> began, and it ends there, even where a function comes back to its own interneuron. A fixed node expands to its neuron; a variable expands to its argument, the neuron bound there (D37).
 > So `A` placed at `f`, whose function is `v` with `u` one frame before it, expands to `v` at `f` and `u` at
 > `f − 1`; and `P` placed at `f + 4`, whose function is `b` with `C` two frames before it, `C`'s function being `c`
 > with `d` one frame before it, expands to `b` at `f + 4`, `c` at `f + 2` and `d` at `f + 1`.
@@ -1584,7 +1605,7 @@ only what happened (R32).
 > fired. One named beyond the radius is placed at exactly the distance its offset names, whatever distance in
 > the group it fired at, and several neighbors at one coarse offset (D6) are each placed there. **The rounding
 > composes.** Each expansion down adds its own group's slack, so a neuron places the base symbols of its
-> farthest neighbors to within the sum of the groups along the path: the longer its span, the coarser its far
+> farthest neighbors to within the sum of the groups along the path: the farther it reaches, the coarser its far
 > placements. That is the loss the file carries (§1), and expansion reports it faithfully rather than hiding it.
 >
 > **This is the one expansion in the design.** It recovers the run from the file (D12): a class to the
