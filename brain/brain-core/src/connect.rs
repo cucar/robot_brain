@@ -52,9 +52,13 @@ impl Machine {
                             writes.push((a.neuron, bn, off, share));
                         }
                     }
-                    if a.covered_at == Some(age) {
-                        if let Some(cov) = a.coverer.and_then(|cr| self.act(cr)).cloned() {
-                            if cov.strong && cov.pos != a.pos && self.cfg.policy.future[a.kind as usize][cov.kind as usize] {
+                    // the last connection, to the call that covered it, and again to each call that took it back (D10, R23)
+                    let mut coverers: Vec<ActRef> = Vec::new();
+                    if a.covered_at == Some(age) { if let Some(c) = a.coverer { coverers.push(c); } }
+                    for (g, c) in &a.retaken { if *g == age { coverers.push(*c); } }
+                    for cr in coverers {
+                        if let Some(cov) = self.act(cr).cloned() {
+                            if cov.strong && cov.pos != a.pos && cov.neuron != NeuronId::MAX && self.cfg.policy.future[a.kind as usize][cov.kind as usize] {
                                 if let Some(off) = self.offset_between(&a, cov.axes, &cov.pos, age) {
                                     let share = self.reward_share_frame0(&at_rewards, cov.neuron);
                                     writes.push((a.neuron, cov.neuron, off, share));

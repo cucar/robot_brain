@@ -5,20 +5,16 @@
 use crate::neuron::*;
 use crate::types::*;
 
-/// One neuron's call at a level (R20): its rows and the context the machine hands it.
+/// One neuron's call at a level (R20): the rows of its activations.
 pub struct LevelTask {
     pub slot: usize,
     pub rows: Vec<RowInput>,
-    pub shared: std::sync::Arc<Shared>,
-    pub ctx: Ctx,
 }
 
-/// What one neuron returned from its call: its bids, everything it retired, and the count added.
+/// What one neuron returned from its call (R21).
 pub struct LevelResult {
     pub neuron: NeuronId,
-    pub bids: Vec<Bid>,
-    pub retired: Vec<Retired>,
-    pub added: usize,
+    pub returns: Vec<ActReturn>,
 }
 
 #[derive(Default)]
@@ -38,20 +34,14 @@ impl Column {
         let mut out = Vec::with_capacity(tasks.len());
         for t in tasks {
             let n = &mut self.neurons[t.slot];
-            n.shared = t.shared;
-            let (bids, retired, added) = n.process(t.rows, t.ctx);
-            out.push(LevelResult { neuron: n.id, bids, retired, added });
+            let returns = n.activate(t.rows);
+            out.push(LevelResult { neuron: n.id, returns });
         }
         out
     }
 
-    /// Scrub a deleted neuron from every living neuron's patterns and saved activations; returns what
-    /// each retired for it.
-    pub fn delete_neighbor(&mut self, dead: NeuronId) -> Vec<(NeuronId, Retired)> {
-        let mut out = Vec::new();
-        for n in self.neurons.iter_mut().filter(|n| n.alive) {
-            for r in n.delete_neighbor(dead) { out.push((n.id, r)); }
-        }
-        out
+    /// `forget neuron` on every living neuron this column owns (§4.1).
+    pub fn forget(&mut self, dead: NeuronId) {
+        for n in self.neurons.iter_mut().filter(|n| n.alive) { n.forget(dead); }
     }
 }

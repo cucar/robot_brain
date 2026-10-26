@@ -69,13 +69,13 @@ impl Thalamus {
 
     /// The call (R20) at one level: route each neuron's task to its column, run the columns of every region in
     /// parallel, and hand the results back in the order the tasks came.
-    pub fn process_level(&mut self, tasks: Vec<(NeuronId, Vec<RowInput>, Ctx)>, shared: std::sync::Arc<Shared>) -> Vec<LevelResult> {
+    pub fn process_level(&mut self, tasks: Vec<(NeuronId, Vec<RowInput>)>) -> Vec<LevelResult> {
         let order: Vec<NeuronId> = tasks.iter().map(|t| t.0).collect();
         let r = self.regions.len();
         let mut by_region: Vec<Vec<Vec<LevelTask>>> = (0..r).map(|_| (0..self.columns).map(|_| Vec::new()).collect()).collect();
-        for (id, rows, ctx) in tasks {
+        for (id, rows) in tasks {
             let (ri, ci, slot) = self.route(id);
-            by_region[ri][ci].push(LevelTask { slot, rows, shared: shared.clone(), ctx });
+            by_region[ri][ci].push(LevelTask { slot, rows });
         }
         let nested: Vec<Vec<LevelResult>> = self.regions.par_iter_mut()
             .zip(by_region.into_par_iter())
@@ -85,14 +85,9 @@ impl Thalamus {
         order.into_iter().filter_map(|id| results.remove(&id)).collect()
     }
 
-    /// Scrub a deleted neuron from every living neuron, in parallel, results in id order.
-    pub fn delete_neighbor(&mut self, dead: NeuronId) -> Vec<(NeuronId, Retired)> {
-        let nested: Vec<Vec<(NeuronId, Retired)>> = self.regions.par_iter_mut()
-            .map(|region| region.delete_neighbor(dead))
-            .collect();
-        let mut out: Vec<(NeuronId, Retired)> = nested.into_iter().flatten().collect();
-        out.sort_by_key(|(n, _)| *n);
-        out
+    /// Forget a decommissioned neuron in every living neuron, in parallel (§4.1).
+    pub fn forget(&mut self, dead: NeuronId) {
+        self.regions.par_iter_mut().for_each(|region| region.forget(dead));
     }
 }
 

@@ -8,7 +8,6 @@
 use rayon::prelude::*;
 
 use crate::column::{Column, LevelResult, LevelTask};
-use crate::neuron::*;
 use crate::types::*;
 
 pub struct Region {
@@ -31,11 +30,8 @@ impl Region {
         nested.into_iter().flatten().collect()
     }
 
-    /// Scrub a deleted neuron from every column's neurons, in parallel.
-    pub fn delete_neighbor(&mut self, dead: NeuronId) -> Vec<(NeuronId, Retired)> {
-        let nested: Vec<Vec<(NeuronId, Retired)>> = self.columns.par_iter_mut()
-            .map(|col| col.delete_neighbor(dead))
-            .collect();
-        nested.into_iter().flatten().collect()
+    /// Forget a decommissioned neuron in every column, in parallel.
+    pub fn forget(&mut self, dead: NeuronId) {
+        self.columns.par_iter_mut().for_each(|col| col.forget(dead));
     }
 }

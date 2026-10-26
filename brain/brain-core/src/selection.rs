@@ -3,6 +3,7 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::machine::*;
+use crate::function::*;
 use crate::neuron::*;
 use crate::offsets::*;
 use crate::types::*;
@@ -11,16 +12,20 @@ impl Machine {
     // ───────────────────────────── selection (R45–R48) ─────────────────────────────
 
     /// What one open activation places at the frame ahead (R46): base symbols its standing inferences expand to there.
-    pub(crate) fn placements(&self, r: ActRef, ahead: Frame) -> Vec<(NeuronId, Pos, f64, f64)> {
+    pub(crate) fn placements(&self, r: ActRef, ahead: Frame, memo: &mut FxHashMap<(NeuronId, Pos), Vec<(NeuronId, Pos)>>) -> Vec<(NeuronId, Pos, f64, f64)> {
         let Some(a) = self.act(r) else { return vec![] };
         let mut out = Vec::new();
         for inf in &a.inferences {
             if inf.struck || !self.thalamus[inf.target].alive { continue; }
             let mut at = a.pos;
             for d in 0..MAX_DIMS { at[d] += inf.offset[d]; }
-            if (at[0] as i64) + self.spans[inf.target as usize][0] as i64 + 1 < ahead { continue; }
-            let mut placed = Vec::new();
-            self.expand(inf.target, at, &mut Vec::new(), &mut placed, None);
+            // an expansion places back from where it completes, so one completed already places nothing ahead
+            if (at[0] as i64) < ahead { continue; }
+            let placed = memo.entry((inf.target, at)).or_insert_with(|| {
+                let mut placed = Vec::new();
+                self.expand_from(inf.target, at, ahead, &mut Vec::new(), &mut placed, None);
+                placed
+            }).clone();
             for (n, p) in placed {
                 if p[0] as i64 != ahead { continue; }
                 let nn = &self.thalamus[n];
@@ -35,7 +40,10 @@ impl Machine {
     pub(crate) fn select(&mut self) -> Vec<Winner> {
         let fno = self.frame_no;
         let ahead = fno + 1;
+        let t = std::time::Instant::now();
         self.match_all();
+        self.timings[8] += t.elapsed().as_secs_f64() * 1000.0;
+        let t = std::time::Instant::now();
         // the electorate (R46, R48): uncovered open activations, and covered ones whose coverer has nothing
         let mut voters: Vec<(ActRef, Vec<(NeuronId, Pos, f64, f64)>)> = Vec::new();
         let mut stack: Vec<ActRef> = Vec::new();
@@ -48,9 +56,10 @@ impl Machine {
             }
         }
         let mut seen: FxHashSet<ActRef> = FxHashSet::default();
+        let mut memo: FxHashMap<(NeuronId, Pos), Vec<(NeuronId, Pos)>> = FxHashMap::default();
         while let Some(r) = stack.pop() {
             if !seen.insert(r) { continue; }
-            let p = self.placements(r, ahead);
+            let p = self.placements(r, ahead, &mut memo);
             if !p.is_empty() { voters.push((r, p)); continue; }
             if let Some(a) = self.act(r) {
                 for c in &a.covers {
@@ -63,6 +72,7 @@ impl Machine {
             }
         }
         self.last_stats.voters = voters.len();
+        self.timings[9] += t.elapsed().as_secs_f64() * 1000.0;
         if self.trace {
             for (r, placed) in &voters {
                 let Some(a) = self.act(*r) else { continue };
@@ -119,6 +129,7 @@ impl Machine {
         // execution activates what it expands where it won (R30): a pattern an inference's expansion passes
         // through fires weakly where its expansion completes at the frame ahead, provided the inference
         // stands and what it placed at that frame was selected
+        let t = std::time::Instant::now();
         let won: FxHashSet<(NeuronId, Pos)> = winners.iter().map(|w| (self.base_neuron(w.dim, w.bucket), w.pos)).collect();
         let mut weak_patterns: Vec<(NeuronId, Pos)> = Vec::new();
         for (r, _) in &voters {
@@ -127,10 +138,10 @@ impl Machine {
                 if inf.struck || self.thalamus[inf.target].kind != Kind::Inter || !self.thalamus[inf.target].alive { continue; }
                 let mut at = a.pos;
                 for d in 0..MAX_DIMS { at[d] += inf.offset[d]; }
-                if at[0] as i64 > ahead { continue; }
+                if at[0] as i64 != ahead { continue; }
                 let mut base = Vec::new();
                 let mut all = Vec::new();
-                self.expand_into(inf.target, at, &mut Vec::new(), &mut base, Some(&mut all), None);
+                self.expand_from(inf.target, at, ahead, &mut Vec::new(), &mut base, Some(&mut all));
                 let mut placed_ahead = base.iter().filter(|(_, p)| p[0] as i64 == ahead).map(|(n, p)| {
                     let mut pp = *p;
                     for d in 1..MAX_DIMS { if self.thalamus[*n].axes & (1 << d) == 0 { pp[d] = 0; } }
@@ -145,103 +156,84 @@ impl Machine {
         weak_patterns.sort();
         weak_patterns.dedup();
         self.pending_weak_patterns = weak_patterns;
+        self.timings[10] += t.elapsed().as_secs_f64() * 1000.0;
         winners
     }
 
     // ───────────────────────────── the match (R49) ─────────────────────────────
 
-    /// Read every standing inference that names a call neuron against the frames its line reaches back
-    /// into, and strike it where the line would not pay there (R49).
+    /// Read every standing inference that names an interneuron against the frames its function reaches back
+    /// into, and strike it where the function would not pay there (R49).
     pub(crate) fn match_all(&mut self) {
         let fno = self.frame_no;
-        // the apex of each open frame (D24), each activation with what it stands for: itself, and for a
-        // child every base symbol its expansion places, at its share of the child's cost (D22, D47)
-        let mut apex: FxHashMap<Frame, Vec<(NeuronId, Pos, f64, f64)>> = FxHashMap::default();
+        // the apex of each open frame (D49), each activation with what it costs, and for an interneuron every
+        // base symbol it stands for, at nothing (D22, D47)
+        let mut apex: FxHashMap<Frame, Vec<(NeuronId, Pos, f64)>> = FxHashMap::default();
         for f in self.frames.iter() {
-            let list = apex.entry(f.no).or_default();
-            for b in f.acts.iter() {
-                if b.gone || !Self::on_apex_at(b, f.no) || b.pos[0] as i64 != f.no { continue; }
-                let (cost, pos) = if b.bound_at.is_some() { (b.cost - b.pos_bits, 0.0) } else { (b.cost, b.pos_bits) };
-                list.push((b.neuron, b.pos, cost, pos));
-                // a child holds what it stands for, and is worth nothing for it (D22, D47)
+            for (i, b) in f.acts.iter().enumerate() {
+                if b.gone || b.neuron == NeuronId::MAX || !Self::on_apex_at(b, f.no) || b.pos[0] as i64 != f.no { continue; }
+                apex.entry(f.no).or_default().push((b.neuron, b.pos, b.cost));
                 if b.kind == Kind::Inter {
                     let mut base = Vec::new();
-                    let mut all = Vec::new();
-                    self.expand_into(b.neuron, b.pos, &mut Vec::new(), &mut base, Some(&mut all), b.fired_by.as_ref());
-                    for (n, p) in all { list.push((n, p, 0.0, 0.0)); }
+                    self.descend(ActRef { frame: f.no, index: i as u32 }, &mut Vec::new(), &mut base, None);
+                    for r in base { if let Some(x) = self.act(r) { apex.entry(x.pos[0] as i64).or_default().push((x.neuron, x.pos, 0.0)); } }
                 }
             }
         }
         let mut strikes: Vec<(ActRef, usize)> = Vec::new();
+        let mut memo: FxHashMap<(NeuronId, Pos), Option<bool>> = FxHashMap::default();
         for f in self.frames.iter() {
             for (i, a) in f.acts.iter().enumerate() {
                 for (k, inf) in a.inferences.iter().enumerate() {
-                    if inf.struck { continue; }
-                    let mut at = a.pos;
-                    for d in 0..MAX_DIMS { at[d] += inf.offset[d]; }
-                    if let Some(false) = self.match_one(inf.target, at, &apex, fno) { strikes.push((ActRef { frame: f.no, index: i as u32 }, k)); }
+                    if inf.struck || self.thalamus.get(inf.target).map_or(true, |t| t.kind != Kind::Inter) { continue; }
+                    let at = add(&a.pos, &inf.offset);
+                    let verdict = *memo.entry((inf.target, at)).or_insert_with(|| self.match_one(inf.target, at, &apex, fno));
+                    if let Some(false) = verdict { strikes.push((ActRef { frame: f.no, index: i as u32 }, k)); }
                 }
             }
         }
         for (r, k) in strikes { if let Some(a) = self.act_mut(r) { a.inferences[k].struck = true; } }
     }
 
-    /// The match of one inference completing at `at` (R49): the inferred call neuron's function, one
-    /// expansion down, placed back from the completion; each fixed node in a frame that has happened credits
-    /// what stands at its offset, credits that less an offset where it stands elsewhere within reach, and
-    /// charges an absence where it stands nowhere; a variable is bound from what stands at its places that
-    /// have happened, crediting their positions, a place holding nothing it could take charging an absence.
-    /// Proposed when the credit exceeds the charges. None where nothing of the function has happened yet,
-    /// or the target has no function to read.
-    pub(crate) fn match_one(&self, target: NeuronId, at: Pos, apex: &FxHashMap<Frame, Vec<(NeuronId, Pos, f64, f64)>>, now: Frame) -> Option<bool> {
+    /// The match of one inference completing at `at` (R49): the inferred interneuron's function, one expansion
+    /// down, placed back from where its call would stand. A node in a frame that has happened credits what
+    /// stands at its offset, credits that less an offset where it stands elsewhere within reach, and charges its
+    /// relation where it stands nowhere; a variable credits the positions of what it binds. No record is
+    /// charged. Proposed when the credit exceeds the charges; None where nothing of it has happened yet.
+    pub(crate) fn match_one(&self, target: NeuronId, at: Pos, apex: &FxHashMap<Frame, Vec<(NeuronId, Pos, f64)>>, now: Frame) -> Option<bool> {
         let t = self.thalamus.get(target)?;
         if t.kind != Kind::Inter { return None; }
-        let &(owner, pid) = t.parents.first()?;
-        let f = self.line(owner, pid)?;
-        let on = &self.thalamus[owner];
+        let f = self.func_of(target)?;
         let reach = self.reach_for(t.axes, &self.spans[target as usize]);
-        let offset_bits = crate::offsets::offset_bits(&reach, &self.radii, t.axes);
-        let absence = |n: NeuronId| self.record_for(t.axes, &self.spans.get(n as usize).copied().unwrap_or([0; MAX_DIMS])).0;
-        let same_group = |a: &Pos, b: &Pos| round_delta(&sub(a, &at), &self.radii, t.axes) == round_delta(&sub(b, &at), &self.radii, t.axes);
+        let anchor = add(&at, &Self::anchor_offset(&f));
+        let same = |p: &Pos, q: &Pos, d: usize| -> bool { round_offset(p[d] - anchor[d], self.radii[d]) == round_offset(q[d] - anchor[d], self.radii[d]) };
         let mut credit = 0.0;
         let mut charge = 0.0;
         let mut judged = 0;
-        for (place, off) in f.places.iter().skip(1) {
-            let q = add(&at, off);
+        let mut values: FxHashMap<u8, NeuronId> = FxHashMap::default();
+        let mut nodes: Vec<(Node, Pos, usize)> = vec![(Node::Fixed(f.anchor), anchor, 0)];
+        for r in &f.rels { let mut q = anchor; q[r.dim as usize] += r.off; nodes.push((r.node, q, r.dim as usize)); }
+        for (node, q, d) in nodes {
             if q[0] as i64 > now { continue; }
-            match place {
-                Place::Owner | Place::Param(_) => {}
-                Place::Fixed(m) => {
-                    judged += 1;
-                    let here = apex.get(&(q[0] as i64)).and_then(|l| l.iter().filter(|(n, p, _, _)| n == m && same_group(p, &q)).map(|(_, _, c, _)| *c).fold(None, |b: Option<f64>, c| Some(b.map_or(c, |x| x.max(c)))));
-                    if let Some(c) = here { credit += c; }
-                    else if let Some((_, _, c, _)) = self.frames.iter().filter(|fr| (now - fr.no) <= reach[0] as i64).flat_map(|fr| apex.get(&fr.no).into_iter().flatten()).find(|(n, p, _, _)| n == m && (0..self.radii.len()).all(|d| (p[d] - q[d]).abs() <= reach[d])) { credit += c - offset_bits; }
-                    else { charge += absence(*m); }
-                }
-                Place::Class(k) => {
-                    let Some(c) = on.class(*k) else { continue };
-                    judged += 1;
-                    let found = apex.get(&(q[0] as i64)).and_then(|l| l.iter().find(|(n, p, _, _)| c.has(*n) && same_group(p, &q)));
-                    match found { Some((_, _, _, pos)) => credit += pos, None => charge += absence(c.frequent().unwrap_or(owner)) }
-                }
-            }
-        }
-        // parameters: the value is the neuron at the earliest of the places that have happened (D44)
-        for k in 0..f.params.len() as u32 {
-            let mut places: Vec<Pos> = f.param_places(k).iter().map(|&qi| add(&at, &f.places[qi].1)).filter(|q| q[0] as i64 <= now).collect();
-            places.sort();
-            if places.is_empty() { continue; }
             judged += 1;
-            let value = places.iter().find_map(|q| apex.get(&(q[0] as i64)).and_then(|l| l.iter().find(|(_, p, _, _)| same_group(p, q)).map(|(n, _, _, _)| *n)));
-            for q in &places {
-                match value.and_then(|v| apex.get(&(q[0] as i64)).and_then(|l| l.iter().find(|(n, p, _, _)| *n == v && same_group(p, q)))) {
-                    Some((_, _, _, pos)) => credit += pos,
-                    None => charge += absence(value.unwrap_or(owner)),
+            let here = apex.get(&(q[0] as i64));
+            match node {
+                Node::Fixed(m) => {
+                    if let Some(c) = here.and_then(|l| l.iter().filter(|(n, p, _)| *n == m && same(p, &q, d)).map(|(_, _, c)| *c).fold(None, |b: Option<f64>, c| Some(b.map_or(c, |x| x.max(c))))) { credit += c; }
+                    else if let Some((_, _, c)) = self.frames.iter().filter(|fr| (now - fr.no) <= reach[0] as i64).flat_map(|fr| apex.get(&fr.no).into_iter().flatten()).find(|(n, p, _)| *n == m && (0..self.radii.len()).all(|e| (p[e] - q[e]).abs() <= reach[e])) { credit += c - 1.0; }
+                    else { charge += 1.0; }
+                }
+                Node::Class(k) => {
+                    let members = self.dict.class(k);
+                    match here.and_then(|l| l.iter().find(|(n, p, _)| members.contains(n) && same(p, &q, d))) { Some((_, _, c)) => credit += (c - 1.0).max(0.0), None => charge += 1.0 }
+                }
+                Node::Param(p) => {
+                    let found = here.and_then(|l| l.iter().find(|(n, pp, _)| same(pp, &q, d) && values.get(&p).map_or(true, |v| v == n)));
+                    match found { Some((n, _, c)) => { values.insert(p, *n); credit += (c - 1.0).max(0.0); } None => charge += 1.0 }
                 }
             }
         }
         if judged == 0 { return None; }
         Some(credit > charge)
     }
-
 }

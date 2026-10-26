@@ -209,7 +209,7 @@ impl JsBrain {
     pub fn dump_tables(&self, limit: u32) -> Result<String> {
         let m = self.inner.borrow();
         let mut s = String::new();
-        for n in m.thalamus.iter().filter(|n| n.alive && (!n.functions.is_empty() || n.kind == Kind::Inter)).take(limit as usize) {
+        for n in m.thalamus.iter().filter(|n| n.alive && (!m.dict.anchored(n.id).is_empty() || n.kind == Kind::Inter)).take(limit as usize) {
             s.push_str(&m.describe_neuron(n.id));
         }
         Ok(s)

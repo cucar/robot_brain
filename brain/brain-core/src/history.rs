@@ -1,4 +1,5 @@
-//! A neuron's history (D18): rows, each an activation of the owner with the neighborhood it observed.
+//! A neuron's history (D18): rows, each an activation of the neuron with the neighborhood it observed, every
+//! neighbor at its exact offset and with what it cost in the file as it stood.
 
 use crate::types::*;
 
@@ -8,42 +9,67 @@ pub struct ActRef {
     pub index: u32,
 }
 
-/// One neighbor of a row (D26): the neuron of an adjacent activation at its exact offset, with what it
-/// cost as it stood (D13).
+/// How a neighbor stands beside the activation (D5, D47).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Via {
+    /// On the apex, as itself.
+    Direct,
+    /// Covered by a call on the apex other than the activation's own (D5): worth its call's record together
+    /// with everything else that call covers, and nothing singly (D22, R23).
+    Inside(ActRef),
+    /// A base symbol an interneuron on the apex stands for (D47): it holds a node and covers nothing.
+    Under(ActRef),
+}
+
+/// One neighbor of a row (D26).
 #[derive(Clone, Debug)]
 pub struct Nb {
     pub act: ActRef,
     pub neuron: NeuronId,
-    /// Exact offset from the owner's activation (D6), one component per axis.
+    /// Exact offset from the activation (D6), one component per axis.
     pub delta: Pos,
-    /// What the activation cost as it stood: its whole record, or its neuron alone where a call had
-    /// already covered its position (D10, D13).
+    pub axes: u8,
+    /// What it costs in the file as it stands (D13): its record bare, its neuron alone where a call bound it,
+    /// nothing where it stands inside or under a call.
     pub cost: f64,
-    /// The part of `cost` that is its position: what a variable binding it covers (D22); zero where its
-    /// position was covered already.
-    pub pos: f64,
-    /// For a child: the base symbols it stands for (R28), each at its offset from the owner's activation;
-    /// in the relation index it is each of them (D47).
-    pub covers: Vec<(NeuronId, Pos)>,
-    /// For a child: every neuron its expansion passes through, interneurons and base symbols, each at its
-    /// offset from the owner's activation; a fixed node naming one of them holds there (D54).
-    pub stands_for: Vec<(NeuronId, Pos)>,
+    /// Its whole record, `d + 2`: what a fresh activation of it costs (D12).
+    pub full: f64,
+    pub via: Via,
 }
 
-/// One row of the history: an activation of the owner with what it observed (D18).
+/// A call on the apex whose covered activations stand in a row (R23): what it costs, and how many activations
+/// it covers, so a fit can tell whether it lands on all of them.
+#[derive(Clone, Copy, Debug)]
+pub struct CallInfo {
+    pub act: ActRef,
+    pub size: usize,
+    pub cost: f64,
+}
+
+/// One row of the history: an activation of the neuron with what it observed (D18).
 #[derive(Clone, Debug)]
 pub struct Row {
+    pub id: u64,
+    /// The neuron whose activation it is.
+    pub owner: NeuronId,
     pub act: ActRef,
     pub pos: Pos,
-    /// What the owner's activation cost (D13).
+    pub axes: u8,
+    /// What the activation costs in the file (D13).
     pub own_cost: f64,
-    /// What a record cost when the row stood (D12, D13): present or absent, a neuron, a position. A call's
-    /// record and an absence in this row are priced at it, as every neighbor is at what it cost then.
-    pub rec: f64,
     pub nbs: Vec<Nb>,
+    pub calls: Vec<CallInfo>,
 }
 
 #[inline]
 pub fn add(a: &Pos, b: &Pos) -> Pos { let mut p = *a; for d in 0..MAX_DIMS { p[d] += b[d]; } p }
 #[inline]
 pub fn sub(a: &Pos, b: &Pos) -> Pos { let mut p = *a; for d in 0..MAX_DIMS { p[d] -= b[d]; } p }
+
+/// The spatial dimensions of a layout (D12).
+#[inline]
+pub fn spatial(axes: u8) -> u32 { (axes & !1).count_ones() }
+
+/// A bare record (D12, D13): the neuron, the frame, and a position per spatial dimension.
+#[inline]
+pub fn record(axes: u8) -> f64 { spatial(axes) as f64 + 2.0 }

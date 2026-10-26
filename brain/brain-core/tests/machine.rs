@@ -1,7 +1,7 @@
 //! Behavioral tests on the machine: what forms over a letter stream (algorithm-text.md), the six-bar
 //! cycle (algorithm-stocks.md), and the weak activation rule (D40).
 use brain_core::machine::Machine;
-use brain_core::neuron::Place;
+use brain_core::function::Node;
 use brain_core::types::*;
 
 fn stream(m: &mut Machine, dim: DimId, text: &str) -> Vec<Option<u32>> {
@@ -14,36 +14,32 @@ fn stream(m: &mut Machine, dim: DimId, text: &str) -> Vec<Option<u32>> {
 }
 
 #[test]
-fn a_repeated_pair_gets_a_function_and_a_child() {
+fn a_repeated_pair_gets_a_function_and_an_interneuron() {
     let mut m = Machine::new(64, Policy::all_on(), 1);
     let ch = m.declare_channel("text", Some(("letter", 256)), None, &[]);
     let dim = m.channels[ch as usize].event.unwrap();
     stream(&mut m, dim, "ab ab ab ab ");
     let b = m.base_neuron(dim, b'b' as u32);
     let a = m.base_neuron(dim, b'a' as u32);
-    let nb = &m.thalamus[b];
-    // b's table names the owner and a at -1 (D47, D27), and the election gave it a child (R16)
-    let f = nb.functions.iter().find(|f| f.places.iter().any(|(p, o)| *p == Place::Fixed(a) && o[0] == -1));
+    // the dictionary holds a function anchored at b naming a a frame before (D15, R50), and the election gave
+    // it an interneuron (R16)
+    let f = m.dict.anchored(b).iter().filter_map(|id| m.dict.get(*id)).find(|f| f.rels.iter().any(|r| r.node == Node::Fixed(a) && r.dim == 0 && r.off == -1));
     assert!(f.is_some(), "b should name a at -1: {}", m.describe_neuron(b));
-    assert!(f.unwrap().child.is_some(), "the function should have been bought a child: {}", m.describe_neuron(b));
-    assert!(m.height_counts().len() >= 2);
+    assert!(f.unwrap().inter.is_some(), "the function should have an interneuron: {}", m.describe_neuron(b));
 }
 
-/// Different letters stand before h (algorithm-text.md §2): h's table holds a function naming h and a
-/// class at -1 whose members are the letters that recurred there (D38, D41, D47), and it was bought.
+/// Different letters stand before h (algorithm-text.md): over one relation a class never pays, so each
+/// pair keeps a function of its own, and none of h's functions holds a class (R52).
 #[test]
-fn varied_predecessors_form_a_class() {
+fn varied_predecessors_keep_their_own_pairs() {
     let mut m = Machine::new(64, Policy::all_on(), 1);
     let ch = m.declare_channel("text", Some(("letter", 256)), None, &[]);
     let dim = m.channels[ch as usize].event.unwrap();
     stream(&mut m, dim, "th ch sh wh th ch sh wh th ch sh wh th ch sh wh ");
     let h = m.base_neuron(dim, b'h' as u32);
-    let nh = &m.thalamus[h];
-    let f = nh.functions.iter().find(|f| f.places.iter().any(|(p, o)| matches!(p, Place::Class(_)) && o[0] == -1));
-    assert!(f.is_some(), "h should hold a class at -1: {}", m.describe_neuron(h));
-    let k = f.unwrap().places.iter().find_map(|(p, _)| if let Place::Class(k) = p { Some(*k) } else { None }).unwrap();
-    assert!(nh.class(k).unwrap().members.len() >= 2, "the class should hold the letters before h: {}", m.describe_neuron(h));
-    assert!(f.unwrap().child.is_some(), "the function should have been bought: {}", m.describe_neuron(h));
+    let fs: Vec<_> = m.dict.anchored(h).iter().filter_map(|id| m.dict.get(*id)).collect();
+    assert!(fs.len() >= 2, "h should hold a function per letter before it: {}", m.describe_neuron(h));
+    assert!(fs.iter().all(|f| f.rels.iter().all(|r| !matches!(r.node, Node::Class(_)))), "no class over one relation: {}", m.describe_neuron(h));
 }
 
 #[test]
@@ -82,8 +78,7 @@ fn weak_activations_last_one_frame_and_write_nothing() {
 }
 
 /// The six-bar cycle in the spec's configuration (R = 6, H = 256, one channel): the machine must own
-/// before a rise and stand out before a fall, and settle. Under the specification as written it settles
-/// with the bar after bar 1 wrong in every lap, and this test fails; docs/ucar-results.md gives why.
+/// before a rise and stand out before a fall, and settle: the chain closes into a ring (R43).
 #[test]
 fn six_bar_cycle_settles() {
     let pattern = [0.009, -0.019, -0.029, 0.019, 0.029, -0.009];

@@ -1,15 +1,16 @@
-//! The machine (§2, §3, §6, §7, §8): frames, open activations, the levels with their elections, the
-//! children with their index, the connect and infer calls, and selection.
+//! The machine (§2, §3, §6, §7, §8): frames, open activations, the dictionary, the levels with recognition
+//! and the election, the connect and infer calls, and selection.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
+use crate::election::View;
+use crate::function::*;
 use crate::neuron::*;
 use crate::thalamus::Thalamus;
 use crate::types::*;
 
 pub use crate::activation::*;
-pub(crate) use crate::election::Pending;
 
 #[derive(Clone, Debug)]
 pub struct Winner {
@@ -72,25 +73,27 @@ pub struct Machine {
     /// they fire weakly there (R30).
     pub(crate) pending_weak_patterns: Vec<(NeuronId, Pos)>,
     pub max_reach_t: i32,
-    /// The interneuron index (D36): what each stands for, to its id.
-    pub index: FxHashMap<String, NeuronId>,
-    /// Per interneuron, its definition (D36): the function that set it, with its owner.
-    pub(crate) definitions: FxHashMap<NeuronId, (NeuronId, Function)>,
-    /// Per interneuron, the members of the classes its definition uses, as they stood when it was set.
-    pub(crate) def_classes: FxHashMap<NeuronId, Vec<(PatternId, Vec<NeuronId>)>>,
-    /// The interneurons an accepted bid redefined this frame, the first such bid's function each (D36).
-    pub(crate) redefined: FxHashMap<NeuronId, (NeuronId, Function, Vec<(PatternId, Vec<NeuronId>)>)>,
-    /// Every function whose bid won a child this frame, with the child (§6).
-    pub(crate) won: Vec<(NeuronId, PatternId, NeuronId)>,
-    /// Children whose last parent retired, waiting for their windows to close (R38).
+    /// The dictionary (D36): every function, its interneuron, and the classes.
+    pub dict: Dictionary,
+    /// Functions that left the dictionary, kept readable while what they fired is open (R38).
+    pub(crate) retired_funcs: FxHashMap<FuncId, (Func, Frame)>,
+    /// Per interneuron, the function that fired it last, for inferring it (R28).
+    pub(crate) last_func: FxHashMap<NeuronId, FuncId>,
+    /// Interneurons whose last function has left, waiting for their windows to close (R38).
     pub ledger: Vec<NeuronId>,
+    pub(crate) stats_added: usize,
+    pub(crate) stats_retired: usize,
     pub last_stats: FrameStats,
     pub last_winners: Vec<Winner>,
     pub trace: bool,
-    /// Retired lines the ledger holds until every window over what they fired has closed (R38), with
-    /// the frame through which they are kept.
-    pub(crate) retired_lines: FxHashMap<(NeuronId, PatternId), (Function, Frame)>,
-    /// Times a descent met a neuron again, as it does once per turn of a chain closed on itself.
+    /// Milliseconds spent per step since the machine began: neighborhoods and activate, group, find and
+    /// generalize, elect and allocate, prune, connect and infer, decommission, select; and within select, the
+    /// match, the voters' placements, and the patterns execution fires.
+    pub timings: [f64; 11],
+    /// Per neuron, the dictionary's functions anchored there as they land on each kind of its rows, kept while
+    /// the dictionary stands (D30): a reading, not a state.
+    pub(crate) landings: std::cell::RefCell<FxHashMap<NeuronId, (u64, FxHashMap<u64, std::rc::Rc<Vec<(crate::fit::Landing, u64)>>>)>>,
+    /// Times a frame ran past a thousand levels: a fault, counted.
     pub cycle_guard: std::cell::Cell<u64>,
 }
 
@@ -118,16 +121,17 @@ impl Machine {
             pending_weak: Vec::new(),
             pending_weak_patterns: Vec::new(),
             max_reach_t: time_radius.max(1),
-            index: FxHashMap::default(),
-            definitions: FxHashMap::default(),
-            def_classes: FxHashMap::default(),
-            redefined: FxHashMap::default(),
-            won: Vec::new(),
+            dict: Dictionary::default(),
+            retired_funcs: FxHashMap::default(),
+            last_func: FxHashMap::default(),
             ledger: Vec::new(),
+            stats_added: 0,
+            stats_retired: 0,
             last_stats: FrameStats::default(),
             last_winners: Vec::new(),
             trace: false,
-            retired_lines: FxHashMap::default(),
+            timings: [0.0; 11],
+            landings: std::cell::RefCell::new(FxHashMap::default()),
             cycle_guard: std::cell::Cell::new(0),
         }
     }
@@ -170,22 +174,10 @@ impl Machine {
 
     pub fn base_neuron(&self, dim: DimId, bucket: u32) -> NeuronId { self.dims[dim as usize].first + bucket }
 
-    /// A function as the machine reads it for expansion and the index: the owner's table, or the ledger's
-    /// copy of a retired function while what it fired is still open (R38).
-    pub(crate) fn line(&self, owner: NeuronId, pid: PatternId) -> Option<&Function> {
-        self.thalamus.get(owner).and_then(|n| n.function(pid)).or_else(|| self.retired_lines.get(&(owner, pid)).map(|x| &x.0))
-    }
-
     pub(crate) fn reach_for(&self, axes: u8, span: &Pos) -> Pos {
         let mut r = [0; MAX_DIMS];
         for d in 0..self.radii.len() { if axes & (1 << d) != 0 { r[d] = span[d] + self.radii[d]; } }
         r
-    }
-
-    pub(crate) fn ctx_for(&self, n: NeuronId) -> Ctx {
-        let nn = &self.thalamus[n];
-        let _ = nn;
-        Ctx { neuron_bits: log2(self.alive as f64), frame: self.frame_no, trace: self.trace }
     }
 
     pub fn act(&self, r: ActRef) -> Option<&Act> {
@@ -226,7 +218,7 @@ impl Machine {
             if !reported.insert((inp.dim, pos)) { continue; }
             let n = dim.first + inp.bucket;
             let idx = frame.acts.len() as u32;
-            frame.acts.push(self.new_act(n, pos, true, None, [0; MAX_DIMS], 0, 0));
+            frame.acts.push(self.new_act(n, pos, true, [0; MAX_DIMS]));
             if dim.kind == Kind::Action { frame.actions_ran.push((dim.channel, ActRef { frame: fno, index: idx })); }
         }
         let weak = std::mem::take(&mut self.pending_weak);
@@ -236,7 +228,7 @@ impl Machine {
             let mut pos = p;
             pos[0] = fno as i32;
             if reported.contains(&(dim, pos)) { continue; }
-            frame.acts.push(self.new_act(n, pos, false, None, [0; MAX_DIMS], 0, 0));
+            frame.acts.push(self.new_act(n, pos, false, [0; MAX_DIMS]));
         }
         // the patterns the expansion completed here weakly, as inputs of the frame like the base (R30, D40)
         let weak_patterns = std::mem::take(&mut self.pending_weak_patterns);
@@ -246,44 +238,21 @@ impl Machine {
             let mut pos = p;
             pos[0] = fno as i32;
             let span = self.spans[n as usize];
-            frame.acts.push(self.new_act(n, pos, false, None, span, 0, 0));
+            frame.acts.push(self.new_act(n, pos, false, span));
         }
         stats.base_acts = frame.acts.len();
         self.frames.push_back(frame);
 
-        // the levels (§6, R26)
+        // the levels (§6, R26): activate, recognize, elect, allocate, prune
+        self.stats_added = 0;
+        self.stats_retired = 0;
         let mut level: u32 = 0;
-        let mut pending: Vec<Pending> = Vec::new();
         loop {
-            // activate children bought at the level before (§6.4)
-            let fired = pending.len();
-            for kid in pending.drain(..) {
-                let fr = kid.act.pos[0] as i64;
-                let Some(f) = self.frame_mut(fr) else { continue };
-                let idx = f.acts.len() as u32;
-                let r = ActRef { frame: fr, index: idx };
-                let mut act = kid.act;
-                act.covers = kid.covered.clone();
-                // where the report built the strong activation of a pattern an inference placed weakly, the
-                // weak one is dropped (D40, R30)
-                if let Some(w) = f.acts.iter_mut().find(|w| !w.strong && !w.gone && w.neuron == act.neuron && w.pos == act.pos && w.opened_at == fno) {
-                    if act.strong { w.gone = true; }
-                }
-                f.acts.push(act);
-                for c in kid.covered {
-                    if let Some(a) = self.act_mut(c) { if a.coverer.is_none() { a.coverer = Some(r); } }
-                }
-            }
-            if level > 0 && fired == 0 { break; }
+            let refs: Vec<ActRef> = self.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter().enumerate().filter(|(_, a)| a.opened_at == fno && a.level == level && !a.gone && a.neuron != NeuronId::MAX).map(|(i, _)| ActRef { frame: fno, index: i as u32 }).collect::<Vec<_>>()).collect();
+            if refs.is_empty() { break; }
             stats.levels += 1;
-            // process functions (§5), per neuron, with every activation of this level
-            let (bids, retired, added) = self.call_level(level);
-            stats.bids += bids.len();
-            stats.added += added;
-            stats.retired += retired.len();
-            for (owner, r) in retired { self.handle_retired(owner, r); }
-            // elect (R24) and create children (R43)
-            let (accepted, minted, reused) = self.elect(level, bids, &mut pending);
+            let (bids, accepted, minted, reused) = self.run_level(level, &refs);
+            stats.bids += bids;
             stats.accepted += accepted;
             stats.minted += minted;
             stats.reused += reused;
@@ -291,17 +260,23 @@ impl Machine {
             // nothing caps the depth (R26); a frame this deep means a fault, and is counted as one
             if level > 1024 { self.cycle_guard.set(self.cycle_guard.get() + 1); break; }
         }
-        // update children (§6, R16) and the index (D36)
-        self.update_children();
+        stats.added = self.stats_added;
+        stats.retired = self.stats_retired;
 
         // connect and infer (§7)
+        let t = std::time::Instant::now();
         self.connect_all();
         self.infer_all();
-        // delete children due (R38)
+        self.timings[5] += t.elapsed().as_secs_f64() * 1000.0;
+        // decommission what is due (R38)
+        let t = std::time::Instant::now();
         self.reap();
+        self.timings[6] += t.elapsed().as_secs_f64() * 1000.0;
 
         // selection (§8)
+        let t = std::time::Instant::now();
         let winners = self.select();
+        self.timings[7] += t.elapsed().as_secs_f64() * 1000.0;
         stats.voters = self.last_stats.voters;
         stats.voters_above_base = self.last_stats.voters_above_base;
         self.pending_weak = winners.iter().map(|w| (self.base_neuron(w.dim, w.bucket), w.pos)).collect();
@@ -313,8 +288,12 @@ impl Machine {
             stats.apex_cost = sf.acts.iter().filter(|a| a.covered_at.is_none()).map(|a| a.cost).sum();
         }
         stats.neurons = self.alive;
-        stats.patterns = self.thalamus.iter().filter(|n| n.alive).map(|n| n.functions.len()).sum();
+        stats.patterns = self.dict.len();
         stats.connections = self.thalamus.iter().filter(|n| n.alive).map(|n| n.connections.len()).sum();
+        // the window the machine keeps: the longest reach in time among the activations still open (D24)
+        let mut longest = self.radii[0];
+        for f in self.frames.iter() { for a in &f.acts { if !a.gone && f.no + a.reach[0] as i64 >= fno { longest = longest.max(a.reach[0]); } } }
+        self.max_reach_t = longest;
         let keep_from = fno - self.max_reach_t as i64 - 1;
         while self.frames.front().map_or(false, |f| f.no < keep_from) { self.frames.pop_front(); }
         stats.elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
@@ -323,51 +302,57 @@ impl Machine {
         winners
     }
 
-    pub(crate) fn current(&self) -> &FrameRec { self.frames.back().unwrap() }
 
-    /// An activation of `n` at `pos`, costing its record (D12, D13): present or absent, its neuron, and its
-    /// position at its span.
-    pub(crate) fn new_act(&self, n: NeuronId, pos: Pos, strong: bool, fired_by: Option<FiredBy>, span: Pos, level: u32, height: u32) -> Act {
+    /// A bare activation of `n` at `pos` (D8), its record its cost (D12, D13).
+    pub(crate) fn new_act(&self, n: NeuronId, pos: Pos, strong: bool, span: Pos) -> Act {
         let nn = &self.thalamus[n];
         let reach = self.reach_for(nn.axes, &span);
-        let (cost, pos_bits) = self.record_for(nn.axes, &span);
-        Act { neuron: n, kind: nn.kind, axes: nn.axes, pos, cost, pos_bits, strong, span, reach, covered_at: None, bound_at: None, coverer: None, covers: Vec::new(), fired_by, inferences: Vec::new(), opened_at: self.frame_no, level, height, gone: false, caught_up: pos[0] as i64 }
+        let cost = record(nn.axes);
+        Act { neuron: n, kind: nn.kind, axes: nn.axes, pos, cost, full: cost, strong, span, reach, covered_at: None, bound_at: None, coverer: None, retaken: Vec::new(), covers: Vec::new(), binds: Vec::new(), fired_by: None, inferences: Vec::new(), opened_at: self.frame_no, level: 0, height: 0, gone: false, caught_up: pos[0] as i64 }
     }
 
-    // ───────────────────────────── the call (R20) ─────────────────────────────
+    // ───────────────────────────── one level (§6, R26) ─────────────────────────────
 
-    pub(crate) fn call_level(&mut self, level: u32) -> (Vec<Bid>, Vec<(NeuronId, Retired)>, usize) {
-        let fno = self.frame_no;
-        // route: the activations of this level, grouped by neuron, in the order they fired
+    /// One level: activate every neuron with an activation here (R20), recognize each activation in turn
+    /// (group, find, generalize), elect over everything found (R24), allocate, and prune (R18).
+    fn run_level(&mut self, level: u32, refs: &[ActRef]) -> (usize, usize, usize, usize) {
+        // activate: each activation with its neighborhood, every neuron's call in its column (R20)
+        let t = std::time::Instant::now();
+        let mut views: Vec<View> = Vec::new();
         let mut by_neuron: FxHashMap<NeuronId, Vec<RowInput>> = FxHashMap::default();
         let mut order: Vec<NeuronId> = Vec::new();
-        let refs: Vec<ActRef> = self.frames.iter().flat_map(|f| f.acts.iter().enumerate().filter(|(_, a)| a.opened_at == fno && a.level == level && !a.gone).map(|(i, _)| ActRef { frame: f.no, index: i as u32 }).collect::<Vec<_>>()).collect();
-        for r in refs {
-            let nbs = self.neighborhood(r);
-            if nbs.is_empty() { continue; }
+        for &r in refs {
+            let (nbs, calls) = self.neighborhood(r);
             let a = self.act(r).unwrap();
             if !by_neuron.contains_key(&a.neuron) { order.push(a.neuron); }
-            let own_cost = if a.bound_at.is_some() { a.cost - a.pos_bits } else { a.cost };
-            by_neuron.entry(a.neuron).or_default().push(RowInput { act: r, pos: a.pos, own_cost, nbs });
+            by_neuron.entry(a.neuron).or_default().push(RowInput { act: r, pos: a.pos, own_cost: a.cost, nbs: nbs.clone(), calls: calls.clone() });
+            views.push(View { act: r, nbs, calls });
         }
-        let tasks: Vec<(NeuronId, Vec<RowInput>, Ctx)> = order.iter().map(|&n| (n, by_neuron.remove(&n).unwrap(), self.ctx_for(n))).collect();
-        // the spans (D4) and the window as the index stands at this level
-        let shared = Shared { spans: self.spans.clone(), window: self.window() };
-        // dispatch: every neuron's call runs in its column, the columns in parallel; collect in the order above
-        let results = self.thalamus.process_level(tasks, std::sync::Arc::new(shared));
-        let mut bids = Vec::new();
-        let mut retired = Vec::new();
-        let mut added = 0;
-        for w in results {
-            let n = w.neuron;
-            if self.trace && (!w.bids.is_empty() || !w.retired.is_empty() || w.added > 0) {
-                eprintln!("[call f{} l{} #{}] bids {} retired {} added {}", fno, level, n, w.bids.len(), w.retired.len(), w.added);
+        let tasks: Vec<(NeuronId, Vec<RowInput>)> = order.iter().map(|&n| (n, by_neuron.remove(&n).unwrap())).collect();
+        let results = self.thalamus.process_level(tasks);
+        self.timings[0] += t.elapsed().as_secs_f64() * 1000.0;
+        // recognize, one activation at a time: group, find, generalize (R50, R53, R52)
+        let mut anchors: FxHashSet<NeuronId> = FxHashSet::default();
+        for res in &results {
+            anchors.insert(res.neuron);
+            for ret in &res.returns {
+                let t = std::time::Instant::now();
+                let kept = self.group(res.neuron, ret);
+                self.timings[1] += t.elapsed().as_secs_f64() * 1000.0;
+                let t = std::time::Instant::now();
+                self.stats_added += self.find(res.neuron, kept);
+                self.timings[2] += t.elapsed().as_secs_f64() * 1000.0;
             }
-            bids.extend(w.bids);
-            retired.extend(w.retired.into_iter().map(|x| (n, x)));
-            added += w.added;
         }
-        (bids, retired, added)
+        // elect and allocate (R24, R16, R43)
+        let t = std::time::Instant::now();
+        let (accepted, minted, reused) = self.elect(level, &views);
+        self.timings[3] += t.elapsed().as_secs_f64() * 1000.0;
+        // prune (R18)
+        let t = std::time::Instant::now();
+        self.prune(&anchors);
+        self.timings[4] += t.elapsed().as_secs_f64() * 1000.0;
+        (results.iter().map(|r| r.returns.len()).sum(), accepted, minted, reused)
     }
 
     // ───────────────────────────── inspection ─────────────────────────────
@@ -388,11 +373,12 @@ impl Machine {
     pub fn describe_neuron(&self, id: NeuronId) -> String {
         let n = &self.thalamus[id];
         let mut s = match n.kind {
-            Kind::Inter => format!("#{} inter parents={:?} key={} definition={}", id, n.parents, n.key, self.definitions.get(&id).map_or("-".to_string(), |(o, f)| format!("#{} {}", o, describe_function(f)))),
+            Kind::Inter => format!("#{} inter", id),
             _ => format!("#{} {:?} dim{} b{}", id, n.kind, n.dim.unwrap(), n.bucket),
         };
         s.push_str(&format!(" span={:?} H={} conns={}\n", self.spans[id as usize], n.history.len(), n.connections.len()));
-        s.push_str(&n.describe());
+        for fid in self.dict.of_inter(id) { if let Some(f) = self.dict.get(*fid) { s.push_str(&format!("  is f{} {}\n", f.id, self.dict.describe(f))); } }
+        for fid in self.dict.standing(id) { if let Some(f) = self.dict.get(*fid) { s.push_str(&format!("  f{} {}\n", f.id, self.dict.describe(f))); } }
         let mut conns: Vec<(&(NeuronId, Offset), &Conn)> = n.connections.iter().collect();
         conns.sort_by(|a, b| a.0.cmp(b.0));
         for ((t, o), c) in conns.into_iter().take(16) {
