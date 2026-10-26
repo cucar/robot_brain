@@ -1,11 +1,14 @@
 # Say the digit you were shown, as a machine that could be built
 
 A worked case for [algorithm.md](algorithm.md): a machine that is shown a digit, is asked, and says that digit,
-written out neuron by neuron. Nothing here is normative, and the machine is shown running: its tables and
+written out neuron by neuron. Nothing here is normative, and the machine is shown running: its dictionary and
 connections are as listed, and its histories already hold requests like this one. It shows the smallest copy
 the design can make: a function with one parameter tying the digit shown to the digit said, bound from
 what was shown and placed at what is said (D44, R28), so that a digit never said before is said the first time
-it is shown. It also shows the same variable binding the digit once a class has bound it below.
+it is shown.
+
+A function is written here as its nodes, each at its offset in time from the node in its latest frame. The
+dictionary holds it as relations, each written from the older of its two nodes (D15, D34).
 
 ---
 
@@ -16,15 +19,16 @@ It declares two event dimensions: `digit`, with ten buckets, `0` to `9`, and `ru
 request is one frame: the digit in `digit` and `run` beside it.
 
 **Out.** One action dimension in the same channel, `say`, with one base action, `say`. The answer is `say` in
-the frame after the request, with a digit beside it in `digit`: the digit is an event the machine expects
-there, and both are its output (§3.5, R40). A frame of silence follows, so nothing of one request is within
-reach of the next.
+the frame after the request, with a digit beside it in `digit`: the digit is an event the machine infers
+there, and both are its output (R30, R40). Two frames of silence follow. An activation is open for its reach
+in time (D9), and the interneuron that covers the request from the answer frame reaches two frames (D4), so
+nothing of one request is open at the next.
 
 **Policy.** Every entry of both tables of the neighborhood policy is on (D50), and the action policy is nothing
 (D51): where every candidate in `say` is negative, the machine says nothing.
 
 **Teaching.** While the machine is being taught, the world runs `say` and shows the shown digit beside it in
-the frame after each request, and rewards it, every lesson the same (§3.5). Afterwards it runs nothing,
+the frame after each request, and rewards it, every lesson the same (R29). Afterwards it runs nothing,
 executes what the machine outputs, and pays what was right and what was wrong.
 
 # 2. The neurons
@@ -33,116 +37,130 @@ executes what the machine outputs, and pays what was right and what was wrong.
 |---|---|
 | base events | `run`, and the ten digits |
 | base action | `say` |
-| the function | `write`, in `say`'s table, naming `say`, `run` a frame before it, and a parameter `W` tying the digit's place a frame back to the digit's place beside `say`: the digit said is the digit shown (D44); its child `WROTE` (D48) |
-| the shown digit, once it pays | `shown`, a function in `run`'s table naming `run` and a class `C` beside it, members the digits (D41); its child `SHOWN` |
+| the requests | one function per digit that has been shown twice, `{run, d@0}`: `run` and the digit beside it; each with its interneuron, `RUN3` for the `3` |
+| the answer | one function, `write` = `{say, run@−1, W@−1, W@0}`: `say`, `run` a frame before it, and a parameter `W` tying the digit's place a frame back to the digit's place beside `say`, so the digit said is the digit shown (D44); its interneuron `WRITE` |
 
 # 3. How it was learned
 
-1. **The digits stand bare at first.** `run` fires beside the digit and sees it at offset zero (D26), a
-   different one each time. An offset from a node where neurons vary is a node-to-open relation (D34, D47), and
-   a class over the ten digits saves `log₂ n − log₂ 10` each time it binds one, against a class that names
-   ten neurons (D13, D30). With thirteen neurons, the twelve base neurons and `WROTE`, that is about four
-   tenths of a bit. Until the history holds
-   enough requests for that to pay, `shown` does not form, and the digit and `run` stand bare on the apex.
-2. **The copy is a parameter.** `say` fires in the next frame and sees the request's frame at `−1`: `run`,
-   and the digit shown; and beside itself at `0`, the digit said. In every taught request the same digit stands
-   at `−1` and at `0`: a same-to-same relation (D34, D47), and the pick grows a function from it, `write`, over
-   `say` and a parameter `W` tying the two places (D33, D27). The collapse then finds `run` a frame back in
-   every use and adds it as a fixed node. `W` writes the digit once, a choice among every neuron, and its two places share that cost. It is
-   open on its members, so a digit never shown before is its value the first time, and a member from then on
-   (D44).
-3. **What the call looks like.** `write` names `say`, its owner, so its child `WROTE` fires at `say`'s
-   coordinate (D53), covering `say` and `run`. The shown digit and the said digit stand in `W`'s two places,
-   bound: the digit is written once, each place at half of it, and both stay on the apex (D10, §6.4).
-4. **The request learns its answer.** `run` is covered in the frame the answer runs and connects once to the
-   neuron that covered it, `WROTE`, one frame ahead, with that frame's reward (D10). The shown digit is bound,
-   not covered, so it goes on connecting to `WROTE` every time it is shown (R31). Before `write` existed, `say`
-   and the digit stood bare at the answer frame and connected to them directly; those connections stay.
-5. **The class forms, and the copy reads through it.** Once the history is long enough, `shown` pays
-   (D30): a function in `run`'s table naming `run` and a class `C` beside it, members the digits. From then
-   on `shown`'s bid covers `run` and binds the digit, and what stands on the apex at the request is `SHOWN` at
-   the request's coordinate with the digit bound beside it. `say` sees both at `−1`. `W`'s place a frame back
-   is the digit's own coordinate, which is where the bound digit still stands, so `W` holds exactly as before: a
-   digit shown bare and the same digit bound in a class are the same activation. `run` no longer stands on
-   the apex, so `write` re-centers (D29): `run` at `−1` fails in every use and leaves, `SHOWN` at `−1` holds in
-   every use and joins, and `write` is `say`, `SHOWN` a frame before and `W`, with the same child. `SHOWN`
-   connects to `WROTE` one frame ahead (D10), and the digit, bound in both calls, keeps connecting to it (R31).
-6. **A digit the class has never admitted.** `C` is closed on its members (D41): a digit shown for the first
-   time is no member, `shown` fails, and `run` and the digit stand bare as in step 1. `run` holds `WROTE` from
-   the bare lessons, `write` fits with `SHOWN` a failed node, and `W` is open, so the new digit is copied the
-   first time it is shown. The class memorizes what recurs; the parameter carries what is new.
+1. **The first showing of a digit.** The world shows `3` beside `run`. At frame 1 `run` and the `3` fire, and
+   each sees the other at offset zero (D26). Each returns that relation held in one row, and nothing is built on
+   one occurrence (R21). At frame 2 `say` and a `3` fire. `say` sees the `3` at `0`, and `run` and the `3` at
+   `−1`: one row. All four stand bare, each at its record of `2` (D13). `run` and the `3` at frame 1 connect to
+   `say` and to the `3` at `+1`, with the lesson's reward (R31).
+2. **The request is named at the second showing.** `run` returns `(run, 3, 0)` held in two rows. Grouping
+   makes `{run, 3@0}` (R50). A row written bare is `run` and the `3`, `4`; through the function it is the
+   call's record, `2`. That saves `4` over two rows against an entry of `3`, two neurons and one relation:
+   margin `1` (D30). Find reaches nothing, so the function is new (R53). Elected, it covers `4` for `2` (R24).
+   `RUN3` is allocated and fires at frame 1, covering `run` and the `3` (R16, D53). The `3` returned the same
+   relation, and the same relations are the same function (D36), so it was placed once. Covered at age 0,
+   `run` and the `3` write nothing (D10).
+3. **The answer is named at the same showing.** At frame 2 `say` sees the `3` at `0`, `RUN3` at `−1`, and under
+   it `run` and the `3` at `−1` (D47). The relations held in two rows are `(say, 3, 0)`, `(say, run, −1)` and
+   `(say, 3, −1)`; `RUN3` at `−1` is held in one. Grouping makes `{say, run@−1, 3@−1, 3@0}`. Row 1 is `8`
+   bare, `2` through the function. Row 2 is `say`, the `3` at `0`, and `RUN3`'s record, since the function
+   lands on both activations under it: `6` for `2` (D22, R23). That saves `10` against an entry of `6`: margin
+   `4`. It is new. Elected, it covers `6` for `2`, and takes `RUN3`'s call back: the call leaves the file and
+   `RUN3`'s activation leaves the apex (R23). Its interneuron, `SAY3`, fires at frame 2. `RUN3` connects once
+   to `SAY3` at `+1`, and so do `run` and the `3` it covered (D10).
+4. **A second digit makes the parameter.** The `5` goes the same way: `RUN5` at its second showing, then
+   `{say, run@−1, 5@−1, 5@0}` grouped at frame 2. Find reads each relation as it is and with either end open
+   (R53). `(say, run, −1)` as it is reaches `SAY3`'s function. `(say, ?, −1)` and `(say, ?, 0)` reach it too.
+   It is in every relation's reading, some only open, so the two differ only at the open ends. Generalizing
+   (R52): `say` and `run` are the same in both, so they are fixed. The nodes at `−1` and `0` differ, and within
+   each function they hold one neuron, `3` in one and `5` in the other, so they are one parameter, `W`. That is
+   `write`. Its entry is `say`, `run` and three relations, `5`; its call's record is `2` and one value, `3`. It
+   is priced as a replacement over `say`'s four rows: the two specifics cost `12` in the dictionary and `2` per
+   row, `20`; `write` costs `5` and `3` per row, `17`. Cheaper by `3`, it joins, and both specifics leave the
+   dictionary. Elected at the same frame, it covers `say`, the `5` and `RUN5`'s record, `6` for `3`. `WRITE` is
+   allocated and fires at frame 2. `SAY3`'s interneuron is decommissioned once its last window closes (R38),
+   and the connections to it go with it (R31).
+5. **What is written from then on.** On a repeat showing `RUN3` covers the request at frame 1, and at frame 2
+   `write` lands on `say`, the digit, and both activations under `RUN3`, taking the call back: `6` for `3`. The
+   relations `say` returns group into nothing new, since `write` fits every group they make, and a function a
+   general function fits is not built again (R52, R53). On the first showing of a digit `write` has not seen,
+   `run` and the digit stand bare at frame 1: `(run, 9, 0)` is held in one row, its open reading reaches the
+   `{run, d@0}` functions, and none fits, since `9` is not the digit any of them names. At frame 2 `write`
+   lands on `say`, the `9` at `0`, and `run` and the `9` at `−1`, all bare: `8` for `3`. `W` takes any neuron:
+   the `9` is its value the first time and a member from then on (D44). A function for the `9` alone is never
+   built. The `9`'s second showing gives it `RUN9` as any digit's does.
+6. **The class never pays.** Generalizing `{run, 5@0}` with `{run, 3@0}` differs at one node, which would be a
+   class over the digits (R52). Priced as a replacement: `m` functions of one digit each cost `3m` in the
+   dictionary and `2` per request; the one function over the class costs `3` and a member each, `3 + m`, and
+   `3` per request, one more for the value. The class is cheaper only while the requests number fewer than
+   `2 − 3/m` per digit, and each function already has two. So each digit keeps its own function.
+7. **The connections.** On every showing since `write` formed, `WRITE` takes `RUN_d`'s call back or covers
+   `run` bare, so `run` connects once to `WRITE` at `+1`, the digit shown connects to it the same way, and
+   `RUN_d` connects to it when its call is taken back (D10). `run`'s connections to `say`, the `3` and the `5`
+   from the first lessons stand at strength `1`, and nothing ever leaves a connection (R31). `WRITE` connects
+   to nothing: nothing stands on the apex within its window.
 
 # 4. One request, frame by frame, after teaching
 
-**With the digits bare.** The world shows `3` beside `run`.
+**A digit shown before.** The world shows `3` beside `run`.
 
 | Frame | input | on the apex | what happens |
 |---|---|---|---|
-| 1 | `3`, `run` | `3`, `run` | Each infers at its age 0 (R36). `run` holds `WROTE` one frame ahead; so does the `3`, from every request it was shown in. |
-| 2 | `say` reported as run; nothing reported in `digit` | `WROTE`, over `say` and `run`; the `3` and the expected `3` bound beside it | The expected `3` stands, since nothing replaced it (D40). `run`, covered, connects once to `WROTE` (D10); the `3`, bound, connects to it as it always has (R31). |
-| 3 | silence | | |
+| 1 | `3`, `run` | `RUN3`, over `run` and the `3` | `RUN3` infers `WRITE` at `+1` (R36). `run` and the `3` are covered and silent (D10). |
+| 2 | `say` reported as run; nothing reported in `digit` | `WRITE`, over `say` and `run`; the `3` shown and the `3` said bound beside it | The inferred `3` stands, since nothing replaced it (D40). `write` takes `RUN3`'s call back; `RUN3`, `run` and the `3` connect once more, to `WRITE` (D10). |
+| 3, 4 | silence | | |
 
-At frame 1 each inference to `WROTE` completes at frame 2. Its expansion places `say` there, `run` at frame 1,
-where it stands, and `W` bound from what stands at frame 1, the `3`, and placed at frame 2 (R28, R45). The
-match reads the line against frame 1 and proposes it (R49). `say` is the one candidate in its dimension and is
-output; `3` is the one candidate in `digit` at frame 2 and is expected, and output (R47).
+At frame 1 the inference to `WRITE` completes at frame 2. Its expansion places `say` there, `run` at frame 1,
+and `W` bound from what stands at frame 1, the `3` under `RUN3`, placed at frame 2 (R28, D44). The match lands
+on `run` and the `3` under `RUN3`, credits `RUN3`'s record, `2`, and charges nothing: the inference is proposed
+(R49). `say` is the one candidate in its dimension and is output; the `3` is the one candidate in `digit` at
+frame 2 and is output (R47).
 
-Show a `9` that has never been shown: nothing differs. `run` infers `WROTE` as before, and `W` is bound from the
-`9` at frame 1. That is what a parameter is for.
-
-**With the class formed.** The world shows `7` beside `run`, and `7` is a member of `C`.
+**A digit never shown.** The world shows `9` beside `run`.
 
 | Frame | input | on the apex | what happens |
 |---|---|---|---|
-| 1 | `7`, `run` | `SHOWN`, over `run`, with the `7` bound beside it | Each infers at its age 0: `SHOWN` holds `WROTE` one frame ahead from every request since `shown` formed, and the `7` holds it from every request it was shown in. |
-| 2 | `say` reported as run; nothing reported in `digit` | `WROTE`, over `say` and `SHOWN`; the `7` and the expected `7` bound beside it | `SHOWN` connects once to `WROTE` (D10); the `7` connects to it as before (R31). |
+| 1 | `9`, `run` | `9`, `run` | `run` infers `WRITE` at `+1`, and from the first lessons `say`, the `3` and the `5` at `+1`. The `9` holds no connection. |
+| 2 | `say` reported as run; nothing reported in `digit` | `WRITE`, over `say` and `run`; the `9` shown and the `9` said bound beside it | `run` and the `9` connect once, to `WRITE` (D10). |
 
-Both inferences to `WROTE` complete at frame 2. Its expansion places `say` there, `SHOWN` at frame 1, where it
-stands, and `W` bound from what stands at frame 1, the `7`, and placed at frame 2 (R28). The match proposes
-it, and `7` is expected and output.
-
-Show a `9` that `C` has never admitted, and the first table runs: `shown` fails, `run` stands bare, `run` infers
-`WROTE`, and `W` is bound from the `9`.
+`WRITE`'s expansion from `run` places `say` at frame 2, `run` at frame 1, where it stands, and `W` bound from
+the `9` at frame 1 and placed at frame 2. The match credits `run`'s record and the `9`'s, `4`, and charges
+nothing: proposed. The vote in `digit` at frame 2 has one voter, `run`, its one vote split by strength across
+the `9` through `write` and the `3` and the `5` from the first lessons (R47). The connection to `WRITE` has
+strengthened on every showing since `write` formed, so the `9` wins and is output. `say` is the one candidate
+in its dimension. That is what a parameter is for.
 
 # 5. The price
 
-While the digits stand bare the machine holds thirteen neurons, the twelve base neurons and `WROTE`, so a neuron
-costs `log₂ 13 ≈ 3.7` bits. Once `shown` pays it holds fourteen, with `SHOWN`, and a neuron costs
-`log₂ 14 ≈ 3.8`. The channel is laid out over time alone, so no position is written. A call costs its child
-and its error correction. `write` names three places besides its owner, `run` and `W`'s two, so with none
-failed its error correction is `log₂ 4 = 2`. `W` writes the digit once, a choice among every neuron, and its
-two places share that cost (D13).
+The channel is laid out over time alone, so a bare activation's record is its neuron and its frame, `2`
+(D13). A call's record is `2`, one per value, and one per relation that did not come true (D12).
 
-| the answer, priced as | bits |
+| a lesson, priced as | numbers |
 |---|---|
-| flat: `say` and a digit | 7.4 |
-| `write`: `WROTE`, `W`'s binding and the error correction; `say` and `run` covered and the two digits bound | 9.4 for `say`, `run` and the two digits, 14.8: saves 5.4 |
-| `write` over `SHOWN`: `WROTE`, `W`'s binding and the error correction; `say` and `SHOWN` covered, `SHOWN` at what its record costs, its child and an error correction of `1`, 4.8; the said digit bound, and the shown digit bound, at its binding in `C`, 3.3 | 9.6 for `say`, `SHOWN` and the two digits, 15.8: saves 6.1 |
+| bare: `run`, the digit, `say`, the digit | 8 |
+| `RUN_d` over the request, the answer bare: `RUN_d`'s record, `say`, the digit | 6 |
+| `write` taking `RUN_d`'s call back: its record and `W`'s value | 3 |
+| `write` over a bare request, the digit's first showing: the same | 3 |
 
-`shown` in `run`'s table covers `run` and binds the digit for `run`'s name, no function choice with one function
-in the table, and one member: it saves about four tenths of a bit a request, and `C` names ten neurons, so it pays
-only when the history holds some hundred requests. That is the one number this case turns on, and it is `H`
-(R4).
+`RUN_d`'s entry is `3`, and `write`'s is `5`. A function over `run` and a class of the digits would cost
+`3 + m` for `m` members and `3` per request, against `3m` and `2` per request for the digits' own functions;
+it is never cheaper once each digit has two requests (§3). Nothing in this case turns on `H` (R4) beyond that:
+a digit's function forms at its second showing within `run`'s history.
 
 # 6. What this case leans on
 
 - **One parameter, not ten connections.** A copy by connections would need the request to learn, per
-  digit, that saying that digit followed; a digit never shown would have nothing. `W` is grown from the
-  agreement of two places and holds for any neuron, so the crossing from what was shown to what is said is
-  learned once.
-- **The written digit is an event.** `say` is the only action. What is said is an expected event in the
-  digit's own dimension, output beside it (§3.5), so the same neuron stands at the shown and the said
-  position, which is what lets a parameter test them (D2, D44).
-- **A bound digit is still the digit.** Once `shown` binds the digit, it stays on the apex where it stood, so
-  `W`'s place a frame back holds the same activation it always did (D10). The copy is the same in both regimes;
-  what changes is who else votes: bare, `run`; bound, `SHOWN`.
+  digit, that saying that digit followed; a digit never shown would have nothing. `W` is made from two
+  functions that differ only at the digit (R52) and holds for any neuron, so the crossing from what was shown
+  to what is said is learned once.
+- **The said digit is an event.** `say` is the only action. What is said is an inferred event in the digit's
+  own dimension, output beside it (R30), so the same neuron stands at the shown and the said position, which is
+  what lets a parameter tie them (D11, D44).
+- **A covered digit still stands for itself.** Under `RUN_d` the digit is a neighbor at its own offset
+  (D47), so `W` reads it there, and `write` lands on both activations under the call and takes it back (R23).
+  The copy is the same on a first showing and a repeat; what changes is who votes: bare, `run`; covered,
+  `RUN_d`.
 
 # 7. The same thing as code
 
 | in the code | in the machine |
 |---|---|
-| `say(x)` | `WROTE`, with the digit bound in `W` beside it |
+| `say(x)` | `WRITE`, with the digit bound in `W` beside it |
 | the argument `x` | what stands in `W`'s place a frame back |
-| the return value appearing on the screen | the expected digit at the answer frame, which the world reads |
-| a value the function has seen before | the digit bound in `C`, inferring `WROTE` beside `SHOWN` |
-| a value it has not | `run` bare, inferring `WROTE`, which binds `W` from what stands |
+| the return value appearing on the screen | the inferred digit at the answer frame, which the world reads |
+| a value the function has seen before | `RUN_d`, inferring `WRITE`, which binds `W` from the digit under it |
+| a value it has not | `run` bare, inferring `WRITE`, which binds `W` from what stands |
