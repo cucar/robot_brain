@@ -393,33 +393,42 @@ offset, with one activation dimension and a reach of 1:
 
 ## 3.5 Functions
 
-> **D15 — Function.** A set of **nodes** (D16) joined by relations (D34). Each node is pinned in the dimensions its
-> relations reach it in, and open in the rest. A function holds where activations stand as its relations say. It
-> has at least one fixed node, since the evidence for it is a fixed node's history (D30). It is written once, in
-> the dictionary (D36), and has one interneuron, its call neuron (D48).
+> **D15 — Function.** A set of relations (D34). Each relation names a **node** at each end (D16) and the offset
+> between them in one dimension. A function holds where its relations hold: each one lands on activations that
+> stand as it says. It has at least one fixed node, since the evidence for it is a fixed node's history (D30). It
+> is written once, in the dictionary (D36), and has one interneuron, its call neuron (D48).
+>
+> **A fit places relations, not a fixed set of activations.** Each time a function fits, every relation lands on
+> the activations that satisfy it. Two relations that name the same neuron may land on one activation, or on two.
+> So one function may fix one activation's `x` and `y` in one row, and the `x` of one activation and the `y` of
+> another in the next. It is the same function either way, and each fit is priced as it falls (D22): an activation
+> the relations land on is covered in the dimensions they fix, and its other positions are written.
 >
 > **Relations, not positions, are stored.** A neuron returns relations from itself to its neighbors (D47). The
-> machine stores a function as relations between its nodes, each written from the older of its two nodes, so a
-> group a neuron returned is rewritten from each relation's older end before it is stored. To match a stored
-> function against what a neuron returned, the machine puts that neuron at its node and composes: a stored
-> relation between two of its neighbors is checked against that neuron's relations to each of them.
+> machine stores a function as its relations, each written from the older of its two nodes, so a group a neuron
+> returned is rewritten from each relation's older end before it is stored. To match a stored function against
+> what a neuron returned, the machine puts that neuron at its node and composes: a stored relation between two of
+> its neighbors is checked against that neuron's relations to each of them.
 >
-> **Where the call stands follows from the relations.** The call fires at the rounded centroid of the activations
-> it covers (D53). The relations fix each node's offset from the first node, and the rounded centroid is the
-> first node's position plus the rounded mean of those offsets, so every node's offset from the call follows from
-> the relations alone. Expansion runs from the call's position out to each node (R28), and the decoder recovers the
-> centroid the same way.
+> **Where the call stands follows from what it lands on.** The call fires at the rounded centroid of the
+> activations it covers and binds (D53). In each dimension, the relations of a fit fix the offsets among the
+> activations they land on there, and the positions they leave open are written from where the call stands. So
+> every activation's offset from the call follows from the relations and the call's record. Expansion runs from the
+> call's position out to each activation (R28), and the decoder recovers the centroid the same way.
 >
 > **A function is not a neighborhood.** A neighborhood is what one activation saw where it fired, saved once and
 > evicted `H` activations later; a function is what the machine writes. A neighborhood is a fact, a function a
 > claim. What followed is in neither, and is held as connections (D25).
 >
 > **Its entry in the dictionary** is its relations and the neurons of its fixed nodes, each at what its kind
-> costs (D13).
+> costs (D13). A neuron named by several relations is named once.
 
-> **D16 — Node.** What a function names at a place: a fixed node, a particular neuron (D2), or a variable (D38).
+> **D16 — Node.** What a relation names at one of its ends: a **fixed node**, a particular neuron (D2), or a variable
+> (D38). A node is what a function names, never an activation. Within one fit, each relation lands its nodes on
+> activations, and nodes of different relations that name the same neuron may land on the same activation or on
+> different ones (D15).
 
-**A function's body is its nodes with the offsets between them.** Some nodes are fixed, a particular neuron at
+**A function's body is its relations, and the nodes they name.** Some nodes are fixed, a particular neuron at
 a place; some are **variables**, places where the function is general. A variable is where the function fits more
 activations than any one neuron there would let it: it names the place and leaves open what stands in it. What
 stands in a variable on one occasion is the variable's **value**, and the values of a call's variables are its
@@ -690,8 +699,8 @@ frequency enters**: a number costs the same however often it is used.
 >
 > | | Numbers |
 > |---|---|
-> | A | for each node that came true, fixed or variable, the record of the activation standing there: its neuron and its position in every dimension, `d + 2`; a number a lower call already covered adds nothing (D10) |
-> | B | the call's record: `d + 2`; one per value; one per position number of a node in a dimension the function does not pin it in; and one per relation that did not come true |
+> | A | for each activation the fit's relations land on, fixed or bound in a variable, its record: its neuron and its position in every dimension, `d + 2`; a number a lower call already covered adds nothing (D10) |
+> | B | the call's record: `d + 2`; one per value; one per position number of such an activation in a dimension no relation that lands on it fixes; and one per relation that did not come true |
 > | savings | A less B |
 >
 > A node that did not come true is in neither: whatever stands there is written bare either way. What a neuron is
