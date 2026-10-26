@@ -690,8 +690,8 @@ frequency enters**: a number costs the same however often it is used.
 >
 > | | Numbers |
 > |---|---|
-> | A | for each fixed node that came true, its neuron and one number per dimension it is pinned in; for each variable that came true, one number per dimension it is pinned in; a dimension a lower call already covered adds nothing (D10) |
-> | B | the call's record: `d + 2`, one per relation that did not come true, and one per value |
+> | A | for each node that came true, fixed or variable, the record of the activation standing there: its neuron and its position in every dimension, `d + 2`; a number a lower call already covered adds nothing (D10) |
+> | B | the call's record: `d + 2`; one per value; one per position number of a node in a dimension the function does not pin it in; and one per relation that did not come true |
 > | savings | A less B |
 >
 > A node that did not come true is in neither: whatever stands there is written bare either way. What a neuron is
@@ -1097,7 +1097,7 @@ one number.
 > | | |
 > |---|---|
 > | the function | and its interneuron or none (D31), placed where each node stands, with what each variable binds |
-> | coverage | A: the records of the activations it covers that stand on the apex (D24), and the positions of the activations it binds |
+> | coverage | A: the records of the activations it covers or binds that stand on the apex (D24) |
 > | price | B: its call's record (D12, D22): `d + 2`, one per relation that did not come true in those same frames, one per value, and one per position number a relation leaves open |
 >
 > The machine places the function by D31's rule. Coverage less price is the savings
@@ -1222,10 +1222,9 @@ Every accepted function with no interneuron is given one where a neuron is free.
 > **Release is the reverse**: the function leaves the dictionary, and the machine decommissions its interneuron once no
 > other function of it remains (R38).
 >
-> **Allocating and keeping are separate, and only keeping waits.** The machine allocates or reuses the interneuron the
-> moment the function is accepted, which is all the frame needs to activate it where what it covers stands (D53)
-> and call it. Pricing, pruning and generalizing wait until the frame's last level has run (R18, R52). Nothing in
-> the frame reads the dictionary's margins, so **the wait costs nothing**.
+> **Allocating is immediate.** The machine allocates or reuses the interneuron the moment the function is
+> accepted, which is all the next level needs to activate it where what it covers stands (D53) and call it.
+> Grouping, generalizing and pruning have already run within the level, before matching (R26).
 
 > **R43 — Reuse.** An accepted function fires its own interneuron where it has one. Where it has none, the
 > machine looks for an interneuron that already stands for what its interneuron would (D36), wherever it is: one that
