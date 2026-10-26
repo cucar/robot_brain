@@ -387,7 +387,8 @@ offset, with one activation dimension and a reach of 1:
 
 > **D15 — Function.** A set of relations (D34). Each relation names a **node** at each end (D16) and the offset
 > between them in one dimension. A function holds where its relations hold: each one lands on activations that
-> stand as it says. It has at least one fixed node, since the evidence for it is a fixed node's history (D30). It
+> stand as it says. It has at least one fixed node in its latest frame, since the evidence for it is the history
+> of a neuron that sees all of it, and reach in time runs back (D30). It
 > is written once, in the dictionary (D36), and has one interneuron, its call neuron (D48).
 >
 > **A fit places relations, not a fixed set of activations.** Each time a function fits, every relation lands on
@@ -487,8 +488,8 @@ promotes no interneuron: what stands in it stays on the apex, bound (D10).
 > **D53 — Interneuron.** The neuron the machine allocates for a function, its **call neuron** (D48). It is allocated the first time
 > the function is accepted and a neuron is free (R16). It has an id and no dimension and no channel. **It fires
 > where what it covers stands**: in time, at the frame it is accepted in, age 0; in each spatial dimension, at the
-> centroid of the positions of the activations it covers that its function pins in that dimension, rounded, half
-> toward the smaller position.
+> centroid of the positions of the activations it covers and binds that its function pins in that dimension,
+> rounded, half toward the smaller position.
 
 An interneuron is not an event or an action, though what it stands for may be either. Its position comes from
 what it covers, not from any one neuron that returned it. So a shape's call stands at the shape's center, and a
@@ -1033,8 +1034,10 @@ argument the call was given, and one over the interneuron and a bound activation
 > | margin of `f` | A less B |
 >
 > **Whose history.** `f` is read over the history of each neuron at a fixed node of `f` whose reach covers every
-> node of `f` (D4), since only that neuron's rows hold all of it. `f` is kept while its margin is positive over at
-> least one of them. The neuron answers which of its rows hold `f` (D47); the machine does the pricing.
+> node of `f` (D4), since only that neuron's rows hold all of it. Reach in time runs back, so that is a neuron at
+> `f`'s latest frame: every function has a fixed node there (D15, R52). `f` is kept while its margin is positive
+> over at least one such history. The neuron answers which of its rows hold `f` (D47); the machine does the
+> pricing.
 >
 > **Without `f`**, a row is written by the rest of the dictionary, so another function may take what `f` held. A
 > function is worth what it adds over the best the dictionary does without it, and where another function does
@@ -1086,19 +1089,26 @@ argument the call was given, and one over the interneuron and a bound activation
 > - where they differ otherwise, the node is a class whose members are the neurons that stood there (D41).
 >
 > The general function is priced like any other (D30) and joins the dictionary where its margin is positive. It
-> needs a fixed node, so two functions that differ at every node make nothing. The two it came from stay while
-> their own margins stay positive: a frequent variant keeps its own function, and the general one holds the rare
-> ones. This is least general generalization: the most specific function that still fits both.
+> needs a fixed node in its latest frame, so two functions that differ at every node, or at every node of the
+> latest frame, make nothing. **Where it joins, the two it came from leave the dictionary.** The general function
+> stands for both, and every variant is written through it, its value beside the call (D48): a frequent variant
+> pays one number more per occurrence than a function of its own would, and its lesson lives with the call
+> neuron and the value bound beside it. A grouped function that a general function already fits is not new, since
+> find reads it through the general function's classes and parameters (R53), so the specific form is not built
+> again. This is least general generalization: the most specific function that still fits both.
 
 Generalizing needs two functions to start from, each built on a variant that came round twice. After that, a rare
 variant fits the general function directly: any neuron for a parameter, and for a class once the member pays its
 one number.
 
-> **R18 — Prune.** After grouping and generalizing, every function whose evidence changed at this level is
-> priced: each function that names, at a fixed node, a neuron activated at this level, whose history admitted or
-> evicted rows (D30), and each function a new one competes with. A function whose margin is negative over every
-> history it is read over leaves the dictionary. A class no function uses any longer goes with it. Its interneuron
-> is decommissioned when due (R38).
+> **R18 — Prune.** After the election, every function whose evidence changed at this level is priced: each
+> function that names, at a fixed node, a neuron activated at this level, whose history admitted or evicted rows
+> (D30), and each function a new one competes with. **They leave one at a time.** The one with the lowest margin
+> leaves first, where that margin is negative over every history it is read over, and the rest are priced again
+> before the next leaves, since two functions that write the same rows equally well are each worth nothing while
+> the other stands, and pricing them together would drop both. Between two with the same margin, the one that
+> joined the dictionary later leaves. A class no function uses any longer goes with its last function. A
+> function's interneuron is decommissioned when due (R38).
 
 ## 6.2 Election
 
@@ -1688,8 +1698,9 @@ only what happened (R32).
 > costs, near or far: what makes a near miss cheap is that within the group it costs nothing.
 >
 > **The test.** The inference is proposed when what the placed nodes credit exceeds what they charge, the
-> relations that did not come true included, and struck otherwise. That is D22's test over the nodes that have
-> happened, since the rest is ahead.
+> relations that did not come true included, and struck otherwise. The call's record is not charged: the match
+> writes nothing, it only asks whether the frames that have happened bear the inference out, so it is D22's test
+> over the nodes that have happened, with B holding the relations that did not come true and nothing else.
 >
 > **What it decides.** Proposed, the inference's placements ahead contend for their positions (R46, R47).
 > Struck, it leaves the standing inferences (R45). An inference that was proposed and stops matching as its
