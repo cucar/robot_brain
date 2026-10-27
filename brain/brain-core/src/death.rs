@@ -40,6 +40,8 @@ impl Machine {
         n.index.clear();
         n.connections.clear();
         self.thalamus.forget(c);
+        // rows that named it have changed, so their kinds are read afresh
+        for pc in self.priced.borrow_mut().values_mut() { pc.sig.clear(); }
         for f in self.frames.iter_mut() {
             for a in f.acts.iter_mut() { a.inferences.retain(|i| i.target != c); }
         }

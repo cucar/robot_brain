@@ -41,50 +41,83 @@ impl Machine {
         rows.sort_unstable();
         rows.dedup();
         let mut gain = 0.0;
+        // a row is read only by the functions it holds a relation of (D47)
+        let before_k: Vec<(&Func, Option<Vec<RelKey>>)> = before.iter().map(|f| (*f, fit_keys(f, anchor, &self.dict))).collect();
+        let after_k: Vec<(&Func, Option<Vec<RelKey>>)> = after.iter().map(|f| (*f, fit_keys(f, anchor, &self.dict))).collect();
         for (row, w) in by_sig(rows.iter().filter_map(|id| n.row(*id))) {
             let changed = add.iter().any(|f| fits(f, row, &self.dict, radii)) || remove.iter().filter_map(|i| self.dict.get(*i)).any(|f| fits(f, row, &self.dict, radii));
             if !changed { continue; }
-            gain += w * (row_cost(row, &before, &self.dict, radii) - row_cost(row, &after, &self.dict, radii));
+            let keys = n.relations_of(row);
+            let b: Vec<&Func> = before_k.iter().filter(|(_, k)| touches(k, &keys)).map(|(f, _)| *f).collect();
+            let a: Vec<&Func> = after_k.iter().filter(|(_, k)| touches(k, &keys)).map(|(f, _)| *f).collect();
+            gain += w * (row_cost(row, &b, &self.dict, radii) - row_cost(row, &a, &self.dict, radii));
         }
         let removed: f64 = remove.iter().filter_map(|id| self.dict.get(*id)).map(|f| self.dict.entry(f, &[])).sum();
         let added: f64 = add.iter().enumerate().map(|(i, f)| self.dict.entry(f, if i == 0 { new_classes } else { &[] })).sum();
         gain + removed - added
     }
 
-    /// Every margin of the functions anchored at a neuron at once (D30): each kind of row is covered with all
-    /// of them and once without each that fits it.
+    /// Every margin of the functions a neuron reads at once (D30): each kind of row is covered with all of
+    /// those that can fit it and once without each that does. Only a function's uses are read: a kind of row is
+    /// landed on only by the functions it holds a relation of (D47), and a kind priced before is read again
+    /// only where a change to the dictionary since touched it.
     pub(crate) fn margins_of(&self, x: NeuronId) -> FxHashMap<FuncId, f64> {
         let n = &self.thalamus[x];
-        let funcs: Vec<&Func> = self.dict.standing(x).iter().filter_map(|id| self.dict.get(*id)).collect();
-        let mut m: FxHashMap<FuncId, f64> = funcs.iter().map(|f| (f.id, -self.dict.entry(f, &[]))).collect();
-        let fresh_of = |row: &Row| -> Vec<(FuncId, Landing, u64)> {
-            let fresh = Fresh { own: row.own_cost, nbs: &row.nbs, calls: &row.calls };
-            funcs.iter().filter_map(|f| land_best(f, x, &self.dict, &self.radii, row.axes, &row.nbs, &row.calls, &fresh).map(|l| (f.id, l, f.joined))).filter(|(_, l, _)| l.savings() > 0.0).collect()
-        };
-        // rows alike are priced once; what the cover leaves of each row is the assignment grouping reads
-        let mut kinds: FxHashMap<u64, (usize, Vec<u64>)> = FxHashMap::default();
+        let funcs: Vec<(&Func, Option<Vec<RelKey>>)> = self.dict.standing(x).iter().filter_map(|id| self.dict.get(*id)).map(|f| (f, fit_keys(f, x, &self.dict))).collect();
+        let mut m: FxHashMap<FuncId, f64> = funcs.iter().map(|(f, _)| (f.id, -self.dict.entry(f, &[]))).collect();
+        let mut cache = self.priced.borrow_mut();
+        let pc = cache.entry(x).or_default();
+        // the kinds of row, each with how many rows it is and one to read
+        let first = n.history.front().map_or(0, |r| r.id);
+        pc.sig.retain(|id, _| *id >= first);
+        let mut kinds: FxHashMap<u64, (usize, f64)> = FxHashMap::default();
         let mut order: Vec<u64> = Vec::new();
         for (k, row) in n.history.iter().enumerate() {
-            let s = row_sig(row);
-            let e = kinds.entry(s).or_insert_with(|| { order.push(s); (k, Vec::new()) });
-            e.1.push(row.id);
+            let s = *pc.sig.entry(row.id).or_insert_with(|| row_sig(row));
+            let e = kinds.entry(s).or_insert_with(|| { order.push(s); (k, 0.0) });
+            e.1 += 1.0;
         }
-        let mut assigned: FxHashMap<u64, (f64, Vec<f64>)> = FxHashMap::default();
-        for s in order {
-            let (k, ids) = &kinds[&s];
-            let row = &n.history[*k];
-            let w = ids.len() as f64;
-            let ls = fresh_of(row);
-            if ls.is_empty() { continue; }
-            let all: Vec<(&Landing, u64)> = ls.iter().map(|(_, l, j)| (l, *j)).collect();
-            let (with, _, left) = cover_left(row, &all);
-            for id in ids { assigned.insert(*id, (left.anchor, left.nbs.clone())); }
-            for k in 0..ls.len() {
-                let rest: Vec<(&Landing, u64)> = ls.iter().enumerate().filter(|(i, _)| *i != k).map(|(_, (_, l, j))| (l, *j)).collect();
-                *m.get_mut(&ls[k].0).unwrap() += w * (greedy(row, &rest) - with);
+        pc.kinds.retain(|s, _| kinds.contains_key(s));
+        // every change to the dictionary since this history was last priced is read once, and the kinds of row
+        // it touches are priced again
+        if pc.version != self.dict.version {
+            match self.dict.changes_since(pc.version) {
+                None => pc.kinds.clear(),
+                Some(changes) => {
+                    for f in changes {
+                        if f.nodes_for(x).is_empty() { continue; }
+                        // a class may have left with the function, so a change through a variable touches every row
+                        if f.rels.iter().any(|r| !r.node.is_fixed()) { pc.kinds.clear(); break; }
+                        let fk = fit_keys(f, x, &self.dict);
+                        pc.kinds.retain(|_, kc| !touches(&fk, &kc.keys));
+                    }
+                }
             }
+            pc.version = self.dict.version;
         }
-        self.assigned.borrow_mut().insert(x, assigned);
+        for s in order {
+            let (k, w) = kinds[&s];
+            if !pc.kinds.contains_key(&s) {
+                let row = &n.history[k];
+                let keys = n.relations_of(row);
+                let fresh = Fresh { own: row.own_cost, nbs: &row.nbs, calls: &row.calls };
+                let ls: Vec<(FuncId, Landing, u64)> = funcs.iter().filter(|(_, fk)| touches(fk, &keys))
+                    .filter_map(|(f, _)| land_best(f, x, &self.dict, &self.radii, row.axes, &row.nbs, &row.calls, &fresh).map(|l| (f.id, l, f.joined)))
+                    .filter(|(_, l, _)| l.savings() > 0.0).collect();
+                let mut contrib: Vec<(FuncId, f64)> = Vec::new();
+                let left = if ls.is_empty() { (row.own_cost, row.nbs.iter().map(|nb| nb.cost).collect()) } else {
+                    let all: Vec<(&Landing, u64)> = ls.iter().map(|(_, l, j)| (l, *j)).collect();
+                    let (with, _, left) = cover_left(row, &all);
+                    for k in 0..ls.len() {
+                        let rest: Vec<(&Landing, u64)> = ls.iter().enumerate().filter(|(i, _)| *i != k).map(|(_, (_, l, j))| (l, *j)).collect();
+                        contrib.push((ls[k].0, greedy(row, &rest) - with));
+                    }
+                    (left.anchor, left.nbs)
+                };
+                pc.kinds.insert(s, KindPriced { keys, contrib, left });
+            }
+            for (fid, c) in &pc.kinds[&s].contrib { if let Some(v) = m.get_mut(fid) { *v += w * c; } }
+        }
         m
     }
 
@@ -371,8 +404,9 @@ impl<'a> Table<'a> {
         for (b, (_, rows)) in rels.iter().enumerate() { for r in rows.iter() { *held.entry(*r).or_insert(0) |= 1u64 << b; } }
         let keys: Vec<RelKey> = rels.into_iter().map(|(k, _)| k).collect();
         let bit: FxHashMap<RelKey, u8> = keys.iter().enumerate().map(|(b, k)| (*k, b as u8)).collect();
-        let assigned = m.assigned.borrow();
-        let left_of = assigned.get(&x);
+        let priced = m.priced.borrow();
+        let pc = priced.get(&x);
+        let left_of = |id: u64| -> Option<(f64, Vec<f64>)> { let pc = pc?; pc.kinds.get(pc.sig.get(&id)?).map(|k| k.left.clone()) };
         let mut ids: Vec<u64> = held.keys().copied().collect();
         ids.sort_unstable();
         let mut rows: Vec<RowInfo> = Vec::with_capacity(ids.len());
@@ -383,7 +417,7 @@ impl<'a> Table<'a> {
                 let c = now.unwrap();
                 (c.anchor, c.nbs.clone())
             } else {
-                left_of.and_then(|a| a.get(&id).cloned()).unwrap_or_else(|| (r.own_cost, r.nbs.iter().map(|nb| nb.cost).collect()))
+                left_of(id).filter(|(_, l)| l.len() == r.nbs.len()).unwrap_or_else(|| (r.own_cost, r.nbs.iter().map(|nb| nb.cost).collect()))
             };
             let mut ans = Vec::new();
             for (i, nb) in r.nbs.iter().enumerate() {
@@ -397,7 +431,7 @@ impl<'a> Table<'a> {
             }
             rows.push(RowInfo { mask, own: r.own_cost, own_left, ans });
         }
-        drop(assigned);
+        drop(priced);
         Some(Table { m, x, row, keys, rows })
     }
 
@@ -480,5 +514,54 @@ impl<'a> Table<'a> {
             val = v;
         }
         cur
+    }
+}
+
+/// One kind of row as the margin priced it (D30): the relations the row holds, what each function that fits it
+/// adds there, and what the cover left of the activation and each neighbor.
+pub(crate) struct KindPriced {
+    keys: Vec<RelKey>,
+    contrib: Vec<(FuncId, f64)>,
+    left: (f64, Vec<f64>),
+}
+
+/// A neuron's history as the margin last priced it: the dictionary's version then, each kind of row, and which
+/// kind each row is.
+#[derive(Default)]
+pub(crate) struct Priced {
+    version: u64,
+    kinds: FxHashMap<u64, KindPriced>,
+    pub(crate) sig: FxHashMap<u64, u64>,
+}
+
+/// The relations a row of `x` must hold one of for `f` to fit it (D47, D31): where `x` stands at the anchor,
+/// each relation to a fixed node or to a member of a class at a node; where it stands at another node, the
+/// relation back to the anchor. None where a parameter can stand anywhere.
+fn fit_keys(f: &Func, x: NeuronId, dict: &Dictionary) -> Option<Vec<RelKey>> {
+    let mut keys: Vec<RelKey> = Vec::new();
+    for at in f.nodes_for(x) {
+        if at == 0 {
+            for r in &f.rels {
+                match r.node {
+                    Node::Fixed(n) => keys.push((n, r.dim, r.off)),
+                    Node::Class(k) => for m in dict.class(k) { keys.push((*m, r.dim, r.off)); },
+                    Node::Param(_) => return None,
+                }
+            }
+        } else {
+            let r = &f.rels[at - 1];
+            keys.push((f.anchor, r.dim, -r.off));
+        }
+    }
+    keys.sort_unstable();
+    keys.dedup();
+    Some(keys)
+}
+
+/// Whether a row holding `keys`, sorted, holds any of a function's (None: any row).
+fn touches(fk: &Option<Vec<RelKey>>, keys: &[RelKey]) -> bool {
+    match fk {
+        None => true,
+        Some(v) => v.iter().any(|k| keys.binary_search(k).is_ok()),
     }
 }

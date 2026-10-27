@@ -77,9 +77,10 @@ pub struct Machine {
     pub dict: Dictionary,
     /// Functions that left the dictionary, kept readable while what they fired is open (R38).
     pub(crate) retired_funcs: FxHashMap<FuncId, (Func, Frame)>,
-    /// The assignment of grouping (R50): per neuron, per row of its history, what the dictionary's cover left
-    /// of it when it was last priced, the activation and each neighbor. Read by grouping, refreshed by pruning.
-    pub(crate) assigned: std::cell::RefCell<FxHashMap<NeuronId, FxHashMap<u64, (f64, Vec<f64>)>>>,
+    /// Per neuron, each kind of row of its history as the margin last priced it (D30): what each function
+    /// adds there and what the cover left, which is also the assignment grouping reads (R50). Kept while no
+    /// change to the dictionary touches it.
+    pub(crate) priced: std::cell::RefCell<FxHashMap<NeuronId, crate::recognize::Priced>>,
     /// Per interneuron, the function that fired it last, for inferring it (R28).
     pub(crate) last_func: FxHashMap<NeuronId, FuncId>,
     /// Interneurons whose last function has left, waiting for their windows to close (R38).
@@ -127,7 +128,7 @@ impl Machine {
             max_reach_t: time_radius.max(1),
             dict: Dictionary::default(),
             retired_funcs: FxHashMap::default(),
-            assigned: std::cell::RefCell::new(FxHashMap::default()),
+            priced: std::cell::RefCell::new(FxHashMap::default()),
             last_func: FxHashMap::default(),
             ledger: Vec::new(),
             stats_added: 0,

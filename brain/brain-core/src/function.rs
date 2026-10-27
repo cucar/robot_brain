@@ -118,6 +118,11 @@ pub struct Dictionary {
     /// Bumped on every change to what a function or class says, so readings of the dictionary can be kept
     /// while it stands.
     pub version: u64,
+    /// The latest changes to functions, each with the version it made and the function as it stood: added, or
+    /// as it was when it left. A reading kept from an earlier version holds while none of them touches it.
+    pub log: std::collections::VecDeque<(u64, Func)>,
+    /// The version of the latest change the log let go of.
+    log_floor: u64,
     next_id: FuncId,
     next_join: u64,
     next_class: ClassId,
@@ -172,8 +177,22 @@ impl Dictionary {
         self.by_key.insert(f.key(), id);
         for n in f.fixed_neurons().into_iter().filter(|n| *n != f.anchor) { self.naming.entry(n).or_default().push(id); }
         if let Some(i) = f.inter { self.by_inter.entry(i).or_default().push(id); }
+        self.note(f.clone());
         self.funcs.insert(id, f);
         id
+    }
+
+    /// Keep a change in the log, the oldest leaving past a bound.
+    fn note(&mut self, f: Func) {
+        self.log.push_back((self.version, f));
+        while self.log.len() > 4096 { if let Some((v, _)) = self.log.pop_front() { self.log_floor = v; } }
+    }
+
+    /// The changes since `version`; None where the log no longer reaches back that far.
+    pub fn changes_since(&self, version: u64) -> Option<impl Iterator<Item = &Func> + '_> {
+        if version < self.log_floor { return None; }
+        let from = self.log.partition_point(|(v, _)| *v <= version);
+        Some(self.log.range(from..).map(|(_, f)| f))
     }
 
     /// Take a function out of the dictionary (R18, R52, R38); returns it.
@@ -185,6 +204,7 @@ impl Dictionary {
         self.by_key.remove(&f.key());
         for n in f.fixed_neurons() { if let Some(v) = self.naming.get_mut(&n) { v.retain(|x| *x != id); } }
         if let Some(i) = f.inter { if let Some(v) = self.by_inter.get_mut(&i) { v.retain(|x| *x != id); } }
+        self.note(f.clone());
         Some(f)
     }
 
