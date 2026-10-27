@@ -9,7 +9,9 @@
  * held-out images are shown with the machine frozen: it answers, its answer runs with no reward and
  * no lesson, and nothing of the machine changes.
  *
- *   node apps/mnist/jobs/mnist.js [--image-size 14] [--per-class 100] [--teach all] [--test 500] [--h 2048] [--episodes 1]
+ * Training takes every training image in the file's order, or with `--per-class` at most that many of each digit.
+ *
+ *   node apps/mnist/jobs/mnist.js [--image-size 14] [--per-class all] [--teach all] [--test 500] [--h 2048] [--episodes 1]
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +24,7 @@ function arg(flag, def, parse = x => x) {
 	return i !== -1 && process.argv[i + 1] !== undefined ? parse(process.argv[i + 1]) : def;
 }
 const imageSize = arg('--image-size', 14, Number);
-const perClass = arg('--per-class', 100, Number);
+const perClass = arg('--per-class', Infinity, Number);
 const teachArg = arg('--teach', Infinity, Number);
 const testCount = arg('--test', 500, Number);
 const h = arg('--h', 2048, Number);
@@ -36,10 +38,10 @@ const trainLabels = loadLabels(path.join(dataDir, 'train-labels-idx1-ubyte.gz'))
 const testImages = loadImages(path.join(dataDir, 't10k-images-idx3-ubyte.gz'));
 const testLabels = loadLabels(path.join(dataDir, 't10k-labels-idx1-ubyte.gz'));
 
-// class-balanced training subset, natural order
+// the training images in the file's order: every one, or at most `--per-class` of each digit
 const picked = new Array(10).fill(0);
 const train = [];
-for (let i = 0; i < trainImages.length && train.length < perClass * 10; i++) {
+for (let i = 0; i < trainImages.length; i++) {
 	const d = trainLabels[i];
 	if (picked[d] < perClass) { picked[d]++; train.push(i); }
 }
@@ -61,7 +63,7 @@ const X = m.declareAxis('x', 1), Y = m.declareAxis('y', 1);
 const image = m.declareChannel({ name: 'image', event: { name: 'ink', resolution: 2 }, axes: [X, Y] });
 const digit = m.declareChannel({ name: 'digit', action: { name: 'digit', resolution: 10 } });
 
-console.log(`UCAR mnist: ${imageSize}x${imageSize}, train ${train.length} (${perClass}/class, first ${teach} taught), test ${testCount}, H=${h}`);
+console.log(`UCAR mnist: ${imageSize}x${imageSize}, train ${train.length} (${perClass === Infinity ? 'all' : perClass + '/class'}, first ${teach} taught), test ${testCount}, H=${h}`);
 
 function showImage(px, label, teachIt, S, testing = false) {
 	const pts = inked(px);
