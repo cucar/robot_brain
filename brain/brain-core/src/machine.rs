@@ -77,6 +77,9 @@ pub struct Machine {
     pub dict: Dictionary,
     /// Functions that left the dictionary, kept readable while what they fired is open (R38).
     pub(crate) retired_funcs: FxHashMap<FuncId, (Func, Frame)>,
+    /// The assignment of grouping (R50): per neuron, per row of its history, what the dictionary's cover left
+    /// of it when it was last priced, the activation and each neighbor. Read by grouping, refreshed by pruning.
+    pub(crate) assigned: std::cell::RefCell<FxHashMap<NeuronId, FxHashMap<u64, (f64, Vec<f64>)>>>,
     /// Per interneuron, the function that fired it last, for inferring it (R28).
     pub(crate) last_func: FxHashMap<NeuronId, FuncId>,
     /// Interneurons whose last function has left, waiting for their windows to close (R38).
@@ -94,9 +97,6 @@ pub struct Machine {
     /// generalize, elect and allocate, prune, connect and infer, decommission, select; and within select, the
     /// match, the voters' placements, and the patterns execution fires.
     pub timings: [f64; 11],
-    /// Per neuron, the dictionary's functions anchored there as they land on each kind of its rows, kept while
-    /// the dictionary stands (D30): a reading, not a state.
-    pub(crate) landings: std::cell::RefCell<FxHashMap<NeuronId, (u64, FxHashMap<u64, std::rc::Rc<Vec<(crate::fit::Landing, u64)>>>)>>,
     /// Times a frame ran past a thousand levels: a fault, counted.
     pub cycle_guard: std::cell::Cell<u64>,
 }
@@ -127,6 +127,7 @@ impl Machine {
             max_reach_t: time_radius.max(1),
             dict: Dictionary::default(),
             retired_funcs: FxHashMap::default(),
+            assigned: std::cell::RefCell::new(FxHashMap::default()),
             last_func: FxHashMap::default(),
             ledger: Vec::new(),
             stats_added: 0,
@@ -136,7 +137,6 @@ impl Machine {
             trace: false,
             frozen: false,
             timings: [0.0; 11],
-            landings: std::cell::RefCell::new(FxHashMap::default()),
             cycle_guard: std::cell::Cell::new(0),
         }
     }

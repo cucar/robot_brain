@@ -51,25 +51,6 @@ impl Machine {
         gain + removed - added
     }
 
-    /// The dictionary's functions anchored at a neuron, landed on one kind of its rows (D54): those that fit
-    /// it, each with when it joined. Kept per kind of row while the dictionary stands.
-    pub(crate) fn landed_on(&self, x: NeuronId, row: &Row, sig: u64) -> std::rc::Rc<Vec<(Landing, u64)>> {
-        let version = self.dict.version;
-        {
-            let mut cache = self.landings.borrow_mut();
-            let e = cache.entry(x).or_insert_with(|| (version, FxHashMap::default()));
-            if e.0 != version { *e = (version, FxHashMap::default()); }
-            if let Some(v) = e.1.get(&sig) { return v.clone(); }
-        }
-        let fresh = Fresh { own: row.own_cost, nbs: &row.nbs, calls: &row.calls };
-        let v: Vec<(Landing, u64)> = self.dict.standing(x).iter().filter_map(|id| self.dict.get(*id))
-            .filter_map(|f| land_best(f, x, &self.dict, &self.radii, row.axes, &row.nbs, &row.calls, &fresh).map(|l| (l, f.joined)))
-            .filter(|(l, _)| l.savings() > 0.0).collect();
-        let v = std::rc::Rc::new(v);
-        self.landings.borrow_mut().get_mut(&x).unwrap().1.insert(sig, v.clone());
-        v
-    }
-
     /// Every margin of the functions anchored at a neuron at once (D30): each kind of row is covered with all
     /// of them and once without each that fits it.
     pub(crate) fn margins_of(&self, x: NeuronId) -> FxHashMap<FuncId, f64> {
@@ -80,140 +61,91 @@ impl Machine {
             let fresh = Fresh { own: row.own_cost, nbs: &row.nbs, calls: &row.calls };
             funcs.iter().filter_map(|f| land_best(f, x, &self.dict, &self.radii, row.axes, &row.nbs, &row.calls, &fresh).map(|l| (f.id, l, f.joined))).filter(|(_, l, _)| l.savings() > 0.0).collect()
         };
-        for (row, w) in by_sig(n.history.iter()) {
+        // rows alike are priced once; what the cover leaves of each row is the assignment grouping reads
+        let mut kinds: FxHashMap<u64, (usize, Vec<u64>)> = FxHashMap::default();
+        let mut order: Vec<u64> = Vec::new();
+        for (k, row) in n.history.iter().enumerate() {
+            let s = row_sig(row);
+            let e = kinds.entry(s).or_insert_with(|| { order.push(s); (k, Vec::new()) });
+            e.1.push(row.id);
+        }
+        let mut assigned: FxHashMap<u64, (f64, Vec<f64>)> = FxHashMap::default();
+        for s in order {
+            let (k, ids) = &kinds[&s];
+            let row = &n.history[*k];
+            let w = ids.len() as f64;
             let ls = fresh_of(row);
             if ls.is_empty() { continue; }
             let all: Vec<(&Landing, u64)> = ls.iter().map(|(_, l, j)| (l, *j)).collect();
-            let with = greedy(row, &all);
+            let (with, _, left) = cover_left(row, &all);
+            for id in ids { assigned.insert(*id, (left.anchor, left.nbs.clone())); }
             for k in 0..ls.len() {
                 let rest: Vec<(&Landing, u64)> = ls.iter().enumerate().filter(|(i, _)| *i != k).map(|(_, (_, l, j))| (l, *j)).collect();
                 *m.get_mut(&ls[k].0).unwrap() += w * (greedy(row, &rest) - with);
             }
         }
+        self.assigned.borrow_mut().insert(x, assigned);
         m
     }
 
-    // ───────────────────────────── grouping (R50) ─────────────────────────────
+    // ───────────────────────────── grouping (R50): assign, update, seed ─────────────────────────────
 
-    /// Group the relations an activation's neuron returned in two or more rows into functions of fixed
-    /// nodes, merging while a merge lowers the cost of writing its history, and keep each whose margin is
-    /// positive (R50).
-    pub(crate) fn group(&self, x: NeuronId, ret: &ActReturn) -> Vec<Vec<Rel>> {
-        let n = &self.thalamus[x];
-        let radii = &self.radii;
-        // a relation that reaches this activation's neighbor only as a base symbol under a call holds a node
-        // and can cover nothing (D47, D22), so no merge with it lowers a cost
-        let Some(me) = n.row(ret.row) else { return Vec::new() };
-        let mut worth: Vec<RelKey> = Vec::new();
-        for nb in me.nbs.iter().filter(|nb| !matches!(nb.via, Via::Under(_))) {
-            let shared = (me.axes & nb.axes) | 1;
-            for d in 0..radii.len().min(MAX_DIMS) {
-                if shared & (1 << d) != 0 { worth.push((nb.neuron, d as u8, crate::offsets::round_offset(nb.delta[d], radii[d]))); }
+    /// Group an activation's relations into functions, one online step of Lloyd's algorithm over its neuron's
+    /// history (R50): the rows are the points and the functions the centres, and the distance from a row to a
+    /// function is what the function saves writing it. Assign: the greedy cover writes the new row with the
+    /// dictionary's functions (D28). Update: each function the cover took that is anchored here, of fixed nodes,
+    /// moves one relation at a time, added or dropped, while that lowers the cost of writing the history (D30).
+    /// Seed: the relations held in two or more rows that the cover left unwritten open one new function, trimmed
+    /// the same way. Returns the seed where its margin is positive, for find (R53).
+    pub(crate) fn group(&mut self, x: NeuronId, ret: &ActReturn) -> Vec<Vec<Rel>> {
+        let (updates, seed) = {
+            let Some(row) = self.thalamus[x].row(ret.row) else { return Vec::new() };
+            // assign: the cover of the new row by every function the neuron reads
+            let fresh = Fresh { own: row.own_cost, nbs: &row.nbs, calls: &row.calls };
+            let ls: Vec<(FuncId, Landing, u64)> = self.dict.standing(x).iter().filter_map(|id| self.dict.get(*id))
+                .filter_map(|f| land_best(f, x, &self.dict, &self.radii, row.axes, &row.nbs, &row.calls, &fresh).map(|l| (f.id, l, f.joined)))
+                .filter(|(_, l, _)| l.savings() > 0.0).collect();
+            let refs: Vec<(&Landing, u64)> = ls.iter().map(|(_, l, j)| (l, *j)).collect();
+            let (_, taken, now) = cover_left(row, &refs);
+            let Some(t) = Table::new(self, x, ret, Some(&now)) else { return Vec::new() };
+            // update: each function taken, anchored here, all of whose relations the row holds
+            let mut updates: Vec<(FuncId, Vec<Rel>)> = Vec::new();
+            let mut written: FxHashSet<usize> = FxHashSet::default();
+            for &k in &taken {
+                let (fid, l, _) = &ls[k];
+                written.extend(l.covered.iter().copied());
+                written.extend(l.bound.iter().map(|(i, _)| *i));
+                written.extend(l.landed.iter().map(|(_, i)| *i).filter(|i| *i != usize::MAX));
+                let Some(f) = self.dict.get(*fid) else { continue };
+                if f.anchor != x { continue; }
+                let Some(bits) = t.bits_of(f) else { continue };
+                let moved = t.descend(bits, false);
+                if moved != bits { updates.push((*fid, t.rels(moved))); }
             }
-        }
-        let groups: Vec<(Vec<Rel>, Vec<u64>)> = ret.rels.iter().filter(|(k, rows)| rows.len() >= 2 && worth.contains(k))
-            .map(|((m, d, o), rows)| (vec![Rel { dim: *d, off: *o, node: Node::Fixed(*m) }], rows.clone())).collect();
-        if groups.is_empty() { return Vec::new(); }
-        let draft = |rels: &Vec<Rel>| self.dict.draft(x, rels.clone(), 0);
-        // rows by signature: two rows alike cost the same, so each kind is read once (D30)
-        let mut all_rows: Vec<u64> = groups.iter().flat_map(|(_, r)| r.iter().copied()).collect();
-        all_rows.sort_unstable();
-        all_rows.dedup();
-        let mut sig_of: FxHashMap<u64, u64> = FxHashMap::default();
-        let mut rep: FxHashMap<u64, u64> = FxHashMap::default();
-        for id in &all_rows {
-            if let Some(row) = n.row(*id) { let s = row_sig(row); sig_of.insert(*id, s); rep.entry(s).or_insert(*id); }
-        }
-        // per kind of row, the dictionary's functions that fit it, landed once; and each group as it lands there,
-        // landed once (D28: a function's price is fixed by what fired)
-        let mut fitting: FxHashMap<u64, std::rc::Rc<Vec<(Landing, u64)>>> = FxHashMap::default();
-        for (s, id) in &rep {
-            let Some(row) = n.row(*id) else { continue };
-            fitting.insert(*s, self.landed_on(x, row, *s));
-        }
-        let group_land: std::cell::RefCell<FxHashMap<(u64, Vec<Rel>), Option<Landing>>> = std::cell::RefCell::new(FxHashMap::default());
-        let cost_sig = |s: u64, gs: &[&Func]| -> f64 {
-            let Some(row) = rep.get(&s).and_then(|id| n.row(*id)) else { return 0.0 };
-            let mut owned: Vec<Landing> = Vec::new();
-            for g in gs {
-                let mut cache = group_land.borrow_mut();
-                let l = cache.entry((s, g.rels.clone())).or_insert_with(|| {
-                    let fresh = Fresh { own: row.own_cost, nbs: &row.nbs, calls: &row.calls };
-                    land_best(g, x, &self.dict, radii, row.axes, &row.nbs, &row.calls, &fresh).filter(|l| l.savings() > 0.0)
-                });
-                if let Some(l) = l { owned.push(l.clone()); }
-            }
-            let mut all: Vec<(&Landing, u64)> = fitting.get(&s).map(|v| v.iter().map(|(l, j)| (l, *j)).collect()).unwrap_or_default();
-            all.extend(owned.iter().map(|l| (l, u64::MAX)));
-            greedy(row, &all)
+            // seed: what the cover left unwritten
+            let open: u64 = (0..t.keys.len()).filter(|&b| !t.nbs_of(b).iter().any(|i| written.contains(i))).fold(0u64, |a, b| a | (1u64 << b));
+            let seed = if open == 0 { None } else {
+                let s = t.descend(open, true);
+                if t.support(s) >= 2.0 { Some(t.rels(s)) } else { None }
+            };
+            (updates, seed)
         };
-        // merge, repeatedly, the two groups whose merge most lowers the cost; each pair is priced once and
-        // priced again only when it comes to the top, as a merge elsewhere may have moved it
-        let mut slots: Vec<Option<(Vec<Rel>, Vec<u64>, Func)>> = groups.into_iter().map(|(r, rows)| { let f = draft(&r); Some((r, rows, f)) }).collect();
-        let delta_of = |slots: &Vec<Option<(Vec<Rel>, Vec<u64>, Func)>>, i: usize, j: usize, baseline: &mut FxHashMap<u64, f64>| -> f64 {
-            let (Some((ri, rowi, _)), Some((rj, rowj, _))) = (&slots[i], &slots[j]) else { return 0.0 };
-            // a merge gains only in the rows that hold both: elsewhere it writes what one wrote, less the other's
-            // relations that did not come true
-            let (mut a, mut b, mut both) = (0, 0, false);
-            while a < rowi.len() && b < rowj.len() {
-                if rowi[a] == rowj[b] { both = true; break; }
-                if rowi[a] < rowj[b] { a += 1; } else { b += 1; }
-            }
-            if !both { return 0.0; }
-            let alive: Vec<&Func> = slots.iter().flatten().map(|(_, _, f)| f).collect();
-            let mut rels = ri.clone();
-            rels.extend(rj.iter().copied());
-            let merged_f = draft(&canonical(rels));
-            let mut merged: Vec<&Func> = slots.iter().enumerate().filter(|(k, _)| *k != i && *k != j).filter_map(|(_, s)| s.as_ref().map(|(_, _, f)| f)).collect();
-            merged.push(&merged_f);
-            let mut kinds: FxHashMap<u64, f64> = FxHashMap::default();
-            for id in rowi.iter().chain(rowj.iter()) { if let Some(s) = sig_of.get(id) { *kinds.entry(*s).or_insert(0.0) += 1.0; } }
-            // a row on both lists was counted twice
-            for id in rowi.iter().filter(|r| rowj.contains(r)) { if let Some(s) = sig_of.get(id) { *kinds.get_mut(s).unwrap() -= 1.0; } }
-            let mut delta = 0.0;
-            for (&s, &w) in &kinds {
-                if w <= 0.0 { continue; }
-                let before = *baseline.entry(s).or_insert_with(|| cost_sig(s, &alive));
-                delta += w * (cost_sig(s, &merged) - before);
-            }
-            delta
-        };
-        #[derive(PartialEq)]
-        struct Cand(f64, usize, usize);
-        impl Eq for Cand {}
-        impl PartialOrd for Cand { fn partial_cmp(&self, o: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(o)) } }
-        impl Ord for Cand { fn cmp(&self, o: &Self) -> std::cmp::Ordering { o.0.partial_cmp(&self.0).unwrap_or(std::cmp::Ordering::Equal).then_with(|| (o.1, o.2).cmp(&(self.1, self.2))) } }
-        let mut baseline: FxHashMap<u64, f64> = FxHashMap::default();
-        let mut heap: std::collections::BinaryHeap<Cand> = std::collections::BinaryHeap::new();
-        for i in 0..slots.len() { for j in (i + 1)..slots.len() {
-            let d = delta_of(&slots, i, j, &mut baseline);
-            if d < -1e-9 { heap.push(Cand(d, i, j)); }
-        } }
-        while let Some(Cand(d, i, j)) = heap.pop() {
-            if slots[i].is_none() || slots[j].is_none() { continue; }
-            let now = delta_of(&slots, i, j, &mut baseline);
-            if !(now < -1e-9) { continue; }
-            if now > d + 1e-9 { if let Some(top) = heap.peek() { if top.0 < now { heap.push(Cand(now, i, j)); continue; } } }
-            let (ri, rowi, _) = slots[i].take().unwrap();
-            let (rj, rowj, _) = slots[j].take().unwrap();
-            let rels = canonical(ri.into_iter().chain(rj).collect());
-            let rows: Vec<u64> = rowi.into_iter().filter(|r| rowj.contains(r)).collect();
-            let f = draft(&rels);
-            slots.push(Some((rels, rows, f)));
-            baseline.clear();
-            let k = slots.len() - 1;
-            for l in 0..k {
-                if slots[l].is_none() { continue; }
-                let d = delta_of(&slots, l, k, &mut baseline);
-                if d < -1e-9 { heap.push(Cand(d, l, k)); }
+        for (fid, rels) in updates {
+            if self.dict.find_key(x, &rels).is_some() { continue; }
+            let moved = self.dict.draft(x, rels.clone(), 0);
+            let gain = self.replacement_gain(&[&moved], &[fid], &[]);
+            if gain > 1e-9 {
+                if self.trace { eprintln!("[update f{}] {} -> {} gain {:.1}", self.frame_no, self.dict.describe(self.dict.get(fid).unwrap()), self.dict.describe(&moved), gain); }
+                self.dict.rewrite(fid, rels);
             }
         }
-        let groups: Vec<(Vec<Rel>, Vec<u64>)> = slots.into_iter().flatten().map(|(r, rows, _)| (r, rows)).collect();
-        // each group left is priced once on its own, and kept where its margin is positive
-        groups.into_iter().map(|(r, _)| r).filter(|r| {
+        // the seed is priced once on its own, and kept where its margin is positive
+        seed.into_iter().filter(|r| {
             if self.dict.find_key(x, r).is_some() { return true; }
-            let f = draft(r);
-            self.replacement_gain(&[&f], &[], &[]) > 1e-9
+            let f = self.dict.draft(x, r.clone(), 0);
+            let g = self.replacement_gain(&[&f], &[], &[]);
+            if self.trace { eprintln!("[seed f{}] {} margin {:.2}", self.frame_no, self.dict.describe(&f), g); }
+            g > 1e-9
         }).collect()
     }
 
@@ -392,5 +324,161 @@ impl Machine {
     /// A function as expansion reads it: the dictionary's, or the ledger's copy (R38).
     pub(crate) fn func(&self, id: FuncId) -> Option<&Func> {
         self.dict.get(id).or_else(|| self.retired_funcs.get(&id).map(|x| &x.0))
+    }
+}
+
+/// One row of the history as grouping reads it (R50): which of the relations it holds, what its activation
+/// costs and what the dictionary's cover left of it, and per relation it holds the neighbor that answers it,
+/// with that neighbor's cost and what the cover left of it.
+struct RowInfo {
+    mask: u64,
+    own: f64,
+    own_left: f64,
+    ans: Vec<(u8, u16, f64, f64)>,
+}
+
+/// One activation's relations against its neuron's history, as grouping reads them (R50): each relation held
+/// in two or more rows is a bit, and each row of the history that holds any of them is read as a point.
+struct Table<'a> {
+    m: &'a Machine,
+    x: NeuronId,
+    row: &'a Row,
+    keys: Vec<RelKey>,
+    rows: Vec<RowInfo>,
+}
+
+impl<'a> Table<'a> {
+    /// `now` is what the cover left of the new row; every other row reads what its cover left when it was last
+    /// priced, or itself where nothing covered it.
+    fn new(m: &'a Machine, x: NeuronId, ret: &ActReturn, now: Option<&Cover>) -> Option<Self> {
+        let n = &m.thalamus[x];
+        let row = n.row(ret.row)?;
+        // a relation that reaches this activation's neighbor only as a base symbol under a call holds a node
+        // and can cover nothing (D47, D22)
+        let mut worth: Vec<RelKey> = Vec::new();
+        for nb in row.nbs.iter().filter(|nb| !matches!(nb.via, Via::Under(_))) {
+            let shared = (row.axes & nb.axes) | 1;
+            for d in 0..m.radii.len().min(MAX_DIMS) {
+                if shared & (1 << d) != 0 { worth.push((nb.neuron, d as u8, crate::offsets::round_offset(nb.delta[d], m.radii[d]))); }
+            }
+        }
+        let mut rels: Vec<(RelKey, &Vec<u64>)> = ret.rels.iter().filter(|(k, rows)| rows.len() >= 2 && worth.contains(k)).map(|(k, r)| (*k, r)).collect();
+        if rels.is_empty() { return None; }
+        // at most 64, the most held first
+        rels.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then(a.0.cmp(&b.0)));
+        rels.truncate(64);
+        let mut held: FxHashMap<u64, u64> = FxHashMap::default();
+        for (b, (_, rows)) in rels.iter().enumerate() { for r in rows.iter() { *held.entry(*r).or_insert(0) |= 1u64 << b; } }
+        let keys: Vec<RelKey> = rels.into_iter().map(|(k, _)| k).collect();
+        let bit: FxHashMap<RelKey, u8> = keys.iter().enumerate().map(|(b, k)| (*k, b as u8)).collect();
+        let assigned = m.assigned.borrow();
+        let left_of = assigned.get(&x);
+        let mut ids: Vec<u64> = held.keys().copied().collect();
+        ids.sort_unstable();
+        let mut rows: Vec<RowInfo> = Vec::with_capacity(ids.len());
+        for id in ids {
+            let Some(r) = n.row(id) else { continue };
+            let mask = held[&id];
+            let (own_left, nb_left): (f64, Vec<f64>) = if id == ret.row && now.is_some() {
+                let c = now.unwrap();
+                (c.anchor, c.nbs.clone())
+            } else {
+                left_of.and_then(|a| a.get(&id).cloned()).unwrap_or_else(|| (r.own_cost, r.nbs.iter().map(|nb| nb.cost).collect()))
+            };
+            let mut ans = Vec::new();
+            for (i, nb) in r.nbs.iter().enumerate() {
+                if matches!(nb.via, Via::Under(_)) { continue; }
+                let shared = (r.axes & nb.axes) | 1;
+                for d in 0..m.radii.len().min(MAX_DIMS) {
+                    if shared & (1 << d) == 0 { continue; }
+                    let Some(&b) = bit.get(&(nb.neuron, d as u8, crate::offsets::round_offset(nb.delta[d], m.radii[d]))) else { continue };
+                    if mask >> b & 1 == 1 { ans.push((b, i as u16, nb.cost, nb_left.get(i).copied().unwrap_or(nb.cost))); }
+                }
+            }
+            rows.push(RowInfo { mask, own: r.own_cost, own_left, ans });
+        }
+        drop(assigned);
+        Some(Table { m, x, row, keys, rows })
+    }
+
+    fn each(&self, bits: u64) -> impl Iterator<Item = usize> + '_ { (0..self.keys.len()).filter(move |b| bits >> b & 1 == 1) }
+
+    fn rels(&self, bits: u64) -> Vec<Rel> {
+        self.each(bits).map(|b| { let (n, d, o) = self.keys[b]; Rel { dim: d, off: o, node: Node::Fixed(n) } }).collect()
+    }
+
+    /// A function anchored here as bits, where the row holds every relation of it.
+    fn bits_of(&self, f: &Func) -> Option<u64> {
+        let mut bits = 0u64;
+        for r in &f.rels {
+            let Node::Fixed(n) = r.node else { return None };
+            let b = self.keys.iter().position(|k| *k == (n, r.dim, r.off))?;
+            bits |= 1u64 << b;
+        }
+        Some(bits)
+    }
+
+    /// The neighbors of the new row that answer a relation.
+    fn nbs_of(&self, b: usize) -> Vec<usize> {
+        let (n, d, o) = self.keys[b];
+        let d = d as usize;
+        (0..self.row.nbs.len()).filter(|&i| {
+            let nb = &self.row.nbs[i];
+            nb.neuron == n && !matches!(nb.via, Via::Under(_)) && (d == 0 || nb.axes & (1 << d) != 0) && crate::offsets::round_offset(nb.delta[d], self.m.radii[d]) == o
+        }).collect()
+    }
+
+    /// What the call of the function of these relations writes on the new row (D22): its price there.
+    fn price(&self, bits: u64) -> f64 {
+        let f = self.m.dict.draft(self.x, self.rels(bits), 0);
+        let fresh = Fresh { own: self.row.own_cost, nbs: &self.row.nbs, calls: &self.row.calls };
+        land(&f, &self.m.dict, &self.m.radii, self.row.axes, 0, &self.row.nbs, &self.row.calls, &fresh).price
+    }
+
+    /// How many rows hold every relation.
+    fn support(&self, bits: u64) -> f64 { self.rows.iter().filter(|r| r.mask & bits == bits).count() as f64 }
+
+    /// What writing the history with the function saves, read off the rows (D30): in each row that holds any of
+    /// its relations, the activation and each neighbor answering one, as they cost or, `left`, as the cover
+    /// left them, less its price and one number per relation that did not come true; nothing where that is not
+    /// positive; less the function's entry.
+    fn value(&self, bits: u64, price: f64, left: bool) -> f64 {
+        if !price.is_finite() { return f64::NEG_INFINITY; }
+        let mut v = 0.0;
+        let mut seen: Vec<u16> = Vec::new();
+        for r in &self.rows {
+            let holds = bits & r.mask;
+            if holds == 0 { continue; }
+            let mut cov = if left { r.own_left } else { r.own };
+            seen.clear();
+            for &(b, i, cost, rest) in &r.ans {
+                if holds >> b & 1 == 0 || seen.contains(&i) { continue; }
+                seen.push(i);
+                cov += if left { rest } else { cost };
+            }
+            let s = cov - price - (bits & !r.mask).count_ones() as f64;
+            if s > 0.0 { v += s; }
+        }
+        let f = self.m.dict.draft(self.x, self.rels(bits), 0);
+        v - self.m.dict.entry(&f, &[])
+    }
+
+    /// The update (R50): from `start`, add or drop the one relation that most raises the value, while one does.
+    fn descend(&self, start: u64, left: bool) -> u64 {
+        let mut cur = start;
+        let mut val = self.value(cur, self.price(cur), left);
+        for _ in 0..(2 * self.keys.len()) {
+            let mut best: Option<(u64, f64)> = None;
+            for b in 0..self.keys.len() {
+                let next = cur ^ (1u64 << b);
+                if next == 0 { continue; }
+                let v = self.value(next, self.price(next), left);
+                if v > val + 1e-9 && best.map_or(true, |(_, bv)| v > bv) { best = Some((next, v)); }
+            }
+            let Some((next, v)) = best else { break };
+            cur = next;
+            val = v;
+        }
+        cur
     }
 }

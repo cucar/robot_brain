@@ -188,6 +188,22 @@ impl Dictionary {
         Some(f)
     }
 
+    /// Move a function to new relations (the update of grouping): it keeps its id, its interneuron and when it
+    /// joined, and every index reads it by its new relations.
+    pub fn rewrite(&mut self, id: FuncId, rels: Vec<Rel>) {
+        let Some(mut f) = self.remove(id) else { return };
+        let inter = f.inter.take();
+        f.rels = canonical(rels);
+        let joined = f.joined;
+        let (next_id, next_join) = (self.next_id, self.next_join);
+        self.next_id = id;
+        self.next_join = joined;
+        self.add(f);
+        self.next_id = next_id;
+        self.next_join = next_join;
+        if let Some(n) = inter { self.set_inter(id, n); }
+    }
+
     /// Give a function its interneuron (R16, R43).
     pub fn set_inter(&mut self, id: FuncId, n: NeuronId) {
         let Some(f) = self.funcs.get_mut(&id) else { return };

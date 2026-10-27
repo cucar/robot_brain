@@ -272,7 +272,14 @@ pub fn cover_value(l: &Landing, nbs: &[Nb], st: &dyn State) -> f64 {
 
 /// The greedy cover of a row (D28) by functions already landed on it, each with when it joined the
 /// dictionary for ties: what was paid, and what is left as itself.
-pub fn greedy(row: &Row, landed: &[(&Landing, u64)]) -> f64 {
+pub fn greedy(row: &Row, landed: &[(&Landing, u64)]) -> f64 { cover_of(row, landed).0 }
+
+/// The greedy cover of a row (D28): what it costs, and which of the landed functions it took, in order.
+pub fn cover_of(row: &Row, landed: &[(&Landing, u64)]) -> (f64, Vec<usize>) { let (c, t, _) = cover_left(row, landed); (c, t) }
+
+/// The greedy cover of a row (D28): what it costs, which functions it took, and what it left.
+pub fn cover_left(row: &Row, landed: &[(&Landing, u64)]) -> (f64, Vec<usize>, Cover) {
+    let mut taken: Vec<usize> = Vec::new();
     let mut st = Cover::of(row.own_cost, &row.nbs, &row.calls);
     let mut left: Vec<usize> = (0..landed.len()).collect();
     let mut paid = 0.0;
@@ -290,9 +297,10 @@ pub fn greedy(row: &Row, landed: &[(&Landing, u64)]) -> f64 {
         let (l, _) = landed[left[x]];
         paid += l.price;
         st.take(l, &row.nbs);
+        taken.push(left[x]);
         left.remove(x);
     }
-    paid + st.left()
+    (paid + st.left(), taken, st)
 }
 
 /// What the election would write for a row from a set of functions (D30): the greedy cover (D28) by those
