@@ -86,6 +86,10 @@ pub struct Machine {
     pub last_stats: FrameStats,
     pub last_winners: Vec<Winner>,
     pub trace: bool,
+    /// A test: the machine recognizes and predicts but changes nothing of itself. No rows enter a history, no
+    /// function is added, generalized or pruned, no interneuron is allocated or reused, no connection or reward
+    /// is written, nothing is decommissioned.
+    pub frozen: bool,
     /// Milliseconds spent per step since the machine began: neighborhoods and activate, group, find and
     /// generalize, elect and allocate, prune, connect and infer, decommission, select; and within select, the
     /// match, the voters' placements, and the patterns execution fires.
@@ -130,6 +134,7 @@ impl Machine {
             last_stats: FrameStats::default(),
             last_winners: Vec::new(),
             trace: false,
+            frozen: false,
             timings: [0.0; 11],
             landings: std::cell::RefCell::new(FxHashMap::default()),
             cycle_guard: std::cell::Cell::new(0),
@@ -270,7 +275,7 @@ impl Machine {
         self.timings[5] += t.elapsed().as_secs_f64() * 1000.0;
         // decommission what is due (R38)
         let t = std::time::Instant::now();
-        self.reap();
+        if !self.frozen { self.reap(); }
         self.timings[6] += t.elapsed().as_secs_f64() * 1000.0;
 
         // selection (§8)
@@ -329,7 +334,7 @@ impl Machine {
             views.push(View { act: r, nbs, calls });
         }
         let tasks: Vec<(NeuronId, Vec<RowInput>)> = order.iter().map(|&n| (n, by_neuron.remove(&n).unwrap())).collect();
-        let results = self.thalamus.process_level(tasks);
+        let results = if self.frozen { Vec::new() } else { self.thalamus.process_level(tasks) };
         self.timings[0] += t.elapsed().as_secs_f64() * 1000.0;
         // recognize, one activation at a time: group, find, generalize (R50, R53, R52)
         let mut anchors: FxHashSet<NeuronId> = FxHashSet::default();
@@ -350,7 +355,7 @@ impl Machine {
         self.timings[3] += t.elapsed().as_secs_f64() * 1000.0;
         // prune (R18)
         let t = std::time::Instant::now();
-        self.prune(&anchors);
+        if !self.frozen { self.prune(&anchors); }
         self.timings[4] += t.elapsed().as_secs_f64() * 1000.0;
         (results.iter().map(|r| r.returns.len()).sum(), accepted, minted, reused)
     }

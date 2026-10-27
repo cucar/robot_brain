@@ -26,6 +26,11 @@ impl Machine {
 
     pub(crate) fn connect_all(&mut self) {
         let fno = self.frame_no;
+        // a test writes nothing: every activation is simply caught up
+        if self.frozen {
+            for f in self.frames.iter_mut() { for a in f.acts.iter_mut() { a.caught_up = fno; } }
+            return;
+        }
         let span_default = self.max_reach_t.max(1);
         let mut writes: Vec<(NeuronId, NeuronId, Offset, f64)> = Vec::new();
         let frames: Vec<(Frame, usize)> = self.frames.iter().map(|f| (f.no, f.acts.len())).collect();

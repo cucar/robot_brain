@@ -85,6 +85,8 @@ impl Machine {
             let ids: Vec<FuncId> = self.dict.standing(a.neuron).to_vec();
             for id in ids {
                 let Some(f) = self.dict.get(id) else { continue };
+                // a test fires only the interneurons the machine already has
+                if self.frozen && !f.inter.map_or(false, |n| self.thalamus.get(n).map_or(false, |x| x.alive)) { continue; }
                 let Some(l) = self.land_on_board(f, v) else { continue };
                 if !(l.coverage > l.price) { continue; }
                 let acts = Self::landed_acts(v, &l);
@@ -188,14 +190,16 @@ impl Machine {
                 }
             },
         };
-        self.ledger.retain(|x| *x != neuron);
-        self.last_func.insert(neuron, f.id);
+        if !self.frozen {
+            self.ledger.retain(|x| *x != neuron);
+            self.last_func.insert(neuron, f.id);
+        }
         if let Some(a) = self.act_mut(me) { a.neuron = neuron; }
         let span = self.span_of(me);
         let reach = self.reach_for(anchor.axes, &span);
         if reach[0] > self.max_reach_t { self.max_reach_t = reach[0]; }
         if let Some(a) = self.act_mut(me) { a.span = span; a.reach = reach; }
-        self.spans[neuron as usize] = span;
+        if !self.frozen { self.spans[neuron as usize] = span; }
         // where the report built the strong activation of a pattern an inference placed weakly, the weak one is
         // dropped (D40, R30)
         if strong {

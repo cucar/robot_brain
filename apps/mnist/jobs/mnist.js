@@ -4,11 +4,12 @@
  * with one action dimension of ten digits. Two frames per image: the image, then the digit action
  * that ran with its reward, scoped to the digit channel and that frame (R29).
  *
- * The world names the digit itself for the first `--teach` images (a lesson); after that the
- * machine's output runs and is rewarded +1 / -1. Then `--test` held-out images are shown the same
- * way, and the machine's answer is scored before the lesson or reward arrives.
+ * The world names the digit itself for the first `--teach` images (a lesson; every training image
+ * unless told otherwise); after that the machine's output runs and is rewarded +1 / -1. Then `--test`
+ * held-out images are shown with the machine frozen: it answers, its answer runs with no reward and
+ * no lesson, and nothing of the machine changes.
  *
- *   node apps/mnist/jobs/mnist.js [--image-size 14] [--per-class 100] [--teach 200] [--test 500] [--h 2048] [--episodes 1]
+ *   node apps/mnist/jobs/mnist.js [--image-size 14] [--per-class 100] [--teach all] [--test 500] [--h 2048] [--episodes 1]
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +23,7 @@ function arg(flag, def, parse = x => x) {
 }
 const imageSize = arg('--image-size', 14, Number);
 const perClass = arg('--per-class', 100, Number);
-const teach = arg('--teach', 200, Number);
+const teachArg = arg('--teach', Infinity, Number);
 const testCount = arg('--test', 500, Number);
 const h = arg('--h', 2048, Number);
 const episodes = arg('--episodes', 1, Number);
@@ -42,6 +43,7 @@ for (let i = 0; i < trainImages.length && train.length < perClass * 10; i++) {
 	const d = trainLabels[i];
 	if (picked[d] < perClass) { picked[d]++; train.push(i); }
 }
+const teach = Math.min(teachArg, train.length);
 
 const f = 28 / imageSize;
 function inked(px) {
@@ -61,7 +63,7 @@ const digit = m.declareChannel({ name: 'digit', action: { name: 'digit', resolut
 
 console.log(`UCAR mnist: ${imageSize}x${imageSize}, train ${train.length} (${perClass}/class, first ${teach} taught), test ${testCount}, H=${h}`);
 
-function showImage(px, label, teachIt, S) {
+function showImage(px, label, teachIt, S, testing = false) {
 	const pts = inked(px);
 	const inputs = new Int32Array(pts.length * 4);
 	for (let i = 0; i < pts.length; i++) { inputs[i * 4] = image.eventDim; inputs[i * 4 + 1] = 1; inputs[i * 4 + 2] = pts[i][0]; inputs[i * 4 + 3] = pts[i][1]; }
@@ -73,6 +75,13 @@ function showImage(px, label, teachIt, S) {
 	const said = w ? w.bucket : -1;
 	if (said >= 0) { S.spoke++; if (said === label) S.correct++; }
 	S.n++;
+	if (testing) {
+		// frozen: the machine's own answer runs, unrewarded, and nothing is taught
+		const r2 = m.processFrame(new Int32Array(said >= 0 ? [digit.actionDim, said, 0, 0] : []), []);
+		S.ms += r2.stats.elapsedMs;
+		if (silent) m.processFrame(new Int32Array(0), []);
+		return said;
+	}
 	const ran = teachIt || said < 0 ? label : said;
 	if (teachIt || said < 0) S.lessons++;
 	const reward = ran === label ? 1 : -1;
@@ -92,7 +101,7 @@ for (let ep = 1; ep <= episodes; ep++) {
 	const S = newSeg();
 	for (let i = 0; i < train.length; i++) {
 		const idx = train[i];
-		showImage(trainImages[idx], trainLabels[idx], ep === 1 && i < teach, S);
+		showImage(trainImages[idx], trainLabels[idx], i < teach, S);
 		if ((i + 1) % 100 === 0) process.stdout.write(`\r  image ${i + 1}/${train.length} spoke=${S.spoke} correct=${S.correct} (${(100 * S.correct / Math.max(1, S.spoke)).toFixed(1)}% of spoken) neurons=${m.stats().neurons} ${(S.ms / (i + 1)).toFixed(1)}ms/image   `);
 	}
 	process.stdout.write('\n');
@@ -101,8 +110,9 @@ for (let ep = 1; ep <= episodes; ep++) {
 {
 	const t0 = Date.now();
 	const S = newSeg();
+	m.setFrozen(true);
 	for (let i = 0; i < Math.min(testCount, testImages.length); i++) {
-		showImage(testImages[i], testLabels[i], false, S);
+		showImage(testImages[i], testLabels[i], false, S, true);
 		if ((i + 1) % 100 === 0) process.stdout.write(`\r  test ${i + 1}/${testCount} correct=${S.correct} (${(100 * S.correct / (i + 1)).toFixed(1)}%)   `);
 	}
 	process.stdout.write('\n');

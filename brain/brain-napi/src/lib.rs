@@ -180,6 +180,14 @@ impl JsBrain {
         Ok(())
     }
 
+    /// Freeze the machine for a test, or thaw it: frozen, it recognizes and predicts but changes nothing of
+    /// itself, no functions, neurons, histories, connections or rewards.
+    #[napi(js_name = "setFrozen")]
+    pub fn set_frozen(&self, frozen: bool) -> Result<()> {
+        self.inner.borrow_mut().frozen = frozen;
+        Ok(())
+    }
+
     /// How many living neurons stand at each height.
     #[napi(js_name = "heightCounts")]
     pub fn height_counts(&self) -> Result<Vec<u32>> {
