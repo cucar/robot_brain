@@ -381,8 +381,8 @@ what was done together.
 > **The graph is written as nodes and edges, nothing more.** A piece of the graph, in the dictionary or in the
 > transcript, is written as a list of its nodes, each named once, followed by its edges, each naming its two
 > nodes by their place in that list, its dimension and its offset. A node named by several edges is written once.
-> Two parts joined by no edge need nothing written between them. The cost of writing a piece is the cost of its
-> names, its places and its offsets (D13).
+> Two parts joined by no edge need nothing written between them. The cost of writing a piece is its names and its
+> offsets, one number each (D13).
 >
 > **Per dimension, the edges written are a forest.** An edge that closes a cycle within one dimension is implied
 > by the others (D34) and is never written. Across dimensions there is no such constraint: `a–b` in `x`, `b–c`
@@ -656,32 +656,22 @@ coordinate (D11).
 
 ## 3.10 Prices
 
-> **D13 — Number.** Every cost in the design is the cost of writing something in the file, and nothing is ever
-> written: the file is the yardstick (§1.1). A symbol costs what it takes to say which one it is, `log₂` of the
-> choices it is one of:
->
-> | What | Costs |
-> |---|---|
-> | a name | `log₂ N`, which neuron among the `N` the machine holds |
-> | a place, naming a node within a piece of `n` nodes | `log₂ n` |
-> | an offset in a dimension | `log₂` of the offsets reachable in it, `offsets(r) + 1` in time and `2 · offsets(r) + 1` otherwise (D6), `r` the reach of the node it is written from |
-> | a failure, which relation of a function of `m` relations | `log₂ m` |
-> | a class's value, which member of `k` | `log₂ k` |
-> | a parameter's value | `log₂ N`, a name |
->
-> A piece of the graph costs the sum of what it writes (D55). The costs below follow from that table and are
-> written out so that nothing has to be re-derived:
+> **D13 — Number.** Every cost in the design is a count of numbers in the file, and nothing is ever written:
+> the file is the yardstick (§1.1). A number is one field at the machine's precision `P` (§3), and every number
+> costs the same, `1`. A name, an offset in one dimension, a failure and a value are each one number.
+> A piece of the graph costs the numbers it writes (D55):
 >
 > | What | Numbers |
 > |---|---|
-> | a bare activation in the transcript, joined to the rest in `d + 1` dimensions | a name and `d + 1` offsets |
-> | a call in the transcript | a name and `d + 1` offsets; plus one failure per relation that did not come true; plus one value per variable that did; plus one offset per node and dimension its relations leave open |
-> | a function in the dictionary, of `n` nodes and `m` relations | `n` names, and `m` relations each at two places, a dimension and an offset |
-> | a class in the dictionary | one name per member |
+> | a bare activation in the transcript, joined to the rest in `d + 1` dimensions | its name and `d + 1` offsets: `d + 2` |
+> | a call in the transcript | its name and `d + 1` offsets, `d + 2`; plus one per relation that did not come true; plus one per variable that did, its value; plus one per node and dimension its relations leave open |
+> | a function in the dictionary, of `n` nodes and `m` relations | `n` names and `m` offsets; a relation's two nodes are named within the function and cost nothing more |
+> | a class at a node, in the dictionary | `1`, which class |
+> | a class, in the dictionary | one per member |
 
-The precision `P` and the neuron capacity `N` are the hardware's (§3). `N` enters a cost only as the size of
-the alphabet a name is chosen from. They set what can exist: how many neurons there are to allocate (R16), and
-how far an offset can be counted.
+The precision `P` and the neuron capacity `N` are the hardware's (§3), not prices. Neither enters a cost, since
+every number costs `1` at whatever precision. They set what can exist: how many neurons there are to allocate
+(R16), and how far an offset can be counted.
 
 **Every saving is a comparison of two files.** Each savings and each worth in the design is the cost of writing
 the same thing two ways, A less B, and nothing else: a piece of the graph written bare against written through
@@ -746,12 +736,13 @@ A neuron the function does not name is in neither: it costs what it cost whether
 > | held | how many occasions the relation held, the strength its neurons return for it (R21) |
 > | failed | how many occasions the function's call fired without it, the strength its interneuron returns for its failure (R21, D18); none until the function has an interneuron |
 > | saves | one offset, and one name where the relation brings a node no other relation of the function names |
-> | entry | one offset and two places in the function's entry, and that name where it brings the node (D13) |
+> | entry | one offset in the function's entry, and that name where it brings the node (D13) |
 > | worth | `held · saves − failed · (the cost of one failure) − entry` |
 >
 > **A function's worth is the sum of its relations' worths**, with a name counted once however many relations
-> touch the node. A relation on its own, two nodes and an offset, is worth `held · (name + offset) − (2 · name +
-> offset + 2 · place)`, which turns positive once it has held twice: nothing is built on one occurrence (R21).
+> touch the node. A relation on its own, two nodes and an offset, saves 2 per occasion and costs 3 in the
+> dictionary, so it is worth `2 · held − 3`, which turns positive once it has held twice: nothing is built on
+> one occurrence (R21).
 >
 > **Until a function has an interneuron, a relation's failures are read off the strengths.** A relation held `s`
 > times in a function whose strongest relation held `S` times has failed at least `S − s` times among those
@@ -808,9 +799,8 @@ however long the run is.
 
 The machine gives each activation dimension (D1) a **radius** `R`, a count of positions, `1` or more: how far a
 base neuron sees in it (D4), and how every distance in it is rounded (D6). **The design is stated at `R = 1`,
-and that is the radius to pick unless the world has gaps.** An offset costs `log₂` of the offsets reachable
-(D13), so a larger radius makes every offset in the file, dictionary and transcript alike, cost more, and it
-multiplies the relations a neuron returns by `(2R + 1)^(d + 1)`. What it buys is a relation across a stretch
+and that is the radius to pick unless the world has gaps.** A larger radius multiplies the relations a
+neuron returns by `(2R + 1)^(d + 1)`, so strengths spread over more candidates for the same evidence. What it buys is a relation across a stretch
 nothing covers: `a`, then `b` five frames later with unpredictable frames between, which at `R = 1` no neuron
 sees. Everything else long-range comes through the hierarchy, since an interneuron reaches beyond what it
 stands for (D4), and through recursion, where a function names its own interneuron a frame back and covers a
