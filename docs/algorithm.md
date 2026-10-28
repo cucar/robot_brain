@@ -593,52 +593,51 @@ places and keeps (§6).
 > whole of inhibition in the design.
 >
 > **Bound is half covered.** An activation standing in a variable of an accepted function (D38) is **bound**.
-> The call covers its place: the function's relations say where it stands, so that is not written again. Its
+> The call covers the relations to it: the function's relations are written once, in the dictionary. Its
 > neuron is written inside the call, one number (D12, D13). It stays on the apex, it is a neighbor, it is heard,
 > and it connects to what follows. A call hides what is the same on every occasion, its fixed nodes, and leaves
 > visible what varies. A parameter binds each of its nodes the same way, and writes its value once.
 >
 > **Above its level, a bound activation is a neighbor.** Its neuron is called once, at age 0 (R1). At the levels
 > above, the interneurons that fire see it as a neighbor, and their relations to it are the ones it takes part
-> in. In a dimension its binding left open, its place is still written bare, so a function above can cover it
-> there. In a dimension its binding covered, its place costs nothing, so a relation to it there holds a node and
-> covers nothing (D22). Its neuron is still written, as the value in the call that bound it, so a function above
+> in. A relation to it the call that bound it did not write is written bare, so a function above can cover it.
+> One the call wrote costs nothing, so a relation above that lands on it holds a node and covers nothing
+> (D22). Its neuron is still written, as the value in the call that bound it, so a function above
 > that names that call and this neuron fixes the value, and saves it (D24).
 
 ## 3.9 File
 
 > **D12 — File.** Two parts, both pieces of the graph written as D55 writes one. **The dictionary**: every
 > function of the interneuron index (D36), each as its nodes and relations, and the classes they use (D38).
-> **The transcript**: the graph of the run with every accepted call in place of what it covers, written frame by
-> frame. A frame's piece is its nodes, the activations on the apex, bare ones and calls, each joined to the
-> graph already written by one relation per dimension to a node within reach:
+> **The transcript**: the graph of the run (D55), its nodes named once and its relations by place, with every
+> accepted call in place of what it covers. Nothing joins a node to the graph but the relations the neurons
+> returned: a node its neuron related to nothing is a name alone, and no node has a place.
 >
 > | Node | Written as |
 > |---|---|
-> | a bare activation | its name, and one relation per dimension to an earlier node, one offset each |
-> | a call | the interneuron's name, and one relation per dimension to an earlier node, one offset each; then each relation of its function that did not come true, one number each; then the value of each variable that did, one number each; then, for each node of the function that no relation that came true joins to the call in some dimension, its offset from the call in that dimension |
-> | an activation bound in a variable | nothing of its own: its neuron is the value written in the call, and its relations are the call's |
+> | a bare activation | its name |
+> | a relation between two bare activations | its offset |
+> | a call | the interneuron's name; then each relation of its function that did not come true, one number each; then the value of each variable that did, one number each |
+> | an activation bound in a variable | nothing of its own: its neuron is the value written in the call, and the relations the function fixes are the call's |
 >
-> Which earlier node a relation joins a node to is the writer's choice and costs nothing, as a relation inside a
-> function names its nodes at no cost (D13); the relations in one dimension form a forest (D55). Every frame is
-> joined to the one before, since every base neuron sees at least one frame back (D4), so the transcript is one
-> piece from the first frame to the last. **What a call takes out of the transcript** is the relations among the
-> nodes its relations land on, which its function now writes once in the dictionary, and the names of the nodes
-> its true relations land on as fixed nodes. A node at a variable keeps its name, written as the call's value.
+> **What a call takes out of the transcript** is the relations among the nodes its true relations land on, which
+> its function now writes once in the dictionary, and the names of the nodes its true relations land on as fixed
+> nodes. A node at a variable keeps its name, written as the call's value. A relation between a node inside the
+> call and one outside it stands as it was: it names the node, which the call now holds, and it is what joins
+> the call to the rest of the graph. A call writes no relation of its own.
 
 **A call writes its body once and its differences every time.** The function's nodes and relations are in the
-dictionary. Each call writes which of its relations did not come true, what stood in its variables, and the
-offsets its relations leave open. What the relations fix is not written again: the names of its fixed nodes,
-and the offsets among the nodes they join.
+dictionary. Each call writes which of its relations did not come true and what stood in its variables. What
+the relations fix is not written again: the names of its fixed nodes, and the offsets among the nodes they
+join.
 
 **A failure is a relation that did not come true.** It is written with the call, one number. Whatever stood
 where the relation said is on the apex, uncovered, and is written as itself. So a wrong neuron costs the
 relation and a node, and nothing there costs the relation alone.
 
-**An open offset is a relation the function lacks.** Two parts of a function joined by no relation in a
-dimension stand at a distance the function does not fix, so the call writes that distance each time. If it is
-the same each time, the relation that would fix it is returned by the neurons at its ends with the strength of
-every occurrence, and joins the function (R54), after which the offset is not written.
+**Two parts of a function joined by no relation have nothing written between them** (D55). Each stands where
+the relations outside the function put it, and the call writes nothing about their distance. If a neuron at
+one part sees the other, it returns that relation, and the relation joins the function by its worth (R54).
 
 **Both types are in it.** An action the machine executed is a neuron that fired (D8), and it stands in the file
 exactly as an observed event does, compressed by the same functions (D5).
@@ -666,8 +665,9 @@ coordinate (D11).
 >
 > | What | Numbers |
 > |---|---|
-> | a bare activation in the transcript, joined to the rest in `d + 1` dimensions | its name and `d + 1` offsets: `d + 2` |
-> | a call in the transcript | its name and `d + 1` offsets, `d + 2`; plus one per relation that did not come true; plus one per variable that did, its value; plus one per node and dimension its relations leave open |
+> | a bare activation in the transcript | its name: `1` |
+> | a relation in the transcript | its offset: `1` |
+> | a call in the transcript | its name, `1`; plus one per relation that did not come true; plus one per variable that did, its value |
 > | a function in the dictionary, of `n` nodes and `m` relations | `n` names and `m` offsets; a relation's two nodes are named within the function and cost nothing more |
 > | a class at a node, in the dictionary | `1`, which class |
 > | a class, in the dictionary | one per member |
@@ -719,7 +719,7 @@ written is what the worth counts (D57).
 > | | Numbers |
 > |---|---|
 > | A | for each relation of the fit that came true, the board relation it stands in for, one offset; for each node a true relation lands on as a fixed node, its name; and for the relations and names a lower call writes, that call's whole writing, once, where the fit lands on every relation that call wrote, and nothing where it lands on some (R23) |
-> | B | the call's name and its own relations, `d + 2`; one value per variable; one offset per node and dimension no relation that came true joins to the call; and one failure per relation that did not come true |
+> | B | the call's name, `1`; one value per variable; and one failure per relation that did not come true |
 > | savings | A less B |
 >
 > A relation that did not come true is in neither: whatever stands there is written bare either way. What a
@@ -1157,7 +1157,7 @@ pays its one name.
 > |---|---|
 > | the function | and its interneuron or none (D31), its relations landed on the board's relations, with what each variable binds |
 > | coverage | A: the board relations its true relations stand in for and the names its fixed nodes land on, where no accepted call has written them, and the writing of each call it takes back whole (D24, R23) |
-> | price | B: its call's writing (D12, D22): a name and `d + 1` relations, one failure per relation that did not come true in those same frames, one value per variable, and one offset per node and dimension its relations leave open |
+> | price | B: its call's writing (D12, D22): its name, one failure per relation that did not come true in those same frames, and one value per variable |
 >
 > The machine places the function by D31's rule. Coverage less price is the savings over writing what it covers
 > bare, D22's expression over the board.
@@ -1253,9 +1253,9 @@ to exactly one function**, which is what stops an activation being paid for twic
 > joined the dictionary first; and between two placements of one function, the one whose first node stands at
 > the earlier frame, then the one reached from the older activation.
 >
-> **The bound is structural.** A function's price includes its call's writing, so it is taken only when it
-> writes more than one node's worth: at least two nodes. Each round takes one function, so the rounds are never
-> more than the placements.
+> **The bound is structural.** A function's price includes its call's name, so it is taken only when it writes
+> more than one name's worth: at least one relation, two nodes. Each round takes one function, so the rounds are
+> never more than the placements.
 >
 > **A function that never reached the top held nothing.** There is nothing to hand back and nothing to settle:
 > a relation or a name it landed on is either written by a function that did pay or stands bare.
@@ -1659,9 +1659,9 @@ only what happened (R32).
 > 2. **Follow** each relation that came true, from a placed node to the node at its far end, in that relation's
 >    dimension. Offsets compose because each is a difference (D34). Repeat until no true relation leads to an
 >    unplaced node in any dimension.
-> 3. **Read** each node not reached in some dimension at the offset the call wrote for it in that dimension
->    (D12). A node reached by no true relation at all, whose every relation failed, is placed nowhere: whatever
->    stood there was written bare beside the call.
+> 3. **Leave** each node not reached in some dimension where the relations outside the function put it, and in
+>    no particular relation to the rest where none does (D55). A node reached by no true relation at all, whose
+>    every relation failed, is placed nowhere: whatever stood there was written bare beside the call.
 > 4. **Expand** each placed node that is an interneuron the same way, through the function that fired it (§6.4),
 >    and each variable to its argument, the neuron bound there (D37).
 >
@@ -1692,9 +1692,9 @@ only what happened (R32).
 > substituting. An inferred call brought none, so its variables are bound from what has happened: a parameter
 > from what stands at those of its nodes that have happened, and placed at the rest, which is how a value is
 > carried forward; where none of its nodes has happened it places its most frequent member. A class with no
-> argument places its most frequent member, the oldest on a tie. An inferred call brought no open offsets
-> either: a part of its function joined to the first node by no relation is placed from any of its nodes that
-> has happened, and where none has, it is not placed, since nothing says where it would be. A function above
+> argument places its most frequent member, the oldest on a tie. A part of an inferred call's function joined
+> to the first node by no relation is placed from any of its nodes that has happened, and where none has, it is
+> not placed, since nothing says where it would be. A function above
 > that names an interneuron alone expands to the call with its arguments left to be bound, and one that names
 > the interneuron and a bound activation expands to the call with that argument. **Two words, never one.** A
 > function is **expanded**, downward, into what it covers; a connection is **inferred**, forward, into the frames
