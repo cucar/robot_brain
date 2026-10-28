@@ -354,7 +354,7 @@ what was done together.
 > place. Which variable it stood in is the call's business, not the neighbor's.
 
 > **D34 — Relation.** Two neurons and the offset between them in one activation dimension (D1, D6). A node
-> pinned in several dimensions is in several relations, one per dimension. In a neuron's relation index, one
+> joined to the graph in several dimensions is in several relations, one per dimension. In a neuron's relation index, one
 > end is the neuron's own activation and the other a neighbor. In a function, both ends are its nodes. Relations
 > compose: given the offset from `a` to `b` and from `b` to `c` in one dimension, the offset from `a` to `c`
 > follows, so a set of relations that connects its nodes in a dimension fixes every other offset among them
@@ -398,18 +398,18 @@ written once each. The transcript is the graph of the run, written with the piec
 
 > **D15 — Function.** A piece of the graph that recurs: a set of relations (D34), each naming a **node** at each
 > end (D16) and the offset between them in one dimension. A function holds where its relations hold: each one
-> lands on two activations that stand as it says. Its nodes may be joined by its relations into one part or
-> several: a function is any set of relations, and two parts of it joined by no relation stand at a distance the
-> function does not fix, which the call writes each time (D12). It is written once, in the dictionary (D36), and
-> has one interneuron, its call neuron (D48). Its nodes are written in a fixed order, and the first is where its
-> call stands (R55).
+> lands on a board relation that reads as it says (D54). Its nodes may be joined by its relations into one part
+> or several: a function is any set of relations, and two parts of it joined by no relation stand at a distance
+> the function does not fix, which the call writes each time (D12). It is written once, in the dictionary (D36),
+> and has one interneuron, its call neuron (D48). Its nodes are written in a fixed order, and the first is where
+> its call stands (R55).
 >
-> **A fit places relations, not a fixed set of activations.** Each time a function fits, every relation lands on
-> the activations that satisfy it. Two relations that name the same neuron may land on one activation, or on two.
-> So one function may fix one activation's `x` and `y` in one occurrence, and the `x` of one activation and the
-> `y` of another in the next. It is the same function either way, and each fit is priced as it falls (D22): an
-> activation the relations land on is covered in the dimensions they fix, and its place in the other dimensions
-> is written.
+> **A fit is a match of relations to relations.** The board is the relations the neurons returned (R21), and a
+> fit of a function is one board relation per relation of the function, with the neurons, the dimension and the
+> offset the function's relation states. A node is nothing but an end its relations share, so a fit carries one
+> condition: two relations of the function that share a node land on two board relations that share an end. A
+> function has no fixed set of activations; the activations are the ends of the board relations it landed on,
+> and each fit is priced as it falls (D22).
 >
 > **A function is not a neighborhood.** A neighborhood is what one activation saw where it fired, saved once and
 > evicted `H` activations later; a function is what the machine writes. A neighborhood is a fact, a function a
@@ -439,7 +439,7 @@ no interneuron: what stands in it stays on the apex, bound (D10).
 >
 > | Variable | In the dictionary, once | In the call, each time | What it covers |
 > |---|---|---|---|
-> | a class (D41) | which class, a set of neurons, its members, and the node's relations | the member that stood, one number | the member's place in each dimension it is pinned in; the member stands bound (D10) |
+> | a class (D41) | which class, a set of neurons, its members, and the node's relations | the member that stood, one number | the member's place in each dimension it is joined in; the member stands bound (D10) |
 > | a parameter (D44) | its nodes' relations, all reading one neuron | the neuron that stood, one number for all its nodes | the place at each node, and the neuron at every node after the first; the neuron stands bound at each (D10) |
 >
 > **The two types are closed in opposite ways.** A class is closed on its members and open on where: a neuron
@@ -610,18 +610,21 @@ places and keeps (§6).
 > **D12 — File.** Two parts, both pieces of the graph written as D55 writes one. **The dictionary**: every
 > function of the interneuron index (D36), each as its nodes and relations, and the classes they use (D38).
 > **The transcript**: the graph of the run with every accepted call in place of what it covers, written frame by
-> frame. In a frame's piece the nodes are:
+> frame. A frame's piece is its nodes, the activations on the apex, bare ones and calls, each joined to the
+> graph already written by one relation per dimension to a node within reach:
 >
 > | Node | Written as |
 > |---|---|
-> | a bare activation | its neuron's name |
-> | a call | the interneuron's name; then each relation of its function that did not come true, one number each; then the value of each variable that did, one number each; then, for each node of the function not joined to the first node by relations that came true in some dimension, its offset from the call in that dimension |
-> | an activation bound in a variable | nothing of its own: its neuron is the value written in the call, and its place is fixed by the call's relations |
+> | a bare activation | its name, and one relation per dimension to an earlier node, one offset each |
+> | a call | the interneuron's name, and one relation per dimension to an earlier node, one offset each; then each relation of its function that did not come true, one number each; then the value of each variable that did, one number each; then, for each node of the function that no relation that came true joins to the call in some dimension, its offset from the call in that dimension |
+> | an activation bound in a variable | nothing of its own: its neuron is the value written in the call, and its relations are the call's |
 >
-> and the edges are the relations among the frame's nodes, calls included, that the neurons returned, written
-> as a forest per dimension (D55), and the relations from the frame's nodes back to the nodes of earlier frames
-> within reach. Every frame is joined to the one before by at least one relation, since every base neuron sees
-> at least one frame back (D4), so the transcript is one piece from the first frame to the last.
+> Which earlier node a relation joins a node to is the writer's choice and costs nothing, as a relation inside a
+> function names its nodes at no cost (D13); the relations in one dimension form a forest (D55). Every frame is
+> joined to the one before, since every base neuron sees at least one frame back (D4), so the transcript is one
+> piece from the first frame to the last. **What a call takes out of the transcript** is the relations among the
+> nodes its relations land on, which its function now writes once in the dictionary, and the names of the nodes
+> its true relations land on as fixed nodes. A node at a variable keeps its name, written as the call's value.
 
 **A call writes its body once and its differences every time.** The function's nodes and relations are in the
 dictionary. Each call writes which of its relations did not come true, what stood in its variables, and the
@@ -690,39 +693,44 @@ written is what the worth counts (D57).
 
 > **D54 — Fit.** A function fits where writing what it names through it costs less than writing it bare: its
 > savings there are positive (D22). It is read against the board, to place it (R53, R24), and against what an
-> inference placed, to match it (R49). Each node is read as it stands: every neighbor is the neuron at its
-> offset, and an interneuron on the apex is a neuron as itself. Nothing is reserved: two functions may fit on
-> the same neighbors.
+> inference placed, to match it (R49). A fit is a match of relations (D15): each relation of the function
+> against one board relation of the same dimension and offset, with the two sharing an end wherever the
+> function's relations share a node. A board relation is read as it stands: its ends are the neurons that fired,
+> and an interneuron on the apex is a neuron as itself. Nothing is reserved: two functions may land on the same
+> board relation.
 >
-> **Coming true.** Measured where it is read, each relation of a function comes true or does not:
+> **Coming true.** Under a fit, each relation of a function comes true or does not. It comes true where the board
+> holds a relation of its dimension and offset whose near end is the end already landed and whose far end is
+> what the function's far node admits:
 >
-> | Relation, at its far node | Comes true where |
+> | Relation, at its far node | Comes true where the far end is |
 > |---|---|
-> | a fixed node | its neuron stands at the offset, or an interneuron standing on the apex stands for it there (D22) |
-> | a class | a member stands at the offset; it takes members only (D41) |
-> | a parameter | the parameter's value stands at the offset; it takes any neuron, and one that was not a member is one from then on (D44) |
+> | a fixed node | its neuron, or an interneuron standing on the apex that stands for it there (D22) |
+> | a class | a member; it takes members only (D41) |
+> | a parameter | the parameter's value; it takes any neuron, and one that was not a member is one from then on (D44) |
 >
-> A relation that does not come true is written with the call (D12). Where its node would have stood follows
-> from the relations that did.
+> A relation that does not come true lands on no board relation and is written with the call (D12). An end it
+> shares with no relation that came true stands nowhere: the call writes nothing for it, and expansion places
+> it from the relations that did (R28).
 
-> **D22 — Savings.** What one function saves where it is read: the cost of writing bare what it names and came
-> true (A), less the cost of writing it through the function (B).
+> **D22 — Savings.** What one function saves where it is read: the cost of writing bare what it lands on and
+> came true (A), less the cost of writing it through the function (B).
 >
 > | | Numbers |
 > |---|---|
-> | A | for each activation the fit's relations land on, fixed or bound in a variable, its name and the offsets that joined it to the rest of the graph in every dimension, `d + 2` symbols; for the activations a lower call covers, that call's whole writing, once, where the fit lands on every one of them, and nothing where it lands on some (R23) |
-> | B | the call's name and the offsets that join it, `d + 2`; one value per variable; one offset per node and dimension no relation that came true joins to the call; and one failure per relation that did not come true |
+> | A | for each relation of the fit that came true, the board relation it stands in for, one offset; for each node a true relation lands on as a fixed node, its name; and for the relations and names a lower call writes, that call's whole writing, once, where the fit lands on every relation that call wrote, and nothing where it lands on some (R23) |
+> | B | the call's name and its own relations, `d + 2`; one value per variable; one offset per node and dimension no relation that came true joins to the call; and one failure per relation that did not come true |
 > | savings | A less B |
 >
-> A node that did not come true is in neither: whatever stands there is written bare either way. What a neuron
-> is worth is always what it cost (D13), read from the saved neighborhood.
+> A relation that did not come true is in neither: whatever stands there is written bare either way. What a
+> relation or a name is worth is always what it cost (D13).
 >
-> **A call is taken back whole or not at all.** Where a function names neurons an interneuron standing on the
-> apex stands for (D47), and it lands on everything that interneuron's call covers, it covers them: the call
-> leaves the file, the interneuron's activation leaves the apex, and the function is credited the call's writing,
-> since that is what the file held for them (R23). Where it lands on some of them, the nodes hold, the function
-> is credited nothing for them, and the interneuron is not covered: the file holds its writing either way. So a
-> function saves what it takes out of the file, bare nodes and whole calls.
+> **A call is taken back whole or not at all.** Where a function's relations land on every relation an earlier
+> call wrote, and on the names it wrote, it takes the call back: the call leaves the file, the interneuron's
+> activation leaves the apex, and the function is credited the call's writing, since that is what the file held
+> for them (R23). Where it lands on some of them, those relations hold, the function is credited nothing for
+> them, and the call stands: the file holds its writing either way. So a function saves what it takes out of
+> the file, bare relations and names, and whole calls.
 
 **What a function's call stands in for is what it covers**; that is A. What it costs is its writing; that is B.
 A neuron the function does not name is in neither: it costs what it cost whether the function exists or not.
@@ -761,20 +769,21 @@ are meant to:
 One rule decides what a set of functions writes for a set of activations. The election runs it over the board.
 It is stated here and cited from there.
 
-> **D28 — Greedy cover.** The operation that covers a set of activations with **functions**, each read against
-> the activations its relations land on, and pays each covered activation to exactly one function. It repeats:
+> **D28 — Greedy cover.** The operation that writes a set of relations and names with **functions**, each landing
+> its relations on them and its fixed nodes on the names, and pays each relation and each name to exactly one
+> function. It repeats:
 >
-> 1. **Measure** every function not yet taken against the still-uncovered activations: its coverage is what the
->    still-uncovered activations it covers cost, and the writing of each call it takes back whole (R23), and its
->    price is its call's writing there (D22).
-> 2. **Take** the one with the highest `coverage / price` if `coverage > price`, and **stop** otherwise. It is
->    paid for the activations it was measured on. Those it covers leave the uncovered set. Those it binds stay in
->    it at their neuron's cost, since only their places are covered, so a later round may cover them (D10). The
->    round repeats from 1.
+> 1. **Measure** every function not yet taken against the relations and names no taken function has written: its
+>    coverage is what those it would write cost, and the writing of each call it takes back whole (R23), and
+>    its price is its call's writing there (D22).
+> 2. **Take** the one with the highest `coverage / price` if `coverage > price`, and **stop** otherwise. It
+>    writes the relations and names it was measured on. A name its true relation lands on as a fixed node is written
+>    by it and leaves the set. A name at one of its variables is written as its value and stays in the set, so a
+>    later round may write it (D10). The round repeats from 1.
 >
-> **What it returns is what was written and by whom**: the functions taken, what each was paid for, and what no
-> round took, which stands as itself. `price` is fixed by what fired and cannot change between rounds;
-> `coverage` only falls.
+> **What it returns is what was written and by whom**: the functions taken, what each wrote, and what no round
+> wrote, which stands bare. `price` is fixed by what fired and cannot change between rounds; `coverage` only
+> falls.
 
 ## 3.12 File length
 
@@ -979,8 +988,8 @@ With `A` activations this frame, `M` neighbors per row and `d` spatial dimension
 
 # 6. Recognition
 
-> **D23 — Recognition.** The machine covers the board with interneurons, each taken when the activations it
-> covers cost more than its call's writing, never counting its entry in the dictionary (R22, R24).
+> **D23 — Recognition.** The machine covers the board with interneurons, each taken when the relations and names it
+> writes cost more than its call's writing, never counting its entry in the dictionary (R22, R24).
 >
 > **Covering everything is not the goal.** An activation no accepted function covers stays in the file as itself,
 > at what it cost (D13), and that is the shorter file whenever no function could hold it for less. **What
@@ -1047,30 +1056,31 @@ argument.
 > the open end holds a class the observed neuron is a member of, or a parameter, the dictionary function is fit
 > by the observed relation the way D54 reads it, and this is where variables are matched.
 >
-> Every function any reading reaches is **placed** on the board (D31), at the activations its relations land on
-> from that one, and the rest of its relations are read there: those that land are true, those that do not are
-> its failures (D22). A function is placed once per set of activations, from whichever relation reached it
-> first. A function all of whose relations land is placed whole; one some of whose relations land is placed with
-> failures, and the election weighs it with them (R22). A relation no reading reaches is left for grouping
+> Every function any reading reaches is **placed** on the board (D31), matched relation by relation from the
+> board relation that reached it: those of its relations that land on a board relation are true, those that do
+> not are its failures (D22). A function is placed once per set of board relations, from whichever relation
+> reached it first. A function all of whose relations land is placed whole; one some of whose relations land is
+> placed with failures, and the election weighs it with them (R22). A relation no reading reaches is left for grouping
 > (R50). Everything find places goes to the election once every relation of the level has been read (R24).
 
-> **D31 — Placing a function.** A function find reached (R53) is placed on the board, at the activations it
-> would cover. Competing explanations of the same activations are all placed, and the election picks among them
-> (R24). The same function placed over the same activations from two relations is placed once.
+> **D31 — Placing a function.** A function find reached (R53) is placed on the board, on the board relations it
+> matches (D15). Competing matches over the same board relations are all placed, and the election picks among
+> them (R24). The same function matched to the same board relations from two of its relations is placed once.
 >
 > **A function is placed whole.** The machine takes it or leaves it, its variables with it: it cannot hold where
 > they do not.
 >
-> **The placing rule.** The machine puts the relation that reached the function on the two activations that hold
-> it, and each other node where the function's relations put it from there. A coarse offset spans a group of
-> exact offsets (D6), and the node is read over every activation in the group. A fixed node holds where its
-> neuron stands there, or an interneuron standing for it (D22). A class node holds where a member stands there. A
-> parameter's value is the neuron standing at the first of its nodes in the function's order, and it holds at
-> each node where that neuron stands (D44). A node of a part the function's relations do not join to the placed
-> relation is read anywhere within reach where its own part's relations hold. Where several activations could
-> answer one node, the one not yet covered is taken first, then the one nearest the placed relation, then the
-> older one (R24). What stands in each variable on that occasion is the call's arguments (D37). Expansion reads
-> a call back by the same rule (R28).
+> **The placing rule.** The machine lands the relation that reached the function on the board relation find read
+> it against, and extends the match relation by relation: each next relation of the function that shares a node
+> with one already landed is matched to a board relation that shares that end and reads as it says (D54). A
+> coarse offset spans a group of exact offsets (D6), and the relation is read over every board relation in the
+> group. A parameter's value is the far end at the first of its nodes in the function's order, and its other
+> relations are matched to that neuron (D44). A relation of a part the function's relations do not join to the
+> landed one is matched anywhere within reach where its own part's relations hold. Where several board relations
+> could answer one relation of the function, the one no accepted call writes is taken first, then the one nearest
+> the landed relation, then the older one (R24). A relation no board relation answers does not come true, and
+> the match goes on from the function's other relations. What stands in each variable on that occasion is the
+> call's arguments (D37). Expansion reads a call back by the same rule (R28).
 
 > **R50 — Grouping.** Over the relations of the level no placed function holds (R53), each with its strength
 > (R21). Relations held once are left where they are, since nothing is built on one occurrence (D57). The rest
@@ -1145,25 +1155,25 @@ pays its one name.
 >
 > | | |
 > |---|---|
-> | the function | and its interneuron or none (D31), placed where each node stands, with what each variable binds |
-> | coverage | A: the names and offsets of the activations it covers or binds that stand on the apex, and the writing of each call it takes back whole (D24, R23) |
-> | price | B: its call's writing (D12, D22): a name and `d + 1` offsets, one failure per relation that did not come true in those same frames, one value per variable, and one offset per node and dimension its relations leave open |
+> | the function | and its interneuron or none (D31), its relations landed on the board's relations, with what each variable binds |
+> | coverage | A: the board relations its true relations stand in for and the names its fixed nodes land on, where no accepted call has written them, and the writing of each call it takes back whole (D24, R23) |
+> | price | B: its call's writing (D12, D22): a name and `d + 1` relations, one failure per relation that did not come true in those same frames, one value per variable, and one offset per node and dimension its relations leave open |
 >
 > The machine places the function by D31's rule. Coverage less price is the savings over writing what it covers
-> bare, D22's expression over the machine's population.
+> bare, D22's expression over the board.
 >
-> **A place is covered once.** A function that binds an activation whose place an earlier accepted function
-> covered is credited nothing for it (D10, D24).
+> **A relation is written once.** A function whose relation lands on one an earlier accepted call already writes is
+> credited nothing for it (D10, D24).
 >
-> **A neuron that fired and the function does not name belongs to neither side.** It stands in the file as
-> itself if nothing covers it (D23), and the same way if this interneuron is promoted, since the interneuron does
-> not name it: its own cost either way, so it cancels before the test begins.
+> **A node that fired and the function does not land on belongs to neither side.** Its name and relations stand in
+> the file as they are if nothing writes them (D23), and the same way if this function is accepted, since the
+> function does not land on them: their own cost either way, so they cancel before the test begins.
 >
-> **Coverage changes the credit and never the price.** A neuron the function names that fired and another
-> function already covers is credited to no one and charged nothing, unless the function takes that call back
-> whole (R23): it fired, so it was never among the neurons named and absent. A neuron the function names that
-> did not fire is charged its relation whether or not another neuron is right at that place. **What a function
-> gets wrong about a frame is a fact about the two, and ownership does not move it.**
+> **Coverage changes the credit and never the price.** A relation that came true on a board relation another call already
+> writes is credited to no one and charged nothing, unless the function takes that call back whole (R23): it
+> came true, so it is not a failure. A relation that did not come true is charged whether or not another call
+> writes something at that place. **What a function gets wrong about a frame is a fact about the two, and
+> ownership does not move it.**
 >
 > **This is the function's arithmetic over the board, and it differs from its worth.** The worth reads a
 > relation over the strengths the neurons return (D57); the election reads the board, where earlier frames'
@@ -1178,40 +1188,43 @@ R50). The election only accepts or declines one: it never edits a function, merg
 What it does do is *measure* one, and everything a function is worth on the board this frame the machine works
 out itself (R22).
 
-> **D24 — Coverage set.** The machine keeps, for each activation an accepted function was credited, two things:
+> **D24 — Coverage set.** The machine keeps, over the board and the frames within reach, who writes what:
 >
 > | | |
 > |---|---|
-> | credited to | the accepted function that was last credited the activation, by covering it or by binding it (R22) |
-> | covered | whether that function covered the activation, so that it left the apex, or bound it, so that it stays with its place covered (D10) |
+> | per relation on the board | the accepted call that writes it, or none, in which case it is written bare |
+> | per node | whether its name is written by a call, as a fixed node; as a value, inside a call that binds it; or bare |
 >
-> **Credit is what blocks later payment, and coverage is what hides.** A covered activation is paid for through
-> its call. It is in a later function's coverage only together with everything that call covers: the function
-> takes the call back and is paid the call's writing (R23). A function that names it afterward without the rest
-> is neither paid for it nor charged a failure for it, since it fired. A bound activation stays on the apex at
-> its neuron's cost and is a neighbor to every later function. A later function that covers it is credited its
-> neuron, which is all that is left of it in the file. A later function that binds it again is credited nothing,
-> since its place is covered already (D10). So every symbol of an activation is paid for once.
-> **An activation is one node**, so two activations of one neuron at two places never contend. The coverage set
-> spans one frame more than the longest reach in time among the neurons the machine holds, no function reaches
-> further back, and the box every other activation dimension gives, and ages out with it, and over the same span
-> the machine keeps the action that ran at each frame in each action channel, for the shares a reward sends back
-> (R33). **The machine holds nothing on the scale of the run.**
+> **Covered and bound are read off it.** An activation is **covered** when a call writes its name: it has left
+> the apex (D10). It is **bound** when a call writes its relations and its name is a value: it stays on the apex at
+> its name's cost. It is on the apex, bare, when nothing writes its name.
 >
-> The coverage set is about **credit**: an activation is a fact that needs paying for exactly once, so a covered one
-> is paid for through its call until a later call takes that call back whole (R23). It is not about naming: an
-> interneuron expands to everything its function names, credited or not (R24).
+> **Credit is what blocks later payment, and coverage is what hides.** A relation a call writes is paid for
+> through that call. It is in a later function's coverage only together with everything that call writes: the
+> function takes the call back and is paid the call's writing (R23). A function that lands on it afterward
+> without the rest is neither paid for it nor charged a failure for it, since it came true. A bound activation's
+> name is still on the apex and is a neighbor to every later function. A later function that lands on it as a
+> fixed node writes its name, which is all that is left of it in the file. A later function that binds it again
+> writes nothing new (D10). So every relation and every name is paid for once. The coverage set spans one frame more
+> than the longest reach in time among the neurons the machine holds, no function reaches further back, and the
+> box every other activation dimension gives, and ages out with it, and over the same span the machine keeps the
+> action that ran at each frame in each action channel, for the shares a reward sends back (R33). **The machine
+> holds nothing on the scale of the run.**
+>
+> The coverage set is about **credit**: a relation or a name is a fact that needs paying for exactly once, so one a
+> call writes is paid for through that call until a later call takes that call back whole (R23). It is not
+> about naming: an interneuron expands to everything its function names, credited or not (R24).
 
 > **R23 — This frame's functions against the board as it stands.** Only what the file holds is in play: a bare
-> activation at its cost, a bound one at its neuron's cost, and the activations a call covers at that call's
-> writing, together. So no symbol of an activation is paid for twice. Within the electing frame an activation is
-> covered once, by the first accepted function that covers it (R24), and never moves.
+> node's name and relations at their cost, a bound node's name, and the relations and names a call writes at that call's
+> writing, together. So no relation and no name is paid for twice. Within the electing frame a relation is written once,
+> by the first accepted function whose relation lands on it (R24), and never moves.
 >
-> **A later frame takes the past back where it writes it shorter.** A function at `f` that lands on everything a
-> call at an earlier frame within its reach covers takes that call back: its activations are covered by the new
-> call, the old call leaves the file, and its interneuron's activation leaves the apex. What that interneuron
-> learned stands. A function that lands on some of what a call covers takes nothing: a call is whole. So the
-> past is re-elected only by a function that covers a call entire, and only where that pays on the board (D28).
+> **A later frame takes the past back where it writes it shorter.** A function at `f` whose relations land on
+> every relation a call at an earlier frame within its reach wrote takes that call back: the new call writes
+> them, the old call leaves the file, and its interneuron's activation leaves the apex. What that interneuron
+> learned stands. A function that lands on some of what a call wrote takes nothing: a call is whole. So the past
+> is re-elected only by a function that covers a call entire, and only where that pays on the board (D28).
 
 **The file over one frame is the calls made plus the activations no function covered**: the price of every
 accepted function, and what each activation no function covered cost, the transcript half of `L` (§3.12) over
@@ -1227,13 +1240,13 @@ to exactly one function**, which is what stops an activation being paid for twic
 
 > **R24 — The election is D28, run by the machine.** The functions are everything find placed and grouping
 > built at this level (R53, R50, R52), less any that would need a neuron when none is free (R16), and what they
-> cover is the **free set**: every activation on the frontier (R27) that some placed function names, a bound one
-> at its neuron's cost, and every call within reach whose covered activations a placed function lands on entire,
-> at that call's writing (R23).
+> write is the **free set**: every relation and every name on the board that some placed function lands on and no
+> accepted call writes, and every call within reach whose every written relation a placed function lands on, at
+> that call's writing (R23).
 >
 > Each function is placed on the board before the first round (D31), and `price` is R22's. Then D28 runs: the
 > highest `coverage / price` first, each while `coverage > price` against the board as it then stands, and it
-> stops when nothing on the board is left that a placed function could cover for less than it costs.
+> stops when nothing on the board is left that a placed function could write for less than it costs.
 >
 > **Two placements that measure the same are told apart in this order**: a function with an interneuron before
 > one without; between two with interneurons, the older interneuron; between two without, the function that
@@ -1241,24 +1254,24 @@ to exactly one function**, which is what stops an activation being paid for twic
 > the earlier frame, then the one reached from the older activation.
 >
 > **The bound is structural.** A function's price includes its call's writing, so it is taken only when it
-> covers more than one activation: at least two nodes. Each round takes one function, so the rounds are never
+> writes more than one node's worth: at least two nodes. Each round takes one function, so the rounds are never
 > more than the placements.
 >
 > **A function that never reached the top held nothing.** There is nothing to hand back and nothing to settle:
-> an activation it named is either credited to a function that did pay or stands as itself.
+> a relation or a name it landed on is either written by a function that did pay or stands bare.
 >
-> **Ownership is a partition of the activations the accepted functions name**, and that is the whole of the
-> inhibition: no function is ever edited or forbidden, and **overlap is legal and priced**: a function that names
-> an activation an earlier round covered gains nothing for it and pays nothing for it, unless it takes that call
-> back whole (R23). One that covers a bound activation gains its neuron's cost, and one that binds it again gains
-> nothing (D10, R22). **Held by an accepted function** and **named by an accepted function** are therefore the
-> same set, so coverage, credit and the apex frontier (R27) are one question with one answer.
+> **Ownership is a partition of the relations and names the accepted functions land on**, and that is the whole of
+> the inhibition: no function is ever edited or forbidden, and **overlap is legal and priced**: a function that
+> lands on a relation an earlier round wrote gains nothing for it and pays nothing for it, unless it takes that call
+> back whole (R23). One that lands on a bound node as a fixed node gains its name, and one that binds it again
+> gains nothing (D10, R22). **Written by an accepted function** and **landed on by an accepted function** are
+> therefore the same set, so coverage, credit and the apex frontier (R27) are one question with one answer.
 >
 > **Outcome**: accepted functions are promoted, each **whole**, and an interneuron expands to everything its
-> function names, credited or not; the activations they cover leave the apex and what they bind stays on it
-> (D24), and every active neuron no accepted function covers stands as itself. **The election delivers nothing to
-> anyone**: it writes the coverage set and stops. No neuron is told what was bought; a neuron's history is what
-> it saw, and the board is the machine's.
+> function names, credited or not; the activations whose names they write leave the apex and what they bind
+> stays on it (D24), and every active neuron no accepted function covers stands as itself. **The election
+> delivers nothing to anyone**: it writes the coverage set and stops. No neuron is told what was bought; a
+> neuron's history is what it saw, and the board is the machine's.
 
 ## 6.3 Allocate interneurons
 
