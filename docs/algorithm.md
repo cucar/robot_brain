@@ -749,8 +749,8 @@ A neuron the function does not name is in neither: it costs what it cost whether
 >
 > | | |
 > |---|---|
-> | held | the placements at which the relation came true; for a candidate, those at which it was attached |
-> | failed | the placements at which it did not, counted from the first placement it was seen at |
+> | held | the accepted placements at which the relation came true; for a candidate, those at which it was attached |
+> | failed | the accepted placements at which it did not, counted from the first placement it was seen at |
 > | saves | one offset, and one name where the relation brings a node no other relation of the function names |
 > | entry | one offset in the function's entry, and that name where it brings the node (D13) |
 > | worth | `held · saves − failed − entry` |
@@ -763,7 +763,10 @@ A neuron the function does not name is in neither: it costs what it cost whether
 >
 > **A relation's worth where it would be** is read with the same counts, as a candidate of that function (R50),
 > and a relation goes where its worth is highest (R54). The counts are the machine's own, taken at every
-> placement of the function, so they exist from the function's first placement, interneuron or not.
+> placement of the function once the election has ruled on it, so they exist from the function's first
+> placement, interneuron or not. **A placement the election declined saves nothing and counts for nothing**
+> but its place in the window: a function that is placed and never taken sees its held count slide out, its
+> worth fall to less its entry, and is pruned (R18). Worth measures what a function actually saves.
 
 **This is the only valuation in the design**, and it is read in three places, so the three numbers differ, and
 are meant to:
@@ -1013,9 +1016,10 @@ frame reported, each after it over what the level before accepted, until a level
 |------------|-------------|
 | activate   | Fire every interneuron the level below accepted, at its fit's origin (D15, D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations with strengths. |
 | find       | Read every returned relation in the index, as it is and with either end open, and place every function it reaches on the board wherever its relations match, one fit per place (R53, D31). |
-| group      | Count each fit as a placement of its function, with which of its relations came true and which board relations were attached to it; move each relation to the function where its worth is highest, and drop each whose worth has turned negative; start a function for each recurring relation no function holds (R50, R54, R18). |
+| group      | Over the counts as they stand, move each relation to the function where its worth is highest, drop each whose worth has turned negative, and start a function for each recurring relation no function holds (R50, R54, R18). |
 | elect      | Take the fits best first, the highest coverage over price each round, stopping when the board is covered (R24). |
 | allocate   | Give each accepted function with no interneuron one, reused where a stretch comes round (R43), allocated otherwise where a neuron is free (R16). It fires at the next level. |
+| count      | Record each fit as a placement of its function, with the election's verdict on it: for an accepted fit, which of its relations came true and which board relations were attached; for a declined one, nothing (R50). |
 
 Then, once the last level has run:
 
@@ -1039,12 +1043,13 @@ argument.
 > belongs to a frame and not to a neuron: a neuron fires at whatever level accepts its function, and one neuron
 > may fire at different levels of different frames.
 >
-> **Within a level the order is activate, find, group, elect, allocate.** It cannot be otherwise: what fires is
-> what the level before accepted; what a neuron returns is what is placed; a placement is counted before any
-> relation moves, since the counts are what the move reads; the election is over everything placed, as the
-> functions now stand, since a function changed last may cover the board better than any placed first, so
-> nothing is taken until the whole board has been read; and an interneuron is allocated only for a fit the
-> election accepted (R16). The dictionary changes in group, and the index is read before and after it.
+> **Within a level the order is activate, find, group, elect, allocate, count.** It cannot be otherwise: what
+> fires is what the level before accepted; what a neuron returns is what is placed; the moves read the counts
+> as they stand; the election is over everything placed, as the functions now stand, since a function changed
+> last may cover the board better than any placed first, so nothing is taken until the whole board has been
+> read; an interneuron is allocated only for a fit the election accepted (R16); and a placement is counted with
+> the election's verdict on it, which is known last. The dictionary changes in group, and the index is read
+> before and after it.
 >
 > Every neuron runs the same rule at its own reach (D4). **Compression is spatio-temporal for every neuron, in
 > one pass**: a function may name neighbors in its own frame, in earlier ones, beside it in space, or in a mix.
@@ -1083,22 +1088,23 @@ argument.
 > (D37). Expansion reads a call back by the same rule (R28).
 
 > **R50 — Grouping.** Every function the index holds is a center for the relations grouped into it, and every
-> fit of it this level (R53) is one **placement**. Grouping reads the placements and keeps the counts the worth
-> is read over (D57):
+> fit of it this level (R53) is one **placement**. The machine keeps, per function, the counts the worth is
+> read over (D57), recorded once the election has ruled on the fit (R24):
 >
 > | | |
 > |---|---|
-> | the function | one more placement per fit |
-> | each relation of the function | came true at this placement, or did not |
-> | each candidate | a board relation the neurons returned with strength 2 or more, that the function does not hold and that shares an end with an activation the fit landed on: attached at this placement; a candidate seen at an earlier placement and not attached at this one, absent |
+> | the function | one more placement per fit, accepted or declined |
+> | each relation of the function | at an accepted placement: came true at it, or did not; at a declined one, nothing |
+> | each candidate | a board relation the neurons returned with strength 2 or more, that the function does not hold and that shares an end with an activation the fit landed on: at an accepted placement, attached; a candidate seen at an earlier accepted placement and not attached at this one, absent; at a declined one, nothing |
 >
 > Each count runs over the function's last `H` placements, as a history runs over a neuron's last `H`
-> activations (D18), and nothing else is kept. Then the relations move (R54): a candidate joins the function
+> activations (D18), and nothing else is kept. Grouping reads the counts as they stand before the election,
+> and the relations move (R54): a candidate joins the function
 > where its worth is highest, when that is higher than its worth where it is; a relation whose worth in its
 > function has turned negative leaves it (R18). A relation the neurons returned with strength 2 or more that no
-> function holds starts a function of its own, two nodes and an offset, credited its strength as placements it
-> came true at, since each occurrence of it was one (D57). A relation held once is left where it is: nothing is
-> built on one occurrence (R21).
+> function holds starts a function of its own, two nodes and an offset, credited its strength as accepted
+> placements it came true at, since each occurrence of it would have been one (D57). A relation held once is
+> left where it is: nothing is built on one occurrence (R21).
 >
 > **Relations join only through a node.** A candidate is attached where it shares an activation with the fit,
 > so every function stays connected (D15), and two relations that never touch are never one function. Where they
@@ -1151,11 +1157,11 @@ rare variant fits the general function directly: any neuron for a parameter, and
 pays its one name.
 
 > **R18 — Prune.** A relation leaves its function when its worth is negative (D57), read at each placement of
-> the function (R50). A relation that leaves with no function stands bare wherever it holds. A function leaves
-> the dictionary when its last relation does. **Relations leave one at a time**, the most negative first, and
-> the function's other relations are priced again before the next leaves, since a node two relations bring is
-> charged to whichever is read first. A class no function has any longer goes with its last function. A
-> function's interneuron is decommissioned when due (R38).
+> the function, accepted or declined (R50). A relation that leaves with no function stands bare wherever it
+> holds. A function leaves the dictionary when its last relation does. **Relations leave one at a time**, the
+> most negative first, and the function's other relations are priced again before the next leaves, since a node
+> two relations bring is charged to whichever is read first. A class no function has any longer goes with its
+> last function. A function's interneuron is decommissioned when due (R38).
 
 ## 6.2 Election
 

@@ -3,20 +3,22 @@
 A worked case for [algorithm.md](algorithm.md): a price channel per instrument, an action that says whether to
 own it, a world that shows the right answer wherever the machine has none, and a reward that names the frames
 a position was held. Nothing here is normative. It follows the definitions through what a price neuron sees,
-what forms over frames, and how a position comes to be taken.
+what forms over frames, and how a position comes to be taken, and then through one run in full: a six-bar
+cycle that repeats forever.
 
 ---
 
 # 1. The environment
 
-**In.** One channel per instrument, laid out over time alone (D3), with radius `R = 1` (R4): a bar sees the
-bar before it. Each declares one event dimension, `move`, whose buckets are the bar's return quantized at the
-channel's resolution: a handful of buckets from a sharp fall to a sharp rise, each a base neuron (D52). One
-frame is one bar. Channels share only time, so a neuron of one instrument sees the apex of another within
-reach in time (D5), and a function may name both.
+**In.** One channel per instrument, laid out over time alone (D3): a bar sees the bar before it (D4). Each
+declares one event dimension, `move`, whose buckets are the bar's return quantized at the channel's
+resolution: a handful of buckets from a sharp fall to a sharp rise, each a base neuron (D52). One frame is one
+bar. Channels share only time, so a neuron of one instrument sees the apex of another at this frame and the one
+before (D5), and a function may name both.
 
-There is no spatial dimension, so a bare record is two numbers, the neuron and the frame (D12, D13). A call's
-record is two numbers, plus one per relation that did not come true and one per value.
+There is no spatial dimension, so a function fits at one place per frame and its origin is its node at the
+current frame (D15). A bare bar counts its name, 1, and the relation to the bar before it, 1 (D12, D13). A call
+counts its name, 1, plus one per relation that did not come true and one per value.
 
 **Out.** One action dimension per channel, with two base actions, `own` and `disown`: the state the machine
 wants to be in for that instrument. The environment holds the state it is in, compares the two, and buys, sells
@@ -47,34 +49,39 @@ the action is strengthened and takes the reward in one write (R29, R31).
 
 | What stands | its reach | what forms |
 |---|---|---|
-| a bar's move | 1 (D4) | A move sees the move before it in its own channel, and the moves of the other instruments at this frame and the one before (D5). Each neighbor is one relation (D34, R21). Held in two rows, `{m, m'@−1}` is a function: A is two bare records, 4; B the call's record, 2; its entry one relation and two neurons, 3; its margin at two rows 1 (D30). `{m_A, m_B@0}` across two instruments is priced the same. Where the rows of the two intersect, grouping merges them into `{m, m'@−1, m_B@0}`, 6 for 2 (R50). |
-| an interneuron over a pair | 1 beyond the farthest bar it stands for (D4): 2 | The next bar sees the interneuron at `−1` as itself, and the bar under it at `−1` (D5, D47). `{m, PAIR@−1}`, held in two rows, lands on everything the pair's call covers and takes it back (R23): A is the bar's record and the call's record, 4; B is 2. Its interneuron stands for three bars and expands to them (R28). |
+| a bar's move | 1 (D4) | A move sees the move before it in its own channel, and the moves of the other instruments at this frame and the one before (D5). Each neighbor is one relation (D34, R21). At strength 2, `{m', m}` with `m'` one bar back is a function: two nodes, one offset, origin `m` (R50). Its fit covers the relation and both names, 3, for a call of 1 (D22), so it is accepted and gets an interneuron (R16). `{m_A, m_B}` across two instruments at offset 0 is priced the same. |
+| an interneuron over a pair | 1 beyond the farthest bar it stands for (D4): 2 | The next bar sees the interneuron at `−1` as itself, and the bar under it at `−1` (D5, D47). At strength 2, `{PAIR, m}` is a function whose fit covers the relation, the bar's name and the call's name, 3 for 1; the plain pair at the same bar covers the relation and one name, 2 for 1, since its first node is already inside a call. The link is taken first and the pair then lands on nothing uncovered (R24). The link's interneuron stands for three bars and expands to them (R28). |
 | a longer shape | 1 beyond what it stands for | Each further recurrence of the stretch extends the chain by one bar, the next bar's function naming the interneuron that fired a frame before. An interneuron also sees the bar before its stretch, and a function from its history may name it. Shapes across instruments form the same way: an interneuron in one channel beside one in another at offset `0`. |
 
 **Where the stretch stops recurring.** A bar that has not stood after the interneuron twice holds the relation
-in one row; it is read in the index to find what already fits, and nothing is built on it (R21, R53). A pair
-`{m, m'@−1}` with its own interneuron lands on one of what the chain's call covers, and is credited nothing
-for it (R23), so it measures 2 for 2 and is not taken. The bar stands bare, and the chain starts again from the
-next pair that recurs. So the dictionary holds one interneuron per stretch of buckets that recurred, each as
-long as the recurrence, and a stretch seen at one frame and again at another is two activations of one
-interneuron (D11).
+in one row; it is read in the index to find what already fits, and nothing is built on it (R21, R53). The pair
+function for that bar's move is placed, covers 2 for 1 where its first node is inside the chain's call, and is
+accepted, so the bar stands in a pair and the chain starts again from there. The dictionary holds one
+interneuron per stretch of buckets that recurred, each as long as the recurrence, and a stretch seen at one
+frame and again at another is two activations of one interneuron (D11).
 
-**No variable forms.** Two pairs that differ at a node, `{m, fall₁@−1}` and `{m, fall₂@−1}`, are generalized
-into `{m, C@−1}`, `C` a class, priced as a replacement of the two (R52): the two cost 6 in the dictionary and 2
-per occurrence; the class 5 and 3 per occurrence, the member that stood written as a value (D13). Each specific
+**What is placed and not taken is pruned.** A pair that a link outbids at every bar is still placed at every
+bar, and every placement is declined. Its held count is over accepted placements only (D57), so as the window
+of its placements fills with declined ones its worth falls to less its entry, the relation leaves, the function
+goes, and its interneuron is decommissioned once the last window over it closes (R18, R38). The same happens
+to the links of a chain that stopped recurring. Worth pays for what a function saves, not for where it would
+fit.
+
+**No variable forms.** Two pairs that differ at a node, `{fall₁, m}` and `{fall₂, m}`, are generalized into
+`{C, m}`, `C` a class, priced as a replacement of the two (R52): the two cost 6 in the dictionary and 1 per
+occurrence; the class 5 and 2 per occurrence, the member that stood counted as a value (D13). Each specific
 function has at least two occurrences, so the class is never cheaper and does not join. A move that repeats,
-`{m, m@−1}`, is a pair whose two nodes name one neuron. A parameter tying the two would leave no fixed node in
-the latest frame, and R52 makes nothing of it. Since no function names an action, the dictionary describes the
-market and nothing the machine did.
+`{m, m}`, is a pair whose two nodes name one neuron. A parameter tying the two would leave no fixed node, and
+R52 makes nothing of it. Since no function names an action, the dictionary describes the market and nothing the
+machine did.
 
 # 3. Taking a position
 
 Every uncovered activation of a frame, the interneurons standing for the shape of the last bars and the bars
 nothing covered, is open through its reach in time (D9): one frame for a bar, the length of its stretch for an
 interneuron. It connects to the action that ran in each later frame it is open through (R31), at the offset
-its age rounds to (D6). Each frame's reward reaches the connections strengthened in that frame, so an
-interneuron's estimate for `own` at a distance is the mean price change of the frames owned under it at that
-distance.
+its age names (D6). Each frame's reward reaches the connections strengthened in that frame, so an interneuron's
+estimate for `own` at a distance is the mean price change of the frames owned under it at that distance.
 
 **What learns.** An interneuron covered at age 1, by the next bar's function extending the chain, connects
 once more to its coverer and to nothing else (D10); the future table refuses an interneuron as a target, so it
@@ -84,9 +91,9 @@ nothing covered it. Where the interneuron at the top has no connection for the f
 speaks in its place, down to the bars (R48): each says what followed it in the frames it stood bare.
 
 **The first lessons.** Nothing has run yet and nothing infers, so the world runs the right action in every
-channel, and the apex connects to what ran with what it earned (R35). A shape that stood before a rise
-comes to hold `own` at a positive estimate, one that stood before a fall `disown`, and the next time either
-stands on the apex it speaks.
+channel, and the apex connects to what ran with what it earned (R35). A shape that stood before a rise comes
+to hold `own` at a positive estimate, one that stood before a fall `disown`, and the next time either stands on
+the apex it speaks.
 
 **The walk.** Nothing explores while nothing hurts (R37). An estimate turns negative when owning under a shape
 lost, and the connection whose estimate turned negative wires the other action, `disown` after `own`, at
@@ -102,9 +109,78 @@ one situation its function names (R35, R47). The environment executes it, buying
 the difference from the state it is in, reports it, and the apex connects to what ran. Where no voter has
 anything for a channel, the world's lesson runs instead, and is learned the same way.
 
-# 4. What is and is not learned
+# 4. One run: the six-bar cycle
+
+One instrument, two buckets, `rise` and `fall`. The same six bars repeat forever: +1%, −2%, −3%, +2%, +3%,
+−1%, so the moves are `rise fall fall rise rise fall`, and the right actions are `own disown disown own own
+disown`. A lap is one pass over the six.
+
+**The puzzle.** A bar sees only the bar before it, and that is not enough to know where in the lap it is: a
+rise after a fall happens at bar 1 and at bar 4. But a bar does not see a raw move one bar back. It sees
+whatever neuron stands there, and that neuron can carry the whole history.
+
+**Lap 1: the first pair.** Each bar's neuron records the move before it. `fall` at bar 2 records `rise` one
+back, and `fall` at bar 6 records the same, so at bar 6 the relation rise-then-fall has strength 2 and a
+function starts for it (R50): nodes `rise` and `fall`, one offset, origin the `fall`. It is placed at bar 6,
+covers the relation and both names, 3, for a call of 1, is accepted, and gets an interneuron, which stands for
+bars 5 and 6 and fires at bar 6 (D53).
+
+**Lap 2: every pair.** The other three pairs reach strength 2 in turn, fall-then-rise at bar 1, fall-then-fall
+at bar 3, rise-then-rise at bar 5, and each is accepted the same way. A pair whose first node is already inside
+the previous pair's call still pays, 2 for 1. By the end of the lap every bar is the origin of one pair call and
+the first node of the next, and each pair's interneuron stands on the apex where the next bar can see it.
+
+**Lap 3 and on: the chain.** A bar's neuron now sees two things one frame back: the move under the call, and
+the call itself. "My move, after the neuron from one bar back" reaches strength 2 at lap 3. Its fit covers the
+relation, the bar's name and the call's name; the plain pair's fit at the same bar covers less, since its first
+node is already covered:
+
+| fit at a bar, lap 3 | coverage | price |
+|---|---|---|
+| the pair, its first node inside a call | 2 | 1 |
+| the link, this move after the previous call | 3 | 1 |
+
+The link wins the round and the pair then lands on nothing uncovered and is declined (R24). The link's
+interneuron stands for this bar and everything the previous neuron stood for, so each bar adds one link: a
+chain. The count per bar in a chain is one number, the link's call.
+
+**Why it makes mistakes while learning.** A link exists once its pattern has been seen twice. When the chain
+reaches a link no bar has learned to follow yet, the next bar stands in a plain pair and a new chain starts from
+there. Chains that start at different bars are different neurons, even when they cover the same bars. Where a
+chain breaks, the lone bar votes its average over every situation it has stood in, and the abandoned chain end
+votes what its few sightings taught it. Those are the wrong answers in the run: 70 of the first 897 bars.
+
+**Closing the ring.** At lap 70, bar 5, a chain runs a full lap past one of its own neurons. The bar-5 neuron
+is six bars back down the chain, and over those six bars the two expansions are the same, so the index search
+finds it (D36, R43): the machine fires the bar-5 neuron again instead of allocating a new one, the new function
+is added to it, and the chain becomes a ring of six neurons:
+
+| Bar | Its neuron | Says for the next bar |
+|---|---|---|
+| 1 | rise, after the bar-6 neuron | disown, estimate +1.9 |
+| 2 | fall, after the bar-1 neuron | disown, estimate +2.9 |
+| 3 | fall, after the bar-2 neuron | own, estimate +1.9 |
+| 4 | rise, after the bar-3 neuron | own, estimate +2.9 |
+| 5 | rise, after the bar-4 neuron | disown, estimate +0.9 |
+| 6 | fall, after the bar-5 neuron | own, estimate +0.9 |
+
+**Deciding the action.** Every bar, exactly one neuron votes: that bar's ring neuron. The move under it is
+covered and silent (D10). The ring neuron has seen what came next about 135 times, always the same thing, so
+its answer is right every time.
+
+**Cleanup.** The four pairs, and the links of every chain that broke during learning, keep being placed
+wherever their bars recur, and every placement is declined, so their worth falls as their accepted placements
+slide out of the window and they are pruned (R18). Their interneurons are decommissioned as the last windows
+over them close (R38), by about lap 170. After that the machine is 10 neurons: the 4 base ones, `rise`,
+`fall`, `own`, `disown`, and the 6 in the ring. The dictionary is six functions of two nodes and one offset,
+18 numbers, and each bar costs 1.
+
+**Results.** Over 150 laps the machine is right on 92.2% of bars, whether `H` is 64, 256 or 1024. Every miss
+is before lap 70. After that every bar is right and nothing new is created.
+
+# 5. What is and is not learned
 
 What the machine learns about prices is structure: the stretches that recur, held once each. What it learns
 about trading is a mean per situation per action per distance, and nothing else (§1.2). A shape that stops
-paying stays in the dictionary as long as its margin is positive over the bars it describes (D30, R18), and its
-estimates say not to own under it.
+paying stays in the dictionary as long as it is still taken where its bars recur (D57, R18), and its estimates
+say not to own under it.
