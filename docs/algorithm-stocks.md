@@ -16,9 +16,10 @@ resolution: a handful of buckets from a sharp fall to a sharp rise, each a base 
 bar. Channels share only time, so a neuron of one instrument sees the apex of another at this frame and the one
 before (D5), and a function may name both.
 
-There is no spatial dimension, so a function fits at one place per frame and its origin is its node at the
-current frame (D15). A bare bar counts its name, 1, and the relation to the bar before it, 1 (D12, D13). A call
-counts its name, 1, plus one per relation that did not come true and one per value.
+There is no spatial dimension, so a function fits at one place per frame. Its origin is the earlier bar of
+the relation the fit started on, so a call over bars is born one bar old, at the bar it started from, and
+covers forward (D15, D37). A bare bar counts its name, 1, and the relation to the bar before it, 1 (D12, D13).
+A call counts its name, 1, plus one per relation that did not come true and one per value.
 
 **Out.** One action dimension per channel, with two base actions, `own` and `disown`: the state the machine
 wants to be in for that instrument. The environment holds the state it is in, compares the two, and buys, sells
@@ -49,8 +50,8 @@ the action is strengthened and takes the reward in one write (R29, R31).
 
 | What stands | its reach | what forms |
 |---|---|---|
-| a bar's move | 1 (D4) | A move sees the move before it in its own channel, and the moves of the other instruments at this frame and the one before (D5). Each neighbor is one relation (D34, R21). At strength 2, `{m', m}` with `m'` one bar back is a function: two nodes, one offset, origin `m` (R50). Its fit covers the relation and both names, 3, for a call of 1 (D22), so it is accepted and gets an interneuron (R16). `{m_A, m_B}` across two instruments at offset 0 is priced the same. |
-| an interneuron over a pair | 1 beyond the farthest bar it stands for (D4): 2 | The next bar sees the interneuron at `−1` as itself, and the bar under it at `−1` (D5, D47). At strength 2, `{PAIR, m}` is a function whose fit covers the relation, the bar's name and the call's name, 3 for 1; the plain pair at the same bar covers the relation and one name, 2 for 1, since its first node is already inside a call. The link is taken first and the pair then lands on nothing uncovered (R24). The link's interneuron stands for three bars and expands to them (R28). |
+| a bar's move | 1 (D4) | A move sees the move before it in its own channel, and the moves of the other instruments at this frame and the one before (D5). Each neighbor is one relation (D34, R21). At strength 2, `{m', m}` with `m'` one bar back is a function: two nodes, one offset (R50). Its fit is seen when `m` fires, covers the relation and both names, 3, for a call of 1 (D22), so it is accepted and gets an interneuron, born at `m'`'s bar, one bar old (R16, D53). `{m_A, m_B}` across two instruments at offset 0 is priced the same. |
+| an interneuron over a pair | 1 beyond the farthest bar it stands for (D4): 2 | The next bar sees the interneuron at `−1` as itself, at the latest bar it covers, and the bar under it at `−1` (D5, D26). At strength 2, `{PAIR, m}` is a function whose fit covers the relation, the bar's name and the call's name, 3 for 1, its call born at the bar the pair's call last covered; the plain pair at the same bar covers the relation and one name, 2 for 1, since its first node is already inside a call. The link is taken first and the pair then lands on nothing uncovered (R24). The link's interneuron stands for three bars and expands to them (R28). |
 | a longer shape | 1 beyond what it stands for | Each further recurrence of the stretch extends the chain by one bar, the next bar's function naming the interneuron that fired a frame before. An interneuron also sees the bar before its stretch, and a function from its history may name it. Shapes across instruments form the same way: an interneuron in one channel beside one in another at offset `0`. |
 
 **Where the stretch stops recurring.** A bar that has not stood after the interneuron twice holds the relation
@@ -62,7 +63,7 @@ frame and again at another is two activations of one interneuron (D11).
 
 **What is placed and not taken is pruned.** A pair that a link outbids at every bar is still placed at every
 bar, and every placement is declined. Its held count is over accepted placements only (D57), so as the window
-of its placements fills with declined ones its worth falls to less its entry, the relation leaves, the function
+of its placements fills with declined ones its worth falls below zero, the relation leaves, the function
 goes, and its interneuron is decommissioned once the last window over it closes (R18, R38). The same happens
 to the links of a chain that stopped recurring. Worth pays for what a function saves, not for where it would
 fit.
@@ -83,9 +84,10 @@ interneuron. It connects to the action that ran in each later frame it is open t
 its age names (D6). Each frame's reward reaches the connections strengthened in that frame, so an interneuron's
 estimate for `own` at a distance is the mean price change of the frames owned under it at that distance.
 
-**What learns.** An interneuron covered at age 1, by the next bar's function extending the chain, connects
-once more to its coverer and to nothing else (D10); the future table refuses an interneuron as a target, so it
-writes nothing. A bar covered at age 0 writes nothing but that one refused connection. So an interneuron learns
+**What learns.** An interneuron covered by the next bar's function extending the chain connects once more to
+its coverer and to nothing else (D10); the future table refuses an interneuron as a target, so it writes
+nothing. A bar covered the frame it fires, as the far end of the relation a fit started on, writes nothing
+but that one refused connection. So an interneuron learns
 the action in the occurrences where the next bar did not extend its stretch, and a bar in the occurrences where
 nothing covered it. Where the interneuron at the top has no connection for the frame ahead, what it covers
 speaks in its place, down to the bars (R48): each says what followed it in the frames it stood bare.
@@ -121,14 +123,15 @@ whatever neuron stands there, and that neuron can carry the whole history.
 
 **Lap 1: the first pair.** Each bar's neuron records the move before it. `fall` at bar 2 records `rise` one
 back, and `fall` at bar 6 records the same, so at bar 6 the relation rise-then-fall has strength 2 and a
-function starts for it (R50): nodes `rise` and `fall`, one offset, origin the `fall`. It is placed at bar 6,
-covers the relation and both names, 3, for a call of 1, is accepted, and gets an interneuron, which stands for
-bars 5 and 6 and fires at bar 6 (D53).
+function starts for it (R50): nodes `rise` and `fall`, one offset. It is placed at bar 6, covers the relation
+and both names, 3, for a call of 1, is accepted, and gets an interneuron, which stands for bars 5 and 6 and
+is born at bar 5, the origin, one bar old (D53, D9). The `fall` at bar 6 is covered the frame it fires.
 
 **Lap 2: every pair.** The other three pairs reach strength 2 in turn, fall-then-rise at bar 1, fall-then-fall
 at bar 3, rise-then-rise at bar 5, and each is accepted the same way. A pair whose first node is already inside
-the previous pair's call still pays, 2 for 1. By the end of the lap every bar is the origin of one pair call and
-the first node of the next, and each pair's interneuron stands on the apex where the next bar can see it.
+the previous pair's call still pays, 2 for 1. By the end of the lap every bar is the far end of one pair call
+and the origin of the next, and each pair's interneuron stands on the apex over the bar it covers last, where
+the next bar can see it.
 
 **Lap 3 and on: the chain.** A bar's neuron now sees two things one frame back: the move under the call, and
 the call itself. "My move, after the neuron from one bar back" reaches strength 2 at lap 3. Its fit covers the
@@ -140,7 +143,8 @@ node is already covered:
 | the pair, its first node inside a call | 2 | 1 |
 | the link, this move after the previous call | 3 | 1 |
 
-The link wins the round and the pair then lands on nothing uncovered and is declined (R24). The link's
+The link wins the round and the pair then lands on nothing uncovered and is declined (R24). The link's call is
+born at the bar the previous call covered last, one bar old, and covers that call and this bar. Its
 interneuron stands for this bar and everything the previous neuron stood for, so each bar adds one link: a
 chain. The count per bar in a chain is one number, the link's call.
 

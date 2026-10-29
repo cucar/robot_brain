@@ -1,196 +1,93 @@
-# An alternating pair, generalized
+# An alternating pair
 
-A worked case for [algorithm.md](algorithm.md): how `x, y, x, y`, `a, b, a, b` and `m, n, m, n` are seen by a
-neuron that keeps seeing a different pair in the same places, and what it comes to hold for them. Two things,
-in one neuron's history: a general function, with a parameter tying the letters two apart, twice over,
-generalized from two pairs that each came round twice and fitting any pair after that; and, for each pair that
-comes often, the interneuron its own letters build, named outright. Nothing here is normative. It follows the
-letters' own functions first, then `p`'s, through grouping, finding, generalizing, the price and the election.
-
-A function is written here as its nodes, each at its offset in time from the node in its latest frame. The
-dictionary holds it as relations, each written from the older of its two nodes (D15, D34).
+A worked case for [algorithm.md](algorithm.md): how `x, y, x, y, …` is seen by the two neurons in it, the
+function it becomes, a cycle of two nodes, and what one call over the whole run costs. Then the same for other
+pairs, and the one thing the case does not settle: how the cycles of different pairs are generalized into one
+function. Nothing here is normative. It follows the letters through grouping, the standing call, the count, and
+the question left open.
 
 ---
 
 # 1. The stream
 
-One channel, `letters`, laid out over time alone, with radius `R = 4` (D1): a letter sees four frames back, and
-every distance within that is exact (D6). The stream runs `x, y, x, y, p`, or `a, b, a, b, p`, or
-`m, n, m, n, p`: an alternating pair, and then `p`. Three pairs recur; many others go by once or twice. The pairs
-never occur together, and between passes the stream is silent for longer than any reach, so a pass sees nothing
-of the one before (D4). What the passes share is `p`, which follows every one of them, and `p` is the neuron
-this case follows.
-
-Every base neuron here has reach `4` (D4). `p` sees the four letters before it at `−1`, `−2`, `−3`
-and `−4`, each at its own offset, which is what the radius buys: at `R = 1` the letters two and three back would
-both be written at `−2` (D6), and nothing could say that one back and three back held the same letter.
+One channel, `letters`, laid out over time alone (D1): a letter sees the letter before it (D4). The stream runs
+`x, y, x, y, …` for a stretch, then is silent for longer than any reach, then runs `a, b, a, b, …`, then
+`m, n, m, n, …`, and so on. A pair's stretch may be long or short, and a pair may come once or often. Nothing
+follows a stretch but silence, so what a pass teaches is the alternation itself.
 
 # 2. What the letters build
 
-The letters fire before `p` in the stream, and what they build decides what `p` sees, since a neighbor is
-whatever stands on the apex, and an interneuron there is a neighbor as itself and as each letter under it
-(D5, D47).
+**The two relations.** `y` at frame 2 sees `x` one back: the relation `(x, y, 1)`. `x` at frame 3 sees `y`
+one back: `(y, x, 1)`. Each neuron counts its own (D47), and from frame 4 on each relation has come round
+twice (R21).
 
-**A pair's first pass names its last two letters.** In `s, t, s, t`, `t` at frame 2 sees `s` at `−1`, and `t`
-at frame 4 sees `s` at `−1`, `t` at `−2` and `s` at `−3`. `(t, s, −1)` is held in two rows, so grouping makes
-`{t, s@−1}` (R50): a row written bare is `4`, through the function `2`, which saves `4` over two rows against
-an entry of `3`, margin `1` (D30). It is new (R53). Elected at frame 4, it covers `s` at frame 3 and `t` at
-frame 4, `4` for `2` (R24), and its interneuron, `ST`, fires at frame 4 (D53). It was placed from the `t` at
-frame 4 (D31), so the `s` and `t` at frames 1 and 2 stand bare.
+**The first function.** At frame 4, `(x, y, 1)` has strength 2 and no function holds it, so it starts one: two
+nodes, `x` and `y`, one relation (R50). The fit is seen at frame 4, where it lands on `x` at 3 and `y` at 4. It
+covers the relation and both names, 3, for a call of 1, and is accepted (R24). Its interneuron, `XY`, is born
+at frame 3, the origin, one frame old, covering frames 3 and 4 (D53, D9).
 
-**The second pass covers the four letters whole.** At frame 12 the second `t` finds `{t, s@−1}` as it is,
-and `ST` fires over frames 11 and 12. The `s` at frame 13 sees `ST` at `−1`, and under it `t` at `−1` and `s`
-at `−2`. `(s, t, −1)` and `(s, s, −2)` are each held in two rows, frames 3 and 13, and group into
-`{s, t@−1, s@−2}`. Row 3 is `6` bare, `2` through it. In row 13 it lands on both letters under `ST`, so it is
-`s` and `ST`'s record, `4`, for `2` (D22, R23). Savings `6`, entry `4`, margin `2`. Elected, it takes `ST`'s
-call back, and `STS` fires at frame 13. The `t` at frame 14 sees `STS` at `−1` and the three letters under
-it, and `t` at `−2` and `s` at `−3` are each held in two rows, frames 4 and 14. `{t, s@−1, t@−2, s@−3}`
-writes row 4 at `2` where `ST` and two bare letters wrote it at `6`, and row 14 at `2` where `t` and
-`STS`'s record wrote it at `4`: savings `6`, entry `5`, margin `1`. Elected, it takes `STS`'s call back, and
-`STST` fires at frame 14. Every later pass runs the same chain, `ST`, `STS`, `STST`, each taking the one
-before it back, and what `p` sees one back is one interneuron standing for the four letters. `xyxy` and
-`mnmn` form the same way, each in its own letters' histories.
+**The cycle closes.** At frame 5, `x` fires, and its neuron returns `(y, x, 1)`, strength 2. That relation
+shares `y` with an activation the standing call `XY` landed on, so it is a candidate of `XY`'s function,
+attached at this placement (R50). `XY` is placed at every pair `x, y` in the stretch, and `x` follows every
+one of them, so the candidate is attached at every accepted placement, and it joins: the function is now `x`
+to `y` at 1 and `y` to `x` at 1, two nodes, two relations, a cycle (D15, R54). The relation a candidate
+would add from `x` to `x` at 2 is implied by the other two along the cycle, and is never held (D34).
 
-**A pair that goes by once builds `ST` and nothing more.** Its first pass is the first pass above: one function
-over its last two letters, and the first two bare. Those are the passes the general function is elected on.
+**One call over the run.** From then on a stretch of the pair is one call. Its fit is seen at the first `y`,
+the call is born at the `x` before it, and every later letter is what the function expects: `x` after `y`,
+`y` after `x`, each covered the frame it fires, never standing on the apex, and no interneuron fires anew (D54,
+D10). The call goes round the cycle as many times as the stretch runs, and ends on the first relation that
+does not come true, the silence after the last letter (D12).
 
-# 3. What `p` sees
-
-Every activation of `p` records what stood within four frames (D7). On a pair's first pass that is `ST` at
-`−1`, with `t` at `−1` and `s` at `−2` under it, then `t` at `−3` and `s` at `−4`, bare. On a later pass it is
-`STST` at `−1`, with the four letters under it at `−1` through `−4`.
-
-On the second pass of `s, t` the relations `(p, t, −1)`, `(p, s, −2)`, `(p, t, −3)` and `(p, s, −4)` are each
-held in two rows, frames 5 and 15, and group into `{p, t@−1, s@−2, t@−3, s@−4}`. Row 5 is `p`, `ST`'s
-record and two bare letters, `8`, for `2`: the function lands on both letters under `ST` and takes its call
-back. Row 15 is `p` and `STST`'s record, `4`, for `2`. Savings `8`, entry `7`, three neurons and four
-relations, margin `1`. It is new. Elected at frame 15, it covers `4` for `2`, takes `STST`'s call back, and
-its interneuron fires at frame 15.
-
-# 4. The function
-
-The second pass of a second pair, `x, y`, groups `{p, y@−1, x@−2, y@−3, x@−4}` the same way. Find reads each
-relation with either end open (R53): `(p, ?, −1)` reaches the function over `s, t`, which writes `(p, t, −1)`,
-and so do `(p, ?, −2)`, `(p, ?, −3)` and `(p, ?, −4)`. It is in every relation's reading, only through an open
-end, so the two differ only at the open ends, and the machine generalizes them (R52). `p` is the same in
-both, so it is fixed. The nodes at `−1` and `−3` differ, and within each function hold one neuron, `t` in one
-and `y` in the other: one parameter, `P`. The nodes at `−2` and `−4` differ the same way: a second parameter,
-`P′`. Nothing is left to fix:
-
-| Question | Answer |
+| a stretch of `2k` letters | numbers |
 |---|---|
-| Is anything left for the function to name as a fixed node? | No. The two variables hold all four places. |
-| What holds in those rows? | `p` itself, one letter at `−1` and `−3`, and one letter at `−2` and `−4`. |
-| So what does the function name? | `p`, `P` at `−1` and `−3`, and `P′` at `−2` and `−4`, and nothing else. |
+| bare: `2k` names and `2k − 1` relations | `4k − 1` |
+| the call: its name, how far round the cycle it ran, and one failure where the stretch ends | 3 |
 
-```
-alternation:  p;  P at −1 and −3;  P′ at −2 and −4
-```
+The function costs 4 in the dictionary, two names and two offsets (D56, D13).
 
-The function fixes no letter. It says that two letters alternated before `p`, whatever the pair was. Its one
-fixed node is `p`, in its latest frame (D15). Its entry is `p` and four relations, `5`, and its call's record
-is `2` and two values, `4`. It is priced as a replacement over `p`'s four rows (R52): the two specifics cost
-`14` in the dictionary and `2` per row, `22`; `alternation` costs `5` and `4` per row, `21`. Cheaper by `1`,
-it joins, and both specifics leave the dictionary. Each variable's members are the letters that have stood at
-both of its places, a record of what has passed and no condition on what may (D44).
+**Other pairs.** `a, b, a, b, …` builds `AB` the same way, and `m, n, m, n, …` builds `MN`. Each is a function of
+two nodes and two relations, each has its own interneuron, and none of them shares a node with another.
 
-At that same frame it is placed and measured: `p` and `xyxy`'s record, `4`, for `4`. Coverage does not exceed
-price, so it is not taken (D28), and `p` and `xyxy` stand on the apex. It has no interneuron until it is first
-accepted (R16).
+# 3. The standing call
 
-# 5. The recurring pairs
+The call is on the apex over every frame it covers (D49). While it stands, its function says what comes next,
+and that is placed at the frame ahead, weakly, as the call's own proposal (R30, R45): `y` after `x`, `x` after
+`y`. When the letter arrives, the strong activation replaces the weak one and is covered. The call connects, at
+each age, to what stands on the apex outside its function (R31): nothing, in this stream, until the silence.
+What follows the stretch is what it learns, offset by how long the stretch was.
 
-On the third pass of `x, y`, `p` sees `xyxy` at `−1`, and `(p, xyxy, −1)` is held in two rows. `{p, xyxy@−1}`
-writes each at `2` where `p` and `xyxy`'s record wrote it at `4`: savings `4`, entry `3`, margin `1`. Find's
-open reading `(p, ?, −1)` reaches `alternation`, but the two do not differ only in which neuron stands at some
-of their nodes, since `alternation` has nodes this function lacks, so generalizing makes nothing (R52). The
-function is new. Elected, it covers `4` for `2`, where `alternation` measures `4` for `4`, and its interneuron
-fires at `p`'s frame. `stst` and `mnmn` get a function each the same way.
+A letter covered at age 0 writes one connection, to the call, and is silent (D10). The call speaks for the
+stretch: at the base, a letter's own connections say only that `x` is followed by `y` and `y` by `x`, which the
+function says already, so after the first pass nothing is inferred at the base that the call does not say.
 
-A class over the three is made when the second of these functions is found through the first's open end
-(R52), and never pays. `m` functions of one chain each cost `3m` in the dictionary and `2` per pass; one
-function over a class costs `3 + m` and `3` per pass. The class is cheaper only while the passes number fewer
-than `2 − 3/m` per chain, and each function already has two.
+# 4. The count
 
-So the two forms stand in one history and never meet in one row. What comes often is covered by its own
-letters' chain and named here outright; what comes rarely is described by the general function. A pair that
-becomes frequent moves from the one to the other as its letters' chain covers it, and nothing in `p`'s
-dictionary is told: its rows stop holding four letters and start holding one interneuron.
+The function's counts are over its accepted placements (R50, D57). Each pass is one placement, the two
+relations come true once per traversal, and the failure at the end is the one the call ended on. Over a window
+of passes each relation is worth `2 · held − failed − 2`, with `held` the traversals and `failed` the passes,
+so a pair that comes round at all keeps its function, and one that stops coming sees its placements age out and
+its function pruned (R18).
 
-# 6. The price
+# 5. What is not settled
 
-The stream is laid out over time alone, so a bare activation's record is `2` (D13). A call's record is `2`,
-one per value, and one per relation that did not come true (D12).
+`XY`, `AB` and `MN` have the same shape: two nodes, two relations, offset 1 each way. Compared as graphs with
+the names ignored, their nodes pair (R52), and at each node the two functions hold different neurons. If the
+pairing were fixed, one general function would follow: two open nodes and the two relations, whatever the pair,
+and a stretch of a pair never seen would be covered on its first pass, its two letters bound as values, for 3
+numbers and two values against `4k − 1` bare.
 
-| a pass, priced as | numbers |
-|---|---|
-| flat: `p` and four letters, each at what it cost | 10 |
-| a first pass, as it stands on the board: `p`, the pair's last two letters under their call, two bare letters | 8 |
-| by `alternation`: its record and two values | 4 |
-| a later pass, as it stands on the board: `p` and the letters' chain | 4 |
-| by `{p, stst@−1}`: its record | 2 |
+What is not settled is the pairing. A cycle of two nodes can be read from either node, so `x` pairs with `a` or
+with `b`, and the two readings give two different general functions. Nothing in the rule for generalizing says
+which, and a cycle read from the wrong node generalizes `x` with `b` and `y` with `a`, which fits the same
+streams and says nothing different. Whether that is one function or two, and what the variable at a node that
+is reached again stands for across functions, is left open here, and the design marks it so (R52).
 
-`alternation`'s entry is `5`: one number per relation, four, and `p`. The variables' members cost nothing (D44).
-A letter new to a variable is its value the first time it passes, and a member from then on.
-
-What `alternation`'s call fires stands on the frontier at what it costs: its record, `4`, at `p`'s frame. The
-four letters stay bound, their positions covered, each written once as its parameter's value (D10). Whatever
-covers them later is credited their neurons and no more (D24).
-
-# 7. The return and the election
-
-On a pass `p` has not seen, its activate call returns its relations held in one row (R21). The machine reads
-them in the index the three ways, and the readings with the letter end open reach `alternation` (R53).
-`alternation` fits where one letter stands at `−1` and `−3` and one at `−2` and `−4` (D54). It is placed
-with the letter in each variable (D31) and elected where it covers more than it costs (R24). The first time
-it is accepted the machine allocates its interneuron, `alternation`, one level above `p`, holding nothing
-(R16).
-
-# 8. One occurrence
-
-`s, t, s, t, p` arrives, a pair never seen, and `p` fires. The letters built `ST` over frames 3 and 4 (§2),
-and the first two stand bare.
-
-| Stage | what happens |
-|---|---|
-| activate, in `p` | `p` returns `(p, t, −1)`, `(p, s, −2)`, `(p, t, −3)`, `(p, s, −4)` and `(p, ST, −1)`, each held in one row. |
-| find | The open readings reach `alternation`. `t` stands at `−1` and `−3` and `s` at `−2` and `−4`, so it fits, with `P = t` and `P′ = s`. |
-| elect | It covers `p`, the two bare letters and `ST`'s record, `8`, for `4`, and is taken. `ST`'s call is taken back. |
-| allocate | `alternation` fires at `p`'s frame; the four letters stay where they are, bound (§6.4). |
-
-The level above sees the call neuron and, bound beside it, the four letters where they stood. Nothing about
-`s` or `t` had to be learned first: each joined its variable's members in this row.
-
-`s, t, u, t, p` fits with one error. `ST` covers frames 1 and 2, and the `t` at frame 4 builds nothing over
-`u`. `P` holds `t` at `−1` and `−3`. `P′` finds `u` at `−2` and `s` at `−4`: its value is the neuron at the
-earliest of its nodes, `s`, and the relation at `−2` did not come true (D44). It covers `p`, the `t` at
-frame 4 and `ST`'s record, `6`, for `2`, two values and one error, `5`, and is taken; the `u` stands bare.
-
-`x, y, x, y, p` arrives on a later pass, and `p` sees `xyxy` at `−1` and the four letters under it (§2).
-`alternation` lands on all four and measures `4` for `4`; `{p, xyxy@−1}` measures `4` for `2` and is taken.
-Its interneuron fires at `p`'s frame, covering `p` and `xyxy`.
-
-# 9. What the one interneuron holds
-
-`alternation` is one neuron whatever the pair was, so its connections are one set (D48): what the machine
-learns to do after an alternation it has learned for every pair it saw on a first pass, a pair never seen
-before included. The letters bound beside it say which pair this was, and the level above can learn about a
-particular pair where that matters, by a function over `alternation` and the bound `t` together, whose
-interneuron then holds what followed an alternation of `t`.
-
-A frequent pair is particular already. `{p, xyxy@−1}`'s interneuron holds what followed that pair and nothing
-else. What `xyxy` has in common with `abab`, that each is two of one pair, is said by `alternation`, which fits
-both; but it is not taken over either, since each pair's own chain writes its letters shorter (D28). That is
-the trade the design makes everywhere: what recurs is named, and the general function is elected where
-nothing more specific is.
-
-# 10. The same thing as code
+# 6. The same thing as code
 
 | in the code | in the machine |
 |---|---|
-| three copies of one block with different names in them | `x, y, x, y`, `a, b, a, b` and `m, n, m, n` in the stream |
-| noticing they are one block with two names that vary | two functions in `p`'s history that differ only at the letters, generalized (R52) |
-| the parameters | `P` and `P′`, two parameters of one function |
-| the extracted function | `alternation`, a function over `p` and the two variables, held once in the dictionary |
-| a call with its arguments | `alternation` fires, with `t` and `s` bound beside it |
-| keeping the hot path inlined | `xyxy`, one interneuron for a frequent pair, and `p`'s function naming it |
+| a loop that alternates two things | a function of two nodes with a cycle, one call for the whole loop |
+| the loop body | the two relations |
+| how many times it ran | one number the call counts |
+| the same loop over different things | functions of the same shape, not yet generalized |
