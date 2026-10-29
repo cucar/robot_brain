@@ -2014,7 +2014,7 @@ is to be rewalked under this document, with its graph and its costs written out.
 | Equal | [algorithm-equal.md](algorithm-equal.md) | Shown four digits in one frame and asked, the machine says the third where the first two are the same and the fourth where they differ. |
 | Hit | [algorithm-hit.md](algorithm-hit.md) | The machine hits whatever comes at it, wherever the two of them are, since a function is written in offsets and nothing else. |
 | Loop | [algorithm-loop.md](algorithm-loop.md) | Shown a cue, the machine taps in each of the next three frames and then stops, with no counter: each tap's function names what stood a frame back. |
-| MNIST | [algorithm-mnist.md](algorithm-mnist.md) | An image channel with two spatial dimensions and one base neuron, ink; functions over its relations, tiling the image at every level; a digit action taught by demonstration and resolved by a vote. |
+| MNIST | [algorithm-mnist.md](algorithm-mnist.md) | An image channel with two spatial dimensions and two base neurons, black and white, every pixel firing one of them; functions over their relations, tiling the image at every level; a digit action taught by demonstration and resolved by a vote. |
 | Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument with own and disown as its actions, a world that runs the right action wherever the machine has none, and a reward scoped to the channel and the frame. |
 | Text | [algorithm-text.md](algorithm-text.md) | A stream of letters: pairs at the base, and stretches of any length, each letter's function naming the interneuron a frame before. |
 

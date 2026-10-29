@@ -9,10 +9,13 @@ what the levels leave on the apex, and how the digit is taught and then inferred
 # 1. The environment
 
 **In.** Two channels. The first, `image`, is laid out over two spatial activation dimensions, `x` and `y`, and
-time, each with radius `1` (D1, R4): a pixel sees the pixels beside it, and nothing further needs to be exact.
-It declares one event dimension, `pixel`, with one bucket, ink, so the channel has one base neuron (D52). A
-point with no ink reports nothing: there is no rest value (§3.3), so a blank region costs nothing and holds no
-activation. Each image is one frame, and consecutive images are unrelated.
+time (D1): a pixel sees the pixel beside it in `x`, the pixel beside it in `y`, and the pixel at its own place
+in the frame before (D5). It declares one event dimension, `pixel`, with two buckets, black and white, so the
+channel has two base neurons, and every point of the image fires one of them in every frame (D52). Nothing is
+silent: a blank region is white pixels, each an activation, and the edge of a stroke is where black stands
+beside white. That is what lets a diagonal be seen, since a black pixel with a black pixel one step diagonal
+from it has white beside it in `x` and in `y`, and the arrangement of black and white around a pixel is a
+relation in one dimension at a time (D34). Each image is one frame, and consecutive images are unrelated.
 
 With two spatial dimensions a bare record is four numbers, the neuron, the frame, `x` and `y` (D12, D13). A
 call's record is four numbers, plus one per relation that did not come true, one per value, and one per
