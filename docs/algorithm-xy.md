@@ -1,8 +1,8 @@
 # An alternating pair
 
-A worked case for [algorithm.md](algorithm.md): how `x, y, x, y, …` is seen by the two neurons in it, the two
-functions it becomes, each a cycle of two nodes with its own origin, and what one call over the whole stretch
-costs. Then the same for other pairs, and the general function they generalize into. Nothing here is normative.
+A worked case for [algorithm.md](algorithm.md): how `x, y, x, y, …` is seen by the two neurons in it, the
+function it becomes, a cycle of two nodes with one origin, and what one call over the whole stretch costs.
+Then the same for other pairs, and the general function they generalize into. Nothing here is normative.
 It follows the letters through grouping, the call at the present, the count, and the generalization.
 
 ---
@@ -33,28 +33,29 @@ function is now `y` to `x` at −1 and `x` to `y` at −1, two nodes, two relati
 relation a candidate would add from `x` to `x` at −2 is implied by the other two along the cycle, and is never
 held (D34).
 
-**Two functions, one per origin.** `XY` has origin `y`, so it is recognized at the `y` frames, and a fit of it
-ends on `y`. At an `x` frame the same two relations with origin `x` are another function, `YX`, started the
-same way when `(x, y, −1)` first recurred and grown into the cycle by the same join (D15). Each has its own
-interneuron.
+**One function, one origin.** `(x, y, −1)` recurs at frame 5 too, and a relation no function holds would
+start one of its own, origin `x`; but it is a candidate of `XY` at the same frame, its worth in the cycle is
+higher than alone, so it joins there and nothing of its own survives: a relation is in one function (R50,
+R54). `XY` has origin `y`, and that is the only origin the cycle has.
 
-**One call over the stretch, at any moment.** From then on the stretch is recognized at every letter. At a `y`
-frame `XY` fits, reading back round the cycle as far as the relations keep coming true, to the start of the
-stretch (D54); at an `x` frame `YX` fits the same way. The call fires at the present letter, covers everything
-back to the start, and takes back the call that fired at the letter before, which covered one letter less
-(R23). So the letter that just fired is covered at age 0, the origin, and never stands on the apex; the apex
-holds one call for the stretch, the latest (D49, D10). The call counts how far back it ran (D12).
+**One call over the stretch, at every `y`.** From then on the stretch is recognized at every `y`. The call
+fires there, reads back round the cycle as far as the relations keep coming true, to the start of the stretch
+(D54), covers everything back to it, and takes back the call that fired at the `y` before, which covered two
+letters less (R23). At an `x` frame nothing fits, since no activation stands at the origin: the `x` is bare
+for one frame, its name and its relation back to the covered `y`, two numbers, and is covered at the next `y`
+when the fit reads back through it (R27). So the `y` that just fired is covered at age 0, the origin, and never
+stands on the apex; the `x` between stands on it for a frame; and the apex holds one call for the stretch, the
+latest (D49, D10). The call counts how far back it ran (D12).
 
 | a stretch of `2k` letters, at its last letter | numbers |
 |---|---|
 | bare: `2k` names and `2k − 1` relations | `4k − 1` |
 | the call: its name, and how far back round the cycle it ran | 2 |
 
-Each function costs 4 in the dictionary, two names and two offsets (D56, D13); the pair of them, 8.
+The function costs 4 in the dictionary, two names and two offsets (D56, D13).
 
-**Other pairs.** `a, b, a, b, …` builds `AB` and `BA` the same way, and `m, n, m, n, …` builds `MN` and `NM`.
-Each is a function of two nodes and two relations with its own interneuron, and none of them shares a node
-with another.
+**Other pairs.** `a, b, a, b, …` builds `AB` the same way, and `m, n, m, n, …` builds `MN`. Each is a function
+of two nodes and two relations with its own interneuron, and none of them shares a node with another.
 
 # 3. The call at the present
 
@@ -68,25 +69,24 @@ base that the call does not say.
 
 # 4. The count
 
-A function's counts are over its accepted placements (R50, D57). Each letter of a stretch is one placement of
-the function with that origin, both relations come true at it, and nothing fails: a fit reads back only as far
-as the relations hold. Over a window of placements each relation is worth `2 · held − 2`, with `held` the
-placements, so a pair that comes round at all keeps its two functions, and one that stops coming sees their
-placements age out and both pruned (R18).
+The function's counts are over its accepted placements (R50, D57). Each `y` of a stretch is one placement,
+both relations come true at it, and nothing fails: a fit reads back only as far as the relations hold. Over a
+window of placements each relation is worth `2 · held − 2`, with `held` the placements, so a pair that comes
+round at all keeps its function, and one that stops coming sees its placements age out and the function
+pruned (R18).
 
 # 5. The general function
 
 `XY`, `AB` and `MN` have the same shape: two nodes, two relations, offset 1 each way. Compared as graphs with
 the names ignored, they pair from their origins (R52): `y` with `b`, then along the relations `x` with `a`. At
 each node the two functions hold different neurons, so each node is a parameter, and the general function is
-two open nodes, `P` and `P′`, with `P′` after `P` and `P` after `P′`, origin `P` (D44). `YX`, `BA` and `NM`
-generalize the same way into its twin, origin `P′`. Each costs 4 in the dictionary and replaces nothing: the
-specific functions stand where they recur, since a call of one of them costs 2 against the general function's
-4, its name, how far it ran, and two values.
+two open nodes, `P` and `P′`, with `P′` after `P` and `P` after `P′`, origin `P` (D44). It costs 4 in the
+dictionary and replaces nothing: the specific functions stand where they recur, since a call of one of them
+costs 2 against the general function's 4, its name, how far it ran, and two values.
 
 Where the general function pays is a pair never seen. `u, v, u, v, …` fits it at the second `v`, `u` bound in
-`P′` and `v` in `P`, and from then on every letter of the stretch is covered by one of the two general
-functions at 4 numbers, against `4k − 1` bare, with nothing learned about `u` or `v` first. Each becomes a
+`P′` and `v` in `P`, and from then on the stretch is covered at every `v` by the general function at 4
+numbers, against `4k − 1` bare, with nothing learned about `u` or `v` first. Each becomes a
 member of its parameter in that pass. If the pair keeps coming, `(v, u, −1)` recurs, its own function starts,
 grows into the cycle, and covers the pair for 2 from then on; the general function goes back to waiting for
 the next new pair.

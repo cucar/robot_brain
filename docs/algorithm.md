@@ -454,7 +454,9 @@ once each. The board is the graph of the frame as it stands, with the calls in p
 > **Its origin** is one of its nodes, fixed in the dictionary (D56): the node at age 0 when the function is
 > recognized, its latest node in time, and among several at that frame, the one at the least place in the
 > order the dimensions are declared (D1). The call fires there (D37, D53), and expansion runs back from there
-> (R28). Two functions with the same relations and different origins are two functions.
+> (R28). A relation is in one function (R50), so a cycle has one origin: it is recognized at the frames its
+> origin's neuron fires, and the nodes that fired between are covered then, late, when the fit reads back
+> through them (R27).
 >
 > **A function may hold cycles.** A node is listed once, and in each dimension a relation references it at
 > most twice: once as the later end, its one step back, and once as the earlier end, its one step forward. A
@@ -470,9 +472,9 @@ once each. The board is the graph of the frame as it stands, with the calls in p
 > neurons, the dimension and the offset the function's relation states, two relations of the function that share
 > a node landing on two board relations that share an end. A node may land on several activations, one per
 > traversal. A fit starts at the function's origin, on an activation at the present frame, and nowhere else:
-> a stretch that ends on another node of a cycle is a fit of the function that has that node as its origin. A function may
-> fit at several places in one frame, each fit one activation of its interneuron, and each fit is priced as it
-> falls (D22).
+> at a frame where another node of a cycle fired and the origin did not, there is no fit, and that node stands
+> bare until the origin next fires. A function may fit at several places in one frame, each fit one activation
+> of its interneuron, and each fit is priced as it falls (D22).
 >
 > **A function is not a neighborhood.** A neighborhood is what one activation saw where it fired, saved once and
 > evicted `H` activations later; a function is what the machine holds. A neighborhood is a fact, a function a
@@ -2008,7 +2010,7 @@ is to be rewalked under this document, with its graph and its costs written out.
 
 | Case | File | The job |
 |---|---|---|
-| Alternation | [algorithm-xy.md](algorithm-xy.md) | A stream in which a pair of letters alternates: the two functions it becomes, one per origin, each a two-node cycle, one call over the whole stretch at any moment, and the general function the pairs generalize into. |
+| Alternation | [algorithm-xy.md](algorithm-xy.md) | A stream in which a pair of letters alternates: the two-node cycle it becomes, with one origin, one call over the whole stretch at every origin frame, and the general function the pairs generalize into. |
 | Addition | [algorithm-addition.md](algorithm-addition.md) | A request with each column, a function per case that writes the answer, and a carry the world shows while it teaches and the machine infers afterwards. |
 | Copy | [algorithm-copy.md](algorithm-copy.md) | Shown a digit and asked, the machine says it, by a parameter tying the digit shown to the digit said. |
 | Equal | [algorithm-equal.md](algorithm-equal.md) | Shown four digits in one frame and asked, the machine says the third where the first two are the same and the fourth where they differ. |
