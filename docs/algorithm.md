@@ -321,20 +321,30 @@ connection read.
 
 > **D6 — Offsets.** The offset between two activations is the difference of their places on the board, one
 > component per activation dimension they share (D1). Every offset is exact, in a neighborhood (D18), in a
-> function (D15), in a connection (D25) and where an expansion places a node (R28). A base activation holds its
-> neighbors at offsets of one: `−1` in time, and `−1`, `0` or `+1` in each dimension of space. An interneuron
-> holds them out to its reach.
+> function (D15), in a connection (D25) and where an expansion places a node (R28). A neighbor differs from the
+> activation in one dimension and stands at the same place in every other (D5), so a relation's offset is one
+> number in one dimension. A base activation holds its neighbors at offsets of one: `−1` in time, and `−1` or
+> `+1` in a dimension of space. An interneuron holds them out to its reach. A connection's offset is a full
+> vector, one component per dimension (D25).
 
 > **D5 — Adjacency.** An activation `b` is adjacent to an activation `a` when the following conditions hold:
 >
 > - `b` is in the same frame as `a` or in an earlier one.
-> - `b` is within `a`'s reach in every activation dimension they share, time among them (D4).
+> - `b` differs from `a` in exactly one activation dimension, by no more than `a`'s reach there (D4), and stands
+>   at the same place as `a` in every other dimension they share. Adjacency is per dimension: `b` is adjacent to
+>   `a` in that dimension, and the relation between them is in that dimension (D34).
 > - `a` stands on the apex (R27). `b` stands on it, or is covered by a call on it other than `a`'s own (D10).
 > - The neighborhood policy allows `b`'s kind beside `a`'s (D50).
 >
-> For example, in an image channel the pixels of one frame are adjacent to one another within reach. In space
-> adjacency runs both ways. In time it runs only backward: what fires after `a` is never adjacent to it, and is
-> held as a connection instead (D25).
+> For example, in an image channel a pixel's neighbors are the pixel to its left, to its right, above, below,
+> and the pixel at its own place in the frame before. Two pixels one step apart in both `x` and `y` are not
+> neighbors, and neither are a pixel and the one a frame earlier one step to its side: what differs in two
+> dimensions at once is reached through the hierarchy, where a call covering one of them stands beside the
+> other (D26). In space adjacency runs both ways. In time it runs only backward: what fires after `a` is never
+> adjacent to it, and is held as a connection instead (D25).
+>
+> **A call is adjacent wherever it covers.** A call's activation stands over everything it covers, so it is
+> adjacent to `a` wherever an activation it covers is adjacent to `a`, and `a` sees it there (D26).
 
 Events and actions are compressed in the same functions: above the base a function may name what was seen and
 what was done together.
@@ -355,12 +365,14 @@ what was done together.
 
 > **D26 — Neighbor.** **A neighbor is a neuron at an offset**: the neuron of an adjacent activation (D5), at its
 > offset (D6). At temporal offset 0 a neighbor co-occurs and at negative offsets it led here; **both are the same
-> kind of thing**, and a spatial component is one more of the same.
+> kind of thing**, and a neighbor in a dimension of space is one more of the same.
 >
-> **A call is a neighbor as itself and as what it covers.** An activation that sees a call within reach sees it
-> as itself, at its origin's offset, and as each base symbol under it that is within reach, each at that
-> symbol's own offset (D47). So a base activation that sees one frame back sees the call standing there and the
-> symbol the call's origin is, and a function may name either.
+> **A call is a neighbor as itself and as what it covers.** An activation that sees a call sees it as itself,
+> at the offset of each activation the call covers that is adjacent to it (D5), and as each base symbol under
+> it that is adjacent, at that symbol's own offset (D47). So a base activation that sees one frame back sees
+> the call standing over the symbol at its own place a frame ago, and that symbol, and a function may name
+> either. A run of ink at frame 2 sees the run at frame 1 as itself through the pixel the two cover at the same
+> place, whether or not the two runs start at the same pixel.
 >
 > **A neuron can be its own neighbor.** Two activations of one type at different places each name the other at a
 > nonzero spatial offset, and in time a neuron stands beside its own earlier activation. Offset zero in every
@@ -369,8 +381,8 @@ what was done together.
 
 > **D7 — Neighborhood.** The set of neighbors (D26) one activation observes is its **neighborhood**. In a text
 > stream, with time its one dimension, the neighborhood of `s` in `p a r i s` is `i` at −1, and `p a r` are out
-> of reach. In an image stream, with time, `x` and `y`, a neighborhood holds the pixels one away in `x` and in
-> `y`, and the pixels of the frame before at the same distance.
+> of reach. In an image stream, with time, `x` and `y`, a neighborhood holds the pixel one away in `x`, the
+> pixel one away in `y`, and the pixel at the same place in the frame before.
 >
 > **A neighborhood is the frame around the fired neuron**, since adjacency admits nothing later (D5). The
 > activation itself is not in it: its own node is what a function covering it replaces, and is counted there
@@ -989,9 +1001,11 @@ on the apex in the frames after it, event and action alike.
 > and is read, never stored. The offset is a full D6 offset from the holder's activation's place: positive in
 > time, because what is connected to comes after, and signed in every other activation dimension. A connection
 > to a call is at the offset of the call's origin, where it stands (D53). **A connection reaches as far as a
-> neighbor does** (D5): an activation connects to what stands on the apex within its reach in every activation
-> dimension the two share (D4), the window in time (D9) and the same reach in every other, and to nothing
-> beyond it. **A connection is written only where the future table of the policy admits the target's kind among
+> neighbor does, in every dimension at once** (D4): an activation connects to what stands on the apex within
+> its reach in every activation dimension the two share, the window in time (D9) and the same reach in every
+> other, and to nothing beyond it. Unlike a neighbor, what is connected to may differ from the activation in
+> several dimensions, so a thing that moved is connected to where it went: that is where displacement is
+> learned (D5). **A connection is written only where the future table of the policy admits the target's kind among
 > the holder's kind's connections** (D50). Nothing about any one activation is kept.
 >
 > | Component | Description                                                                              |
@@ -1040,9 +1054,10 @@ The index follows the rows (D47).
 the activation: that neuron, at its offset from the activation in that dimension. The relation's strength goes
 up by one.
 
-**An interneuron gives its relations twice.** A call standing on the apex is a neighbor as itself, at its
-origin's offset, and as each base symbol under it at that symbol's own offset (D26, D47). Both kinds join the
-index. The second kind is worth the interneuron's count together and nothing singly (D47).
+**An interneuron gives its relations twice.** A call standing on the apex is a neighbor as itself, at the
+offset of each activation it covers that is adjacent, and as each base symbol under it at that symbol's own
+offset (D26, D47). Both kinds join the index. The second kind is worth the interneuron's count together and
+nothing singly (D47).
 
 **A bound neighbor gives worthless relations where its binding covered it.** A neighbor bound in a variable at a
 lower level costs nothing in each relation its binding covered, so that relation is marked: it holds a node and
