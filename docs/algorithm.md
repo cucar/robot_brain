@@ -448,14 +448,15 @@ once each. The board is the graph of the frame as it stands, with the calls in p
 > origin's neuron fires, and the nodes that fired between are covered then, late, when the fit reads back
 > through them (R27).
 >
-> **A function may hold cycles.** In each dimension the function is listed from its origin, node after node,
-> each relation leading from the node before to the next. A node is listed once. The moment a node comes again,
-> the listing ends there in that dimension: the relation that reached it closes a cycle, and nothing follows it.
-> So a node may come a second time only as the last node in a dimension, and a function holds at most one cycle
-> per dimension, in any dimension, time included. The repeated node may be the origin or any other: `y` after
-> `x` and `x` after `y`, origin `y`, is `… x y x y` for as long as it runs; `d` after `c`, `c` after `b`, `b`
-> after `c`, origin `d`, is `… b c b c` and then `d`. A relation that a path of the function's other relations
-> already implies is never held (D34).
+> **A function may hold one cycle.** The function is listed from its origin, node after node, each relation
+> leading from the node before to the next. A node is listed once, an open node as a neuron is. The moment a
+> node comes again, the relation that reached it closes the cycle. The repeated node may be the origin or any
+> other. A function holds at most one cycle, in whatever dimensions its relations run, time included. A relation
+> past the cycle hangs off one of the cycle's nodes, and is read after the cycle has run, from that node on the
+> last lap. `y` after `x` and `x` after `y`, origin `y`, is `… x y x y` for as long as it runs; `d` after `c`,
+> `c` after `b`, `b` after `c`, origin `d`, is `… b c b c` and then `d`; `P` after `a`, `a` after `P`, `P` after
+> `o`, origin `P`, is `o` and then `P a P a … P` for as long as it runs. A relation that a path of the function's
+> other relations already implies is never held (D34).
 >
 > **A fit is a match of relations to relations.** The board is the relations the neurons returned (R21), and a
 > fit of a function is one board relation per relation of the function, per traversal of a cycle, with the
@@ -685,11 +686,7 @@ groups, places and keeps (§6).
 > | a call | the interneuron's name; then each relation of its function that did not come true, one number each; then the value of each variable, one number each; then, where the function holds a cycle, how far back it ran round it, one number |
 > | an activation bound in a variable | nothing of its own: its neuron is the value counted in the call, and the relations the function fixes are the call's |
 >
-> **A relation to a covered activation is a relation to its coverer.** The call stands in place of what it
-> covers, so a board relation from an activation on the apex to a node inside a call joins that activation to the
-> call, read at the node it names (D26). It is counted once, however many nodes of the call it could be read at.
->
-> **What a call takes out of the count** is the relations among the nodes its true relations landed on, which
+> **What a call takes out of the board** is the relations among the nodes its true relations landed on, which
 > its function holds once in the dictionary, and the names of the nodes its true relations landed on as fixed
 > nodes. A node at a variable keeps its name, counted as the call's value. A relation between a node inside the
 > call and one outside it stands as it was: it joins the call to the rest of the graph, and the call adds no
@@ -763,9 +760,10 @@ occurs is what the worth counts (D57).
 > **A fit is read at the present, over what has happened.** It starts at the function's origin, on an
 > activation at the frame being recognized, and every other node is at a negative offset from it in time (D15),
 > so every relation of the function is true or failed when the fit is placed, and nothing is pending. Without
-> an activation at the origin there is no fit (D31). A function with a cycle is read
-> back round it as far as its relations keep coming true within reach, and the call counts how far (D12). A
-> relation of a cycle came true when it held anywhere in the fit, and did not when it held nowhere.
+> an activation at the origin there is no fit (D31). A function with a cycle is read back round it as far as
+> its relations keep coming true within reach, and the call counts how far (D12). A relation past the cycle is
+> read after it, from the node it hangs off on the last lap (D15). A relation of a cycle came true when it held
+> anywhere in the fit, and did not when it held nowhere.
 >
 > **Coming true.** Each relation of a function comes true or does not. It comes true where the board holds a
 > relation of its dimension and offset whose near end is the end already landed and whose far end is what the
@@ -1205,8 +1203,9 @@ argument.
 > to a node it covers, and is attached to the call while its activation is open; so what joins is what always
 > followed, the function's origin moves to the new node, and the next time the function is recognized it is
 > recognized there and takes the earlier call back (R23). A candidate whose other neuron is already a node of
-> the function closes a cycle, and nothing joins the function beyond it in that dimension (D15). Two relations
-> that never touch are never one function: where they recur together, the level above relates their two calls.
+> the function closes the cycle, where the function has none; where it has one, the relation is no candidate
+> (D15). A candidate attached to a node of the cycle hangs off it. Two relations that never touch are never one
+> function: where they recur together, the level above relates their two calls.
 >
 > **The fits the election chooses among** are every placement of this level, of functions with an interneuron
 > and without (R24). A function that changed at this level is placed again before the election, with its
@@ -1472,11 +1471,11 @@ and nothing scales with the run. What is cached, and how, is the implementation'
 Two things that are cycles, told apart, because the design holds them in two different places.
 
 **Within a function, a cycle is the pattern repeating.** A function has one node per neuron, so a relation
-back to a node already in it closes a cycle, and the function takes nothing past it in that dimension; the
-function says that the pattern comes round: `x` to `y` at 1 and `y` to `x` at 1 is `x y x y …` for as long as
-it runs (D15). A fit at the latest letter reads back round the cycle as far as its relations keep coming true,
-and the call counts how far it went (D12). A relation a path of the function's relations already implies is
-never held (D34), so a cycle is never a fact paid for twice.
+back to a node already in it closes the cycle, the one a function may hold; the function says that the
+pattern comes round: `x` to `y` at 1 and `y` to `x` at 1 is `x y x y …` for as long as it runs (D15). A fit at
+the latest letter reads back round the cycle as far as its relations keep coming true, and the call counts how
+far it went (D12); a relation hanging off the cycle is read after it has run (D54). A relation a path of the
+function's relations already implies is never held (D34), so a cycle is never a fact paid for twice.
 
 **Through interneurons, recursion.** A period no single function can hold, because the same neurons come in an
 order a graph over them does not fix, is held as a chain: each function "this symbol, and the call before it",
