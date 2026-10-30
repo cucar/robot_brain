@@ -490,8 +490,10 @@ never placed alone, and promotes no interneuron: what stands in it stays on the 
 > | a parameter (D44) | the node, open | the neuron that stood, one number | nothing: any neuron fits, seen before or not |
 >
 > **A variable is one node, like any node.** Where the same thing has to stand at two places, the function says
-> so the way it says anything twice: the node is reached again, by a cycle (D15). Nothing ties places but the
-> graph.
+> so the way it says anything twice: the node is reached again, by a cycle (D15). So a parameter is listed at
+> most twice, the second time as the node that closes the cycle, and the fit reads it as many times as the
+> cycle runs: `a` after `P` and `P` after `a` is `P a P a …` for as long as it holds. Nothing ties places but
+> the graph.
 >
 > **A function holds nothing but its nodes and relations**: no branch, no loop but a cycle. What branches is
 > which function fires; what loops is the frame; what a variable held is on the apex, bound beside the call
