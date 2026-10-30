@@ -342,9 +342,6 @@ connection read.
 > dimensions at once is reached through the hierarchy, where a call covering one of them stands beside the
 > other (D26). In space adjacency runs both ways. In time it runs only backward: what fires after `a` is never
 > adjacent to it, and is held as a connection instead (D25).
->
-> **A call is adjacent wherever it covers.** A call's activation stands over everything it covers, so it is
-> adjacent to `a` wherever an activation it covers is adjacent to `a`, and `a` sees it there (D26).
 
 Events and actions are compressed in the same functions: above the base a function may name what was seen and
 what was done together.
@@ -366,13 +363,6 @@ what was done together.
 > **D26 — Neighbor.** **A neighbor is a neuron at an offset**: the neuron of an adjacent activation (D5), at its
 > offset (D6). At temporal offset 0 a neighbor co-occurs and at negative offsets it led here; **both are the same
 > kind of thing**, and a neighbor in a dimension of space is one more of the same.
->
-> **A call is a neighbor as itself and as what it covers.** An activation that sees a call sees it as itself,
-> at the offset of each activation the call covers that is adjacent to it (D5), and as each base symbol under
-> it that is adjacent, at that symbol's own offset (D47). So a base activation that sees one frame back sees
-> the call standing over the symbol at its own place a frame ago, and that symbol, and a function may name
-> either. A run of ink at frame 2 sees the run at frame 1 as itself through the pixel the two cover at the same
-> place, whether or not the two runs start at the same pixel.
 >
 > **A neuron can be its own neighbor.** Two activations of one type at different places each name the other at a
 > nonzero spatial offset, and in time a neuron stands beside its own earlier activation. Offset zero in every
@@ -983,11 +973,6 @@ no neuron records it. The machine makes it (R52).
 > **D47 — Relation index.** What a neuron counts over its history (D18): every relation from its own activation
 > that its rows hold, each with its **strength**, the number of rows that hold it. It is updated when a row is
 > admitted and when a row is evicted, and at no other time.
->
-> **An interneuron stands for what is under it.** An interneuron on the apex is a neighbor as itself, and as
-> each of the base symbols it stands for, each at its own offset (D26, R28). As itself it costs what it cost. As
-> the base symbols under it, together, it costs the same: a function that lands on all of them takes its call
-> back, and one that lands on some of them holds there and saves nothing (D22, R23).
 
 How the index is laid out is the implementation's. What it holds is not: a relation's strength is the number of
 rows of the history that hold it, and which rows those are leaves the neuron for nothing.
@@ -1055,11 +1040,6 @@ The index follows the rows (D47).
 **An admitted row adds its relations.** Every neighbor in the row gives one relation per dimension it shares with
 the activation: that neuron, at its offset from the activation in that dimension. The relation's strength goes
 up by one.
-
-**An interneuron gives its relations twice.** A call standing on the apex is a neighbor as itself, at the
-offset of each activation it covers that is adjacent, and as each base symbol under it at that symbol's own
-offset (D26, D47). Both kinds join the index. The second kind is worth the interneuron's count together and
-nothing singly (D47).
 
 **A bound neighbor gives worthless relations where its binding covered it.** A neighbor bound in a variable at a
 lower level costs nothing in each relation its binding covered, so that relation is marked: it holds a node and
