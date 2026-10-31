@@ -74,7 +74,7 @@ which the call says already.
 
 Nothing is kept for the function: its worth is read from the neurons at every level it is placed at (R50,
 D57). `y` answers for `y` after `x`, `x` for `x` after `y`, each over its own history. In a stretch both hold
-at every lap, so `with` climbs and `without` stays at zero: each relation is worth `with − 1`. A pair that
+at every lap, so `with` climbs and `without` stays at zero: each relation is worth `2 · with − 1`. A pair that
 stops coming sees its `with` slide out of the two histories, the worth falls below zero, and the function
 leaves (R18).
 

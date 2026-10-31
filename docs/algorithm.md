@@ -826,22 +826,24 @@ A neuron the function does not name is in neither: it costs what it cost whether
 > |---|---|
 > | with | the activations of that neuron at which the function's other relations at it held, and this relation held with them |
 > | without | the activations at which the function's other relations at it held, and this relation did not |
-> | worth | `with − without − 1`: one edge saved at each occasion it held, one failure at each it did not, and one edge in the dictionary (D13) |
+> | worth, in a function of two relations or more | `2 · with − without − 1`: two edges saved at each occasion it held with the function, one failure at each it did not, and one edge in the dictionary (D13) |
+> | worth, in a function of its own | `strength − 1`: one edge saved at each occasion it held, and one edge in the dictionary |
 >
-> **A function's worth is the sum of its relations' worths.** A function of one relation: its call takes one
-> edge out of the graph and counts nothing, so it is worth `with − 1`, which turns positive once it has held
-> twice: nothing is built on one occurrence (R21). Every relation is priced the same, the first and the ones
-> that join.
+> **Two edges, not one, where the function has other relations.** The relation itself is one. The other is
+> between two calls: held in a function of its own, the relation has a call of its own, standing within reach
+> of the function's call, and the edge between the two calls is on the apex at every occasion both fit (D26,
+> D12); held in the function, there is one call and no such edge. Nothing beyond that edge turns on it: what
+> the second call relates to besides, the one call relates to the same way, one edge each, and an edge two
+> others imply is not counted (D55).
 >
-> **A relation's worth where it would be** is read the same way, as a candidate of that function (R50), with
-> one edge more saved at each occasion it held with the function: a relation with a function of its own has a
-> call of its own, and where the two calls stand within reach of each other the edge between them is on the
-> apex, one at every occasion both fit (D26, D12); joined, there is one call and no such edge. So a candidate
-> is worth `2 · with − without − 1` in the function it would join, against `strength − 1` where it stands
-> alone, and a relation goes where its worth is highest (R54). The neurons' histories are the whole record, over
-> the last
-> `H` activations of each (D18), so a relation that stops recurring sees its `with` slide out, its worth fall
-> below zero, and leaves (R18). Worth measures what a function saves wherever it fits.
+> **A function's worth is the sum of its relations' worths.** A function of one relation is worth
+> `strength − 1`, which turns positive once it has held twice: nothing is built on one occurrence (R21).
+>
+> **A relation's worth is read the same way wherever it is or could be**: in the function it holds, in each
+> function it is a candidate of, and in a function of its own; and a relation goes where its worth is highest
+> (R54). The neurons' histories are the whole record, over the last `H` activations of each (D18), so a relation
+> that stops recurring sees its `with` and its strength slide out, its worth fall below zero everywhere, and
+> leaves (R18). Worth measures what a function saves wherever it fits.
 
 **This is the only valuation in the design**, and it is read in three places, so the three numbers differ, and
 are meant to:
@@ -1120,7 +1122,7 @@ frame reported, each after it over what the level before accepted, until a level
 | activate   | Fire every interneuron the level below accepted, at its fit's origin (D15, D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations with strengths. |
 | find       | Read every returned relation in the index, as it is and with either end open, and place every function it reaches on the board wherever its relations match, one fit per place (R53, D31). |
 | count      | Hand each neuron the functions placed at this level that it stands in, with their candidates, and call `count` on it: it answers with and without for each relation and each candidate (R50, D47). |
-| group      | Over those answers, move each candidate to the function it is nearest to where its worth there is positive and higher than where it is, drop each relation whose worth has turned negative, and start a function for each recurring relation no function holds (R50, R54, R18). |
+| group      | Over those answers, move each relation to where its worth is highest, the nearest function it is a candidate of, its own function or none, and start a function for each recurring relation no function holds (R50, R54, R18). |
 | elect      | Take the fits best first, the highest coverage over price each round, stopping when the board is covered (R24). |
 | allocate   | Give each accepted function with no interneuron one, reused where a stretch comes round (R43), allocated otherwise where a neuron is free (R16). It fires at the next level. |
 
@@ -1223,7 +1225,8 @@ argument.
 > occasion it held with the function, a failure at each it did not, and its one edge in the dictionary (D57). A
 > candidate joins the function
 > it is nearest to, where its worth there is positive and higher than where it is (R54). A relation of a
-> function whose worth there has turned negative leaves it (R18). A relation the neurons returned with strength
+> function leaves it where its worth is higher in a function of its own, `strength − 1`, and for nothing
+> where it is negative everywhere (R54, R18). A relation the neurons returned with strength
 > 2 or more that no function holds starts a function of its own, two nodes and an offset, its strength its
 > `with` (D57). A relation held once is left where it is: nothing is built on one occurrence (R21).
 >
@@ -1244,7 +1247,8 @@ argument.
 > | Move | When |
 > |---|---|
 > | a relation joins | a candidate's worth in the function is positive and higher than where it is, in its own function of one relation or in another, and the function is the nearest of those it is a candidate of (R50) |
-> | a relation leaves | its worth in its function is negative (R18) |
+> | a relation leaves for a function of its own | its worth alone, `strength − 1`, is higher than in its function, and higher than in any function it is a candidate of |
+> | a relation leaves for nothing | its worth is negative wherever it is or could be, which is once its strength has slid below 2 (R18) |
 > | two functions merge | a relation of one is a candidate of the other and joins it, and the rest follow one at a time, each where its worth is higher |
 >
 > A relation that leaves its function of one relation leaves that function empty, and the function goes with
@@ -1255,11 +1259,12 @@ argument.
 > and the two are one from then on, the older interneuron standing for both (R43). A moved function is read
 > against the functions of the same shape, and generalized with them (R52).
 
-> **R18 — Prune.** A relation leaves its function when its worth is negative (D57), read at every level the
-> function is placed at (R50). A relation that leaves with no function stands bare wherever it
+> **R18 — Prune.** A relation leaves its function where its worth is higher elsewhere, in a function of its own
+> or in another (R54), and leaves for nothing where its worth is negative wherever it could be (D57), read at
+> every level the function is placed at (R50). A relation that leaves for nothing stands bare wherever it
 > holds. A function leaves the dictionary when its last relation does. **Relations leave one at a time**, the
-> most negative first, and the function's other relations are priced again before the next leaves, since a node
-> two relations bring is charged to whichever is read first. A class no function has any longer goes with its
+> one that gains most by leaving first, and the function's other relations are priced again before the next
+> leaves, since what fails beyond a relation that left is priced anew. A class no function has any longer goes with its
 > last function. A function's interneuron is decommissioned when due (R38).
 
 ## 6.2 Election
