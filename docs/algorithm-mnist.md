@@ -17,8 +17,8 @@ beside white. A diagonal is two black pixels one step apart in `x` and in `y` at
 component in each (D34), and the arrangement of black and white around a pixel is its neighborhood (D7). Each
 image is one frame, and consecutive images are unrelated.
 
-A bare pixel costs its relations to the inked pixels around it, one edge each, less those the others imply
-(D12, D13, D55). A call costs one per relation that did not come true and one per argument.
+A bare pixel costs its relations to the pixels around it, black and white alike, one edge each, less those
+the others imply (D12, D13, D55). A call costs one per relation that did not come true and one per argument.
 
 The resolution is the environment's to raise. With 256 buckets the dimension reports a gray level at each point.
 With three channels sharing the layout, each with one event dimension, it reports red, green and blue; neurons of
@@ -43,7 +43,7 @@ policy every connection is to a digit action, and a reward scoped to the digit c
 
 | What stands | its reach | what it sees, and what forms |
 |---|---|---|
-| a pixel | 1 in `x`, in `y` and in time (D4) | An inked pixel sees the inked pixels among the eight around it and the nine at those places in the frame before. Each neighbor gives one relation, at its offset in `x`, `y` and time (D34, R21): ink at `(+1, 0)`, at `(+1, +1)`, at `(0, −1)`, and so on. Ink's history holds each at a strength in the hundreds. Grouping merges the relations that hold together in ink's history into functions of fixed nodes, all of them ink (R50), and keeps each whose worth is positive (D57). |
+| a pixel | 1 in `x`, in `y` and in time (D4) | A pixel sees the eight around it and the nine at those places in the frame before, black and white alike, since white reports too. Each neighbor gives one relation, at its offset in `x`, `y` and time (D34, R21): ink at `(+1, 0)`, white at `(+1, +1)`, ink at `(0, −1)`, and so on. Ink's history holds each at a strength in the hundreds. Grouping merges the relations that hold together in ink's history into functions of fixed nodes, black and white around a black pixel (R50), and keeps each whose worth is positive (D57). |
 | an interneuron over pixels | 1 beyond the farthest pixel it stands for, from its origin (D4) | It sees the interneurons within reach and the pixels nothing covered, and nothing under a call (D5). Its history, over its activations across images, holds relations to them, one per neighbor. Grouping, finding and the election run as at the base, and a fit that lands on an interneuron as a node covers its whole count (D22, D54). |
 | an interneuron above | the same, one more each level | Levels run until one fires nothing (R26). |
 
