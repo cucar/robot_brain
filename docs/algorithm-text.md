@@ -8,41 +8,40 @@ letter sees only the letter before it, to the interneurons that stand for the st
 
 # 1. The environment
 
-One channel, `text`, laid out over time alone, with radius `R = 1` (R4): a letter sees the letter before it
-and nothing further (D4). It declares one event dimension, `letter`, with a bucket per letter and one for the
-space; each bucket is a base neuron (D52). One frame is one letter. There is no action dimension: this machine
-reads.
+One channel, `text`, laid out over time alone: a letter sees the letter before it and nothing further (D4). It
+declares one event dimension, `letter`, with a bucket per letter and one for the space; each bucket is a base
+neuron (D52). One frame is one letter. There is no action dimension: this machine reads.
 
 There is no spatial dimension, so a bare record is two numbers, the neuron and the frame (D12, D13). A call's
 record is two numbers, plus one per relation that did not come true and one per value.
 
 # 2. The base: one letter back
 
-At the base the reach is the radius, 1 (D4), so a letter's neighborhood is one neighbor, the letter before it
-(D7). Its activate call returns one relation per activation: the letter before, at `−1` in time, with the rows
-of the history that hold it (D34, R21).
+At the base the reach is 1 (D4), so a letter's neighborhood is one neighbor, the letter before it (D7). Its
+activate call returns one relation per activation: the letter before, at `−1` in time, with its strength, how
+many of the letter's activations saw it (D34, R21).
 
-A relation held in one row is returned and read in the index, to find a function that already fits it; nothing
-is built on it (R21, R53). Held in two rows, it is grouped into a function of two fixed nodes (R50). Take `th`.
-Once `h`'s history holds `t@−1` in two rows, `{h, t@−1}` is a function: `t` and `h` one frame apart, written
-from the older of the two (D15). Its price:
+A relation at strength 1 is returned and read in the index, to find a function that already fits it; nothing
+is built on it (R21, R53). At strength 2 it is grouped into a function of two fixed nodes (R50). Take `th`.
+Once `h` has seen `t` one back twice, `{h, t@−1}` is a function: `t` and `h` one frame apart, origin `h`
+(D15). Its price:
 
 | | numbers |
 |---|---|
 | A, the two bare records | 4 |
 | B, the call's record | 2 |
-| savings per row | 2 |
+| savings per occasion | 2 |
 | entry in the dictionary: one relation, two neurons | 3 |
-| margin at two rows | 1 |
+| worth at strength 2 | 1 |
 
-The margin is positive at two rows, so the function is kept (D30). Find reads its relation in the index and it
-is new (R53). The election places it over `t` at frame `f − 1` and `h` at `f`, 4 for 2, and takes it (R24). Its
-interneuron, call it `TH`, is allocated (R16) and fires at frame `f`, the latest frame of the two (D53),
+The worth is positive at strength 2, so the function is kept (D57). Find reads its relation in the index and
+it is new (R53). The election places it over `t` at frame `f − 1` and `h` at `f`, 4 for 2, and takes it (R24).
+Its interneuron, call it `TH`, is allocated (R16) and fires at frame `f`, the latest frame of the two (D53),
 covering both. `t`, open at age 1, connects once more, to `TH` at `+1` (D10); `h`, covered at age 0, writes
 nothing. Both leave the apex (D49).
 
-Once a function is in the dictionary, it is found from a single row (R53) and fits wherever its two letters
-stand: one interneuron for every `th` in the stream (D11).
+Once a function is in the dictionary, it is found from a single occurrence (R53) and fits wherever its two
+letters stand: one interneuron for every `th` in the stream (D11).
 
 **No variable forms in this stream.** Two functions that differ at a node, `{h, t@−1}` and `{h, s@−1}`, are
 generalized into `{h, C@−1}`, `C` a class whose members are `t` and `s`, and the general function is priced as a
@@ -56,25 +55,26 @@ general.
 
 A word is not one neuron. What the machine names is the stretch that recurs, a letter at a time.
 
-Take `the`. `TH` fires at `h`'s frame `f`. At `f + 1`, `e` fires. Its neighborhood holds `TH` at `−1` as
-itself, and `h` under it at `−1` (D5, D47); `t` stands at `−2`, beyond its reach. The call returns two
-relations, `(e, TH, −1)` and `(e, h, −1)` (R21).
-
-- `{e, h@−1}`, held in two rows, is a function. On the board it lands on one of the two activations `TH`
-  covers, and is credited nothing for it (R23): it measures 2 for 2 and is not taken.
-- `{e, TH@−1}`, once `TH` has stood before `e` in two rows, is a function. It lands on everything `TH`'s call
-  covers, so it takes that call back (R23): A is `e`'s record and `TH`'s record, 4; B is 2. The election takes
-  it. `TH`'s call leaves the file, `TH`'s activation leaves the apex, and the new interneuron, `THE`, fires at
-  `e`'s frame, standing for `t h e` and expanding to it (R28). `h`, open at age 1, connects once more, to `THE`
-  (D10); `t`'s window has closed (D9).
+Take `the`. `TH` fires at `h`'s frame `f`. At `f + 1`, `e` fires. Its neighborhood holds `TH` at `−1` and
+nothing under it: `t` and `h` are covered, and a covered activation is a neighbor of nothing (D5, D10). The
+call returns one relation, `(e, TH, −1)` (R21). Once `TH` has stood before `e` twice, `{e, TH@−1}` is a
+function. It lands on `e` and on `TH`'s call as a node, and covers the call's whole count (D22): A is `e`'s
+record and `TH`'s record, 4; B is 2. The election takes it. `TH`'s activation leaves the apex, and the new
+interneuron, `THE`, fires at `e`'s frame, standing for `t h e` through `TH` and expanding to it (R28). `TH`,
+open at age 1, connects once more, to `THE` (D10).
 
 So each letter's function that pays names what stood on the apex a frame before: the bare letter, or the
 interneuron that covered it, and through that interneuron the whole stretch it stands for. The stretch grows a
 letter per frame for as long as each next letter has stood after that interneuron twice. Where it has not, the
-relation is in one row, nothing is built on it (R21), the letter stands bare, and the chain starts again from the
-next pair that recurs.
+relation is at strength 1, nothing is built on it (R21), the letter stands bare, and the chain starts again
+from the next pair that recurs.
 
-An interneuron sees `R` beyond what it stands for (D4), so it also sees the bare letter or the interneuron just
+Where `h` stands bare, after a space or a vowel, `{e, h@−1}` forms from those occurrences, and it fits at
+`the` too: a fixed node comes true on a call whose origin is that neuron, so its `h` lands on `TH` and covers
+the call (D54). There it measures the same as `{e, TH@−1}`, and the election takes the fit whose relation
+reads as it stands on the board, `{e, TH@−1}`, first (R24). Each has its own places.
+
+An interneuron sees one beyond what it stands for (D4), so it also sees the bare letter or the interneuron just
 before its stretch. A function from its own history may name that, where it recurs twice, and join two stretches
 into one.
 
@@ -91,17 +91,16 @@ A stretch of any length forms this way, and nothing has to be a power of two lon
 and whatever fires next within reach can name it. A long stretch does not see far for being long: an interneuron
 standing for eight letters sees one beyond them, eight back from where it fires (D4).
 
-The radius sets how much of this happens at the base. At `R = 4` a letter sees four letters back, each at its
-own offset (D6), so a stretch of up to five letters is one function from its last letter's history, and the
-chain above starts from there; [algorithm-xy.md](algorithm-xy.md) is a stream declared that way.
-
 # 4. A doubled letter
 
 `ll`, `oo` and `ss` are pairs like any other: the second `l` sees the first one back, a neuron being its own
-neighbor at any offset but zero (D26). `{l, l@−1}` has two fixed nodes and one relation, so its entry is 3, it
-saves 2 per row, and its margin is positive at two rows, as `{h, t@−1}` is. The same holds for `oo` from `o`'s
-history and `ss` from `s`'s. A doubling that recurs is covered by its own interneuron. One too rare to recur
-within `l`'s history stays as two letters on the apex, as any rare pair does.
+neighbor at any offset but zero (D26). `{l, l@−1}` has one node and one relation from it to itself, so its
+entry is 2 and it is a cycle of one node (D15): `l` after `l` for as long as it runs. Its fit at a doubled
+letter reads one lap and covers both, 4 for 3, the call's record and how far it ran, so it pays from its third
+occurrence; a longer run is covered a letter per frame, each call landing on the one before as its origin
+(D54). The same holds for `oo` from `o`'s history and `ss` from `s`'s.
+A doubling that recurs is covered by its own interneuron. One too rare to recur within `l`'s history stays as
+two letters on the apex, as any rare pair does.
 
 # 5. What the apex holds after a sentence
 

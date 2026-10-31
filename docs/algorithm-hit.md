@@ -27,9 +27,8 @@ that reach they are each other's neighbors on the apex (D5). Within the radius e
 the distances this case uses are `2` and `4`.
 
 The layout has two spatial dimensions, so a bare record is four numbers: the neuron, the frame and two
-positions (D13). A call's record is four, then one per relation that did not come true, one per value, and
-one per position of an activation it lands on that no relation fixes (D12, D22). Offsets are written
-`(time, x, y)`.
+positions (D13). A call's record is four, then one per relation that did not come true and one per value
+(D12, D22). Offsets are written `(time, x, y)`.
 
 # 3. The neurons
 
@@ -76,7 +75,7 @@ charges nothing (R49), so `hit` is proposed, and output (R30).
 **A lesson per thing on a course** is one level up. The bound ball stands at `COMING`'s own coordinate, a
 neighbor at offset zero (D26). Its positions are covered, and its neuron is written as `COMING`'s value, so a
 function `{COMING, ball@(0, 0, 0)}` covers that one number and `COMING`'s record, seven, for four: three
-relations and two neurons, an entry of five, so its margin is positive from its second row (D30). Until then the first
+relations and two neurons, an entry of five, so its margin is positive from its second row (D57). Until then the first
 ball is answered by `COMING`, not by a lesson of its own.
 
 **How `T` came to be.** A ball stood in `approaching`'s rows at `(0, 0, +2)` and at `(−1, 0, +4)`, and

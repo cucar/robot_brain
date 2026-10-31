@@ -49,6 +49,22 @@ if it is common:** report one bit per bid, bought or not, back to the neuron on 
 and let R18 read benefit over bought activations only. That is far cheaper than the per-neighbor
 adjustment the design used to run, and it closes the case without touching what a pattern learns.
 
+**A function that fits and always loses stays.** Worth is read from the neurons' histories (D57, R50), and a
+neuron records that a relation recurred, not whether the election took the fit it stood in. So a function whose
+relations keep recurring but whose fits are outbid wherever they are placed looks worth keeping: it stays in
+the dictionary, is placed at every level its relations are returned at, and keeps the neuron it was given the
+one time it was accepted. The design bets this is rare. A relation at a function's past end joins the function
+instead of starting a longer competitor (R54); what follows a call is a function above it, not a replacement
+(R50); and where a function loses because another covers its nodes, those nodes leave the board, its relation
+stops being observed, its `with` slides out of the histories and it is pruned the ordinary way (R18). What is
+left is two functions over the same bare ground where one always wins. Whether that stays rare, or compounds
+into neurons that fit and never cover, the runs will have to show. **Diagnostic:** per function, fits placed
+against fits accepted over a stretch of frames, and the interneurons allocated that have not fired in a long
+stretch. **Fallbacks if it is common:** the one bit per fit of the paragraph above, accepted or not, returned
+to the neurons that answered for it, so that `without` counts a declined fit; or a function whose interneuron
+has not fired within some stretch of frames leaves the dictionary, which is a timer the design otherwise does
+not have.
+
 **Earlier bidders win shared past neurons.** A bid at `f` keeps a neuron at `f − 2` against a better bid at
 `f + 1` (R23). The bias is on the neurons at the boundary between what two children cover and it is stated as a cost.
 **Diagnostic:** how

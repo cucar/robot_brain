@@ -1,9 +1,9 @@
 # An alternating pair
 
 A worked case for [algorithm.md](algorithm.md): how `x, y, x, y, …` is seen by the two neurons in it, the
-function it becomes, a cycle of two nodes with one origin, and what one call over the whole stretch costs.
-Then the same for other pairs, and the general function they generalize into. Nothing here is normative.
-It follows the letters through grouping, the call at the present, the count, and the generalization.
+function it becomes, a cycle of two nodes with one origin, and what the stretch costs at every frame. Then
+the same for other pairs, and the general function they generalize into. Nothing here is normative. It
+follows the letters through grouping, the call at the present, the worth, and the generalization.
 
 ---
 
@@ -17,63 +17,64 @@ follows a stretch but silence, so what a pass teaches is the alternation itself.
 # 2. What the letters build
 
 **The two relations.** `y` at frame 2 sees `x` one back: the relation `(y, x, −1)`, from the later neuron to
-the earlier (D34). `x` at frame 3 sees `y` one back: `(x, y, −1)`. Each neuron counts its own (D47), and from
-frame 4 on each relation has come round twice (R21).
+the earlier (D34). `x` at frame 3 sees `y` one back: `(x, y, −1)`. Each neuron counts its own (D47).
 
 **The first function.** At frame 4, `(y, x, −1)` has strength 2 and no function holds it, so it starts one: two
 nodes, `x` and `y`, one relation, origin `y` (R50, D15). It is placed at frame 4, where it lands on `y` at 4
 and `x` at 3. It covers the relation and both names, 3, for a call of 1, and is accepted (R24). Its
 interneuron, `XY`, fires at frame 4, the origin, covering frames 3 and 4 (D53).
 
-**The cycle closes.** At frame 5, `x` fires, and its neuron returns `(x, y, −1)`, strength 2. That relation
-shares `y` with the origin of the call `XY` fired a frame before, which is still open, so it is a candidate of
-`XY`'s function, attached at that placement (R50). `XY` is placed at every pair `x, y` in the stretch, and `x`
-follows every one of them, so the candidate is attached at every accepted placement, and it joins: the
-function is now `y` to `x` at −1 and `x` to `y` at −1, two nodes, two relations, a cycle (D15, R54). The
-relation a candidate would add from `x` to `x` at −2 is implied by the other two along the cycle, and is never
-held (D34).
+**The pair covers the letter after it from view.** At frame 5, `x` fires and sees the call `XY` at `−1` and
+nothing under it: a covered activation is a neighbor of nothing (D5, D10). Its neuron returns `(x, XY, −1)` at
+strength 1, and `x` stands bare for the frame. At frame 6, `y` sees that bare `x`, `XY` fits again, and fires
+at 6 covering frames 5 and 6.
 
-**One function, one origin.** `(x, y, −1)` recurs at frame 5 too, and a relation no function holds would
-start one of its own, origin `x`; but it is a candidate of `XY` at the same frame, its worth in the cycle is
-higher than alone, so it joins there and nothing of its own survives: a relation is in one function (R50,
-R54). `XY` has origin `y`, and that is the only origin the cycle has.
+**The cycle closes through the call.** At frame 7, `x` sees `XY` at `−1` again, and `(x, XY, −1)` has strength
+2. The call's function has `y` as its origin, and `y` is a node of that same function, so the relation is read
+as `x` after `y` (R50, D54): a candidate attached at `y` whose other end, `x`, is already a node. It closes the
+cycle (D15). `x` answers for it over its history: `with` 2, `without` 0, and it costs one offset, so its worth
+is 3 and it joins (D57, R54). The function is now `y` after `x` and `x` after `y`, two nodes, two relations, a
+cycle. The relation is in that function and starts none of its own (R50), so nothing forms over the call at
+the `x` frames. Placed again at frame 7 the function has no fit, since no `y` stands at the present (D31):
+`x` is bare for one frame.
 
-**One call over the stretch, at every `y`.** From then on the stretch is recognized at every `y`. The call
-fires there, reads back round the cycle as far as the relations keep coming true, to the start of the stretch
-(D54), covers everything back to it, and takes back the call that fired at the `y` before, which covered two
-letters less (R23). At an `x` frame nothing fits, since no activation stands at the origin: the `x` is bare
-for one frame, its name and its relation back to the covered `y`, two numbers, and is covered at the next `y`
-when the fit reads back through it (R27). So the `y` that just fired is covered at age 0, the origin, and never
-stands on the apex; the `x` between stands on it for a frame; and the apex holds one call for the stretch, the
-latest (D49, D10). The call counts how far back it ran (D12).
+**One call per lap, each covering the one before.** At frame 8 the cycle fits at `y`: `y` after `x` lands on
+the `x` at 7, and `x` after `y` reaches the `y` at 6, which stands as the call `XY` fired there. A fixed node
+comes true on a call whose origin is that neuron, so the fit lands on the call and covers its whole count
+(D54, D22). Nothing earlier is on the board: at the base reach the fit reads one lap and lands on the call of
+the lap before.
 
-| a stretch of `2k` letters, at its last letter | numbers |
+| the fit at frame 8 | numbers |
 |---|---|
-| bare: `2k` names and `2k − 1` relations | `4k − 1` |
-| the call: its name, and how far back round the cycle it ran | 2 |
+| A: `y` and `x`, their two relations, and the call at 6, its name and how far it ran | 6 |
+| B: the call's name, and how far it ran, one lap | 2 |
 
-The function costs 4 in the dictionary, two names and two offsets (D56, D13).
+It is accepted, `XY` fires at 8, and the call at 6 is covered and leaves the apex (D10). From then on the
+stretch is recognized at every `y`: the call fires there, covers the lap and the call before it, and the apex
+holds one call for the stretch, the latest (D49). The `x` between stands on the apex for a frame, its name and
+its relation back to the call, two numbers, and is covered at the next `y`. The laps are in the calls, each
+under the one after it, and expansion follows them back (R28). The function costs 4 in the dictionary, two
+names and two offsets (D56, D13).
 
 **Other pairs.** `a, b, a, b, …` builds `AB` the same way, and `m, n, m, n, …` builds `MN`. Each is a function
 of two nodes and two relations with its own interneuron, and none of them shares a node with another.
 
 # 3. The call at the present
 
-Each frame of the stretch the call fires anew at the present letter, at age 0, and infers from its connections
-what follows (R36): the next letter, which its earlier activations saw on the apex at offset 1 as the call
-that fired there, and after the stretch, the silence. The activation it took back is gone from the apex, and
-the new one votes (R46). The letter that just fired is covered at age 0 and writes one connection, to the
-call, and is silent (D10). So the call speaks for the stretch: at the base, a letter's own connections say
-only that `x` is followed by `y` and `y` by `x`, which the call says already, and nothing is inferred at the
-base that the call does not say.
+Each `y` of the stretch the call fires anew at the present letter, at age 0, and infers from its connections
+what follows (R36): the next letter, which its earlier activations saw on the apex at offset 1, and after the
+stretch, the silence. The call it covered is gone from the apex, and the new one votes (R46). The letter that
+just fired is covered at age 0, writes one connection to the call, and is silent (D10). So the call speaks for
+the stretch: at the base, a letter's own connections say only that `x` is followed by `y` and `y` by `x`,
+which the call says already.
 
-# 4. The count
+# 4. The worth
 
-The function's counts are over its accepted placements (R50, D57). Each `y` of a stretch is one placement,
-both relations come true at it, and nothing fails: a fit reads back only as far as the relations hold. Over a
-window of placements each relation is worth `2 · held − 2`, with `held` the placements, so a pair that comes
-round at all keeps its function, and one that stops coming sees its placements age out and the function
-pruned (R18).
+Nothing is kept for the function: its worth is read from the neurons at every level it is placed at (R50,
+D57). `y` answers for `y` after `x`, `x` for `x` after `y`, each over its own history. In a stretch both hold
+at every lap, so `with` climbs and `without` stays at zero: the first relation is worth `2 · with − 3` and the
+closing one `2 · with − 1`. A pair that stops coming sees its `with` slide out of the two histories, the worth
+falls below zero, and the function leaves (R18).
 
 # 5. The general function
 
@@ -84,18 +85,17 @@ two open nodes, `P` and `P′`, with `P′` after `P` and `P` after `P′`, orig
 dictionary and replaces nothing: the specific functions stand where they recur, since a call of one of them
 costs 2 against the general function's 4, its name, how far it ran, and two values.
 
-Where the general function pays is a pair never seen. `u, v, u, v, …` fits it at the second `v`, `u` bound in
-`P′` and `v` in `P`, and from then on the stretch is covered at every `v` by the general function at 4
-numbers, against `4k − 1` bare, with nothing learned about `u` or `v` first. Each becomes a
-member of its parameter in that pass. If the pair keeps coming, `(v, u, −1)` recurs, its own function starts,
-grows into the cycle, and covers the pair for 2 from then on; the general function goes back to waiting for
-the next new pair.
+Where it would pay is a pair never seen. `u, v, u, v, …` fits it at the second `v`, `u` bound in `P′` and `v`
+in `P`, reading back over the four bare letters: 7 for 4. But `(v, u, −1)` has strength 2 at that same frame,
+the pair's own function starts and is placed beside it, 3 for 1, and the election takes the specific first
+(R24). So in this stream the general function covers nothing. It would, where a pair comes round too rarely
+for its own function to form within a history, or where the stream showed a pair twice and never again.
 
 # 6. The same thing as code
 
 | in the code | in the machine |
 |---|---|
-| a loop that alternates two things | a function of two nodes with a cycle, one call for the whole loop |
+| a loop that alternates two things | a function of two nodes with a cycle, one call on the apex for the loop |
 | the loop body | the two relations |
-| how many times it ran | one number the call counts |
+| how many times it ran | one lap per call at the base reach, the earlier laps in the calls under it |
 | the same loop over different things | one general function with two parameters, used where no specific one fits |

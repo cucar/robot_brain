@@ -12,8 +12,8 @@ and that is the one the design runs natively.
 
 # 1. The environment
 
-**In.** One channel, laid out over time alone, with radius `R = 1` (D1): a base neuron sees the frame before
-it. It declares one event dimension, `cue`, with two buckets, `go` and `done`.
+**In.** One channel, laid out over time alone (D1): a base neuron sees the frame before it (D4). It declares
+one event dimension, `cue`, with two buckets, `go` and `done`.
 
 **Out.** One action dimension, `tap`, with one base action, `tap`, in the same channel, so a tap is a neighbor
 of the cue and of the tap before it (D1). One base action runs per action dimension per position in a frame
@@ -40,15 +40,14 @@ That is the whole machine: three neurons for the three states of the loop, and o
 # 3. How it was learned
 
 1. **The first tap names the cue.** In the second run, the tap after `go` sees `go` at `−1`, and `tap`'s
-   activate call returns that relation held in two rows (R21). Grouping makes `{tap, go@−1}` of it (R50). It
+   activate call returns that relation at strength 2 (R21). Grouping makes `{tap, go@−1}` of it (R50). It
    writes two records, four numbers, as one call of two, and its entry is one relation and two neurons, three,
-   so its margin is positive at two rows (D30). The election takes it (R24), it is allocated `go·tap` (R16),
+   so its worth is positive at strength 2 (D57). The election takes it (R24), it is allocated `go·tap` (R16),
    and `go·tap` fires at the tap's frame, the latest of what it covers (D53), at the frame's second level.
 2. **The second tap names the first interneuron.** Once `go·tap` stands, the next tap sees it at `−1`, since
-   a neighbor is whatever stands on the apex within reach (D5). It also sees, through the cover, the tap under
-   `go·tap` at `−1`; those two count together at `go·tap`'s record, and a function landing on one of them
-   saves nothing (D47, D22). In the third run the relation to `go·tap` is held in two rows, and `{tap,
-   go·tap@−1}` is grouped: it covers the tap and `go·tap`'s record, four numbers, for two. Its interneuron
+   a neighbor is whatever stands on the apex within reach (D5), and nothing under it (D10). In the third run
+   the relation to `go·tap` is at strength 2, and `{tap, go·tap@−1}` is grouped: it covers the tap and
+   `go·tap`'s record, four numbers, for two (D22). Its interneuron
    `go·tap²` covers `go·tap` and the tap, three frames of run.
 3. **The third tap names the second.** `{tap, go·tap²@−1}` in the fourth run, the same way, and `go·tap³`.
    Each state is one frame longer than the one before it. The chain grows one state per run, because an

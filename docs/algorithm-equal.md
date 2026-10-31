@@ -33,8 +33,8 @@ varies every digit. Afterwards it runs nothing, executes what the machine output
 what was wrong.
 
 **Prices.** The layout has one spatial dimension, so a bare record is three numbers: the neuron, the frame and
-the slot (D13). A call's record is three numbers, then one per relation that did not come true, one per value,
-and one per position of an activation it lands on that no relation fixes (D12, D22).
+the slot (D13). A call's record is three numbers, then one per relation that did not come true and one per
+value (D12, D22).
 
 **Why `a` and `b` are two positions of one dimension.** The only thing in the design that tests two places for
 the same content is a parameter, and what it tests is that one neuron stands at both (D44). A neuron is a
@@ -70,7 +70,7 @@ Offsets are written `(time, slot)`.
    lands on the `3` at slot `1`, the smaller coordinate (D31). The other `3`'s frame is fixed by no relation,
    so the call writes it. The function writes two records of `3` and `run`'s, nine numbers, as one call of four:
    it saves five per row. Its entry is three relations and two neurons, five, so its margin is positive from
-   its second row (D30).
+   its second row (D57).
 2. **Two digits' equality is one parameter.** When `{run, 4@s+1, 4@s+2, 4@t0}` is grouped, find reads each of
    its relations with the digit end open (R53) and reaches the function for `3`. The two differ only at nodes
    that hold one neuron within each function, so those nodes are one parameter (R52): `equal`, which is `{run,
