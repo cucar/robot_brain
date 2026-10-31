@@ -18,8 +18,8 @@ before (D5), and a function may name both.
 
 There is no spatial dimension, so a function fits at one place per frame, and its origin is its node at the
 current bar: a call fires at the latest bar it covers and covers back from there (D15, D37). A bare bar counts
-its name, 1, and the relation to the bar before it, 1 (D12, D13). A call counts its name, 1, plus one per
-relation that did not come true and one per value.
+its relation to the bar before it, one edge (D12, D13). A call counts one per relation that did not come true
+and one per argument, and nothing else.
 
 **Out.** One action dimension per channel, with two base actions, `own` and `disown`: the state the machine
 wants to be in for that instrument. The environment holds the state it is in, compares the two, and buys, sells
@@ -50,14 +50,14 @@ the action is strengthened and takes the reward in one write (R29, R31).
 
 | What stands | its reach | what forms |
 |---|---|---|
-| a bar's move | 1 (D4) | A move sees the move before it in its own channel, and the moves of the other instruments at this frame and the one before (D5). Each neighbor is one relation (D34, R21). At strength 2, `{m', m}` with `m'` one bar back is a function: two nodes, one offset, origin `m` (R50). Its fit covers the relation and both names, 3, for a call of 1 (D22), so it is accepted and gets an interneuron, which fires at `m`'s bar (R16, D53). `{m_A, m_B}` across two instruments at offset 0 is priced the same. |
-| an interneuron over a pair | 1 beyond the farthest bar it stands for (D4): 2 | The next bar sees the interneuron at `−1` and nothing under it (D5, D10). At strength 2, `{PAIR, m}` is a function whose fit covers the relation, the bar's name and the call's count, 3 for 1. The plain pair fits at the same bar too: its first node comes true on the call whose origin it is, lands on it and covers the same count, 3 for 1 (D54). The two measure the same, and the link is taken first, since its relation reads as it stands on the board (R24); the pair then lands on nothing uncovered. The link's interneuron stands for three bars and expands to them (R28). |
+| a bar's move | 1 (D4) | A move sees the move before it in its own channel, and the moves of the other instruments at this frame and the one before (D5). Each neighbor is one relation (D34, R21). At strength 2, `{m', m}` with `m'` one bar back is a function: two nodes, one offset, origin `m` (R50). Its fit covers the relation, one edge, for a call that costs nothing (D22), so it is accepted and gets an interneuron, which fires at `m`'s bar (R16, D53). `{m_A, m_B}` across two instruments at offset 0 is priced the same. |
+| an interneuron over a pair | 1 beyond the farthest bar it stands for (D4): 2 | The next bar sees the interneuron at `−1` and nothing under it (D5, D10). At strength 2, `{PAIR, m}` is a function whose fit covers the relation and the call's count, 1 for 0. The plain pair fits at the same bar too: its first node comes true on the call whose origin it is, lands on it and covers the same, 1 for 0 (D54). The two measure the same, and the link is taken first, since its relation reads as it stands on the board (R24); the pair then lands on nothing uncovered. The link's interneuron stands for three bars and expands to them (R28). |
 | a longer shape | 1 beyond what it stands for | Each further recurrence of the stretch extends the chain by one bar, the next bar's function naming the interneuron that fired a frame before. An interneuron also sees the bar before its stretch, and a function from its history may name it. Shapes across instruments form the same way: an interneuron in one channel beside one in another at offset `0`. |
 
 **Where the stretch stops recurring.** A bar that has not stood after the interneuron twice holds the relation
 at strength 1; it is read in the index to find what already fits, and nothing is built on it (R21, R53). The
 pair function for that bar's move is placed, its first node landing on the chain's call as the origin's neuron
-(D54), covers 3 for 1, and is accepted, so the bar stands in a pair and the chain starts again from there. The
+(D54), covers 1 for 0, and is accepted, so the bar stands in a pair and the chain starts again from there. The
 dictionary holds one interneuron per stretch of buckets that recurred, each as long as the recurrence, and a
 stretch seen at one frame and again at another is two activations of one interneuron (D11).
 
@@ -70,8 +70,8 @@ happens to the links of a chain that stopped recurring. A pair outbid at some ba
 recurring and stays.
 
 **No variable forms.** Two pairs that differ at a node, `{fall₁, m}` and `{fall₂, m}`, are generalized into
-`{C, m}`, `C` a class, priced as a replacement of the two (R52): the two cost 6 in the dictionary and 1 per
-occurrence; the class 5 and 2 per occurrence, the member that stood counted as a value (D13). Each specific
+`{C, m}`, `C` a class, priced as a replacement of the two (R52): the two cost 2 in the dictionary and nothing
+per occurrence; the class 1, and one binding per occurrence for the member that stood (D13). Each specific
 function has at least two occurrences, so the class is never cheaper and does not join. A move that repeats,
 `{m, m}`, is a pair whose two nodes name one neuron. A parameter tying the two would leave no fixed node, and
 R52 makes nothing of it. Since no function names an action, the dictionary describes the market and nothing the
@@ -125,30 +125,30 @@ whatever neuron stands there, and that neuron can carry the whole history.
 **Lap 1: the first pair.** Each bar's neuron records the move before it. `fall` at bar 2 records `rise` one
 back, and `fall` at bar 6 records the same, so at bar 6 the relation rise-then-fall has strength 2 and a
 function starts for it (R50): nodes `rise` and `fall`, one offset, origin the `fall`. It is placed at bar 6,
-covers the relation and both names, 3, for a call of 1, is accepted, and gets an interneuron, which stands for
+covers the relation, 1 for 0, is accepted, and gets an interneuron, which stands for
 bars 5 and 6 and fires at bar 6 (D53). The `fall` at bar 6 is covered at age 0.
 
 **Lap 2: every pair.** The other three pairs reach strength 2 in turn, fall-then-rise at bar 1, fall-then-fall
 at bar 3, rise-then-rise at bar 5, and each is accepted the same way. A pair whose first node stands as the
-origin of the previous pair's call lands on that call and covers it, 3 for 1 (D54). By the end of the lap every
+origin of the previous pair's call lands on that call and covers it, 1 for 0 (D54). By the end of the lap every
 bar is the origin of one pair call, and each pair's interneuron stands on the apex where the next bar can see
 it.
 
 **Lap 3 and on: the chain.** A bar's neuron now sees the call one frame back, and nothing under it (D5).
-"My move, after the neuron from one bar back" reaches strength 2 at lap 3. Its fit covers the relation, the
-bar's name and the call's count; the plain pair's fit at the same bar lands its first node on the call through
-its origin and covers the same (D54):
+"My move, after the neuron from one bar back" reaches strength 2 at lap 3. Its fit covers the relation and the
+call's count; the plain pair's fit at the same bar lands its first node on the call through its origin and
+covers the same (D54):
 
 | fit at a bar, lap 3 | coverage | price |
 |---|---|---|
-| the pair, its first node landing on the call as its origin | 3 | 1 |
-| the link, this move after the previous call | 3 | 1 |
+| the pair, its first node landing on the call as its origin | 1 | 0 |
+| the link, this move after the previous call | 1 | 0 |
 
 They measure the same, and the link is taken first, since its relation reads as it stands on the board (R24);
 the pair then lands on nothing uncovered and is declined. The link's call fires at this bar and covers the
 previous call and this bar. Its interneuron stands for this bar and
 everything the previous neuron stood for, so each bar adds one link: a chain. The count per bar in a chain is
-one number, the link's call.
+nothing: the link's call has no failure and no argument.
 
 **Why it makes mistakes while learning.** A link exists once its pattern has been seen twice. When the chain
 reaches a link no bar has learned to follow yet, the next bar stands in a plain pair and a new chain starts from
@@ -178,8 +178,9 @@ its answer is right every time.
 pairs' relations stop being observed, their `with` slides out of the bars' histories, and they are pruned
 (R18); the links of the chains that broke during learning go the same way. Their interneurons are
 decommissioned as the last windows over them close (R38). After that the machine is 10 neurons: the 4 base
-ones, `rise`, `fall`, `own`, `disown`, and the 6 in the ring. The dictionary is six functions of two nodes and
-one offset, 18 numbers, and each bar costs 1.
+ones, `rise`, `fall`, `own`, `disown`, and the 6 in the ring. The dictionary is six functions of one relation
+each, 6 edges, and the run costs nothing: the ring's call at the latest bar relates to nothing outside it, the
+free root the evaluation document names.
 
 **Results.** The run of this case under the earlier rules, where a bar saw the move under a call and the pair
 was credited nothing for it, was right on 92.2% of bars over 150 laps, every miss before the ring closed, for

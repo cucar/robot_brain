@@ -17,8 +17,8 @@ beside white. A diagonal is two black pixels one step apart in `x` and in `y` at
 component in each (D34), and the arrangement of black and white around a pixel is its neighborhood (D7). Each
 image is one frame, and consecutive images are unrelated.
 
-With two spatial dimensions a bare record is four numbers, the neuron, the frame, `x` and `y` (D12, D13). A
-call's record is four numbers, plus one per relation that did not come true and one per value.
+A bare pixel costs its relations to the inked pixels around it, one edge each, less those the others imply
+(D12, D13, D55). A call costs one per relation that did not come true and one per argument.
 
 The resolution is the environment's to raise. With 256 buckets the dimension reports a gray level at each point.
 With three channels sharing the layout, each with one event dimension, it reports red, green and blue; neurons of
@@ -50,21 +50,23 @@ policy every connection is to a digit action, and a reward scoped to the digit c
 **What a function saves.** Take a function of `k` relations from ink's history, each landing on a pixel at
 the offset it names in `x` and `y` (D15, D22):
 
-| | numbers |
+| | edges |
 |---|---|
-| A, the pixel's record and each landed pixel's record | `4(k + 1)` |
-| B, the call's record | `4` |
-| savings per occasion | `4k` |
-| entry in the dictionary: `k` relations, ink named once | `k + 1` |
-| worth at strength 2 | `7k − 1` |
+| A, the `k` relations it lands on | `k` |
+| B, the call's count | `0` |
+| savings per occasion | `k` |
+| entry in the dictionary: `k` relations | `k` |
+| worth at strength 2 | `k` |
 
-A relation that lands on nothing is written with the call, one number (D12). The worth is positive at strength
-2 for any `k`, and ink's history holds such occasions by the hundred.
+A relation that lands on nothing is a failure, one edge with the call (D12), so a function of `k` relations is
+taken where fewer than half of them fail. The worth is positive at strength 2 for any `k`, and ink's history
+holds such occasions by the hundred.
 
 **What grouping leaves.** Merging two relations lowers the cost of the occasions that hold both: one call
-covers the pixel and two neighbors and saves 8, where a second function could not cover the pixel again (D28)
+covers the pixel's two relations and saves 2, where a second function could not cover the pixel again (D28)
 and would save nothing. On an occasion that holds one of the two, the merged function fits with one relation
-that did not come true and saves 3. So the relations that hold together in ink's history merge, and what forms
+that did not come true, 1 for 1, and is not taken. So the relations that hold together in ink's history merge,
+and what forms
 is the arrangements of ink around a pixel that recur: a pixel with ink on both sides, a bend, the end of a
 stroke, each neighbor at its own offset in `x` and `y`. Pairs, corners and pieces of stroke, since a relation
 fixes its neighbor in every dimension at once.
@@ -73,8 +75,8 @@ fixes its neighbor in every dimension at once.
 and the greedy cover takes the placement with the highest coverage over price each round, a placement's
 coverage falling as earlier rounds cover its neighbors (D28, R24). What is left is a tiling: placements that do
 not overlap, each covering a pixel and the neighbors its relations landed on, and the pixels no placement pays
-for standing bare (R27). A placement at the edge of a stroke has relations that did not come true, one number
-each, and is taken where it still pays.
+for standing bare (R27). A placement at the edge of a stroke has relations that did not come true, one edge
+each, and is taken while fewer than half of its relations fail.
 
 **Time.** At `t:−1` a pixel sees the previous image's calls and the pixels nothing covered there, and nothing
 under a call (D5). Consecutive images are unrelated, so no relation across them recurs, nothing is built on
@@ -90,9 +92,9 @@ interneurons, until a level fires nothing.
 **Variables.** At the base every node is ink, so two functions never differ at a node and R52 makes nothing
 there. Above, two functions that differ in the interneuron at a node are generalized into one with a class
 there, or a parameter where the same interneuron stands at two nodes within each (R52). The general function is
-priced as a replacement of the two: each occurrence writes one number more, its value, and the dictionary writes
-one entry fewer, so it joins only where the dictionary saving outweighs the occurrences, long functions with few
-occurrences, and the specific functions stand otherwise.
+priced as a replacement of the two: each occurrence costs one binding more, and the dictionary one entry
+fewer, so it joins only where the entry saved outweighs the occurrences, long functions with few occurrences,
+and the specific functions stand otherwise.
 
 **Translation.** A function is its relations, offsets between its nodes (D15), so the same arrangement at
 another place in the image is another activation of the same interneuron (D11), and what is learned about it at

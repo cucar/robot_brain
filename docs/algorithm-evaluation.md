@@ -49,6 +49,15 @@ if it is common:** report one bit per bid, bought or not, back to the neuron on 
 and let R18 read benefit over bought activations only. That is far cheaper than the per-neighbor
 adjustment the design used to run, and it closes the case without touching what a pattern learns.
 
+**A root that touches nothing costs nothing.** A call costs its failures and its bindings and nothing for
+itself, since the relations from outside its function to its origin already join it to the graph (D13). A call
+that nothing outside relates to, the top of a stretch no activation within reach stands beside, is therefore
+in the count at zero, and a run the dictionary covers entire costs nothing at all. That is accepted. It takes
+a stream with nothing beside the loop: the alternation and the six-bar cycle do it, since each is one closed
+cycle and silence, and a real world, where something always stands within reach of the top, should hardly
+ever. **Diagnostic:** calls on the apex with no relation to anything outside what they cover, and how long
+they stand.
+
 **A function that fits and always loses stays.** Worth is read from the neurons' histories (D57, R50), and a
 neuron records that a relation recurred, not whether the election took the fit it stood in. So a function whose
 relations keep recurring but whose fits are outbid wherever they are placed looks worth keeping: it stays in
