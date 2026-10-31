@@ -833,8 +833,13 @@ A neuron the function does not name is in neither: it costs what it cost whether
 > twice: nothing is built on one occurrence (R21). Every relation is priced the same, the first and the ones
 > that join.
 >
-> **A relation's worth where it would be** is read the same way, as a candidate of that function (R50), and a
-> relation goes where its worth is highest (R54). The neurons' histories are the whole record, over the last
+> **A relation's worth where it would be** is read the same way, as a candidate of that function (R50), with
+> one edge more saved at each occasion it held with the function: a relation with a function of its own has a
+> call of its own, and where the two calls stand within reach of each other the edge between them is on the
+> apex, one at every occasion both fit (D26, D12); joined, there is one call and no such edge. So a candidate
+> is worth `2 · with − without − 1` in the function it would join, against `strength − 1` where it stands
+> alone, and a relation goes where its worth is highest (R54). The neurons' histories are the whole record, over
+> the last
 > `H` activations of each (D18), so a relation that stops recurring sees its `with` slide out, its worth fall
 > below zero, and leaves (R18). Worth measures what a function saves wherever it fits.
 
@@ -1213,8 +1218,10 @@ argument.
 > answer with the more activations behind it, as a returned relation is (R21).
 >
 > **Distance and worth.** A candidate's distance to a function is `1 − with / (with + without)`: zero where it
-> stood at every occasion the function did, one where it never did. Its worth in the function is `with` times
-> what it would save, less `without`, less its statement in the dictionary (D57). A candidate joins the function
+> stood at every occasion the function did, one where it never did. Its worth in the function is
+> `2 · with − without − 1`: the relation and the edge between its own call and the function's, saved at each
+> occasion it held with the function, a failure at each it did not, and its one edge in the dictionary (D57). A
+> candidate joins the function
 > it is nearest to, where its worth there is positive and higher than where it is (R54). A relation of a
 > function whose worth there has turned negative leaves it (R18). A relation the neurons returned with strength
 > 2 or more that no function holds starts a function of its own, two nodes and an offset, its strength its

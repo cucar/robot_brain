@@ -33,9 +33,10 @@ at 6 covering frames 5 and 6.
 2. The call's function has `y` as its origin, and `y` is a node of that same function, so the relation is read
 as `x` after `y` (R50, D54): a candidate attached at `y` whose other end, `x`, is already a node. It closes the
 cycle (D15). `x` answers for it over its history: `with` 2, `without` 0, and it costs one edge in the
-dictionary, so its worth is 1 and it joins (D57, R54). The function is now `y` after `x` and `x` after `y`,
-two nodes, two relations, a cycle. The relation is in that function and starts none of its own (R50), so
-nothing forms over the call at the `x` frames. Placed again at frame 7 the function has no fit, since no `y`
+dictionary, and it would save the edge between its own call and `XY` at each of them, so its worth is 3 and it
+joins (D57, R54). The function is now `y` after `x` and `x` after `y`, two nodes, two relations, a cycle. The
+relation is in that function and starts none of its own (R50), so nothing forms over the call at the `x`
+frames. Placed again at frame 7 the function has no fit, since no `y`
 stands at the present (D31):
 `x` is bare for one frame.
 
