@@ -1123,7 +1123,7 @@ frame reported, each after it over what the level before accepted, until a level
 | activate   | Fire every interneuron the level below accepted, at its fit's origin (D15, D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations with strengths. |
 | find       | Read every returned relation in the index, as it is and with either end open, and place every function it reaches on the board wherever its relations match, one fit per place (R53, D31). |
 | count      | Hand each neuron the functions placed at this level that it stands in, with their candidates, and call `count` on it: it answers with and without for each relation and each candidate (R50, D47). |
-| group      | Over those answers, move each relation to where its worth is highest, the nearest function it is a candidate of, its own function or none, and start a function for each recurring relation no function holds (R50, R54, R18). |
+| group      | Over those answers, move each relation to where its worth is highest, a function it is a candidate of, the nearest on a tie, its own function or none, and start a function for each recurring relation no function holds (R50, R54, R18). |
 | elect      | Take the fits best first, the highest coverage over price each round, stopping when the board is covered (R24). |
 | allocate   | Give each accepted function with no interneuron one, reused where a stretch comes round (R43), allocated otherwise where a neuron is free (R16). It fires at the next level. |
 
@@ -1224,8 +1224,8 @@ argument.
 > stood at every occasion the function did, one where it never did. Its worth in the function is
 > `2 · with − without − 1`: the relation and the edge between its own call and the function's, saved at each
 > occasion it held with the function, a failure at each it did not, and its one edge in the dictionary (D57). A
-> candidate joins the function
-> it is nearest to, where its worth there is positive and higher than where it is (R54). A relation of a
+> candidate joins the function where its worth is highest, where that is positive and higher than where it
+> is, and where two functions tie on worth, the one it is nearest to (R54). A relation of a
 > function leaves it where its worth is higher in a function of its own, `strength − 1`, and for nothing
 > where it is negative everywhere (R54, R18). A relation the neurons returned with strength
 > 2 or more that no function holds starts a function of its own, two nodes and an offset, its strength its
@@ -1247,7 +1247,7 @@ argument.
 >
 > | Move | When |
 > |---|---|
-> | a relation joins | a candidate's worth in the function is positive and higher than where it is, in its own function of one relation or in another, and the function is the nearest of those it is a candidate of (R50) |
+> | a relation joins | a candidate's worth in the function is positive and higher than where it is, in its own function of one relation or in another, and higher than in any other function it is a candidate of; on a tie, the nearest (R50) |
 > | a relation leaves for a function of its own | its worth alone, `strength − 1`, is higher than in its function, and higher than in any function it is a candidate of |
 > | a relation leaves for nothing | its worth is negative wherever it is or could be, which is once its strength has slid below 2 (R18) |
 > | two functions merge | a relation of one is a candidate of the other and joins it, and the rest follow one at a time, each where its worth is higher |
