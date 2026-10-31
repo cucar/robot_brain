@@ -260,8 +260,8 @@ that fires through it (D8), and expansion ends on base symbols read back through
 >
 > The machine holds the activation open, not the neuron. There is one open activation per neuron and place, and
 > it holds: the activation, its place on the board, its age, and the age it was covered at, if it has been. An
-> interneuron's activation holds besides what expansion reads (R28): the function that fired it, which of the
-> function's relations did not come true, and how far back it ran round a cycle.
+> interneuron's activation holds besides what expansion reads (R28): the function that fired it, and which of
+> the function's relations did not come true. What it covers is in the coverage set (D24).
 >
 > **Age is per activation, and a neuron can carry several ages at once.** An activation's age is the frames
 > elapsed since the frame it fired in, `0` through `reach_t`; a new activation is the one at age 0, base and
@@ -693,7 +693,7 @@ groups, places and keeps (§6).
 > |---|---|
 > | a bare activation | its name |
 > | a relation between two activations on the apex | its offset, once per pair and dimension, and not where other relations on the apex imply it (D55) |
-> | a call | the interneuron's name; then each relation of its function that did not come true, one number each; then the value of each variable, one number each; then, where the function holds a cycle, how far back it ran round it, one number |
+> | a call | the interneuron's name; then each relation of its function that did not come true, one number each; then the value of each variable, one number each |
 > | an activation bound in a variable | nothing of its own: its neuron is the value counted in the call, and the relations the function fixes are the call's |
 >
 > **What a call takes out of the board** is the relations among the nodes its true relations landed on, which
@@ -703,8 +703,8 @@ groups, places and keeps (§6).
 > relation of its own.
 
 **A call counts its body once and its differences every time.** The function's nodes and relations are in the
-dictionary. Each call counts which of its relations did not come true, what stood in its variables, and how
-far it ran round a cycle. What the relations fix is not counted again: the names of its fixed nodes, and the
+dictionary. Each call counts which of its relations did not come true and what stood in its variables. What
+the relations fix is not counted again: the names of its fixed nodes, and the
 offsets among the nodes they join.
 
 **A failure is a relation that did not come true.** It is counted with the call, one number. Whatever stood
@@ -737,7 +737,7 @@ one place and the same shape at another are counted the same, and nothing in the
 > |---|---|
 > | a bare activation on the apex | its name: `1` |
 > | a relation on the apex | its offset: `1` |
-> | a call on the apex | its name, `1`; plus one per relation that did not come true; plus one per variable, its value; plus, where the function holds a cycle, how far back round it the fit ran, one number (D12) |
+> | a call on the apex | its name, `1`; plus one per relation that did not come true; plus one per variable, its value (D12) |
 > | a function in the dictionary, of `n` nodes and `m` relations | `n` names and `m` offsets (D56) |
 > | a class at a node, in the dictionary | `1`, which class |
 > | a class, in the dictionary | one per member |
@@ -778,11 +778,11 @@ occurs is what the worth counts (D57).
 > **A cycle is read round, lap after lap.** The relation that closes the cycle (D15) is matched again from the
 > node it reached, and the cycle's relations are matched again after it, one lap further back. The fit goes
 > round while that relation lands, and ends at the lap where it does not. So a node of the cycle may land on
-> several activations, one per lap, and the call counts how far the fit ran (D12). Where the node it reaches is
-> the origin of an earlier call of the same function, it lands on that call and covers it whole, and the laps
-> under it are that call's: at the base reach, in time, a fit reads one lap on the board and covers the call
-> of the lap before. Nothing is read past the cycle. A relation of a cycle came true when it held anywhere in
-> the fit, and did not when it held nowhere.
+> several activations, one per lap; how many is in what the call covers (D24), and the call counts nothing for
+> it (D12). Where the node it reaches is the origin of an earlier call of the same function, it lands on that
+> call and covers it whole, and the laps under it are that call's: at the base reach, in time, a fit reads one
+> lap on the board and covers the call of the lap before. Nothing is read past the cycle. A relation of a
+> cycle came true when it held anywhere in the fit, and did not when it held nowhere.
 >
 > **Coming true.** Each relation of a function comes true or does not. It comes true where the board holds a
 > relation of its dimension and offset whose near end is the end already landed and whose far end is what the
@@ -804,7 +804,7 @@ occurs is what the worth counts (D57).
 > | | Numbers |
 > |---|---|
 > | A | for each relation of the fit that came true, the board relation it stands in for, one offset; for each node a true relation lands on as a fixed node, its name, or the whole count of the call it lands on where a call stands at that place, as the node's neuron or with that neuron as its origin (D12, D54); and for the relations and names an earlier call covers, that call's whole count, once, where the fit lands on every relation that call covers, and nothing where it lands on some (R23) |
-> | B | the call's count (D12): its name, `1`; one value per variable; one failure per relation that did not come true; and, where the function holds a cycle, how far the fit ran round it |
+> | B | the call's count (D12): its name, `1`; one value per variable; one failure per relation that did not come true |
 > | savings | A less B |
 >
 > A relation that did not come true is in neither: whatever stands there is counted bare either way. What a
@@ -1276,7 +1276,7 @@ argument.
 > |---|---|
 > | the fit | the function and its interneuron or none (D31), its relations landed on the board's relations, with what each variable binds |
 > | coverage | A: the board relations its true relations stand in for and the names its fixed nodes land on, where no accepted call has covered them, and the count of each call it takes back whole (D24, R23) |
-> | price | B: its call's count (D12, D22): its name, one failure per relation that did not come true, one value per variable, and, where the function holds a cycle, how far the fit ran round it |
+> | price | B: its call's count (D12, D22): its name, one failure per relation that did not come true, one value per variable |
 >
 > The machine places the function by D31's rule. Coverage less price is the savings over stating what it covers
 > bare, D22's expression over the board.
@@ -1427,9 +1427,9 @@ lost is given nothing.
 An interneuron fires at the level after the one its fit was accepted at, before that level is called. It fires
 at the fit's origin (D15, D53), once per accepted fit, at age 0, and what stood in its function's variables
 stays on the apex beside it, bound (D10). Nothing sees an interneuron until it fires
-(D5). An interneuron's activation records the function that fired it, since it may have several (R43), which
-of that function's relations did not come true, and how far back round a cycle it ran, and is expanded through
-that function (R28). Every activation no accepted fit covers stands as itself.
+(D5). An interneuron's activation records the function that fired it, since it may have several (R43), and
+which of that function's relations did not come true, and is expanded through that function (R28). Every
+activation no accepted fit covers stands as itself.
 
 > **R27 — The apex is a frontier.** It is every active neuron **no accepted function covers** (D49), the
 > uncovered set, base neurons and interneurons alike, so a base neuron no function found worth naming stands in
@@ -1506,10 +1506,10 @@ Two things that are cycles, told apart, because the design holds them in two dif
 **Within a function, a cycle is the pattern repeating.** A function has one node per neuron, so a relation
 back to a node already in it closes the cycle, the one a function may hold; the function says that the
 pattern comes round: `x` to `y` at 1 and `y` to `x` at 1 is `x y x y …` for as long as it runs (D15). A fit at
-the latest letter reads back round the cycle while the relation that closes it lands, and the call counts how
-far it went (D12); at the base reach that is one lap, the call of the lap before landed on as the origin and
-covered whole (D54); nothing is read past the cycle. A relation a path of the function's relations already
-implies is never held (D34), so a cycle is never a fact paid for twice.
+the latest letter reads back round the cycle while the relation that closes it lands; at the base reach that
+is one lap, the call of the lap before landed on as the origin and covered whole (D54); nothing is read past
+the cycle, and the call counts nothing for how far it went (D12). A relation a path of the function's
+relations already implies is never held (D34), so a cycle is never a fact paid for twice.
 
 **Through interneurons, recursion.** A period no single function can hold, because the same neurons come in an
 order a graph over them does not fix, is held as a chain: each function "this symbol, and the call before it",

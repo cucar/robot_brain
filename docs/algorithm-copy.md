@@ -65,22 +65,21 @@ executes what the machine outputs, and pays what was right and what was wrong.
    bare at the first and as `RUN3`'s origin after, so `with` is 3, `without` 0, and it costs one offset: it
    joins (D57). The answer is `{say, 3@0, 3 after 3}`. Placed again, its fit lands on `say`, the said `3`, and
    the `3` at frame 1 as the call `RUN3` standing there, covering the call's whole count (D54, D22): `6` for
-   `3`, the call's record and how far it ran, one lap. Elected; `RUN3` leaves the apex and connects once more,
-   to `SAY3` (D10).
+   `2`. Elected; `RUN3` leaves the apex and connects once more, to `SAY3` (D10).
 4. **A second digit makes the parameter.** The `5` goes the same way: `RUN5`, then `{say, 5@0, 5 after 5}`.
    Find reads each relation as it is and with either end open (R53): `(say, ?, 0)` reaches `SAY3`'s function,
    and the two have the same shape, two nodes and two relations. Paired from their origins (R52), `say` is
    fixed, and the one other node holds `3` in one and `5` in the other: a parameter, `W`. That is `write`,
-   `{say, W@0, W after W}`. Its entry is `say`, `W` and two relations, `4`; its call's record is `2`, one value,
-   and how far it ran, `4`. Priced as a replacement over the four lessons: the two specifics cost `8` in the
-   dictionary and `3` per lesson, `20`; `write` costs `4` and `4` per lesson, `20`. No cheaper, it replaces
-   nothing (R52), and it stands beside them for the digits they do not name.
+   `{say, W@0, W after W}`. Its entry is `say`, `W` and two relations, `4`; its call's record is `2` and one
+   value, `3`. Priced as a replacement over the four lessons: the two specifics cost `8` in the dictionary and
+   `2` per lesson, `16`; `write` costs `4` and `3` per lesson, `16`. No cheaper, it replaces nothing (R52), and
+   it stands beside them for the digits they do not name.
 5. **What is written from then on.** On a repeat showing `RUN3` covers the request at frame 1, and at frame 2
-   `SAY3` and `write` both fit over `say`, the said `3` and `RUN3`'s call, `6` for `3` and `6` for `4`; the
+   `SAY3` and `write` both fit over `say`, the said `3` and `RUN3`'s call, `6` for `2` and `6` for `3`; the
    election takes `SAY3` (R24). On the first showing of a digit `write` has not seen, `run` and the digit
    stand bare at frame 1: `(9, run, 0)` is at strength 1, its open reading reaches the `{d, run@0}` functions,
    and none fits, since `9` is not the digit any of them names. At frame 2 `write` lands on `say`, the `9` at
-   `0`, and the `9` at `−1`, bare: `6` for `4`. `W` takes any neuron: the `9` is its value the first time and a
+   `0`, and the `9` at `−1`, bare: `6` for `3`. `W` takes any neuron: the `9` is its value the first time and a
    member from then on (D44). `run` stands bare at frame 1. The `9`'s second showing gives it `RUN9` as any
    digit's does, and its third `SAY9`.
 6. **The class never pays.** Generalizing `{5, run@0}` with `{3, run@0}` differs at one node, which would be a
@@ -127,15 +126,14 @@ parameter is for.
 # 5. The price
 
 The channel is laid out over time alone, so a bare activation's record is its neuron and its frame, `2`
-(D13). A call's record is `2`, one per value, one per relation that did not come true, and one for how far a
-cycle ran (D12).
+(D13). A call's record is `2`, one per value, and one per relation that did not come true (D12).
 
 | a lesson, priced as | numbers |
 |---|---|
 | bare: `run`, the digit, `say`, the digit | 8 |
 | `RUN_d` over the request, the answer bare: `RUN_d`'s record, `say`, the digit | 6 |
-| `SAY_d` over the answer and `RUN_d`'s call: its record and how far it ran | 3 |
-| `write` over a bare request, the digit's first showing: its record, `W`'s value, how far; and `run` bare | 6 |
+| `SAY_d` over the answer and `RUN_d`'s call: its record | 2 |
+| `write` over a bare request, the digit's first showing: its record and `W`'s value; and `run` bare | 5 |
 
 `RUN_d`'s entry is `3`, `SAY_d`'s `4`, and `write`'s `4`. A function over `run` and a class of the digits would
 cost `3 + m` for `m` members and `3` per request, against `3m` and `2` per request for the digits' own
@@ -157,7 +155,7 @@ beyond that: a digit's function forms at its second showing within the digit's h
   `run`; covered, `RUN_d`.
 - **The copy is a cycle.** The same digit as the frame before is one node read twice, the second time closing
   the cycle; a parameter is listed at most twice, that way (D38). The fit reads one lap, the frame of the
-  request, and stops at the silence before it.
+  request, and stops at the silence before it. The call counts nothing for the lap.
 
 # 7. The same thing as code
 

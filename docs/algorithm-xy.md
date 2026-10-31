@@ -42,18 +42,19 @@ the `x` frames. Placed again at frame 7 the function has no fit, since no `y` st
 the `x` at 7, and `x` after `y` reaches the `y` at 6, which stands as the call `XY` fired there. A fixed node
 comes true on a call whose origin is that neuron, so the fit lands on the call and covers its whole count
 (D54, D22). Nothing earlier is on the board: at the base reach the fit reads one lap and lands on the call of
-the lap before.
+the lap before. The call counts nothing for the lap; how many it covers is in what the calls cover (D24).
 
 | the fit at frame 8 | numbers |
 |---|---|
-| A: `y` and `x`, their two relations, and the call at 6, its name and how far it ran | 6 |
-| B: the call's name, and how far it ran, one lap | 2 |
+| A: `y` and `x`, their two relations, and the call at 6, its name | 5 |
+| B: the call's name | 1 |
 
 It is accepted, `XY` fires at 8, and the call at 6 is covered and leaves the apex (D10). From then on the
 stretch is recognized at every `y`: the call fires there, covers the lap and the call before it, and the apex
 holds one call for the stretch, the latest (D49). The `x` between stands on the apex for a frame, its name and
 its relation back to the call, two numbers, and is covered at the next `y`. The laps are in the calls, each
-under the one after it, and expansion follows them back (R28). The function costs 4 in the dictionary, two
+under the one after it, and expansion follows them back (R28). The stretch costs 1 at every `y` and 2 at every
+`x`. The function costs 4 in the dictionary, two
 names and two offsets (D56, D13).
 
 **Other pairs.** `a, b, a, b, …` builds `AB` the same way, and `m, n, m, n, …` builds `MN`. Each is a function
@@ -83,10 +84,10 @@ the names ignored, they pair from their origins (R52): `y` with `b`, then along 
 each node the two functions hold different neurons, so each node is a parameter, and the general function is
 two open nodes, `P` and `P′`, with `P′` after `P` and `P` after `P′`, origin `P` (D44). It costs 4 in the
 dictionary and replaces nothing: the specific functions stand where they recur, since a call of one of them
-costs 2 against the general function's 4, its name, how far it ran, and two values.
+costs 1 against the general function's 3, its name and two values.
 
 Where it would pay is a pair never seen. `u, v, u, v, …` fits it at the second `v`, `u` bound in `P′` and `v`
-in `P`, reading back over the four bare letters: 7 for 4. But `(v, u, −1)` has strength 2 at that same frame,
+in `P`, reading back over the four bare letters: 7 for 3. But `(v, u, −1)` has strength 2 at that same frame,
 the pair's own function starts and is placed beside it, 3 for 1, and the election takes the specific first
 (R24). So in this stream the general function covers nothing. It would, where a pair comes round too rarely
 for its own function to form within a history, or where the stream showed a pair twice and never again.
@@ -97,5 +98,5 @@ for its own function to form within a history, or where the stream showed a pair
 |---|---|
 | a loop that alternates two things | a function of two nodes with a cycle, one call on the apex for the loop |
 | the loop body | the two relations |
-| how many times it ran | one lap per call at the base reach, the earlier laps in the calls under it |
+| how many times it ran | not written anywhere: one lap per call at the base reach, the earlier laps in the calls under it |
 | the same loop over different things | one general function with two parameters, used where no specific one fits |

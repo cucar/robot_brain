@@ -96,9 +96,8 @@ standing for eight letters sees one beyond them, eight back from where it fires 
 `ll`, `oo` and `ss` are pairs like any other: the second `l` sees the first one back, a neuron being its own
 neighbor at any offset but zero (D26). `{l, l@−1}` has one node and one relation from it to itself, so its
 entry is 2 and it is a cycle of one node (D15): `l` after `l` for as long as it runs. Its fit at a doubled
-letter reads one lap and covers both, 4 for 3, the call's record and how far it ran, so it pays from its third
-occurrence; a longer run is covered a letter per frame, each call landing on the one before as its origin
-(D54). The same holds for `oo` from `o`'s history and `ss` from `s`'s.
+letter reads one lap and covers both, 4 for 2, and a longer run is covered a letter per frame, each call
+landing on the one before as its origin (D54). The same holds for `oo` from `o`'s history and `ss` from `s`'s.
 A doubling that recurs is covered by its own interneuron. One too rare to recur within `l`'s history stays as
 two letters on the apex, as any rare pair does.
 
