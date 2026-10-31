@@ -1265,8 +1265,11 @@ argument.
 > every level the function is placed at (R50). A relation that leaves for nothing stands bare wherever it
 > holds. A function leaves the dictionary when its last relation does. **Relations leave one at a time**, the
 > one that gains most by leaving first, and the function's other relations are priced again before the next
-> leaves, since what fails beyond a relation that left is priced anew. A class no function has any longer goes with its
-> last function. A function's interneuron is decommissioned when due (R38).
+> leaves, since what fails beyond a relation that left is priced anew. **A function stays connected** (D15): a
+> relation whose leaving breaks every path from the origin to a node takes with it each relation that reached
+> the function only through that path, and each of those goes where its worth is highest (R54), to the
+> function the leaving relation started, which they share a node with, to another, or to one of their own. A
+> class no function has any longer goes with its last function. A function's interneuron is decommissioned when due (R38).
 
 ## 6.2 Election
 
