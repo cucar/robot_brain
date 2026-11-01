@@ -1,12 +1,12 @@
-//! Decommissioning (R38): an interneuron dies when its last function has left the dictionary and the last
-//! window over it has closed; every function that names it leaves with it, and so on up.
+//! Decommissioning (R38): an interneuron dies when its last function has left the dictionary and its last
+//! activation, or its subtree's, has left the board; every function that names it leaves with it, and so on up.
 
 use crate::machine::*;
 use crate::types::*;
 
 impl Machine {
-    /// Decommission every interneuron on the ledger that is due: no function of it left, and no open
-    /// activation of it. Its subtree goes in the same pass (R38).
+    /// Decommission every interneuron on the ledger that is due: no function of it left, and no activation of it
+    /// or of its subtree standing on the board (D9). Its subtree goes in the same pass (R38).
     pub(crate) fn reap(&mut self) {
         let fno = self.frame_no;
         let mut keep = Vec::new();
@@ -14,8 +14,17 @@ impl Machine {
         while !pending.is_empty() {
             for c in pending.drain(..) {
                 if !self.thalamus[c].alive || !self.dict.of_inter(c).is_empty() { continue; }
-                let open = self.frames.iter().any(|f| f.acts.iter().any(|a| a.neuron == c && self.is_open(a, fno)));
-                if open { keep.push(c); continue; }
+                // it waits while an activation of it, or of any neuron in its subtree, still stands on the board
+                let mut subtree = vec![c];
+                let mut k = 0;
+                while k < subtree.len() {
+                    for id in self.dict.naming(subtree[k]) {
+                        if let Some(n) = self.dict.get(id).and_then(|f| f.inter) { if !subtree.contains(&n) { subtree.push(n); } }
+                    }
+                    k += 1;
+                }
+                let standing = self.frames.iter().any(|f| f.acts.iter().any(|a| subtree.contains(&a.neuron) && self.stands(a, fno)));
+                if standing { keep.push(c); continue; }
                 self.decommission(c);
             }
             pending = std::mem::take(&mut self.ledger);

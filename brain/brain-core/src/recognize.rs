@@ -439,7 +439,7 @@ impl Machine {
     }
 
     /// A function has left the dictionary (R18, R38): its interneuron, left with no function, waits on the ledger
-    /// to be decommissioned when due, and the function stays readable while what it fired is open.
+    /// to be decommissioned when due, and the function stays readable until what it fired has left the board.
     pub(crate) fn retire(&mut self, f: Func) {
         self.stats_retired += 1;
         if let Some(n) = f.inter {
