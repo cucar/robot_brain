@@ -66,6 +66,9 @@ pub struct Machine {
     pub frame_no: Frame,
     pub(crate) pending_weak: Vec<(NeuronId, Pos)>,
     pub max_reach_t: i32,
+    /// S (D9): how long an activation stands on the board, the longest reach in time among the neurons the machine
+    /// holds, one beyond the farthest node any function places from its origin. It moves with the dictionary.
+    pub span_s: i32,
     /// The dictionary (D36, D56): every function and its interneuron.
     pub dict: Dictionary,
     /// Functions that left the dictionary, kept readable while what they fired is open (R38).
@@ -108,6 +111,7 @@ impl Machine {
             frame_no: 0,
             pending_weak: Vec::new(),
             max_reach_t: 1,
+            span_s: 1,
             dict: Dictionary::default(),
             retired_funcs: FxHashMap::default(),
             last_func: FxHashMap::default(),
@@ -211,6 +215,7 @@ impl Machine {
         self.frames.push_back(frame);
 
         // the levels (§6, R26): activate, find, count, group, elect, allocate
+        self.span_s = self.board_span();
         self.stats_added = 0;
         self.stats_reused = 0;
         self.stats_retired = 0;
@@ -251,12 +256,17 @@ impl Machine {
         let mut longest = 1;
         for f in self.frames.iter() { for a in &f.acts { if !a.gone && f.no + a.reach[0] as i64 >= fno { longest = longest.max(a.reach[0]); } } }
         self.max_reach_t = longest;
-        let keep_from = fno - self.max_reach_t as i64 - 1;
+        let keep_from = fno - self.max_reach_t.max(self.span_s) as i64 - 1;
         while self.frames.front().map_or(false, |f| f.no < keep_from) { self.frames.pop_front(); }
         stats.elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
         self.last_stats = stats;
         self.last_winners = winners.clone();
         winners
+    }
+
+    /// S (D9): one beyond the farthest node any function places from its origin in time, and at least the base reach.
+    pub(crate) fn board_span(&self) -> i32 {
+        self.dict.funcs.values().map(|f| f.reach(1)[0]).max().unwrap_or(1).max(1)
     }
 
     /// A bare activation of `n` at `pos` (D8): a base activation sees one position in every dimension (D4).
@@ -309,6 +319,7 @@ impl Machine {
         // count and group (R50, R54, R18); what changed is placed again before the election
         if !self.frozen {
             let changed = self.group(&fits, &fresh);
+            self.span_s = self.board_span();
             if !changed.is_empty() {
                 placed.extend(changed);
                 placed.retain(|id| self.dict.get(*id).is_some());

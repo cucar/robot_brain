@@ -5,8 +5,8 @@ use crate::neuron::*;
 use crate::types::*;
 
 impl Machine {
-    /// Whether an activation is open at the frame being processed: within its window (D9), and not a weak one of
-    /// an earlier frame (D40).
+    /// Whether an activation is open, connecting, at the frame being processed: within its own reach in time (D9),
+    /// and not a weak one of an earlier frame (D40).
     pub(crate) fn is_open(&self, a: &Act, at: Frame) -> bool {
         if a.gone { return false; }
         let age = at - a.pos[0] as i64;
@@ -14,9 +14,19 @@ impl Machine {
         age >= 0 && age <= a.reach[0] as i64
     }
 
+    /// Whether an activation stands on the board at the frame being processed (D9): through S, the machine's longest
+    /// reach in time, for a fit to land on it and an interneuron whose reach extends to it to see it; not a weak
+    /// one of an earlier frame (D40).
+    pub(crate) fn stands(&self, a: &Act, at: Frame) -> bool {
+        if a.gone { return false; }
+        let age = at - a.pos[0] as i64;
+        if !a.strong && age > 0 { return false; }
+        age >= 0 && age <= self.span_s as i64
+    }
+
     /// What one activation observes (D5, D7): every activation in its frame or an earlier one, within its reach in
-    /// every activation dimension the two share, not at its own place, both of them on the apex, that the policy
-    /// admits. Each at its exact offset (D6).
+    /// every activation dimension the two share, not at its own place, both of them on the apex, the other standing
+    /// on the board (D9), that the policy admits. Each at its exact offset (D6).
     pub(crate) fn neighborhood(&self, me: ActRef) -> Vec<Nb> {
         let Some(a) = self.act(me) else { return vec![] };
         let fno = self.frame_no;
@@ -26,7 +36,7 @@ impl Machine {
             if f.no > a.pos[0] as i64 || (a.pos[0] as i64 - f.no) > a.reach[0] as i64 { continue; }
             for (i, b) in f.acts.iter().enumerate() {
                 let r = ActRef { frame: f.no, index: i as u32 };
-                if r == me || !b.on_apex() || b.neuron == NeuronId::MAX || !self.is_open(b, fno) { continue; }
+                if r == me || !b.on_apex() || b.neuron == NeuronId::MAX || !self.stands(b, fno) { continue; }
                 // what fires above this level in this frame has not fired yet
                 if b.opened_at == fno && b.level > a.level { continue; }
                 if !self.cfg.policy.past[a.kind as usize][b.kind as usize] { continue; }

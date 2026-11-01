@@ -61,8 +61,7 @@ impl Machine {
         let a = self.act(from)?;
         let fno = self.frame_no;
         let target = add(&a.pos, &delta);
-        let mine: Vec<ActRef> = a.rels.iter().filter(|br| br.off == delta).map(|br| br.other).collect();
-        let mut others = mine.clone();
+        let mut others: Vec<ActRef> = a.rels.iter().filter(|br| br.off == delta).map(|br| br.other).collect();
         if let Some(fr) = self.frames.iter().find(|f| f.no == target[0] as i64) {
             for (i, w) in fr.acts.iter().enumerate() {
                 if w.pos != target { continue; }
@@ -76,9 +75,7 @@ impl Machine {
         for o in others {
             if used.contains(&o) { continue; }
             let Some(w) = self.act(o) else { continue };
-            // a relation stays on the board while the activation that returned it is open (experiment)
-            let held_open = mine.contains(&o) && self.is_open(a, fno) && !w.gone;
-            if !w.on_apex() || !(self.is_open(w, fno) || held_open) { continue; }
+            if !w.on_apex() || !self.stands(w, fno) { continue; }
             let is = if w.neuron == want { Some(false) } else if self.call_origin(w) == Some(want) { Some(true) } else { None };
             let Some(call) = is else { continue };
             let better = match best { None => true, Some((b, bc)) => (call, o) < (bc, b) };
@@ -163,7 +160,10 @@ impl Machine {
             }
             deferred = rest;
         }
-        let failed: Vec<usize> = (0..f.rels.len()).filter(|ri| !came[*ri]).collect();
+        // the relation that closes a cycle is never a failure: the fit ends where it stops landing, and a lap read
+        // once is the cycle run once (D54)
+        let closing_ri = lay.closing.map(|c| c.0);
+        let failed: Vec<usize> = (0..f.rels.len()).filter(|ri| !came[*ri] && Some(*ri) != closing_ri).collect();
         Fit { func: f.id, origin, landed, calls, edges, failed }
     }
 
@@ -309,7 +309,7 @@ impl Machine {
         for e in fresh {
             for end in [e.near, e.far] {
                 let Some(a) = self.act(end) else { continue };
-                if a.kind != Kind::Inter || !a.on_apex() || !self.is_open(a, fno) { continue; }
+                if a.kind != Kind::Inter || !a.on_apex() || !self.stands(a, fno) { continue; }
                 let Some(fb) = &a.fired_by else { continue };
                 let Some(f) = self.dict.get(fb.func) else { continue };
                 touch.entry(f.id).or_default().push((end, f.origin(), a.pos));
@@ -445,7 +445,7 @@ impl Machine {
         if let Some(n) = f.inter {
             if self.dict.of_inter(n).is_empty() && !self.ledger.contains(&n) { self.ledger.push(n); }
         }
-        let until = self.frame_no + self.max_reach_t as i64 + 1;
+        let until = self.frame_no + self.max_reach_t.max(self.span_s) as i64 + 1;
         self.retired_funcs.insert(f.id, (f, until));
     }
 
