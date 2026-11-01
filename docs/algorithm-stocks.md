@@ -61,19 +61,16 @@ pair function for that bar's move is placed, its first node landing on the chain
 dictionary holds one interneuron per stretch of buckets that recurred, each as long as the recurrence, and a
 stretch seen at one frame and again at another is two activations of one interneuron (D11).
 
-**What stops being seen is pruned.** A pair that a link outbids at every bar is still placed there and
-declined, and nothing records the verdict (D57). What prunes it is the bar's own history: once the move before
-it stands under a call at every bar, the bar sees the call and not the move (D5), the pair's relation is no
-longer observed, its `with` slides out of the history, its worth falls below zero, the relation leaves, the
-function goes, and its interneuron is decommissioned once its last activation leaves the board (R18, R38). The same
-happens to the links of a chain that stopped recurring. A pair outbid at some bars and bare at others keeps
-recurring and stays.
+**A pair outbid at every bar stays.** Once the move before a bar stands under a call at every bar, the bar
+sees the call and not the move (D5). The pair's relation is still counted: the count asks for the move or any
+call whose origin is that move, and the bar saw such a call at every bar (R50). So the pair's worth stays
+positive, it is placed at every bar, loses the tie to the link there, and stays in the dictionary with its
+interneuron, placed and never taken, the case the evaluation document names. What is pruned is a link whose
+stretch stopped recurring: nothing stands at its node any more, under a call or bare.
 
 **After a break.** The ring's links name calls, and after a silence no call stands, so the first bars are
-bare. What covers them is whatever still reads from bare bars: a pair or a flat function that kept recurring
-elsewhere fits at once; where every pair was pruned under the ring, the bars stand bare until a pair has
-recurred twice, and the links fire again from there, one lap behind. The ring itself is untouched: its
-functions and neurons stand, waiting for a call to name.
+bare. The pairs and the cycle, which never left, fit them at once, 1 for 0, and the links fire again from the
+second bar on, each landing on the call before it. The ring is back within a lap.
 
 **No variable forms.** Two pairs that differ at a node, `{fall₁, m}` and `{fall₂, m}`, are generalized into
 `{C, m}`, `C` a class, priced as a replacement of the two (R52): the two cost 2 in the dictionary and nothing
@@ -134,11 +131,15 @@ function starts for it (R50): nodes `rise` and `fall`, one offset, origin the `f
 covers the relation, 1 for 0, is accepted, and gets an interneuron, which stands for
 bars 5 and 6 and fires at bar 6 (D53). The `fall` at bar 6 is covered at age 0.
 
-**Lap 2: every pair.** The other three pairs reach strength 2 in turn, fall-then-rise at bar 1, fall-then-fall
-at bar 3, rise-then-rise at bar 5, and each is accepted the same way. A pair whose first node stands as the
-origin of the previous pair's call lands on that call and covers it, 1 for 0 (D54). By the end of the lap every
-bar is the origin of one pair call, and each pair's interneuron stands on the apex where the next bar can see
-it.
+**Lap 2: every pair, and one cycle.** The other relations reach strength 2 in turn. Rise-then-rise at bar 5
+and fall-then-fall at bar 3 are each a cycle of one node, a move after itself, read one lap at the base reach
+(D15). Fall-then-rise, at bar 4, is a candidate of the first pair: its other end, `rise`, is already a node of
+that function, so it closes the cycle, `fall` after `rise` and `rise` after `fall`, as the alternation does
+(R50, D15), and `rise` answers for it with `with` 2, worth 3, so it joins. That one function now fits at bar 2
+and at bar 6, reading back round the cycle while it lands: at bar 6 one lap, since bar 4 is a rise, and at bar
+2 two laps, bars 5 to 2, landing on the bar-6 call as its origin. A pair whose first node stands as the origin
+of another call lands on that call and covers it, 1 for 0 (D54). By the end of the lap every bar is the origin
+of one call, and each call stands on the apex where the next bar can see it.
 
 **Lap 3 and on: the chain.** A bar's neuron now sees the call one frame back, and nothing under it (D5).
 "My move, after the neuron from one bar back" reaches strength 2 at lap 3. Its fit covers the relation and the
@@ -180,13 +181,13 @@ is added to it, and the chain becomes a ring of six neurons:
 covered and silent (D10). The ring neuron has seen what came next about 135 times, always the same thing, so
 its answer is right every time.
 
-**Cleanup.** Once the ring stands, every bar sees a ring neuron one back and never a bare move, so the four
-pairs' relations stop being observed, their `with` slides out of the bars' histories, and they are pruned
-(R18); the links of the chains that broke during learning go the same way. Their interneurons are
-decommissioned as their last activations leave the board (R38). After that the machine is 10 neurons: the 4 base
-ones, `rise`, `fall`, `own`, `disown`, and the 6 in the ring. The dictionary is six functions of one relation
-each, 6 edges, and the run costs nothing: the ring's call at the latest bar relates to nothing outside it, the
-free root the evaluation document names.
+**Cleanup.** Once the ring stands, every bar sees a ring neuron one back and never a bare move. The links of
+the chains that broke during learning stop recurring and are pruned (R18), and their interneurons are
+decommissioned as their last activations leave the board (R38). The three base functions stay, placed at
+every bar and outbid by the ring: the alternation cycle and the two one-node cycles. After that the machine is
+13 neurons: the 4 base ones, `rise`, `fall`, `own`, `disown`, the 3 base functions, and the 6 in the ring. The
+dictionary is nine functions, 10 edges, and the run costs nothing: the ring's call at the latest bar relates
+to nothing outside it, the free root the evaluation document names.
 
 **Results.** The run of this case under the earlier rules, where a bar saw the move under a call and the pair
 was credited nothing for it, was right on 92.2% of bars over 150 laps, every miss before the ring closed, for
