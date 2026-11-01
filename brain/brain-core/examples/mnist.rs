@@ -1,0 +1,182 @@
+//! MNIST (docs/algorithm-mnist.md): an image channel over x, y and time with one event dimension of two buckets,
+//! white and black, every pixel firing one of them in every frame; a digit channel over time alone with ten digit
+//! actions. Two frames per image: the image, then the digit that ran and its reward, +1 where it named the image's
+//! digit and −1 where not, scoped to the digit channel and that one frame (R29, D35).
+//! The world names the digit itself for the first `teach` training images (a lesson), and wherever the machine is
+//! silent; after that what the machine says runs. Then `test` held-out images with the machine frozen: its answer
+//! runs, with no reward and no lesson, and nothing of the machine changes.
+//! The data files are the raw (gunzipped) MNIST idx files in `data-dir`, taken in the file's order.
+//! usage: cargo run --release --example mnist -- <data-dir> [train=all] [test=500] [h=2048] [size=14] [teach=all] [threshold=128] [trace-image=0]
+use brain_core::machine::Machine;
+use brain_core::types::*;
+use std::time::Instant;
+
+fn read(path: &str) -> Vec<u8> { std::fs::read(path).unwrap_or_else(|e| panic!("{}: {}", path, e)) }
+
+fn images(path: &str) -> Vec<Vec<u8>> {
+    let b = read(path);
+    let n = u32::from_be_bytes([b[4], b[5], b[6], b[7]]) as usize;
+    (0..n).map(|i| b[16 + i * 784..16 + (i + 1) * 784].to_vec()).collect()
+}
+
+fn labels(path: &str) -> Vec<u32> { read(path)[8..].iter().map(|&x| x as u32).collect() }
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let dir = args.get(1).expect("usage: mnist <data-dir> [train] [test] [h] [size] [teach] [threshold]").clone();
+    let num = |i: usize| -> Option<usize> { args.get(i).and_then(|s| if s == "all" { None } else { s.parse().ok() }) };
+    let train_imgs = images(&format!("{}/train-images-idx3-ubyte", dir));
+    let train_lbls = labels(&format!("{}/train-labels-idx1-ubyte", dir));
+    let test_imgs = images(&format!("{}/t10k-images-idx3-ubyte", dir));
+    let test_lbls = labels(&format!("{}/t10k-labels-idx1-ubyte", dir));
+    let train_n = num(2).unwrap_or(train_imgs.len()).min(train_imgs.len());
+    let test_n = num(3).unwrap_or(500).min(test_imgs.len());
+    let h = num(4).unwrap_or(2048);
+    let size = num(5).unwrap_or(14);
+    let teach = num(6).unwrap_or(train_n).min(train_n);
+    let threshold = num(7).unwrap_or(128) as u32;
+    // the one training image (counted from 1) to trace, or none
+    let trace_n = num(8).unwrap_or(0);
+    assert!(28 % size == 0, "size must divide 28");
+    let f = 28 / size;
+
+    let mut m = Machine::new(h, Policy::events_to_actions(), 1);
+    let ax = m.declare_axis("x", 1);
+    let ay = m.declare_axis("y", 1);
+    let image = m.declare_channel("image", Some(("pixel", 2)), None, &[ax, ay]);
+    let digit = m.declare_channel("digit", None, Some(("digit", 10)), &[]);
+    let pix = m.channels[image as usize].event.unwrap();
+    let dig = m.channels[digit as usize].action.unwrap();
+    println!("mnist: {}x{}, black and white pixels, train {} (first {} taught), test {}, H={}", size, size, train_n, teach, test_n, h);
+
+    // the pixels of an image: 1 (black, ink) where the block's mean reaches the threshold, 0 (white) elsewhere
+    let frame_of = |px: &[u8]| -> Vec<Input> {
+        let mut v = Vec::with_capacity(size * size);
+        for y in 0..size {
+            for x in 0..size {
+                let mut s = 0u32;
+                for dy in 0..f { for dx in 0..f { s += px[(y * f + dy) * 28 + x * f + dx] as u32; } }
+                let ink = if s / (f * f) as u32 >= threshold { 1 } else { 0 };
+                let mut pos = [0i32; MAX_DIMS];
+                pos[ax] = x as i32;
+                pos[ay] = y as i32;
+                v.push(Input { dim: pix, bucket: ink, pos });
+            }
+        }
+        v
+    };
+
+    // two frames per image, as the JS job has them: the image, then the digit that ran with what it earned, so
+    // that no image sees another (R29)
+    let run = |m: &mut Machine, px: &[u8]| -> (Option<u32>, f64) {
+        let t = Instant::now();
+        let w = m.process_frame(&frame_of(px), vec![]);
+        (w.iter().find(|w| w.dim == dig).map(|w| w.bucket), t.elapsed().as_secs_f64() * 1000.0)
+    };
+    let answer = |m: &mut Machine, d: Option<u32>, reward: Option<f64>| -> f64 {
+        let t = Instant::now();
+        let inputs: Vec<Input> = d.map(|d| Input { dim: dig, bucket: d, pos: [0; MAX_DIMS] }).into_iter().collect();
+        let rewards = reward.map(|r| Reward { reward: r, channels: vec![digit], frames: 1 }).into_iter().collect();
+        m.process_frame(&inputs, rewards);
+        t.elapsed().as_secs_f64() * 1000.0
+    };
+
+    let t0 = Instant::now();
+    let (mut spoke, mut right, mut lessons, mut ms, mut apex) = (0usize, 0usize, 0usize, 0.0f64, 0usize);
+    let (mut w_spoke, mut w_right) = (0usize, 0usize);
+    for i in 0..train_n {
+        let label = train_lbls[i];
+        m.trace = trace_n > 0 && i + 1 == trace_n;
+        let (said, t) = run(&mut m, &train_imgs[i]);
+        ms += t;
+        if trace_n > 0 && i + 1 == trace_n { active_after(&m, &train_imgs[i], size, label, 0); active_after(&m, &train_imgs[i], size, label, 1); }
+        if trace_n > 0 && i + 1 == trace_n { eprintln!("[image {}] {:.0} ms, levels {}, apex {}, neurons {}, functions {}", i + 1, t, m.last_stats.levels, m.last_stats.apex_acts, m.alive, m.dict.len()); }
+        apex += m.last_stats.apex_acts;
+        if let Some(s) = said { spoke += 1; w_spoke += 1; if s == label { right += 1; w_right += 1; } }
+        let lesson = i < teach || said.is_none();
+        if lesson { lessons += 1; }
+        let ran = if lesson { label } else { said.unwrap() };
+        ms += answer(&mut m, Some(ran), Some(if ran == label { 1.0 } else { -1.0 }));
+        if (i + 1) % 1000 == 0 {
+            eprintln!("  image {}/{} | last 1000: spoke {} right {} ({:.1}% of spoken) | neurons {} functions {} | apex/image {:.1} | {:.1} ms/image",
+                i + 1, train_n, w_spoke, w_right, 100.0 * w_right as f64 / w_spoke.max(1) as f64, m.alive, m.dict.len(), apex as f64 / (i + 1) as f64, ms / (i + 1) as f64);
+            w_spoke = 0;
+            w_right = 0;
+        }
+    }
+    println!("  train: {} images | spoke {} | right {} ({:.1}% of all, {:.1}% of spoken) | lessons {} | apex/image {:.1} | neurons {} functions {} | {:.0}s",
+        train_n, spoke, right, 100.0 * right as f64 / train_n.max(1) as f64, 100.0 * right as f64 / spoke.max(1) as f64, lessons, apex as f64 / train_n.max(1) as f64, m.alive, m.dict.len(), t0.elapsed().as_secs_f64());
+
+    // what the dictionary holds: functions by relations and nodes, and by whether their interneuron is allocated
+    {
+        let mut by: std::collections::BTreeMap<(usize, usize, bool, bool), usize> = Default::default();
+        for f in m.dict.funcs.values() { *by.entry((f.rels.len(), f.nodes.len(), f.has_cycle(), f.inter.is_some())).or_default() += 1; }
+        println!("  dictionary by (relations, nodes, cycle, has interneuron): {:?}", by);
+        let mut big: Vec<&brain_core::function::Func> = m.dict.funcs.values().filter(|f| f.rels.len() > 1).collect();
+        big.sort_by_key(|f| std::cmp::Reverse(f.rels.len()));
+        for f in big.iter().take(12) { println!("    {}", m.dict.describe(f)); }
+    }
+    // test: frozen, the machine's own answer runs, unrewarded, and nothing is taught
+    m.frozen = true;
+    let t1 = Instant::now();
+    let (mut spoke, mut right, mut apex) = (0usize, 0usize, 0usize);
+    let mut confusion = [[0usize; 10]; 10];
+    for i in 0..test_n {
+        let label = test_lbls[i];
+        let (said, _) = run(&mut m, &test_imgs[i]);
+        apex += m.last_stats.apex_acts;
+        if let Some(s) = said { spoke += 1; confusion[label as usize][s as usize] += 1; if s == label { right += 1; } }
+        answer(&mut m, said, None);
+    }
+    println!("  test: {} images | spoke {} | right {} ({:.1}%) | apex/image {:.1} | neurons {} functions {} | {:.0}s",
+        test_n, spoke, right, 100.0 * right as f64 / test_n.max(1) as f64, apex as f64 / test_n.max(1) as f64, m.alive, m.dict.len(), t1.elapsed().as_secs_f64());
+    println!("  confusion (row = digit, column = said):");
+    for (d, row) in confusion.iter().enumerate() { println!("    {} {:?}", d, row); }
+}
+
+/// What stands active once the election of `level` has run: every activation of this frame fired at `level + 1` or
+/// below that no call fired at `level + 1` or below covers. One letter per activation, on the pixels it stands for
+/// (what it covers, followed down), lower case at its own place; each listed with its neuron, place and function.
+fn active_after(m: &Machine, px: &[u8], size: usize, label: u32, level: u32) {
+    use brain_core::machine::ActRef;
+    let fno = m.frame_no;
+    let Some(fr) = m.frames.iter().find(|f| f.no == fno) else { return };
+    let f = 28 / size;
+    let ink = |x: usize, y: usize| { let mut s = 0u32; for dy in 0..f { for dx in 0..f { s += px[(y * f + dy) * 28 + x * f + dx] as u32; } } s / (f * f) as u32 >= 128 };
+    let top = level + 1;
+    let mut grid = vec![vec!['?'; size]; size];
+    let letters: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@$%&".chars().collect();
+    let mut rows = Vec::new();
+    let mut k = 0;
+    for (i, a) in fr.acts.iter().enumerate() {
+        if a.kind == Kind::Action || a.gone || a.level > top { continue; }
+        let hidden = a.coverer.and_then(|c| m.act(c)).map_or(false, |c| c.pos[0] as i64 == fno && c.level <= top);
+        if hidden { continue; }
+        let mut stack = vec![ActRef { frame: fno, index: i as u32 }];
+        let mut pix = Vec::new();
+        while let Some(r) = stack.pop() {
+            let Some(c) = m.act(r) else { continue };
+            if c.kind == Kind::Event && c.pos[0] as i64 == fno { pix.push((c.pos[1] as usize, c.pos[2] as usize)); }
+            stack.extend(c.covers.iter().copied());
+        }
+        let (x, y) = (a.pos[1] as usize, a.pos[2] as usize);
+        if a.kind == Kind::Event {
+            grid[y][x] = if m.thalamus[a.neuron].bucket == 1 { '*' } else { '-' };
+            continue;
+        }
+        let ch = letters[k % letters.len()];
+        k += 1;
+        for &(px_, py_) in &pix { if px_ < size && py_ < size { grid[py_][px_] = ch; } }
+        if x < size && y < size { grid[y][x] = ch.to_ascii_lowercase(); }
+        let what = a.fired_by.as_ref().and_then(|fb| m.dict.get(fb.func)).map(|f| m.dict.describe(f)).unwrap_or_else(|| "(retired)".into());
+        rows.push(format!("  {} = #{} at ({}, {}), level {}, {} pixels | {}", ch, a.neuron, x, y, a.level, pix.len(), what));
+    }
+    let bare = grid.iter().flatten().filter(|c| **c == '-' || **c == '*').count();
+    eprintln!("[active] image of a {}, active after the election of level {}: {} calls, {} bare pixels (- white, * black)", label, level, rows.len(), bare);
+    for y in 0..size {
+        let img: String = (0..size).map(|x| if ink(x, y) { '#' } else { '.' }).collect();
+        let g: String = grid[y].iter().collect();
+        eprintln!("[active]   {}      {}", img, g);
+    }
+    for r in rows { eprintln!("[active]{}", r); }
+}

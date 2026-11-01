@@ -46,6 +46,10 @@ pub struct Act {
     pub pos: Pos,
     pub strong: bool,
     pub reach: Pos,
+    /// The box of places it stands for in space (D4): its own place for a base activation, and for a call the
+    /// union of what it covered.
+    pub lo: Pos,
+    pub hi: Pos,
     /// The age at which an accepted call covered it (D9, D10).
     pub covered_at: Option<u32>,
     pub coverer: Option<ActRef>,

@@ -347,6 +347,10 @@ impl Machine {
             for fid in fs {
                 let Some(f) = self.dict.get(fid) else { continue };
                 if f.holds(&rel) { continue; }
+                // read against the function as it now stands, since joins and leaves before it may have changed it:
+                // it touches a node, and closes no second cycle
+                let (ka, kb) = (f.node_of(rel.a).is_some(), f.node_of(rel.b).is_some());
+                if !(ka || kb) || (ka && kb && f.has_cycle()) { continue; }
                 let mut rels = f.rels.clone();
                 rels.push(rel);
                 let (w, near) = self.worth_in(&rels, &rel);

@@ -144,8 +144,13 @@ impl Machine {
         let covers: Vec<ActRef> = fit.landed.iter().chain(fit.calls.iter()).copied().collect();
         let strong = covers.iter().filter_map(|r| self.act(*r)).any(|a| a.strong);
         let height = 1 + covers.iter().filter_map(|r| self.act(*r)).map(|a| a.height).max().unwrap_or(0);
+        // what it stands for in space is the union of what it covers, and it sees one beyond that (D4)
+        let (mut lo, mut hi) = (origin.pos, origin.pos);
+        for c in covers.iter().filter_map(|r| self.act(*r)) { for d in 1..MAX_DIMS { lo[d] = lo[d].min(c.lo[d]); hi[d] = hi[d].max(c.hi[d]); } }
+        let mut reach = f.reach(origin.axes);
+        for d in 1..MAX_DIMS { if origin.axes & (1 << d) != 0 { reach[d] = reach[d].max((origin.pos[d] - lo[d]).max(hi[d] - origin.pos[d]) + 1); } }
         let act = Act {
-            neuron, kind: Kind::Inter, axes: origin.axes, pos: origin.pos, strong, reach: f.reach(origin.axes),
+            neuron, kind: Kind::Inter, axes: origin.axes, pos: origin.pos, strong, reach, lo, hi,
             covered_at: None, coverer: None, covers: covers.clone(),
             fired_by: Some(FiredBy { func: f.id, failed: fit.failed.clone() }),
             rels: Vec::new(), inferences: Vec::new(), opened_at: fno, level: level + 1, height, gone: false,
