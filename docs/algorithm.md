@@ -60,11 +60,12 @@ it is a function at the level above, over its call. What followed any activation
 included, is on the neurons as connections with an estimate (D25), and the reward lives there, where the choice
 is.
 
-**The compression is lossy in one place, and it is a limit of the neuron.**
+**The compression is lossy in two places, and both are limits of the neuron.**
 
 | Loss      | Description                                                                                                                                       | Reference |
 |-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
 | memory    | A neuron has limited memory: it remembers only its most recent activations, and reports its relations over those, so what it saw earlier no longer shapes the dictionary. | D18       |
+| laps      | The dictionary holds shapes without their sizes: a cycle says that a pattern comes round, never how many times. A recognized call expands exactly, to what its fit landed on, for as long as that stands on the board; after that, a run of white or a stretch of alternation is held only as its shape. What survives of a length is in the histories and connections, as the offset of what stood at the end, and where one length recurs a function holds that end as a node. | D15, D56, R28 |
 
 **A neuron's vision is a limit, not a loss.** A base neuron sees its neighbors one position away in each
 dimension and nothing beyond (D4). What lies farther reaches the dictionary through the hierarchy: an interneuron
@@ -264,8 +265,8 @@ that fires through it (D8), and expansion ends on base symbols read back through
 >
 > The machine holds the activation open, not the neuron. There is one open activation per neuron and place, and
 > it holds: the activation, its place on the board, its age, and the age it was covered at, if it has been. An
-> interneuron's activation holds besides what expansion reads (R28): the function that fired it, and which of
-> the function's relations did not come true. What it covers is in the coverage set (D24).
+> interneuron's activation holds besides what expansion reads (R28): the function that fired it, which of the
+> function's relations did not come true, and the activations its fit landed on and bound, credited or not.
 >
 > **Age is per activation, and a neuron can carry several ages at once.** An activation's age is the frames
 > elapsed since the frame it fired in, `0` through `reach_t`; a new activation is the one at age 0, base and
@@ -571,7 +572,7 @@ free, no interneuron is granted (R16, R24).
 > | | interneuron | the neuron allocated for it, or none (D53) | nothing: the function is reached through it, not stated by it |
 > | | members | per parameter, the neurons that have stood there within the window, a record (D44) | nothing |
 > | a class | members | its member neurons, by id (D41) | nothing |
-> | an interneuron | functions | the functions it fires for, one or more where a stretch came round (R43); and each form a function had before a move, kept until the last activation that form fired has left the board (R54, R38) | nothing beyond the functions' own |
+> | an interneuron | functions | the functions it fires for, one or more where a stretch came round (R43); and nothing of any earlier form (R54) | nothing beyond the functions' own |
 >
 > **Two indexes are kept over it and rebuilt from it**, so they cost nothing: by relation, each neuron and
 > offset with the other end open or not, to the functions holding it, for finding (R53); and by what an
@@ -591,7 +592,7 @@ free, no interneuron is granted (R16, R24).
 > **The same relations are the same function.** A function is its set of relations, so the same neurons at the
 > same offsets are one function whichever neurons returned them. Each function has one interneuron. An
 > interneuron may hold more than one function where a stretch comes round (R43): it fires for each, and an
-> activation of it is expanded through the one that fired it.
+> activation of it expands to what its fit landed on (R28).
 >
 > **A function names other interneurons by id**, and through them it may come back to its own: a function whose
 > node is the interneuron that fired a frame before, whose function names the one before that, and so on, can
@@ -615,8 +616,8 @@ groups, places and keeps (§6).
 > variables is bound beside it, on the apex (D10). It says which function ran. Its connections are one set for
 > every value its variables have taken, so a function above learns about it regardless of its arguments by
 > naming the call neuron alone, and about one argument by naming the call neuron and the activation bound in
-> that variable. It holds a history, a relation index and connections of its own, like any neuron, and is
-> expanded through the function that fired it (R28).
+> that variable. It holds a history, a relation index and connections of its own, like any neuron, and an
+> activation of it expands to what its fit landed on and bound (R28).
 
 ## 3.8 Apex
 
@@ -1206,12 +1207,14 @@ argument.
 > fit of it (R53) is one **placement**. The machine keeps nothing for it: what grouping reads, it asks the
 > neurons at the count step (§6.1), over their histories (D18, D47).
 >
-> **A candidate** is a board relation the neurons returned with strength 2 or more, that the function does not
-> hold, and that shares a neuron with an activation the fit landed on or with the call. Its other end is a
+> **A candidate** is a board relation the neurons returned with strength 2 or more, that the fit did not land
+> on, and that shares a neuron with an activation the fit landed on or with the call. Its other end is a
 > neuron the function does not name, which would be a new node, or a node the function has, which would close
 > the cycle where the function has none (D15). A relation to a call whose function has a node of this function
-> as its origin is read as a relation to that node (D54): it is attached there, and it is no candidate where
-> the function already holds that relation. It is no candidate where its new node would be the origin, later
+> as its origin is read as a relation to that node (D54): it is attached there. The relation to the call and
+> the relation to its origin's neuron are one board edge, and a function holds that edge as one or the other,
+> never both: where the fit already lands on it, under either name, it is no candidate. It is no candidate
+> where its new node would be the origin, later
 > in time or at a lesser place in the same frame, since the origin is fixed (D15); where the function has a
 > cycle and it leads on from a node of the cycle in a dimension the cycle runs in; or where the function has a
 > cycle and it would close another.
@@ -1268,9 +1271,9 @@ argument.
 >
 > A relation that leaves its function of one relation leaves that function empty, and the function goes with
 > it (R18). A function keeps its interneuron through every move: what the interneuron stands for moves with its
-> function. The relations it held before a move stay readable through the dictionary until the activations
-> the old form fired have left the board (D56, R38), so expansion reads each call through the function as it
-> was when the call fired. A function that a move makes the same as another is that other function (D36),
+> function. A call that fired under an earlier form of the function expands to what it covered, not through
+> the function (R28), so nothing of the earlier form is kept. A function that a move makes the same as
+> another is that other function (D36),
 > and the two are one from then on, the older interneuron standing for both (R43). A moved function is read
 > against the functions of the same shape, and generalized with them (R52).
 
@@ -1448,8 +1451,8 @@ An interneuron fires at the level after the one its fit was accepted at, before 
 at the fit's origin (D15, D53), once per accepted fit, at age 0, and what stood in its function's variables
 stays on the apex beside it, bound (D10). Nothing sees an interneuron until it fires
 (D5). An interneuron's activation records the function that fired it, since it may have several (R43), and
-which of that function's relations did not come true, and is expanded through that function (R28). Every
-activation no accepted fit covers stands as itself.
+which of that function's relations did not come true, and what its fit landed on and bound, credited or not,
+which is what it expands to (R28). Every activation no accepted fit covers stands as itself.
 
 > **R27 — The apex is a frontier.** It is every active neuron **no accepted function covers** (D49), the
 > uncovered set, base neurons and interneurons alike, so a base neuron no function found worth naming stands in
@@ -1501,9 +1504,9 @@ level has settled, so it is recorded in the `connect` call instead (R31).
 > writes at age `reach_t` is taken before its neuron goes. Every frame, after those calls, the machine takes
 > everything due, and calls forget neuron on every neuron whose history names one (§4.1).
 >
-> **The dictionary holds the function.** Until the activations a function fired have left the board, calls
-> above them may still expand them, so the function stays readable after it leaves the dictionary, and so does
-> each form a function had before a move (D56, R54).
+> **A call outlives its function on the board.** Until the activations a function fired have left the board,
+> calls above them may still expand them; expansion reads what they covered, not the dictionary (R28), so the
+> function need not be kept for it.
 
 ## 6.6 Cost per level
 
@@ -1794,23 +1797,30 @@ happened (R32).
 ## 8.2 Expansion
 
 > **R28 — Expansion.** A neuron above the base is not yet anything in the base alphabet. Expanding it recovers
-> what its function covered and bound: the nodes its function names, each where the function's relations put it
-> from the origin, repeated down to base symbols. It follows the function's relations back from the origin, one
-> dimension at a time:
+> what its function covered and bound, down to base symbols.
+>
+> **A recognized call expands to what its fit landed on.** The machine holds, with every call on the board,
+> the activations its fit landed on and bound, credited or not (D9, R24). Expanding the call is reading them:
+> each landed activation that is an interneuron is expanded the same way, through what its own fit landed on,
+> and each bound activation is the argument, the neuron that stood there (D37). Nothing is read from the dictionary,
+> so a function that has changed since the call fired changes nothing about what the call expands to:
+> expansion follows what actually fired, frame by frame, back to where it began, and it ends there, even
+> where a function comes back to its own interneuron (§6.7).
+>
+> **An inferred call expands through its function**, since it covers nothing yet (R36). It follows the
+> function's relations back from the origin, one dimension at a time:
 >
 > 1. **Start** at the origin: the call's place, in every dimension, where the function's origin stands (D15).
-> 2. **Follow** each relation that came true, from a placed node to the node at its far end, in that relation's
->    dimension. Offsets compose because each is a difference (D34). Round a cycle as many times as the call
->    records (D12). Repeat until no true relation leads to an unplaced node in any dimension.
-> 3. **Leave** a node no true relation reaches where nothing is: whatever stood there was counted bare beside
->    the call, and the call says nothing about it.
-> 4. **Expand** each placed node that is an interneuron the same way, through the function that fired it (§6.4),
->    from its own origin, which is where it was placed. Expand each variable to its argument, the neuron bound
->    there (D37).
+> 2. **Follow** each relation from a placed node to the node at its far end, in that relation's dimension.
+>    Offsets compose because each is a difference (D34). Round a cycle while the node it reaches has
+>    something to land on in the frames that have happened; beyond them, round up to the nearest node the
+>    function places past the cycle in that direction, where it has one, and once where it has none (D54).
+>    Repeat until no relation leads to an unplaced node in any dimension.
+> 3. **Expand** each placed node that is an interneuron the same way, through its function, from its own
+>    origin, which is where it was placed. Expand each variable to its argument where one is bound, and
+>    otherwise as the next paragraph says.
 >
-> Each activation is expanded through the function that fired it, so expansion follows what actually fired,
-> frame by frame, back to where it began, and it ends there, even where a function comes back to its own
-> interneuron (§6.7). A fixed node expands to its neuron; a variable expands to its argument.
+> A fixed node expands to its neuron; a variable expands to its argument.
 >
 > **Every placement is exact.** A node is placed at exactly the offset its relation names, composed along the
 > path from the origin, and an expansion many levels deep places its farthest base symbols exactly where the
