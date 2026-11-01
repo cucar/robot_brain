@@ -571,7 +571,7 @@ free, no interneuron is granted (R16, R24).
 > | | interneuron | the neuron allocated for it, or none (D53) | nothing: the function is reached through it, not stated by it |
 > | | members | per parameter, the neurons that have stood there within the window, a record (D44) | nothing |
 > | a class | members | its member neurons, by id (D41) | nothing |
-> | an interneuron | functions | the functions it fires for, one or more where a stretch came round (R43); and each form a function had before a move, kept until the last window over the activations that form fired has closed (R54, R38) | nothing beyond the functions' own |
+> | an interneuron | functions | the functions it fires for, one or more where a stretch came round (R43); and each form a function had before a move, kept until the last activation that form fired has left the board (R54, R38) | nothing beyond the functions' own |
 >
 > **Two indexes are kept over it and rebuilt from it**, so they cost nothing: by relation, each neuron and
 > offset with the other end open or not, to the functions holding it, for finding (R53); and by what an
@@ -1268,9 +1268,9 @@ argument.
 >
 > A relation that leaves its function of one relation leaves that function empty, and the function goes with
 > it (R18). A function keeps its interneuron through every move: what the interneuron stands for moves with its
-> function. The relations it held before a move stay readable through the dictionary until the windows over the
-> activations the old form fired have closed (D56, R38), so expansion reads each call through the function as
-> it was when the call fired. A function that a move makes the same as another is that other function (D36),
+> function. The relations it held before a move stay readable through the dictionary until the activations
+> the old form fired have left the board (D56, R38), so expansion reads each call through the function as it
+> was when the call fired. A function that a move makes the same as another is that other function (D36),
 > and the two are one from then on, the older interneuron standing for both (R43). A moved function is read
 > against the functions of the same shape, and generalized with them (R52).
 
@@ -1488,21 +1488,22 @@ level has settled, so it is recorded in the `connect` call instead (R31).
 
 ## 6.5 Decommission interneurons
 
-> **R38 — An interneuron dies when its last function leaves the dictionary and the last window over it
-> closes.** Dying is decommissioning: the neuron is free to be allocated again. Once its last function has
+> **R38 — An interneuron dies when its last function leaves the dictionary and its last activation leaves
+> the board.** Dying is decommissioning: the neuron is free to be allocated again. Once its last function has
 > left, nothing can fire it again. Every function that names it as a node leaves the dictionary with it, since
 > it can no longer hold, and so on up: that is its **subtree**. The death frame is the frame in which the last
-> open activation of the interneuron, or of any neuron in its subtree, closes its window, and this frame when
-> none is open. That set only shrinks. An activation's window closes at its reach in time (D9), so the wait is
-> at most the longest reach in time among the interneuron and the neurons built on it.
+> activation of the interneuron, or of any neuron in its subtree, leaves the board, and this frame when none
+> stands on it. That set only shrinks. An activation stands on the board through the machine's longest reach
+> in time (D9), which is longer than it connects, so a neuron is never allocated again while a fit could still
+> land on one of its activations or an interneuron could still see it.
 >
 > **Decommissioning is after the frame's connect and infer calls** (§7), so the last exposure an activation
 > writes at age `reach_t` is taken before its neuron goes. Every frame, after those calls, the machine takes
 > everything due, and calls forget neuron on every neuron whose history names one (§4.1).
 >
-> **The dictionary holds the function.** Until the windows of the activations a function fired have closed,
-> calls above them may still expand them, so the function stays readable after it leaves the dictionary, and so
-> does each form a function had before a move (D56, R54).
+> **The dictionary holds the function.** Until the activations a function fired have left the board, calls
+> above them may still expand them, so the function stays readable after it leaves the dictionary, and so does
+> each form a function had before a move (D56, R54).
 
 ## 6.6 Cost per level
 

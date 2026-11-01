@@ -65,7 +65,7 @@ stretch seen at one frame and again at another is two activations of one interne
 declined, and nothing records the verdict (D57). What prunes it is the bar's own history: once the move before
 it stands under a call at every bar, the bar sees the call and not the move (D5), the pair's relation is no
 longer observed, its `with` slides out of the history, its worth falls below zero, the relation leaves, the
-function goes, and its interneuron is decommissioned once the last window over it closes (R18, R38). The same
+function goes, and its interneuron is decommissioned once its last activation leaves the board (R18, R38). The same
 happens to the links of a chain that stopped recurring. A pair outbid at some bars and bare at others keeps
 recurring and stays.
 
@@ -183,7 +183,7 @@ its answer is right every time.
 **Cleanup.** Once the ring stands, every bar sees a ring neuron one back and never a bare move, so the four
 pairs' relations stop being observed, their `with` slides out of the bars' histories, and they are pruned
 (R18); the links of the chains that broke during learning go the same way. Their interneurons are
-decommissioned as the last windows over them close (R38). After that the machine is 10 neurons: the 4 base
+decommissioned as their last activations leave the board (R38). After that the machine is 10 neurons: the 4 base
 ones, `rise`, `fall`, `own`, `disown`, and the 6 in the ring. The dictionary is six functions of one relation
 each, 6 edges, and the run costs nothing: the ring's call at the latest bar relates to nothing outside it, the
 free root the evaluation document names.
