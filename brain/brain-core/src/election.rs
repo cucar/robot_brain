@@ -4,6 +4,7 @@
 
 use rustc_hash::FxHashSet;
 
+use crate::function::Func;
 use crate::machine::*;
 use crate::neuron::*;
 use crate::recognize::{edge, Fit};
@@ -29,12 +30,54 @@ impl Machine {
 
     /// The tie-break of two fits that measure the same (R24): a function with an interneuron before one without,
     /// the older interneuron, the function that joined first, the fit from the older activation.
-    fn rank(&self, fit: &Fit) -> (u8, u64, u64, ActRef) {
+    fn rank(&self, fit: &Fit) -> (bool, u8, u64, u64, ActRef) {
         let f = self.dict.get(fit.func);
+        // a fit whose relations land on the board relations as they read, before one landing a node on a call
+        // through its origin (D54)
+        let via_origin = !fit.calls.is_empty();
         match f.and_then(|f| f.inter) {
-            Some(n) => (0, n as u64, 0, fit.origin),
-            None => (1, 0, f.map_or(u64::MAX, |f| f.joined), fit.origin),
+            Some(n) => (via_origin, 0, n as u64, 0, fit.origin),
+            None => (via_origin, 1, 0, f.map_or(u64::MAX, |f| f.joined), fit.origin),
         }
+    }
+
+    /// The reuse search (R43, D36): an interneuron that already stands for what this function's would. The
+    /// function's expansion is read from its origin; an interneuron met in it, not at the origin, within that
+    /// interneuron's own length, whose expansion over exactly that length is the same as the function's. The
+    /// nearest meeting first, the older interneuron on a tie.
+    fn reuse(&self, f: &Func) -> Option<NeuronId> {
+        let lay = f.layout();
+        let mut out: Vec<(NeuronId, Pos)> = Vec::new();
+        let mut met: Vec<(NeuronId, Pos)> = Vec::new();
+        for (i, m) in f.nodes.iter().enumerate() {
+            let mut q = [0i32; MAX_DIMS];
+            for d in 0..MAX_DIMS { q[d] += lay.place[i][d]; }
+            if self.thalamus.get(*m).map_or(false, |x| x.alive && x.kind == Kind::Inter) { met.push((*m, q)); }
+            self.expand_from(*m, q, i64::MIN, &mut Vec::new(), &mut out, Some(&mut met));
+        }
+        met.retain(|(_, p)| *p != [0; MAX_DIMS]);
+        met.sort_by_key(|(n, p)| (p.iter().map(|x| x.unsigned_abs()).sum::<u32>(), *n));
+        met.dedup();
+        let mut tried: Vec<NeuronId> = Vec::new();
+        for (n, p) in met {
+            if tried.contains(&n) { continue; }
+            tried.push(n);
+            if self.dict.of_inter(n).is_empty() { continue; }
+            let mut own: Vec<(NeuronId, Pos)> = Vec::new();
+            self.expand_from(n, [0; MAX_DIMS], i64::MIN, &mut Vec::new(), &mut own, None);
+            if own.is_empty() { continue; }
+            // its length in each dimension: the extent its expansion spans back from its origin
+            let (mut lo, mut hi) = ([0i32; MAX_DIMS], [0i32; MAX_DIMS]);
+            for (_, q) in &own { for d in 0..MAX_DIMS { lo[d] = lo[d].min(q[d]); hi[d] = hi[d].max(q[d]); } }
+            if !(0..MAX_DIMS).all(|d| p[d].abs() < hi[d] - lo[d] + 1) { continue; }
+            let inside = |q: &Pos| (0..MAX_DIMS).all(|d| q[d] >= lo[d] && q[d] <= hi[d]);
+            let mut a: Vec<(NeuronId, Pos)> = out.iter().filter(|(_, q)| inside(q)).copied().collect();
+            let mut b = own;
+            a.sort();
+            b.sort();
+            if a == b { return Some(n); }
+        }
+        None
     }
 
     /// The greedy cover over the fits of this level (D28, R24). Returns how many were accepted and allocated.
@@ -77,8 +120,16 @@ impl Machine {
         let Some(origin) = self.act(fit.origin).cloned() else { return 0 };
         let Some(f) = self.dict.get(fit.func).cloned() else { return 0 };
         let mut minted = 0;
-        let neuron = match f.inter.filter(|n| self.thalamus.get(*n).map_or(false, |x| x.alive)) {
-            Some(n) => n,
+        let own = f.inter.filter(|n| self.thalamus.get(*n).map_or(false, |x| x.alive));
+        let found = if own.is_none() { self.reuse(&f) } else { None };
+        let neuron = match own.or(found) {
+            Some(n) if own.is_some() => n,
+            Some(n) => {
+                self.dict.set_inter(f.id, n);
+                self.stats_reused += 1;
+                if self.trace { eprintln!("[reuse f{}] {} -> #{}", fno, self.dict.describe(&f), n); }
+                n
+            }
             None => {
                 minted = 1;
                 let id = self.thalamus.next_id();

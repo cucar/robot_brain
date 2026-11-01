@@ -297,8 +297,11 @@ impl Machine {
         let mut changed: Vec<FuncId> = Vec::new();
         // the activations each function touches here: what its fits landed on, and its calls on the board
         let mut touch: FxHashMap<FuncId, Vec<(ActRef, NeuronId, Pos)>> = FxHashMap::default();
+        // the board edges each function's fits already land on: one edge is never two of its relations
+        let mut taken: FxHashMap<FuncId, FxHashSet<(ActRef, ActRef)>> = FxHashMap::default();
         for fit in fits {
             let Some(f) = self.dict.get(fit.func) else { continue };
+            taken.entry(f.id).or_default().extend(fit.edges.iter().map(|&(a, b)| edge(a, b)));
             let opos = self.act(fit.origin).map(|a| a.pos).unwrap_or([0; MAX_DIMS]);
             for &l in &fit.landed { if let Some(a) = self.act(l) { touch.entry(f.id).or_default().push((l, a.neuron, opos)); } }
         }
@@ -321,6 +324,7 @@ impl Machine {
                 let Some(f) = self.dict.get(*fid) else { continue };
                 for &(act, as_node, opos) in list {
                     let other = if e.near == act { e.far } else if e.far == act { e.near } else { continue };
+                    if taken.get(fid).map_or(false, |t| t.contains(&edge(act, other))) { continue; }
                     let Some(rel) = self.candidate(f, act, as_node, &opos, other) else { continue };
                     let v = cands.entry(rel).or_default();
                     if !v.contains(fid) { v.push(*fid); }

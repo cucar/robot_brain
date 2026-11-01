@@ -75,6 +75,7 @@ pub struct Machine {
     /// Interneurons whose last function has left, waiting for their windows to close (R38).
     pub ledger: Vec<NeuronId>,
     pub(crate) stats_added: usize,
+    pub(crate) stats_reused: usize,
     pub(crate) stats_retired: usize,
     pub last_stats: FrameStats,
     pub last_winners: Vec<Winner>,
@@ -112,6 +113,7 @@ impl Machine {
             last_func: FxHashMap::default(),
             ledger: Vec::new(),
             stats_added: 0,
+            stats_reused: 0,
             stats_retired: 0,
             last_stats: FrameStats::default(),
             last_winners: Vec::new(),
@@ -210,6 +212,7 @@ impl Machine {
 
         // the levels (§6, R26): activate, find, count, group, elect, allocate
         self.stats_added = 0;
+        self.stats_reused = 0;
         self.stats_retired = 0;
         let mut level: u32 = 0;
         loop {
@@ -226,6 +229,7 @@ impl Machine {
             if level > 1024 { break; }
         }
         stats.added = self.stats_added;
+        stats.reused = self.stats_reused;
         stats.retired = self.stats_retired;
 
         // connect and infer (§7), then decommission what is due (R38)

@@ -1,5 +1,5 @@
 //! Expansion (R28): an inferred call is read through its function in the dictionary, its nodes placed back from
-//! its origin, each node that is an interneuron expanded in turn, down to base symbols. A descent stops where it
+//! its origin, a cycle read round once, each node that is an interneuron expanded in turn, down to base symbols. A descent stops where it
 //! comes back to an interneuron already on its path (D36).
 
 use crate::function::*;
@@ -29,6 +29,12 @@ impl Machine {
             let mut q = at;
             for d in 0..MAX_DIMS { q[d] += lay.place[i][d]; }
             self.expand_from(*m, q, from, path, out, all.as_deref_mut());
+        }
+        // a cycle is read round once: the relation that closes it, from its node to the next lap's (R28, D12)
+        if let Some((_, ua, ub, off)) = lay.closing {
+            let mut q = at;
+            for d in 0..MAX_DIMS { q[d] += lay.place[ua][d] + off[d]; }
+            self.expand_from(f.nodes[ub], q, from, path, out, all.as_deref_mut());
         }
         path.pop();
     }
