@@ -43,8 +43,9 @@ stands at the present (D31):
 **One call per lap, each covering the one before.** At frame 8 the cycle fits at `y`: `y` after `x` lands on
 the `x` at 7, and `x` after `y` reaches the `y` at 6, which stands as the call `XY` fired there. A fixed node
 comes true on a call whose origin is that neuron, so the fit lands on the call and covers its whole count
-(D54, D22). Nothing earlier is on the board: at the base reach the fit reads one lap and lands on the call of
-the lap before. The call counts nothing for the lap; how many it covers is in what the calls cover (D24).
+(D54, D22). The `y` at 6 is covered, so the fit reaches it only as the call standing there: at the base
+reach the fit reads one lap and lands on the call of the lap before. The call counts nothing for the lap; how
+many it covers is in what the calls cover (D24).
 
 | the fit at frame 8 | edges |
 |---|---|
@@ -57,6 +58,12 @@ holds one call for the stretch, the latest (D49). The `x` between stands on the 
 relation back to the call, one edge, and is covered at the next `y`. The laps are in the calls, each under the
 one after it, and expansion follows them back (R28). The stretch costs nothing at a `y` and one edge at an
 `x`. The function costs 2 in the dictionary, its two relations (D56, D13).
+
+**After a break.** The stream falls silent and `x, y` comes again. At the first `y` the fit reads `y` after
+`x`, and `x` after `y` reaches silence. The relation that closes a cycle is never a failure: the fit ends
+there, a lap read once is the cycle run once (D54), so it covers one edge for nothing and is taken, and the
+call fires. At the next `y` the closing relation lands on that call through its origin, as in a run that
+never stopped. Nothing had to stay on the board for it but the call.
 
 **Other pairs.** `a, b, a, b, …` builds `AB` the same way, and `m, n, m, n, …` builds `MN`. Each is a function
 of two nodes and two relations with its own interneuron, and none of them shares a node with another.

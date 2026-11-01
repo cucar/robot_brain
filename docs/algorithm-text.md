@@ -74,9 +74,13 @@ Where `h` stands bare, after a space or a vowel, `{e, h@−1}` forms from those 
 the call (D54). There it measures the same as `{e, TH@−1}`, and the election takes the fit whose relation
 reads as it stands on the board, `{e, TH@−1}`, first (R24). Each has its own places.
 
-An interneuron sees one beyond what it stands for (D4), so it also sees the bare letter or the interneuron just
-before its stretch. A function from its own history may name that, where it recurs twice, and join two stretches
-into one.
+An interneuron sees one beyond what it stands for (D4), and an activation stands on the board for the longest
+reach the machine's neurons have (D9), so the interneuron also sees the bare letter or the interneuron just
+before its stretch. Where that recurs twice, the relation to it is a candidate at the function's past end,
+answered by the interneuron, and joins (R50): the function grows one letter toward its past per recurrence,
+flat, in one interneuron. So a stretch is reached two ways, as a chain of calls growing at the future end, one
+function per length, and as one function growing at the past end; where both fit, they cover the same edges,
+and the election takes the one whose relations read as they stand on the board (R24).
 
 **One word, several interneurons.** Which stretch an interneuron stands for is decided by what recurred twice
 first. After a space, `{t, space@−1}` recurs early; its interneuron covers the space and `t`, `h`'s function

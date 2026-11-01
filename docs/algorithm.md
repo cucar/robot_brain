@@ -249,9 +249,13 @@ that fires through it (D8), and expansion ends on base symbols read back through
 > accepted (D37), and covers from there everything its function's relations landed on, all of it already
 > happened (D54).
 
-> **D9 — Activation window.** An activation at place `f` in time stays open through `f + reach_t`, its reach in
-> time (D4). Two things reach it over that span, one frame at a time, by the connect call after the frame's last
-> level (§7.1):
+> **D9 — Activation window.** An activation at place `f` in time has two spans. It **stands on the board**
+> through `f + S`, where `S` is the longest reach in time among the neurons the machine holds, one beyond the
+> farthest node any function places from its origin (D4, D24): for that long a fit may land on it, and an
+> interneuron whose reach extends to it sees it. `S` moves with the dictionary, up when a function gains a node
+> toward its past and down when the last function of that depth leaves. It is **open**, connecting, through
+> `f + reach_t`, its own reach in time (D4): a neuron learns what followed only as far as it sees. Two things
+> reach it while it is open, one frame at a time, by the connect call after the frame's last level (§7.1):
 >
 > | Input           | Description                                                                                                 | References |
 > |-----------------|-------------------------------------------------------------------------------------------------------------|------------|
@@ -323,8 +327,8 @@ connection read.
 > back over all of what it stands for, and one frame more. Where what it stands for comes back to an interneuron
 > already expanded, it stops there (D36), and so does its reach.
 >
-> In space the reach runs either way; in time it runs back, and the same number runs forward as the activation's
-> window (D9). `reach_t` is the reach in time, the activation's window.
+> In space the reach runs either way; in time it runs back, and the same number runs forward as the span the
+> activation connects over (D9). `reach_t` is the reach in time.
 
 > **D6 — Offsets.** The offset between two activations is the difference of their places on the board, one
 > component per activation dimension they share (D1). Every offset is exact, in a neighborhood (D18), in a
@@ -775,12 +779,14 @@ occurs is what the worth counts (D57).
 >
 > **A cycle is read round, lap after lap.** The relation that closes the cycle (D15) is matched again from the
 > node it reached, and the cycle's relations are matched again after it, one lap further back. The fit goes
-> round while that relation lands, and ends at the lap where it does not. So a node of the cycle may land on
-> several activations, one per lap; how many is in what the call covers (D24), and the call counts nothing for
-> it (D12). Where the node it reaches is the origin of an earlier call of the same function, it lands on that
-> call and covers it whole, and the laps under it are that call's: at the base reach, in time, a fit reads one
-> lap on the board and covers the call of the lap before. Nothing is read past the cycle. A relation of a
-> cycle came true when it held anywhere in the fit, and did not when it held nowhere.
+> round while that relation lands, and ends at the lap where it does not. The relation that closes the cycle
+> is never a failure: every fit of a cycle ends where it stops landing, and a lap read once is the cycle run
+> once (D12). So a node of the cycle may land on several activations, one per lap; how many is in what the call
+> covers (D24), and the call counts nothing for it. Where the node it reaches is the origin of an earlier call
+> of the same function, it lands on that call and covers it whole, and the laps under it are that call's: at
+> the base reach, in time, a fit reads one lap on the board and covers the call of the lap before. Nothing is
+> read past the cycle. A relation of the cycle's body came true when it held anywhere in the fit, and did not
+> when it held nowhere.
 >
 > **Coming true.** Each relation of a function comes true or does not. It comes true where the board holds a
 > relation of its dimension and offset whose near end is the end already landed and whose far end is what the
@@ -1111,7 +1117,7 @@ With `A` activations this frame and `M` neighbors per row:
 > happened.
 
 **The board** is the apex as it stands at a level, partway through the frame: what the levels below have left
-uncovered so far, with the open activations of earlier frames still within reach, and the relations the neurons
+uncovered so far, with the activations of earlier frames still on the board (D9), and the relations the neurons
 returned among all of them. It is a piece of the graph (D55), and it changes with every level. The apex of the
 frame is the board once the last level has run.
 
@@ -1219,6 +1225,14 @@ argument.
 > ones to its own frame and to earlier ones, so a candidate at the past end of a function in time is answered
 > by the interneuron alone, once the function has one. A relation two neurons both answer for is read at the
 > answer with the more activations behind it, as a returned relation is (R21).
+>
+> **A relation to a node is asked for through the calls that stand at it.** A fit lands a node on its neuron
+> or on a call whose function has that neuron as its origin (D54), so the count must read both as the node.
+> The machine holds the dictionary and knows every such call; it writes the relation into the query as a set,
+> the node's neuron and each of those calls at the same offset, and the neuron counts a row as holding the
+> relation when it holds any of them. The neuron knows nothing of calls or origins; the mapping is the
+> machine's, the one the fit makes. Without it a relation that keeps landing on a call would count as never
+> holding, since the node under the call is a neighbor of nothing (D5).
 >
 > **Distance and worth.** A candidate's distance to a function is `1 − with / (with + without)`: zero where it
 > stood at every occasion the function did, one where it never did. Its worth in the function is
@@ -1328,7 +1342,8 @@ machine works out itself (R22).
 > apex and is a neighbor to every later function. A later fit that lands on it covers the relations of its own
 > that no call has covered, and nothing else (D10). So every edge is paid for once. The coverage set spans one
 > frame more than the longest reach in time among the neurons the machine holds, no function reaches further
-> back, and the box every other activation dimension gives, and ages out with it, and over the same span the
+> back, which is the span an activation stands on the board (D9), and the box every other activation dimension
+> gives, and ages out with it, and over the same span the
 > machine keeps the action that ran at each frame in each action channel, for the shares a reward sends back
 > (R33). **The machine holds
 > nothing on the scale of the run.**
