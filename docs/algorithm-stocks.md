@@ -163,10 +163,10 @@ there. Chains that start at different bars are different neurons, even when they
 chain breaks, the lone bar votes its average over every situation it has stood in, and the abandoned chain end
 votes what its few sightings taught it. Those are the wrong answers while the chain is being built.
 
-**Closing the ring.** At some lap a chain runs a full lap past one of its own neurons, at bar 5 say. The bar-5 neuron
-is six bars back down the chain, and over those six bars the two expansions are the same, so the index search
-finds it (D36, R43): the machine fires the bar-5 neuron again instead of allocating a new one, the new function
-is added to it, and the chain becomes a ring of six neurons:
+**Closing the ring.** At some lap a chain runs a full lap past one of its own neurons, at bar 5 say. The bar-5
+neuron is six bars back down the chain, no further than its own length, and over its length the two
+expansions are the same, so the index search finds it (D36, R43): the machine fires the bar-5 neuron again
+instead of allocating a new one, the new function is added to it, and the chain becomes a ring of six neurons:
 
 | Bar | Its neuron | Says for the next bar |
 |---|---|---|

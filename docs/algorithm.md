@@ -602,9 +602,9 @@ free, no interneuron is granted (R16, R24).
 >
 > **The index is searched by what an interneuron would stand for** (R43): a function's expansion, read from its
 > origin. The search finds an interneuron when three things hold: reading that expansion, it meets the
-> interneuron within the interneuron's own length; over exactly that length the two expansions are the same; and
-> the meeting is not at the origin. That is how something that comes round again finds the interneuron it had the
-> first time.
+> interneuron no further back than the interneuron's own length, that far included; over exactly that length
+> the two expansions are the same; and the meeting is not at the origin. That is how something that comes
+> round again finds the interneuron it had the first time.
 
 **A function and its interneuron are held together.** The machine holds both in its dictionary. No neuron holds
 a function or points at an interneuron: a neuron records what it sees and returns it (§5), and the machine
