@@ -32,12 +32,13 @@ at 6 covering frames 5 and 6.
 **The cycle closes through the call.** At frame 7, `x` sees `XY` at `−1` again, and `(x, XY, −1)` has strength
 2. The call's function has `y` as its origin, and `y` is a node of that same function, so the relation is read
 as `x` after `y` (R50, D54): a candidate attached at `y` whose other end, `x`, is already a node. It closes the
-cycle (D15). `x` answers for it over its history: `with` 2, `without` 0, and it costs one edge in the
-dictionary, and it would save the edge between its own call and `XY` at each of them, so its worth is 3 and it
-joins (D57, R54). The function is now `y` after `x` and `x` after `y`, two nodes, two relations, a cycle. The
-relation is in that function and starts none of its own (R50), so nothing forms over the call at the `x`
-frames. Placed again at frame 7 the function has no fit, since no `y`
-stands at the present (D31):
+cycle (D15). `x` answers for it over its history, counting a row as holding `y` one back where it holds `y`
+or a call whose origin is `y` (R50): the `x` at 3 saw `y` bare, the ones at 5 and 7 saw the call, so `with`
+is 3 and `without` 0. It costs one edge in the dictionary and would save the edge between its own call and
+`XY` at each of the three, so its worth is 5 and it joins (D57, R54). The function is now `y` after `x` and
+`x` after `y`, two nodes, two relations, a cycle. The relation is in that function and starts none of its own
+(R50), so nothing forms over the call at the `x` frames. Placed again at frame 7 the function has no fit,
+since no `y` stands at the present (D31):
 `x` is bare for one frame.
 
 **One call per lap, each covering the one before.** At frame 8 the cycle fits at `y`: `y` after `x` lands on
