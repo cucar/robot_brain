@@ -14,7 +14,7 @@ impl Machine {
         while !pending.is_empty() {
             for c in pending.drain(..) {
                 if !self.thalamus[c].alive || !self.dict.of_inter(c).is_empty() { continue; }
-                let open = self.frames.iter().any(|f| f.acts.iter().any(|a| a.neuron == c && !a.gone && (fno - f.no) <= a.reach[0] as i64));
+                let open = self.frames.iter().any(|f| f.acts.iter().any(|a| a.neuron == c && self.is_open(a, fno)));
                 if open { keep.push(c); continue; }
                 self.decommission(c);
             }
@@ -31,17 +31,14 @@ impl Machine {
         self.last_func.remove(&c);
         if self.trace { eprintln!("[decommission f{}] #{}", self.frame_no, c); }
         // every function that names it can no longer hold, and leaves (its subtree)
-        let naming: Vec<_> = self.dict.naming.get(&c).cloned().unwrap_or_default();
-        for id in naming { self.retire_func(id); }
-        let anchored: Vec<_> = self.dict.anchored(c).to_vec();
-        for id in anchored { self.retire_func(id); }
+        for id in self.dict.naming(c) {
+            if let Some(f) = self.dict.remove(id) { self.retire(f); }
+        }
         let n = &mut self.thalamus[c];
         n.history.clear();
         n.index.clear();
         n.connections.clear();
         self.thalamus.forget(c);
-        // rows that named it have changed, so their kinds are read afresh
-        for pc in self.priced.borrow_mut().values_mut() { pc.sig.clear(); }
         for f in self.frames.iter_mut() {
             for a in f.acts.iter_mut() { a.inferences.retain(|i| i.target != c); }
         }

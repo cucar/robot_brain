@@ -1,227 +1,243 @@
-//! Functions and the dictionary (§3.5, §3.6, D15, D16, D36, D38, D41, D44): a function is a set of relations,
-//! each from its anchor, a fixed node at its latest frame, to a node at an offset in one dimension; the
-//! machine's dictionary holds every function, the classes they use, and the indexes the machine reads them
-//! through.
+//! Functions and the dictionary (§3.6, D15, D34, D36, D56): a function is a graph over neurons, one node per
+//! neuron, connected, with at most one cycle, listed from its origin; the dictionary holds every function, each
+//! relation in one function only, and the indexes the machine reads them through.
 
 use rustc_hash::FxHashMap;
 
 use crate::types::*;
 
 pub type FuncId = u32;
-pub type ClassId = u32;
 
-/// What a relation names at its far end (D16): a particular neuron, a class of the dictionary, or a parameter
-/// of the function.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
-pub enum Node {
-    Fixed(NeuronId),
-    Class(ClassId),
-    Param(u8),
-}
-
-impl Node {
-    pub fn is_fixed(&self) -> bool { matches!(self, Node::Fixed(_)) }
-}
-
-/// One relation of a function (D34): from the anchor to a node, at an offset in one dimension, written
-/// rounded (D6).
+/// A relation in its one form (D34): two neurons and the offset from the first to the second, one component per
+/// activation dimension. In time it runs from the later neuron to the earlier, at a negative offset; where the
+/// offset is zero in time, the first nonzero component is positive, and where every component is zero, the older
+/// neuron is first.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct Rel {
-    pub dim: u8,
-    pub off: i32,
-    pub node: Node,
+    pub a: NeuronId,
+    pub b: NeuronId,
+    pub off: Offset,
 }
 
-/// A function (D15): its anchor, the fixed node at its latest frame whose history is its evidence (D30), and
-/// its relations from the anchor, in one canonical order.
+fn neg(o: &Offset) -> Offset { let mut r = *o; for x in r.iter_mut() { *x = -*x; } r }
+
+/// The one form of the relation from `n` to `m` standing at `off` from it (D34).
+pub fn canon(n: NeuronId, m: NeuronId, off: Offset) -> Rel {
+    let first = off.iter().copied().find(|x| *x != 0);
+    let keep = if off[0] != 0 { off[0] < 0 } else {
+        match first { Some(x) => x > 0, None => n <= m }
+    };
+    if keep { Rel { a: n, b: m, off } } else { Rel { a: m, b: n, off: neg(&off) } }
+}
+
+impl Rel {
+    /// The neuron that sees this relation from its own activation, and the neighbor and offset it records (D47):
+    /// in time the later end alone; in space either end, the first here.
+    pub fn recorders(&self) -> Vec<(NeuronId, NeuronId, Offset)> {
+        if self.off[0] != 0 { vec![(self.a, self.b, self.off)] } else { vec![(self.a, self.b, self.off), (self.b, self.a, neg(&self.off))] }
+    }
+}
+
+/// A function (D15, D56): its nodes, the origin first, one per neuron, and its relations.
 #[derive(Clone, Debug)]
 pub struct Func {
     pub id: FuncId,
-    pub anchor: NeuronId,
+    pub nodes: Vec<NeuronId>,
     pub rels: Vec<Rel>,
-    /// Its interneuron, once the election has accepted it (R16, R43).
+    /// Its interneuron once a fit of it has been accepted (R16, R43).
     pub inter: Option<NeuronId>,
-    /// When it joined the dictionary: earlier is older (R24, R18).
+    /// When it joined the dictionary: earlier is older (R24).
     pub joined: u64,
-    /// The neurons that have stood at each parameter's nodes, a record (D44).
-    pub param_members: Vec<Vec<NeuronId>>,
 }
 
-/// A function's relations as the dictionary keys them (D15, D36): each written from the older of its two
-/// nodes, a neuron before a class before a parameter, the older neuron first; between two nodes alike, from the
-/// smaller position. So the same relations are the same function whichever neuron returned them.
-pub type FuncKey = Vec<(Node, Node, u8, i32)>;
-
-pub fn key_of(anchor: NeuronId, rels: &[Rel]) -> FuncKey {
-    let mut out: FuncKey = rels.iter().map(|r| {
-        let (a, b, off) = (Node::Fixed(anchor), r.node, r.off);
-        if b < a || (b == a && off < 0) { (b, a, r.dim, -off) } else { (a, b, r.dim, off) }
-    }).collect();
-    out.sort_unstable();
-    out
+/// How a function reads from its origin (D15, D54): the relations of a spanning tree in the order they are
+/// reached, each as (relation, from node, to node, offset from the one to the other); the relation that closes the
+/// cycle, if there is one, the same way; and each node's place from the origin over one lap.
+#[derive(Clone, Debug, Default)]
+pub struct Layout {
+    pub tree: Vec<(usize, usize, usize, Offset)>,
+    pub closing: Option<(usize, usize, usize, Offset)>,
+    pub place: Vec<Pos>,
+    /// Per node, the tree relation that reached it and the node it came from.
+    pub parent: Vec<Option<(usize, usize)>>,
 }
 
 impl Func {
-    pub fn key(&self) -> FuncKey { key_of(self.anchor, &self.rels) }
-    /// The nodes an activation of `n` can stand at to read the function (D31): the anchor, and every fixed
-    /// node in the anchor's frame, the latest, so that the rest stands within its reach. Node 0 is the anchor,
-    /// node `i + 1` the far node of relation `i`.
-    pub fn nodes_for(&self, n: NeuronId) -> Vec<usize> {
-        let mut v = Vec::new();
-        if self.anchor == n { v.push(0); }
-        for (i, r) in self.rels.iter().enumerate() {
-            if r.node == Node::Fixed(n) && (r.dim != 0 || r.off == 0) { v.push(i + 1); }
+    pub fn origin(&self) -> NeuronId { self.nodes[0] }
+    pub fn node_of(&self, n: NeuronId) -> Option<usize> { self.nodes.iter().position(|x| *x == n) }
+    pub fn holds(&self, r: &Rel) -> bool { self.rels.contains(r) }
+    pub fn has_cycle(&self) -> bool { self.rels.len() >= self.nodes.len() }
+
+    pub fn layout(&self) -> Layout {
+        let n = self.nodes.len();
+        let mut place: Vec<Option<Pos>> = vec![None; n];
+        let mut parent: Vec<Option<(usize, usize)>> = vec![None; n];
+        place[0] = Some([0; MAX_DIMS]);
+        let mut used = vec![false; self.rels.len()];
+        let mut tree = Vec::new();
+        let mut queue = vec![0usize];
+        let mut qi = 0;
+        while qi < queue.len() {
+            let u = queue[qi];
+            qi += 1;
+            for (ri, r) in self.rels.iter().enumerate() {
+                if used[ri] { continue; }
+                let (ua, ub) = (self.node_of(r.a).unwrap(), self.node_of(r.b).unwrap());
+                let (v, off) = if ua == u { (ub, r.off) } else if ub == u { (ua, neg(&r.off)) } else { continue };
+                if place[v].is_some() { continue; }
+                used[ri] = true;
+                let mut p = place[u].unwrap();
+                for d in 0..MAX_DIMS { p[d] += off[d]; }
+                place[v] = Some(p);
+                parent[v] = Some((ri, u));
+                tree.push((ri, u, v, off));
+                queue.push(v);
+            }
         }
-        v
+        let closing = self.rels.iter().enumerate().find(|(ri, _)| !used[*ri]).map(|(ri, r)| {
+            let (ua, ub) = (self.node_of(r.a).unwrap(), self.node_of(r.b).unwrap());
+            (ri, ua, ub, r.off)
+        });
+        Layout { tree, closing, place: place.into_iter().map(|p| p.unwrap_or([0; MAX_DIMS])).collect(), parent }
     }
-    pub fn params(&self) -> usize { self.param_members.len() }
-    pub fn uses_class(&self, k: ClassId) -> bool { self.rels.iter().any(|r| r.node == Node::Class(k)) }
-    /// Every neuron the function names as a fixed node, the anchor among them, each once (D15).
-    pub fn fixed_neurons(&self) -> Vec<NeuronId> {
-        let mut v = vec![self.anchor];
-        for r in &self.rels { if let Node::Fixed(n) = r.node { if !v.contains(&n) { v.push(n); } } }
-        v
+
+    /// The tree relations from `from` to `to` along the spanning tree, in order, each with its offset in that
+    /// direction (the cycle's path, read once round from the node the closing relation reaches).
+    pub fn tree_path(lay: &Layout, from: usize, to: usize) -> Vec<(usize, usize, usize, Offset)> {
+        let up = |mut x: usize| { let mut v = vec![x]; while let Some((_, p)) = lay.parent[x] { v.push(p); x = p; } v };
+        let (pf, pt) = (up(from), up(to));
+        let lca = *pf.iter().find(|x| pt.contains(x)).unwrap_or(&0);
+        let mut steps = Vec::new();
+        // from `from` up to the meeting node, each step against the tree's direction
+        let mut x = from;
+        while x != lca {
+            let (ri, p) = lay.parent[x].unwrap();
+            let off = lay.tree.iter().find(|t| t.0 == ri).unwrap().3;
+            steps.push((ri, x, p, neg(&off)));
+            x = p;
+        }
+        // then down to `to`, with it
+        let mut down = Vec::new();
+        let mut y = to;
+        while y != lca {
+            let (ri, p) = lay.parent[y].unwrap();
+            let off = lay.tree.iter().find(|t| t.0 == ri).unwrap().3;
+            down.push((ri, p, y, off));
+            y = p;
+        }
+        down.reverse();
+        steps.extend(down);
+        steps
     }
-    pub fn names(&self, n: NeuronId) -> bool { self.anchor == n || self.rels.iter().any(|r| r.node == Node::Fixed(n)) }
+
+    /// How far its activation sees (D4): one position beyond the farthest node it places from its origin, in each
+    /// dimension of `axes`.
+    pub fn reach(&self, axes: u8) -> Pos {
+        let lay = self.layout();
+        let mut r = [0; MAX_DIMS];
+        for d in 0..MAX_DIMS {
+            if d > 0 && axes & (1 << d) == 0 { continue; }
+            r[d] = lay.place.iter().map(|p| p[d].abs()).max().unwrap_or(0) + 1;
+        }
+        r
+    }
+
+    /// Two functions with the same relations and the same origin are one (D36).
+    pub fn key(&self) -> (NeuronId, Vec<Rel>) {
+        let mut r = self.rels.clone();
+        r.sort();
+        (self.origin(), r)
+    }
 }
 
-/// Put relations in the one order the dictionary keys them by.
-pub fn canonical(mut rels: Vec<Rel>) -> Vec<Rel> {
-    rels.sort();
-    rels.dedup();
-    rels
-}
+pub fn describe_rel(r: &Rel) -> String { format!("#{}→#{}{:?}", r.a, r.b, r.off) }
 
-pub fn describe_rels(anchor: NeuronId, rels: &[Rel]) -> String {
-    let parts: Vec<String> = rels.iter().map(|r| {
-        let n = match r.node { Node::Fixed(n) => format!("#{}", n), Node::Class(k) => format!("C{}", k), Node::Param(p) => format!("P{}", p) };
-        let d = ["t", "x", "y"][r.dim as usize % 3];
-        format!("{}{}{:+}", n, d, r.off)
-    }).collect();
-    format!("#{}[{}]", anchor, parts.join(" "))
-}
-
-/// The dictionary (D36): every function, each with its interneuron once it has one, and the classes they use.
+/// The dictionary (D36, D56).
 #[derive(Default)]
 pub struct Dictionary {
     pub funcs: FxHashMap<FuncId, Func>,
-    pub classes: FxHashMap<ClassId, Vec<NeuronId>>,
-    pub by_anchor: FxHashMap<NeuronId, Vec<FuncId>>,
-    /// Per neuron, the functions it can stand in to read them (D31): at the anchor, or at a fixed node of the
-    /// anchor's frame.
-    pub by_label: FxHashMap<NeuronId, Vec<FuncId>>,
-    pub by_key: FxHashMap<FuncKey, FuncId>,
+    /// Every relation to the one function that holds it (R50).
+    pub by_rel: FxHashMap<Rel, FuncId>,
     /// Per interneuron, its functions (R43: it may hold more than one).
     pub by_inter: FxHashMap<NeuronId, Vec<FuncId>>,
-    /// Per neuron, the functions that name it at a fixed node other than the anchor, for the subtree (R38).
-    pub naming: FxHashMap<NeuronId, Vec<FuncId>>,
-    /// Bumped on every change to what a function or class says, so readings of the dictionary can be kept
-    /// while it stands.
-    pub version: u64,
-    /// The latest changes to functions, each with the version it made and the function as it stood: added, or
-    /// as it was when it left. A reading kept from an earlier version holds while none of them touches it.
-    pub log: std::collections::VecDeque<(u64, Func)>,
-    /// The version of the latest change the log let go of.
-    log_floor: u64,
     next_id: FuncId,
     next_join: u64,
-    next_class: ClassId,
 }
 
 impl Dictionary {
     pub fn get(&self, id: FuncId) -> Option<&Func> { self.funcs.get(&id) }
     pub fn len(&self) -> usize { self.funcs.len() }
-    pub fn anchored(&self, n: NeuronId) -> &[FuncId] { self.by_anchor.get(&n).map_or(&[], |v| v.as_slice()) }
-    /// The functions an activation of `n` reads (D31).
-    pub fn standing(&self, n: NeuronId) -> &[FuncId] { self.by_label.get(&n).map_or(&[], |v| v.as_slice()) }
+    pub fn holder(&self, r: &Rel) -> Option<FuncId> { self.by_rel.get(r).copied() }
     pub fn of_inter(&self, n: NeuronId) -> &[FuncId] { self.by_inter.get(&n).map_or(&[], |v| v.as_slice()) }
-    pub fn find_key(&self, anchor: NeuronId, rels: &[Rel]) -> Option<FuncId> { self.by_key.get(&key_of(anchor, rels)).copied() }
-    pub fn class(&self, k: ClassId) -> &[NeuronId] { self.classes.get(&k).map_or(&[], |v| v.as_slice()) }
-
-    /// A class with exactly these members, the existing one where there is one (D43).
-    pub fn class_for(&mut self, mut members: Vec<NeuronId>) -> ClassId {
-        members.sort_unstable();
-        members.dedup();
-        if let Some((k, _)) = self.classes.iter().find(|(_, m)| **m == members) { return *k; }
-        let k = self.next_class;
-        self.next_class += 1;
-        self.classes.insert(k, members);
-        self.version += 1;
-        k
+    /// The functions whose nodes name a neuron (R38, the subtree).
+    pub fn naming(&self, n: NeuronId) -> Vec<FuncId> {
+        let mut v: Vec<FuncId> = self.funcs.values().filter(|f| f.nodes.contains(&n)).map(|f| f.id).collect();
+        v.sort_unstable();
+        v
     }
-    pub fn class_exists(&self, members: &[NeuronId]) -> bool {
-        let mut m = members.to_vec();
-        m.sort_unstable();
-        m.dedup();
-        self.classes.values().any(|c| *c == m)
+    /// Functions whose origin is a neuron (D54: a call stands for its origin's neuron).
+    pub fn find_key(&self, key: &(NeuronId, Vec<Rel>)) -> Option<FuncId> {
+        self.funcs.values().find(|f| f.key() == *key).map(|f| f.id)
     }
 
-    /// A function as it would stand, not yet in the dictionary.
-    pub fn draft(&self, anchor: NeuronId, rels: Vec<Rel>, params: usize) -> Func {
-        Func { id: FuncId::MAX, anchor, rels: canonical(rels), inter: None, joined: u64::MAX, param_members: vec![Vec::new(); params] }
+    /// A new function of one relation, its origin the relation's first neuron (R50, D15).
+    pub fn start(&mut self, r: Rel) -> FuncId {
+        let nodes = if r.a == r.b { vec![r.a] } else { vec![r.a, r.b] };
+        self.insert(Func { id: 0, nodes, rels: vec![r], inter: None, joined: 0 })
     }
 
-    /// Add a function to the dictionary (R53, R52); returns its id.
-    pub fn add(&mut self, mut f: Func) -> FuncId {
+    fn insert(&mut self, mut f: Func) -> FuncId {
         let id = self.next_id;
         self.next_id += 1;
-        self.version += 1;
         f.id = id;
         f.joined = self.next_join;
         self.next_join += 1;
-        self.by_anchor.entry(f.anchor).or_default().push(id);
-        let mut labels: Vec<NeuronId> = f.fixed_neurons().into_iter().filter(|n| !f.nodes_for(*n).is_empty()).collect();
-        labels.sort_unstable();
-        labels.dedup();
-        for n in labels { self.by_label.entry(n).or_default().push(id); }
-        self.by_key.insert(f.key(), id);
-        for n in f.fixed_neurons().into_iter().filter(|n| *n != f.anchor) { self.naming.entry(n).or_default().push(id); }
-        if let Some(i) = f.inter { self.by_inter.entry(i).or_default().push(id); }
-        self.note(f.clone());
+        for r in &f.rels { self.by_rel.insert(*r, id); }
+        if let Some(n) = f.inter { self.by_inter.entry(n).or_default().push(id); }
         self.funcs.insert(id, f);
         id
     }
 
-    /// Keep a change in the log, the oldest leaving past a bound.
-    fn note(&mut self, f: Func) {
-        self.log.push_back((self.version, f));
-        while self.log.len() > 4096 { if let Some((v, _)) = self.log.pop_front() { self.log_floor = v; } }
+    /// A relation joins a function (R54): a new node where its other neuron is not one, a cycle where it is.
+    pub fn join(&mut self, id: FuncId, r: Rel) {
+        let Some(f) = self.funcs.get_mut(&id) else { return };
+        if !f.nodes.contains(&r.a) { f.nodes.push(r.a); }
+        if !f.nodes.contains(&r.b) { f.nodes.push(r.b); }
+        f.rels.push(r);
+        self.by_rel.insert(r, id);
     }
 
-    /// The changes since `version`; None where the log no longer reaches back that far.
-    pub fn changes_since(&self, version: u64) -> Option<impl Iterator<Item = &Func> + '_> {
-        if version < self.log_floor { return None; }
-        let from = self.log.partition_point(|(v, _)| *v <= version);
-        Some(self.log.range(from..).map(|(_, f)| f))
+    /// A relation leaves its function (R18, R54). The function stays connected: what the origin no longer reaches
+    /// leaves with it, and those relations are returned. A function left with none leaves the dictionary, and is
+    /// returned.
+    pub fn leave(&mut self, id: FuncId, r: &Rel) -> (Vec<Rel>, Option<Func>) {
+        let Some(f) = self.funcs.get_mut(&id) else { return (vec![], None) };
+        f.rels.retain(|x| x != r);
+        self.by_rel.remove(r);
+        // what the origin still reaches
+        let mut reach = vec![f.nodes[0]];
+        loop {
+            let before = reach.len();
+            for x in &f.rels {
+                if reach.contains(&x.a) && !reach.contains(&x.b) { reach.push(x.b); }
+                if reach.contains(&x.b) && !reach.contains(&x.a) { reach.push(x.a); }
+            }
+            if reach.len() == before { break; }
+        }
+        let cut: Vec<Rel> = f.rels.iter().copied().filter(|x| !(reach.contains(&x.a) && reach.contains(&x.b))).collect();
+        f.rels.retain(|x| reach.contains(&x.a) && reach.contains(&x.b));
+        f.nodes.retain(|n| reach.contains(n));
+        for x in &cut { self.by_rel.remove(x); }
+        if f.rels.is_empty() { return (cut, self.remove(id)); }
+        (cut, None)
     }
 
-    /// Take a function out of the dictionary (R18, R52, R38); returns it.
+    /// Take a function out of the dictionary (R18, R38); returns it.
     pub fn remove(&mut self, id: FuncId) -> Option<Func> {
         let f = self.funcs.remove(&id)?;
-        self.version += 1;
-        if let Some(v) = self.by_anchor.get_mut(&f.anchor) { v.retain(|x| *x != id); }
-        for n in f.fixed_neurons() { if let Some(v) = self.by_label.get_mut(&n) { v.retain(|x| *x != id); } }
-        self.by_key.remove(&f.key());
-        for n in f.fixed_neurons() { if let Some(v) = self.naming.get_mut(&n) { v.retain(|x| *x != id); } }
-        if let Some(i) = f.inter { if let Some(v) = self.by_inter.get_mut(&i) { v.retain(|x| *x != id); } }
-        self.note(f.clone());
+        for r in &f.rels { if self.by_rel.get(r) == Some(&id) { self.by_rel.remove(r); } }
+        if let Some(n) = f.inter { if let Some(v) = self.by_inter.get_mut(&n) { v.retain(|x| *x != id); } }
         Some(f)
-    }
-
-    /// Move a function to new relations (the update of grouping): it keeps its id, its interneuron and when it
-    /// joined, and every index reads it by its new relations.
-    pub fn rewrite(&mut self, id: FuncId, rels: Vec<Rel>) {
-        let Some(mut f) = self.remove(id) else { return };
-        let inter = f.inter.take();
-        f.rels = canonical(rels);
-        let joined = f.joined;
-        let (next_id, next_join) = (self.next_id, self.next_join);
-        self.next_id = id;
-        self.next_join = joined;
-        self.add(f);
-        self.next_id = next_id;
-        self.next_join = next_join;
-        if let Some(n) = inter { self.set_inter(id, n); }
     }
 
     /// Give a function its interneuron (R16, R43).
@@ -233,29 +249,10 @@ impl Dictionary {
         self.by_inter.entry(n).or_default().push(id);
     }
 
-    /// The classes no function uses any longer, or left with one member, are deleted (D41).
-    pub fn drop_dead_classes(&mut self) {
-        let used: Vec<ClassId> = self.classes.keys().copied().filter(|k| self.funcs.values().any(|f| f.uses_class(*k))).collect();
-        let before = self.classes.len();
-        self.classes.retain(|k, m| used.contains(k) && !m.is_empty());
-        if self.classes.len() != before { self.version += 1; }
-    }
-
-    /// An entry in the dictionary (D15, D13): one number per relation, per fixed neuron named, and per class at a
-    /// node; and, for each class it uses that is not yet in the dictionary, one per member (D41).
-    pub fn entry(&self, f: &Func, new_classes: &[Vec<NeuronId>]) -> f64 {
-        let rels = f.rels.len() as f64;
-        let fixed = f.fixed_neurons().len() as f64;
-        let mut classes: Vec<ClassId> = f.rels.iter().filter_map(|r| if let Node::Class(k) = r.node { Some(k) } else { None }).collect();
-        classes.sort_unstable();
-        classes.dedup();
-        let members: f64 = new_classes.iter().map(|m| m.len() as f64).sum();
-        rels + fixed + classes.len() as f64 + members
-    }
-
     pub fn describe(&self, f: &Func) -> String {
-        let mut s = describe_rels(f.anchor, &f.rels);
-        for r in &f.rels { if let Node::Class(k) = r.node { s.push_str(&format!(" C{}={:?}", k, self.class(k))); } }
+        let rels: Vec<String> = f.rels.iter().map(describe_rel).collect();
+        let mut s = format!("f{} origin #{} [{}]", f.id, f.origin(), rels.join(" "));
+        if f.has_cycle() { s.push_str(" cycle"); }
         if let Some(i) = f.inter { s.push_str(&format!(" -> #{}", i)); }
         s
     }
