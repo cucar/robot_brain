@@ -343,10 +343,16 @@ connection read.
 >
 > - `b` is in the same frame as `a` or in an earlier one.
 > - `b` is within `a`'s reach in every activation dimension they share (D4), and is not at `a`'s own place.
-> - The edge between them is one no accepted call covers (D24). An activation is a neighbor through its
->   uncovered edges, covered as a node or not: a pixel whose row a call covers still relates up and down. One
->   whose every edge is covered is a neighbor of nothing. Where a call stands at `b`'s place, as the origin of
->   its function, the call is the neighbor there, and the edge to it is the edge to `b` (D53, D54).
+> - The edge between them is one no accepted call covers (D24). Coverage is per combination of dimensions:
+>   the combination of an offset is the dimensions it differs in, `x` alone, `y` alone, `x` and `y`
+>   together, time and `x`, and so on. A call covers an activation in the combinations its relations at that
+>   activation run in, and nowhere else. A covered activation stays a neighbor of anything within whose reach
+>   it stands, at an offset whose combination no call has covered. A pixel whose row a call covers in `x` is
+>   not seen again at an offset in `x` alone, and is still seen in `y` alone, diagonally in `x` and `y`, in
+>   time, and in any other combination. Where a call stands at `b`'s place, as the origin of its function,
+>   the call is the neighbor there, and the edge to it is the edge to `b` (D53, D54).
+> - Where `a` is a call, `b` is nothing its fit landed on, nor anything under what it landed on, at any depth:
+>   a call never sees what it stands for (D24, R28).
 > - The neighborhood policy allows `b`'s kind beside `a`'s (D50).
 >
 > For example, in an image channel a pixel's neighbors are the eight pixels around it, and the nine at those

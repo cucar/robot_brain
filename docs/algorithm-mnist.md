@@ -44,7 +44,7 @@ policy every connection is to a digit action, and a reward scoped to the digit c
 | What stands | its reach | what it sees, and what forms |
 |---|---|---|
 | a pixel | 1 in `x`, in `y` and in time (D4) | A pixel sees the eight around it and the nine at those places in the frame before, black and white alike, since white reports too. Each neighbor gives one relation, at its offset in `x`, `y` and time (D34, R21): ink at `(+1, 0)`, white at `(+1, +1)`, ink at `(0, −1)`, and so on. Ink's history holds each at a strength in the hundreds. Grouping merges the relations that hold together in ink's history into functions of fixed nodes, black and white around a black pixel (R50), and keeps each whose worth is positive (D57). |
-| an interneuron over pixels | 1 beyond the farthest pixel it stands for, from its origin (D4) | It sees, within reach, the interneurons, and every pixel through the edges nothing covers: a pixel under a row keeps its edges up and down (D5). Its history, over its activations across images, holds relations to them, one per neighbor. Grouping, finding and the election run as at the base, and a fit that lands on an interneuron as a node covers its whole count (D22, D54). |
+| an interneuron over pixels | 1 beyond the farthest pixel it stands for, from its origin (D4) | It sees, within reach, the interneurons and the pixels, except what it stands for, and except at an offset whose combination of dimensions a call has covered: a pixel under another row is covered in `x` alone, and still seen in `y`, diagonally and in time (D5). Its history, over its activations across images, holds relations to them, one per neighbor. Grouping, finding and the election run as at the base, and a fit that lands on an interneuron as a node covers its whole count (D22, D54). |
 | an interneuron above | the same, one more each level | Levels run until one fires nothing (R26). |
 
 **What a function saves.** Take a function of `k` relations from ink's history, each landing on a pixel at
@@ -78,13 +78,13 @@ not overlap, each covering a pixel and the neighbors its relations landed on, an
 for standing bare (R27). A placement at the edge of a stroke has relations that did not come true, one edge
 each, and is taken while fewer than half of its relations fail.
 
-**Time.** At `t:−1` a pixel sees the previous image's calls, and its pixels through their uncovered edges
-(D5). Consecutive images are unrelated, so no relation across them recurs, nothing is built on
+**Time.** At `t:−1` a pixel sees the previous image's calls, and its pixels in time, a dimension no call over
+the image covers (D5). Consecutive images are unrelated, so no relation across them recurs, nothing is built on
 them (R21), and the functions that form are over `x` and `y` within the frame.
 
 **Above.** Each accepted function's interneuron fires at its origin, the covered pixel least in `x` and then
 in `y` (D15, D53), and sees one beyond its farthest pixel (D4): the interneurons beside it, and the pixels
-through the edges nothing covers. A relation between two interneurons at an offset, at strength 2 in
+within reach, none of those it stands for (D5). A relation between two interneurons at an offset, at strength 2 in
 the first's history, is grouped and priced the same way, and a fit landing on the second's activation covers
 its whole count (D22). The election tiles the level with what pays, and the next level runs over those
 interneurons, until a level fires nothing.
