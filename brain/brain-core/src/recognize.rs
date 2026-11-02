@@ -203,20 +203,32 @@ impl Machine {
         row.nbs.iter().any(|nb| nb.off == *off && (nb.neuron == far || origins.entry(nb.neuron).or_insert_with(|| self.inter_origins(nb.neuron)).contains(&far)))
     }
 
-    /// The neuron that answers for a relation, from its own side (D47, R50): in time the later end; in space the
-    /// end with more activations behind it.
-    fn recorder(&self, r: &Rel) -> (NeuronId, NeuronId, Offset) {
-        let mut best = r.recorders()[0];
-        for c in r.recorders() {
-            let len = |n: NeuronId| self.thalamus.get(n).map_or(0, |x| x.history.len());
-            if len(c.0) > len(best.0) { best = c; }
+    /// How far a neuron sees in each dimension (D4): one position for a base neuron, and for an interneuron the
+    /// farthest any of its activations has reached.
+    pub(crate) fn neuron_reach(&self, n: NeuronId) -> Pos {
+        match self.thalamus.get(n) {
+            Some(nn) if nn.kind == Kind::Inter => self.reach_of.get(&n).copied().unwrap_or([1; MAX_DIMS]),
+            _ => [1; MAX_DIMS],
         }
-        best
+    }
+
+    /// Whether a neuron's reach covers an offset from it (D4, R50).
+    pub(crate) fn can_see(&self, n: NeuronId, off: &Offset) -> bool {
+        let r = self.neuron_reach(n);
+        (0..MAX_DIMS).all(|d| off[d].abs() <= r[d])
+    }
+
+    /// The neuron that answers for a relation, from its own side (D47, R50): only an end that can see it, a neuron
+    /// whose reach covers the offset, and in time the later end; among those, the one with more activations behind
+    /// it. None where no end can see it.
+    fn recorder(&self, r: &Rel) -> Option<(NeuronId, NeuronId, Offset)> {
+        let len = |n: NeuronId| self.thalamus.get(n).map_or(0, |x| x.history.len());
+        r.recorders().into_iter().filter(|c| self.can_see(c.0, &c.2)).max_by_key(|c| len(c.0))
     }
 
     /// How many rows of its neuron hold a relation (D47), reading a call as its origin's neuron.
     pub(crate) fn strength_of(&self, r: &Rel) -> u32 {
-        let (n, far, off) = self.recorder(r);
+        let Some((n, far, off)) = self.recorder(r) else { return 0 };
         let Some(nn) = self.thalamus.get(n) else { return 0 };
         let mut origins = FxHashMap::default();
         nn.history.iter().filter(|row| self.row_holds(row, far, &off, &mut origins)).count() as u32
@@ -226,7 +238,7 @@ impl Machine {
     /// many hold the set's other relations at that neuron together with it, and how many hold them and not it.
     /// Where the neuron holds none of the others, every row that holds it is `with`, and nothing is `without`.
     pub(crate) fn answer(&self, rels: &[Rel], r: &Rel) -> (u32, u32) {
-        let (n, far, off) = self.recorder(r);
+        let Some((n, far, off)) = self.recorder(r) else { return (0, 0) };
         let Some(nn) = self.thalamus.get(n) else { return (0, 0) };
         let mut cond: Vec<(NeuronId, Offset)> = Vec::new();
         for s in rels {
@@ -249,6 +261,45 @@ impl Machine {
         let (w, wo) = self.answer(rels, r);
         let near = if w + wo == 0 { 0.0 } else { w as f64 / (w + wo) as f64 };
         (2.0 * w as f64 - wo as f64 - 1.0, near)
+    }
+
+    /// A function's worth (D57): the sum of its relations' worths in it.
+    pub(crate) fn worth_of(&self, rels: &[Rel]) -> f64 {
+        rels.iter().map(|r| self.worth_in(rels, r).0).sum()
+    }
+
+    /// A candidate's worth in a function as the function's interneuron answers it (R50): every activation of the
+    /// interneuron is a fit of its function, so over its activations, `with` those that hold the candidate's far end
+    /// at its offset from the origin and `without` those that do not. None where the function has no interneuron or
+    /// the interneuron cannot see that far.
+    fn worth_by_inter(&self, f: &Func, c: &Rel) -> Option<f64> {
+        let i = f.inter.filter(|n| self.thalamus.get(*n).map_or(false, |x| x.alive))?;
+        let lay = f.layout();
+        let (u, other, mut q) = if let Some(u) = f.node_of(c.a) { (u, c.b, c.off) } else { let u = f.node_of(c.b)?; (u, c.a, neg(&c.off)) };
+        for d in 0..MAX_DIMS { q[d] += lay.place[u][d]; }
+        if q.iter().all(|x| *x == 0) || !self.can_see(i, &q) { return None; }
+        let nn = self.thalamus.get(i)?;
+        let mut origins = FxHashMap::default();
+        let with = nn.history.iter().filter(|row| self.row_holds(row, other, &q, &mut origins)).count() as f64;
+        let without = nn.history.len() as f64 - with;
+        Some(2.0 * with - without - 1.0)
+    }
+
+    /// A relation's gain in a function (D57, R54): the function's worth with it less its worth without it; the
+    /// candidate itself answered by the function's interneuron where that can see it (R50).
+    pub(crate) fn gain(&self, f: &Func, c: &Rel) -> f64 {
+        let mut with = f.rels.clone();
+        with.push(*c);
+        let own = self.worth_by_inter(f, c).unwrap_or_else(|| self.worth_in(&with, c).0);
+        let others: f64 = f.rels.iter().map(|r| self.worth_in(&with, r).0).sum();
+        own + others - self.worth_of(&f.rels)
+    }
+
+    /// A relation's contribution to the function it is in (D57, R54): the function's worth with it less without
+    /// it; `strength − 1` where it is alone.
+    pub(crate) fn contribution(&self, rels: &[Rel], r: &Rel) -> f64 {
+        let without: Vec<Rel> = rels.iter().filter(|x| *x != r).copied().collect();
+        self.worth_of(rels) - self.worth_of(&without)
     }
 
     // ───────────────────────────── grouping (R50, R54, R18) ─────────────────────────────
@@ -339,9 +390,9 @@ impl Machine {
         keys.sort();
         for rel in keys {
             let fs = cands[&rel].clone();
-            // where it is: in a function, or alone
+            // its contribution where it stands: to its function, or strength − 1 alone (R54)
             let here = match self.dict.holder(&rel).and_then(|g| self.dict.get(g)) {
-                Some(g) => self.worth_in(&g.rels, &rel).0,
+                Some(g) => self.contribution(&g.rels, &rel),
                 None => strength[&rel] as f64 - 1.0,
             };
             let mut best: Option<(f64, f64, u64, FuncId)> = None;
@@ -354,20 +405,23 @@ impl Machine {
                 if !(ka || kb) || (ka && kb && f.has_cycle()) { continue; }
                 let mut rels = f.rels.clone();
                 rels.push(rel);
-                let (w, near) = self.worth_in(&rels, &rel);
+                // its gain there: the function's worth with it less without it, every relation priced again (R54)
+                let w = self.gain(f, &rel);
+                let near = self.worth_in(&rels, &rel).1;
                 let better = match best { None => true, Some((bw, bn, bj, _)) => w > bw || (w == bw && (near > bn || (near == bn && f.joined < bj))) };
                 if better { best = Some((w, near, f.joined, fid)); }
             }
             let Some((w, _, _, fid)) = best else { continue };
-            if !(w > 0.0 && w > here) { continue; }
-            if self.trace { eprintln!("[join f{}] {} into {} worth {:.0} over {:.0}", fno, describe_rel(&rel), self.dict.describe(self.dict.get(fid).unwrap()), w, here); }
+            if !(w > here) { continue; }
+            if self.trace { eprintln!("[join f{}] {} into {} gain {:.0} over {:.0}", fno, describe_rel(&rel), self.dict.describe(self.dict.get(fid).unwrap()), w, here); }
             if let Some(g) = self.dict.holder(&rel) { self.leave(g, &rel, &mut changed); }
             if self.dict.get(fid).is_none() { continue; }
             self.dict.join(fid, rel);
             joined.insert(rel);
             if !changed.contains(&fid) { changed.push(fid); }
         }
-        // leaving (R54, R18): one relation at a time, the one that gains most, priced again between
+        // leaving (R54, R18): one relation at a time, the one whose leaving raises the dictionary's worth most, the
+        // function priced again between
         // every function a neuron firing at this level stands in, placed or not (R18, R50)
         let standing: Vec<FuncId> = self.dict.funcs.values().filter(|f| f.nodes.iter().any(|n| fired.contains(n))).map(|f| f.id).collect();
         let mut placed: Vec<FuncId> = fits.iter().map(|f| f.func).chain(changed.iter().copied()).chain(standing).collect();
@@ -380,7 +434,8 @@ impl Machine {
                 let mut worst: Option<(f64, Rel, bool)> = None;
                 for r in &rels {
                     let s = self.strength_of(r) as f64;
-                    let (inside, _) = self.worth_in(&rels, r);
+                    // its contribution to the function against strength − 1 alone (R54, R18)
+                    let inside = self.contribution(&rels, r);
                     let alone = s - 1.0;
                     if s < 2.0 { let gain = f64::INFINITY; if worst.map_or(true, |w| gain > w.0) { worst = Some((gain, *r, true)); } continue; }
                     if rels.len() > 1 && alone > inside {

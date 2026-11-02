@@ -1,5 +1,7 @@
 //! Neighborhoods (D5, D7, D26): what an activation observes.
 
+use rustc_hash::FxHashSet;
+
 use crate::machine::*;
 use crate::neuron::*;
 use crate::types::*;
@@ -35,22 +37,18 @@ impl Machine {
         let mut out = Vec::new();
         if !a.on_apex() { return out; }
         // a call never sees what it stands for, at any depth (D5)
-        let mut under: Vec<ActRef> = Vec::new();
+        let mut under: FxHashSet<ActRef> = FxHashSet::default();
         let mut stack: Vec<ActRef> = a.covers.clone();
         while let Some(r) = stack.pop() {
-            if under.contains(&r) { continue; }
-            under.push(r);
+            if !under.insert(r) { continue; }
             if let Some(c) = self.act(r) { stack.extend(c.covers.iter().copied()); }
         }
         for f in self.frames.iter() {
             if f.no > a.pos[0] as i64 || (a.pos[0] as i64 - f.no) > a.reach[0] as i64 { continue; }
             for (i, b) in f.acts.iter().enumerate() {
-                let r = ActRef { frame: f.no, index: i as u32 };
-                if r == me || b.neuron == NeuronId::MAX || !self.stands(b, fno) || under.contains(&r) { continue; }
-                // where a call stands at its place, as the origin of its function, the call is the neighbor there
-                if b.coverers.iter().filter_map(|c| self.act(*c)).any(|c| c.pos == b.pos && !c.gone) { continue; }
-                // what fires above this level in this frame has not fired yet
-                if b.opened_at == fno && b.level > a.level { continue; }
+                // the cheap tests first: what fires above this level in this frame has not fired yet; the policy;
+                // within reach; standing on the board
+                if b.neuron == NeuronId::MAX || (b.opened_at == fno && b.level > a.level) { continue; }
                 if !self.cfg.policy.past[a.kind as usize][b.kind as usize] { continue; }
                 let shared = a.axes & b.axes;
                 let mut off = [0i32; MAX_DIMS];
@@ -59,11 +57,16 @@ impl Machine {
                 for d in 1..MAX_DIMS {
                     if shared & (1 << d) == 0 { continue; }
                     off[d] = b.pos[d] - a.pos[d];
-                    if off[d].abs() > a.reach[d] { within = false; }
+                    if off[d].abs() > a.reach[d] { within = false; break; }
                 }
                 if !within || off.iter().all(|x| *x == 0) { continue; }
+                let r = ActRef { frame: f.no, index: i as u32 };
+                if r == me || !self.stands(b, fno) { continue; }
                 // a covered activation stays a neighbor at an offset whose combination no call has covered (D5)
                 if b.covered_for(&off) { continue; }
+                if under.contains(&r) { continue; }
+                // where a call stands at its place, as the origin of its function, the call is the neighbor there
+                if b.coverers.iter().filter_map(|c| self.act(*c)).any(|c| c.pos == b.pos && !c.gone) { continue; }
                 out.push(Nb { act: r, neuron: b.neuron, off });
             }
         }

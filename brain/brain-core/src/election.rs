@@ -19,6 +19,12 @@ impl Machine {
         for &(a, b) in &fit.edges {
             let e = edge(a, b);
             if edges.contains(&e) || !seen.insert(e) { continue; }
+            // experiment: within the election too, an activation is covered per combination of dimensions, so an
+            // edge whose combination an accepted call already covers at either end earns nothing (D5)
+            if let (Some(aa), Some(ab)) = (self.act(a), self.act(b)) {
+                let off = offset_between(aa, ab);
+                if aa.covered_for(&off) || ab.covered_for(&off) { continue; }
+            }
             c += 1.0;
         }
         for k in &fit.calls {
@@ -104,7 +110,7 @@ impl Machine {
             }
             let Some((i, _, _)) = best else { break };
             let fit = fits.swap_remove(i);
-            for &(a, b) in &fit.edges { edges.insert(edge(a, b)); }
+            for &(a, b) in &fit.edges { if edges.insert(edge(a, b)) { self.covered_edges.push(edge(a, b)); } }
             for k in &fit.calls { calls.insert(*k); }
             minted += self.accept(&fit, level);
             accepted += 1;
@@ -155,6 +161,7 @@ impl Machine {
             fired_by: Some(FiredBy { func: f.id, failed: fit.failed.clone() }),
             rels: Vec::new(), inferences: Vec::new(), opened_at: fno, level: level + 1, height, gone: false,
         };
+        { let r = self.reach_of.entry(neuron).or_insert([0; MAX_DIMS]); for d in 0..MAX_DIMS { r[d] = r[d].max(act.reach[d]); } }
         let Some(fr) = self.frame_mut(fno) else { return minted };
         let me = ActRef { frame: fno, index: fr.acts.len() as u32 };
         fr.acts.push(act);
@@ -169,7 +176,7 @@ impl Machine {
             let (au, aw) = (self.act(u)?, self.act(w)?);
             Some([(u, combination(&offset_between(au, aw))), (w, combination(&offset_between(au, aw)))])
         }).flatten().collect();
-        for (r, c) in marks { if let Some(a) = self.act_mut(r) { a.covered_in |= 1u8 << c; } }
+        for (r, c) in marks { if let Some(a) = self.act_mut(r) { a.covered_in |= c; } }
         // where the report built the strong call of a function an inference placed weakly, the weak one goes (D40)
         if strong {
             let pos = origin.pos;

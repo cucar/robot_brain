@@ -54,8 +54,8 @@ pub struct Act {
     pub covered_at: Option<u32>,
     /// Every accepted call that landed on it as a fixed node (D24, D10).
     pub coverers: Vec<ActRef>,
-    /// The combinations of dimensions it is covered in (D5, D24): bit `1 << c`, `c` the mask of the dimensions an
-    /// offset differs in, for each combination an accepted call's relation at it ran in.
+    /// The dimensions it is covered in (D5, D24), one bit per dimension: an accepted call's relation at it covers it
+    /// in every dimension the relation's offset differs in (experiment: per dimension, a diagonal covering x and y).
     pub covered_in: u8,
     /// What its call covered (§6.4): the activations its fixed nodes landed on and the calls it landed on.
     pub covers: Vec<ActRef>,
@@ -75,8 +75,8 @@ pub struct Act {
 
 impl Act {
     pub fn on_apex(&self) -> bool { self.covered_at.is_none() && !self.gone }
-    /// Whether it is covered in the combination of dimensions an offset differs in (D5).
-    pub fn covered_for(&self, off: &Offset) -> bool { self.covered_in & (1u8 << combination(off)) != 0 }
+    /// Whether it is covered in any dimension an offset differs in (experiment: per dimension).
+    pub fn covered_for(&self, off: &Offset) -> bool { self.covered_in & combination(off) != 0 }
 }
 
 /// The combination of an offset (D5): the mask of the dimensions it differs in.

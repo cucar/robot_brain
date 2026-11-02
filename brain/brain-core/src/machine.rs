@@ -42,6 +42,8 @@ pub struct FrameStats {
     pub voters: usize,
     pub voters_above_base: usize,
     pub elapsed_ms: f64,
+    /// Per level: the activations it ran, the relations they returned, the fits placed, accepted, and functions added.
+    pub per_level: Vec<(usize, usize, usize, usize, usize, f64)>,
 }
 
 #[derive(Clone, Debug)]
@@ -79,10 +81,19 @@ pub struct Machine {
     pub ledger: Vec<NeuronId>,
     pub(crate) stats_added: usize,
     pub(crate) stats_reused: usize,
+    pub(crate) last_fits: usize,
+    /// Per interneuron, the farthest it has seen in each dimension, over its activations (D4).
+    pub(crate) reach_of: FxHashMap<NeuronId, Pos>,
     pub(crate) stats_retired: usize,
     pub last_stats: FrameStats,
     pub last_winners: Vec<Winner>,
     pub trace: bool,
+    /// Print each level's counts as it finishes, a diagnostic.
+    pub trace_levels: bool,
+    /// A diagnostic: run no level above this one in a frame.
+    pub stop_after_level: Option<u32>,
+    /// A diagnostic: the board edges the accepted fits of this frame covered.
+    pub covered_edges: Vec<(ActRef, ActRef)>,
     /// A test: the machine recognizes and predicts but changes nothing of itself. No rows enter a history, no
     /// function is added, moved or pruned, no interneuron is allocated, no connection or reward is written,
     /// nothing is decommissioned.
@@ -118,10 +129,15 @@ impl Machine {
             ledger: Vec::new(),
             stats_added: 0,
             stats_reused: 0,
+            last_fits: 0,
+            reach_of: FxHashMap::default(),
             stats_retired: 0,
             last_stats: FrameStats::default(),
             last_winners: Vec::new(),
             trace: false,
+            trace_levels: false,
+            stop_after_level: None,
+            covered_edges: Vec::new(),
             frozen: false,
         }
     }
@@ -216,6 +232,7 @@ impl Machine {
 
         // the levels (§6, R26): activate, find, count, group, elect, allocate
         self.span_s = self.board_span();
+        self.covered_edges.clear();
         self.stats_added = 0;
         self.stats_reused = 0;
         self.stats_retired = 0;
@@ -225,10 +242,18 @@ impl Machine {
                 .filter(|(_, a)| a.opened_at == fno && a.level == level && !a.gone).map(|(i, _)| ActRef { frame: fno, index: i as u32 }).collect::<Vec<_>>()).collect();
             if refs.is_empty() { break; }
             stats.levels += 1;
+            let lt = std::time::Instant::now();
+            let added_before = self.stats_added;
             let (bids, accepted, minted) = self.run_level(level, &refs);
+            stats.per_level.push((refs.len(), bids, self.last_fits, accepted, self.stats_added - added_before, lt.elapsed().as_secs_f64() * 1000.0));
+            if self.trace_levels {
+                let (acts, rels, fits, acc, added, ms) = stats.per_level[stats.per_level.len() - 1];
+                eprintln!("[level {}] activations {} | relations returned {} | fits placed {} | accepted {} | functions added {} | {:.0} ms", level, acts, rels, fits, acc, added, ms);
+            }
             stats.bids += bids;
             stats.accepted += accepted;
             stats.minted += minted;
+            if self.stop_after_level == Some(level) { break; }
             level += 1;
             // nothing caps the depth (R26); a frame this deep means a fault
             if level > 1024 { break; }
@@ -297,6 +322,22 @@ impl Machine {
         } else {
             self.thalamus.process_level(tasks).into_iter().flat_map(|r| r.returns).collect()
         };
+        // experiment: a relation is seen from both ends; an activation that fired earlier in this frame, at a lower
+        // level, holds the relation the later one returned to it, in its row for this frame
+        if !self.frozen {
+            let mut seen: Vec<(NeuronId, ActRef, Nb)> = Vec::new();
+            for ret in &returns {
+                let Some(near) = self.act(ret.act) else { continue };
+                for (nb, _) in &ret.rels {
+                    let Some(far) = self.act(nb.act) else { continue };
+                    if far.opened_at != self.frame_no || far.level >= near.level { continue; }
+                    let mut back = nb.off;
+                    for x in back.iter_mut() { *x = -*x; }
+                    seen.push((far.neuron, nb.act, Nb { act: ret.act, neuron: near.neuron, off: back }));
+                }
+            }
+            for (n, act, nb) in seen { self.thalamus[n].add_seen(act, nb); }
+        }
         // the board's edges at each activation, and the relations of this level in their one form (R21, D34)
         let mut fresh: FxHashMap<(ActRef, ActRef), Fresh> = FxHashMap::default();
         for ret in &returns {
@@ -333,6 +374,7 @@ impl Machine {
             fits.retain(|f| self.dict.get(f.func).and_then(|f| f.inter).is_some());
         }
         if self.trace { for f in &fits { eprintln!("[fit f{} l{}] f{} origin {:?} landed {} calls {} edges {} failed {:?}", self.frame_no, level, f.func, f.origin, f.landed.len(), f.calls.len(), f.edges.len(), f.failed); } }
+        self.last_fits = fits.len();
         let (accepted, minted) = self.elect(level, fits);
         (bids, accepted, minted)
     }

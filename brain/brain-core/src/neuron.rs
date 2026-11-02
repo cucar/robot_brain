@@ -108,6 +108,17 @@ impl Neuron {
         inputs.into_iter().map(|inp| ActReturn { act: inp.act, rels: inp.nbs.iter().map(|nb| (*nb, self.strength(&(nb.neuron, nb.off)) + 1)).collect() }).collect()
     }
 
+    /// A relation seen from the other end after this activation's row was written (experiment): an activation that
+    /// fired later in the same frame saw it, so its row holds the later one too, and the index counts it.
+    pub fn add_seen(&mut self, act: ActRef, nb: Nb) {
+        let Some(row) = self.history.iter_mut().rev().find(|r| r.act == act) else { return };
+        let k = (nb.neuron, nb.off);
+        let had = row.nbs.iter().any(|x| x.neuron == nb.neuron && x.off == nb.off);
+        if row.nbs.iter().any(|x| x.act == nb.act) { return; }
+        row.nbs.push(nb);
+        if !had { *self.index.entry(k).or_insert(0) += 1; }
+    }
+
     /// `forget neuron` (§4.1): remove a decommissioned neuron from every row and relation that names it.
     pub fn forget(&mut self, n: NeuronId) {
         self.index.retain(|k, _| k.0 != n);

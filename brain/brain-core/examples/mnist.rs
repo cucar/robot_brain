@@ -99,20 +99,36 @@ fn main() {
     let (mut spoke, mut right, mut lessons, mut ms, mut apex) = (0usize, 0usize, 0usize, 0.0f64, 0usize);
     let (mut w_spoke, mut w_right) = (0usize, 0usize);
     let mut k = 0usize;
+    let mut last_apex: Vec<String> = Vec::new();
     for ep in 0..episodes {
         let (mut e_right, mut e_spoke, mut e_levels, mut e_ms) = (0usize, 0usize, 0usize, 0.0f64);
         let mut said_list = Vec::new();
+        let mut apex_note = String::new();
         for &i in &order {
             k += 1;
             let label = train_lbls[i];
-            m.trace = trace_n > 0 && k == trace_n;
+            let tracing = trace_n > 0 && k == trace_n;
+            m.trace_levels = tracing;
+            if tracing { m.stop_after_level = None; }
+            m.trace = tracing;
             let (said, t) = run(&mut m, &train_imgs[i]);
             ms += t;
             e_ms += t;
             e_levels = e_levels.max(m.last_stats.levels);
-            if m.trace { active_after(&m, &train_imgs[i], size, label, 0); active_after(&m, &train_imgs[i], size, label, 1); }
-            if m.trace { eprintln!("[image {}] {:.0} ms, levels {}, apex {}, neurons {}, functions {}", k, t, m.last_stats.levels, m.last_stats.apex_acts, m.alive, m.dict.len()); }
+            if tracing { level0_view(&m, &train_imgs[i], size); }
+            if tracing { eprintln!("[image {}] {:.0} ms, levels {}, apex {}, neurons {}, functions {}", k, t, m.last_stats.levels, m.last_stats.apex_acts, m.alive, m.dict.len()); }
             apex += m.last_stats.apex_acts;
+            if order.len() == 1 {
+                // what stands on the apex after this image: each neuron with its place, and whether it is what stood last time
+                let fr = m.frames.back().unwrap();
+                let mut ap: Vec<String> = fr.acts.iter().filter(|a| a.on_apex() && a.kind != Kind::Action)
+                    .map(|a| if a.kind == Kind::Inter { format!("#{}@{},{}", a.neuron, a.pos[1], a.pos[2]) } else { format!("{}@{},{}", if m.thalamus[a.neuron].bucket == 1 { "B" } else { "W" }, a.pos[1], a.pos[2]) }).collect();
+                ap.sort();
+                let kept = ap.iter().filter(|x| last_apex.contains(x)).count();
+                apex_note = format!(" | apex {} ({} kept, {} new, {} gone) levels {} added {}", ap.len(), kept, ap.len() - kept, last_apex.len() - kept, m.last_stats.levels, m.last_stats.added);
+                if ep + 1 == episodes || ep < 3 { apex_note.push_str(&format!(" [{}]", ap.join(" "))); }
+                last_apex = ap;
+            }
             said_list.push(format!("{}:{}", label, said.map_or("-".to_string(), |s| s.to_string())));
             if let Some(s) = said { spoke += 1; w_spoke += 1; e_spoke += 1; if s == label { right += 1; w_right += 1; e_right += 1; } }
             let lesson = k <= teach || said.is_none();
@@ -127,8 +143,8 @@ fn main() {
             }
         }
         if episodes > 1 {
-            println!("  episode {:2}: right {}/{} (spoke {}) | max levels {} | neurons {} functions {} | {:.0} ms/image | digit:said {}",
-                ep + 1, e_right, order.len(), e_spoke, e_levels, m.alive, m.dict.len(), e_ms / order.len().max(1) as f64, said_list.join(" "));
+            println!("  episode {:2}: right {}/{} (spoke {}) | max levels {} | neurons {} functions {} | {:.0} ms/image | digit:said {}{}",
+                ep + 1, e_right, order.len(), e_spoke, e_levels, m.alive, m.dict.len(), e_ms / order.len().max(1) as f64, said_list.join(" "), apex_note);
         }
     }
     println!("  train: {} images | spoke {} | right {} ({:.1}% of all, {:.1}% of spoken) | lessons {} | apex/image {:.1} | neurons {} functions {} | {:.0}s",
@@ -206,4 +222,80 @@ fn active_after(m: &Machine, px: &[u8], size: usize, label: u32, level: u32) {
         eprintln!("[active]   {}      {}", img, g);
     }
     for r in rows { eprintln!("[active]{}", r); }
+}
+
+/// What each call that fired at level 1 returned at level 1: where it stands, its reach, and its relations, by
+/// what stands at the other end and how far.
+fn level1_view(m: &Machine, size: usize) {
+    let fno = m.frame_no;
+    let Some(fr) = m.frames.iter().find(|f| f.no == fno) else { return };
+    let name = |a: &brain_core::machine::Act| -> String {
+        match a.kind {
+            Kind::Inter => a.fired_by.as_ref().and_then(|fb| m.dict.get(fb.func)).map(|f| {
+                let r = f.rels[0];
+                let col = |n: u32| if m.thalamus[n].bucket == 1 { "B" } else { "W" };
+                let dir = match (r.off[1], r.off[2]) { (1, 0) => "-", (0, 1) => "|", (1, 1) => "\\", (1, -1) => "/", _ => "?" };
+                format!("{}{}{}", col(r.a), col(r.b), dir)
+            }).unwrap_or("?".into()),
+            _ => if m.thalamus[a.neuron].bucket == 1 { "black px".into() } else { "white px".into() },
+        }
+    };
+    let mut total = 0;
+    let mut rows = Vec::new();
+    for a in fr.acts.iter().filter(|a| a.kind == Kind::Inter && a.level == 1) {
+        let n = a.rels.len();
+        total += n;
+        let far = a.rels.iter().filter(|r| r.off[1].abs().max(r.off[2].abs()) > 1).count();
+        let to_calls = a.rels.iter().filter(|r| m.act(r.other).map_or(false, |o| o.kind == Kind::Inter)).count();
+        let same_place = a.rels.iter().filter(|r| m.act(r.other).map_or(false, |o| o.pos == a.pos)).count();
+        rows.push((n, format!("  {:5} at ({:2},{:2}) reach x{:2} y{:2} | box x {}..{} y {}..{} | returned {:3}: to calls {:3}, to pixels {:3}, farther than 1: {:3}",
+            name(a), a.pos[1], a.pos[2], a.reach[1], a.reach[2], a.lo[1], a.hi[1], a.lo[2], a.hi[2], n, to_calls, n - to_calls, far)));
+        let _ = same_place;
+    }
+    rows.sort_by(|x, y| y.0.cmp(&x.0));
+    eprintln!("[level1] {} calls at level 1 returned {} relations ({} x {} image)", rows.len(), total, size, size);
+    for (_, r) in &rows { eprintln!("[level1]{}", r); }
+}
+
+/// What level 0 left on the image: the board edges between pixels, covered or bare, by direction; and each pixel's
+/// combinations, covered or not.
+fn level0_view(m: &Machine, px: &[u8], size: usize) {
+    use brain_core::machine::{combination, offset_between, ActRef};
+    let fno = m.frame_no;
+    let Some(fr) = m.frames.iter().find(|f| f.no == fno) else { return };
+    let f = 28 / size;
+    let ink = |x: usize, y: usize| { let mut s = 0u32; for dy in 0..f { for dx in 0..f { s += px[(y * f + dy) * 28 + x * f + dx] as u32; } } s / (f * f) as u32 >= 128 };
+    let mut at = vec![vec![None; size]; size];
+    for (i, a) in fr.acts.iter().enumerate() { if a.kind == Kind::Event { at[a.pos[2] as usize][a.pos[1] as usize] = Some(ActRef { frame: fno, index: i as u32 }); } }
+    let covered: std::collections::HashSet<(ActRef, ActRef)> = m.covered_edges.iter().copied().collect();
+    let dirs = [("along x", 1i32, 0i32), ("down y", 0, 1), ("diagonal \\", 1, 1), ("diagonal /", 1, -1)];
+    let (mut total, mut bare) = (0, 0);
+    for (name, dx, dy) in dirs {
+        let (mut t, mut b, mut bw, mut bb, mut mixed) = (0, 0, 0, 0, 0);
+        for y in 0..size as i32 { for x in 0..size as i32 {
+            let (x2, y2) = (x + dx, y + dy);
+            if x2 < 0 || y2 < 0 || x2 >= size as i32 || y2 >= size as i32 { continue; }
+            let (p, q) = (at[y as usize][x as usize].unwrap(), at[y2 as usize][x2 as usize].unwrap());
+            t += 1;
+            let e = if p <= q { (p, q) } else { (q, p) };
+            if !covered.contains(&e) {
+                b += 1;
+                match (ink(x as usize, y as usize), ink(x2 as usize, y2 as usize)) { (false, false) => bw += 1, (true, true) => bb += 1, _ => mixed += 1 }
+            }
+        } }
+        eprintln!("[level0] {:11} edges {:3} | covered {:3} | bare {:3} (white-white {}, black-black {}, black-white {})", name, t, t - b, b, bw, bb, mixed);
+        total += t; bare += b;
+    }
+    eprintln!("[level0] all          edges {:3} | covered {:3} | bare {:3}", total, total - bare, bare);
+    // per pixel: the combinations it is covered in
+    let mut kinds = std::collections::BTreeMap::new();
+    for y in 0..size { for x in 0..size {
+        let a = m.act(at[y][x].unwrap()).unwrap();
+        let mut s = String::new();
+        for (c, n) in [(2u8, "x"), (4, "y"), (1, "time")] { if a.covered_in & c != 0 { if !s.is_empty() { s.push('+'); } s.push_str(n); } }
+        if s.is_empty() { s = "none".into(); }
+        *kinds.entry((s, a.coverers.len())).or_insert(0) += 1;
+    }}
+    for ((s, n), k) in &kinds { eprintln!("[level0] pixels covered in {:10} by {} calls: {}", s, n, k); }
+    let _ = (combination, offset_between);
 }
