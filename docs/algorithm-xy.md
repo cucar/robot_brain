@@ -35,10 +35,12 @@ at 6 covering frames 5 and 6.
 as `x` after `y` (R50, D54): a candidate attached at `y` whose other end, `x`, is already a node. It closes the
 cycle (D15). `x` answers for it over its history, counting a row as holding `y` one back where it holds `y`
 or a call whose origin is `y` (R50): the `x` at 3 saw `y` bare, the ones at 5 and 7 saw the call, so `with`
-is 3 and `without` 0. It costs one relation in the dictionary and would save the relation between its own call and
-`XY` at each of the three, so its worth is 5 and it joins (D57, R54). The function is now `y` after `x` and
-`x` after `y`, two nodes, two relations, a cycle. The relation is in that function and starts none of its own
-(R50), so nothing forms over the call at the `x` frames. Placed again at frame 7 the function has no fit,
+is 3 and `without` 0. It costs one relation in the dictionary and would save the relation between its own
+call and `XY` at each of the three, so its worth there is 5. `y` after `x`, conditioned on it, is worth 5 as
+well, so the function's worth rises from 2 to 10, a gain of 8 against 2 for the relation alone, and it joins
+(D57, R54). The function is now `y` after `x` and `x` after `y`, two nodes, two relations, a cycle. The
+relation is in that function and starts none of its own (R50), so nothing forms over the call at the `x`
+frames. Placed again at frame 7 the function has no fit,
 since no `y` stands at the present (D31):
 `x` is bare for one frame.
 
