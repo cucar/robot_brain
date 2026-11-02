@@ -1282,10 +1282,11 @@ argument.
 
 > **R18 — Prune.** A relation leaves its function where its worth is higher elsewhere, in a function of its own
 > or in another (R54), and leaves for nothing where its worth is negative wherever it could be (D57), read at
-> every level a neuron standing in the function fires at, placed or not (R50). A relation that leaves for nothing stands bare wherever it
-> holds. A function leaves the dictionary when its last relation does. **Relations leave one at a time**, the
-> one that gains most by leaving first, and the function's other relations are priced again before the next
-> leaves, since what fails beyond a relation that left is priced anew. **A function stays connected** (D15): a
+> every level a neuron standing in the function fires at, placed or not (R50). A relation that leaves for
+> nothing stands bare wherever it holds. A function leaves the dictionary when its last relation does.
+> **Relations leave one at a time**, the one that gains most by leaving first, and the function's other
+> relations are priced again before the next leaves, since what fails beyond a relation that left is priced
+> anew. **A function stays connected** (D15): a
 > relation whose leaving breaks every path from the origin to a node takes with it each relation that reached
 > the function only through that path, and each of those goes where its worth is highest (R54), to the
 > function the leaving relation started, which they share a node with, to another, or to one of their own. A
