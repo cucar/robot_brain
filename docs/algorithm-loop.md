@@ -45,7 +45,7 @@ That is the whole machine: three neurons for the three states of the loop, and o
    positive at strength 2 (D57). The election takes it (R24), it is allocated `go·tap` (R16),
    and `go·tap` fires at the tap's frame, the latest of what it covers (D53), at the frame's second level.
 2. **The second tap names the first interneuron.** Once `go·tap` stands, the next tap sees it at `−1`, since
-   a neighbor is whatever stands on the apex within reach (D5), and nothing under it (D10). In the third run
+   a call stands at its origin's place and is the neighbor there (D5). In the third run
    the relation to `go·tap` is at strength 2, and `{tap, go·tap@−1}` is grouped: it covers the tap's relation
    to `go·tap` and the call's count, one edge for nothing (D22). Its interneuron
    `go·tap²` covers `go·tap` and the tap, three frames of run.

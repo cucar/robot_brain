@@ -57,7 +57,8 @@ executes what the machine outputs, and pays what was right and what was wrong.
    allocated and fires at frame 1, covering `run` and the `3` (R16, D53). Covered at age 0, both write
    nothing (D10).
 3. **The answer is named at the second showing, and closes at the third.** At frame 2 of the second showing
-   `say` sees the said `3` at `0`, and `RUN3` at `−1` with nothing under it (D5, D10). `(say, 3, 0)` has
+   `say` sees the said `3` at `0`, and `RUN3` at `−1`, the call standing at its origin's place (D5).
+   `(say, 3, 0)` has
    strength 2 and makes `{say, 3@0}`: `1` for `0`, entry `1`, worth `1`. Elected, `SAY3` fires at frame 2
    covering `say` and the said `3`; `RUN3`, open at age 1, connects to it at `+1` (D10). `(say, RUN3, −1)` is
    at strength 1, since the first showing had `run` and the `3` bare. At the third showing it has strength 2.
@@ -151,7 +152,8 @@ beyond that: a digit's function forms at its second showing within the digit's h
 - **The said digit is an event.** `say` is the only action. What is said is an inferred event in the digit's
   own dimension, output beside it (R30), so the same neuron stands at the shown and the said position, which is
   what lets one node be read at both (D11, D44).
-- **The shown digit is reached through the request's call.** Nothing under a call is seen (D5). The digit is
+- **The shown digit is reached through the request's call.** A call stands at its origin's place and is the
+  neighbor there (D5). The digit is
   the request function's origin, so the node for the digit a frame back comes true on `RUN_d`'s call and
   covers it (D54); the copy is the same on a first showing and a repeat, and what changes is who votes: bare,
   `run`; covered, `RUN_d`.

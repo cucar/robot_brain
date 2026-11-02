@@ -25,7 +25,8 @@ and `x` at 3. It covers the relation, one edge, for a call that costs nothing, a
 interneuron, `XY`, fires at frame 4, the origin, covering frames 3 and 4 (D53).
 
 **The pair covers the letter after it from view.** At frame 5, `x` fires and sees the call `XY` at `−1` and
-nothing under it: a covered activation is a neighbor of nothing (D5, D10). Its neuron returns `(x, XY, −1)` at
+nothing under it: the call stands at the `y`'s place and is the neighbor there, and the `x` at 3 is beyond
+its reach (D5). Its neuron returns `(x, XY, −1)` at
 strength 1, and `x` stands bare for the frame. At frame 6, `y` sees that bare `x`, `XY` fits again, and fires
 at 6 covering frames 5 and 6.
 

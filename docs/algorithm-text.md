@@ -56,7 +56,8 @@ general.
 A word is not one neuron. What the machine names is the stretch that recurs, a letter at a time.
 
 Take `the`. `TH` fires at `h`'s frame `f`. At `f + 1`, `e` fires. Its neighborhood holds `TH` at `−1` and
-nothing under it: `t` and `h` are covered, and a covered activation is a neighbor of nothing (D5, D10). The
+nothing under it: the call stands at `h`'s place and is the neighbor there, and `t` is beyond its reach
+(D5). The
 call returns one relation, `(e, TH, −1)` (R21). Once `TH` has stood before `e` twice, `{e, TH@−1}` is a
 function. It lands on `e` and on `TH`'s call as a node, and covers the call's whole count (D22): A is the
 relation from `e` to the call, 1, and the call's count, 0; B is 0. The election takes it. `TH`'s activation

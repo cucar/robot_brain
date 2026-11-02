@@ -61,7 +61,8 @@ carry is inferring it; reading it is seeing it beside the next request.
    for `0` (R24), and its interneuron, `C11`, fires at frame 1 covering all three (D53). Eight columns give
    eight such functions, and the last request gives two more: `end` with a carry, and `end` without.
 3. **The answer gets its function at the next lesson.** At frame 2 `out-0` sees `carry` at `0` and `C11` at
-   `−1`, and nothing under it (D5, D10). `(out-0, carry, 0)` is at strength 2 and `(out-0, C11, −1)` at 1,
+   `−1`, the call standing at its origin's place (D5). `(out-0, carry, 0)` is at strength 2 and
+   `(out-0, C11, −1)` at 1,
    since the first lesson had the three bare. At the third lesson both are at strength 2, and grouping makes
    `{out-0, carry@0, C11@−1}`. A lesson's answer frame written bare is two edges, `out-0` to `carry` and
    `out-0` to `C11`; through the function it is the call's count, nothing, the call landing on `C11` as a node
