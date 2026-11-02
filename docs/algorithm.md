@@ -1250,8 +1250,11 @@ argument.
 > them and not this one. Every activation of an interneuron is a fit of its function, so it answers over all
 > its activations, for any candidate within its reach (D4). A neuron holds the relations it observed (D7), the
 > ones to its own frame and to earlier ones, so a candidate at the past end of a function in time is answered
-> by the interneuron alone, once the function has one. A relation two neurons both answer for is read at the
-> answer with the more activations behind it, as a returned relation is (R21).
+> by the interneuron alone, once the function has one. **A relation is answered only by an end that can see
+> it**: a neuron whose reach covers the relation's offset (D4), and in time the later end, since the earlier
+> never sees the later; an end whose reach falls short of the offset holds nothing of it and answers for it
+> never. Among the ends that can see it, a relation two of them answer for is read at the answer with the more
+> activations behind it, as a returned relation is (R21).
 >
 > **A relation to a node is asked for through the calls that stand at it.** A fit lands a node on its neuron
 > or on a call whose function has that neuron as its origin (D54), so the count must read both as the node.
