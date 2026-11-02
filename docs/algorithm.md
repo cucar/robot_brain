@@ -1129,7 +1129,7 @@ frame reported, each after it over what the level before accepted, until a level
 |------------|-------------|
 | activate   | Fire every interneuron the level below accepted, at its fit's origin (D15, D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations with strengths. |
 | find       | Read every returned relation in the index, as it is and with either end open, and place every function it reaches on the board wherever its relations match, one fit per place (R53, D31). |
-| count      | Hand each neuron the functions placed at this level that it stands in, with their candidates, and call `count` on it: it answers with and without for each relation and each candidate (R50, D47). |
+| count      | Hand each neuron every function it stands in, placed at this level or not, with the candidates of the placed ones, and call `count` on it: it answers with and without for each relation and each candidate (R50, D47). |
 | group      | Over those answers, move each relation to where its worth is highest, a function it is a candidate of, the nearest on a tie, its own function or none, and start a function for each recurring relation no function holds (R50, R54, R18). |
 | elect      | Take the fits best first, the highest coverage over price each round, stopping when the board is covered (R24). |
 | allocate   | Give each accepted function with no interneuron one, reused where a stretch comes round (R43), allocated otherwise where a neuron is free (R16). It fires at the next level. |
@@ -1219,8 +1219,11 @@ argument.
 > cycle and it leads on from a node of the cycle in a dimension the cycle runs in; or where the function has a
 > cycle and it would close another.
 >
-> **What the neurons answer.** The machine hands each neuron the functions placed at this level that it stands
-> in, each with its candidates. For each relation of the function the neuron is an end of, and for each
+> **What the neurons answer.** The machine hands each neuron every function it stands in, which the index
+> gives by neuron (D36), placed at this level or not, with the candidates of the ones that were placed. A
+> function nothing reaches any more, one naming a call that no longer fires, is still handed to the neurons
+> that stand in it, so its worth is still read and it can still leave (R18). For each relation of the
+> function the neuron is an end of, and for each
 > candidate it shares, the neuron answers two numbers over its history (D47): **with**, how many of its
 > activations hold the function's other relations at it together with this one, and **without**, how many hold
 > them and not this one. Every activation of an interneuron is a fit of its function, so it answers over all
@@ -1279,7 +1282,7 @@ argument.
 
 > **R18 — Prune.** A relation leaves its function where its worth is higher elsewhere, in a function of its own
 > or in another (R54), and leaves for nothing where its worth is negative wherever it could be (D57), read at
-> every level the function is placed at (R50). A relation that leaves for nothing stands bare wherever it
+> every level a neuron standing in the function fires at, placed or not (R50). A relation that leaves for nothing stands bare wherever it
 > holds. A function leaves the dictionary when its last relation does. **Relations leave one at a time**, the
 > one that gains most by leaving first, and the function's other relations are priced again before the next
 > leaves, since what fails beyond a relation that left is priced anew. **A function stays connected** (D15): a
@@ -1516,7 +1519,7 @@ With `G` relations returned per activation, `F` functions reached per relation, 
 | Step | Work |
 |---|---|
 | find | per relation, three index reads, widened by the classes its far neuron is in; per function reached, `L` relations matched per fit |
-| count | per neuron, per function it stands in, `L + C` answers, each a pass over its `H` rows |
+| count | per neuron, per function it stands in, placed or not, `L + C` answers, each a pass over its `H` rows |
 | group | per candidate, one worth where it is and one where it would join; one worth per relation of each function placed |
 | elect | the fits placed, a greedy cover over the board, stopping when it is covered |
 
