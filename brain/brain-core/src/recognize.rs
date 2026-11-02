@@ -293,7 +293,7 @@ impl Machine {
     /// Grouping at one level (R50, R54, R18): each candidate goes where its worth is highest, each relation of a
     /// function placed here leaves where it is worth more alone or nothing anywhere, and each recurring relation
     /// no function holds starts one. Returns the functions that changed.
-    pub(crate) fn group(&mut self, fits: &[Fit], fresh: &[Fresh]) -> Vec<FuncId> {
+    pub(crate) fn group(&mut self, fits: &[Fit], fresh: &[Fresh], fired: &FxHashSet<NeuronId>) -> Vec<FuncId> {
         let mut changed: Vec<FuncId> = Vec::new();
         // the activations each function touches here: what its fits landed on, and its calls on the board
         let mut touch: FxHashMap<FuncId, Vec<(ActRef, NeuronId, Pos)>> = FxHashMap::default();
@@ -367,7 +367,9 @@ impl Machine {
             if !changed.contains(&fid) { changed.push(fid); }
         }
         // leaving (R54, R18): one relation at a time, the one that gains most, priced again between
-        let mut placed: Vec<FuncId> = fits.iter().map(|f| f.func).chain(changed.iter().copied()).collect();
+        // every function a neuron firing at this level stands in, placed or not (R18, R50)
+        let standing: Vec<FuncId> = self.dict.funcs.values().filter(|f| f.nodes.iter().any(|n| fired.contains(n))).map(|f| f.id).collect();
+        let mut placed: Vec<FuncId> = fits.iter().map(|f| f.func).chain(changed.iter().copied()).chain(standing).collect();
         placed.sort_unstable();
         placed.dedup();
         for fid in placed {

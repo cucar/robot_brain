@@ -318,7 +318,8 @@ impl Machine {
         let mut fits: Vec<_> = placed.iter().flat_map(|id| self.place(*id)).collect();
         // count and group (R50, R54, R18); what changed is placed again before the election
         if !self.frozen {
-            let changed = self.group(&fits, &fresh);
+            let fired: FxHashSet<NeuronId> = refs.iter().filter_map(|r| self.act(*r)).map(|a| a.neuron).collect();
+            let changed = self.group(&fits, &fresh, &fired);
             self.span_s = self.board_span();
             if !changed.is_empty() {
                 placed.extend(changed);
