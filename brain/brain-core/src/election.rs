@@ -42,8 +42,8 @@ impl Machine {
     }
 
     /// The reuse search (R43, D36): an interneuron that already stands for what this function's would. The
-    /// function's expansion is read from its origin; an interneuron met in it, not at the origin, within that
-    /// interneuron's own length, whose expansion over exactly that length is the same as the function's. The
+    /// function's expansion is read from its origin; an interneuron met in it, not at the origin, no further back
+    /// than that interneuron's own length, that far included, whose expansion over exactly that length is the same as the function's. The
     /// nearest meeting first, the older interneuron on a tie.
     fn reuse(&self, f: &Func) -> Option<NeuronId> {
         let lay = f.layout();
@@ -53,7 +53,7 @@ impl Machine {
             let mut q = [0i32; MAX_DIMS];
             for d in 0..MAX_DIMS { q[d] += lay.place[i][d]; }
             if self.thalamus.get(*m).map_or(false, |x| x.alive && x.kind == Kind::Inter) { met.push((*m, q)); }
-            self.expand_from(*m, q, i64::MIN, &mut Vec::new(), &mut out, Some(&mut met));
+            self.expand_from(*m, q, i64::MIN, false, &mut Vec::new(), &mut out, Some(&mut met));
         }
         met.retain(|(_, p)| *p != [0; MAX_DIMS]);
         met.sort_by_key(|(n, p)| (p.iter().map(|x| x.unsigned_abs()).sum::<u32>(), *n));
@@ -64,12 +64,12 @@ impl Machine {
             tried.push(n);
             if self.dict.of_inter(n).is_empty() { continue; }
             let mut own: Vec<(NeuronId, Pos)> = Vec::new();
-            self.expand_from(n, [0; MAX_DIMS], i64::MIN, &mut Vec::new(), &mut own, None);
+            self.expand_from(n, [0; MAX_DIMS], i64::MIN, false, &mut Vec::new(), &mut own, None);
             if own.is_empty() { continue; }
             // its length in each dimension: the extent its expansion spans back from its origin
             let (mut lo, mut hi) = ([0i32; MAX_DIMS], [0i32; MAX_DIMS]);
             for (_, q) in &own { for d in 0..MAX_DIMS { lo[d] = lo[d].min(q[d]); hi[d] = hi[d].max(q[d]); } }
-            if !(0..MAX_DIMS).all(|d| p[d].abs() < hi[d] - lo[d] + 1) { continue; }
+            if !(0..MAX_DIMS).all(|d| p[d].abs() <= hi[d] - lo[d] + 1) { continue; }
             let inside = |q: &Pos| (0..MAX_DIMS).all(|d| q[d] >= lo[d] && q[d] <= hi[d]);
             let mut a: Vec<(NeuronId, Pos)> = out.iter().filter(|(_, q)| inside(q)).copied().collect();
             let mut b = own;

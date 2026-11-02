@@ -21,7 +21,7 @@ impl Machine {
             if (at[0] as i64) < ahead { continue; }
             let placed = memo.entry((inf.target, at)).or_insert_with(|| {
                 let mut placed = Vec::new();
-                self.expand_from(inf.target, at, ahead, &mut Vec::new(), &mut placed, None);
+                self.expand_from(inf.target, at, ahead, true, &mut Vec::new(), &mut placed, None);
                 placed
             }).clone();
             for (n, p) in placed {
@@ -120,7 +120,7 @@ impl Machine {
 
     /// Whether a neuron stood at a place that has happened (R49): an activation of it there, or a call standing for
     /// it (D54).
-    fn stood(&self, n: NeuronId, q: &Pos) -> bool {
+    pub(crate) fn stood(&self, n: NeuronId, q: &Pos) -> bool {
         let Some(f) = self.frames.iter().find(|f| f.no == q[0] as i64) else { return false };
         f.acts.iter().any(|a| {
             if a.gone { return false; }

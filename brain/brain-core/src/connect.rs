@@ -115,7 +115,7 @@ impl Machine {
         if t.kind == Kind::Action { dims.push(t.dim.unwrap()); }
         else if t.kind == Kind::Inter {
             let mut placed = Vec::new();
-            self.expand_from(target, [0; MAX_DIMS], i64::MIN, &mut Vec::new(), &mut placed, None);
+            self.expand_from(target, [0; MAX_DIMS], i64::MIN, false, &mut Vec::new(), &mut placed, None);
             for (n, _) in placed {
                 let nn = &self.thalamus[n];
                 if nn.kind == Kind::Action { if let Some(d) = nn.dim { if !dims.contains(&d) { dims.push(d); } } }
