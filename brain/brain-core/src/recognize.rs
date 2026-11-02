@@ -75,7 +75,8 @@ impl Machine {
         for o in others {
             if used.contains(&o) { continue; }
             let Some(w) = self.act(o) else { continue };
-            if !w.on_apex() || !self.stands(w, fno) { continue; }
+            if !self.stands(w, fno) || a.covered_for(&delta) || w.covered_for(&delta) { continue; }
+            if w.coverers.iter().filter_map(|c| self.act(*c)).any(|c| c.pos == w.pos && !c.gone) { continue; }
             let is = if w.neuron == want { Some(false) } else if self.call_origin(w) == Some(want) { Some(true) } else { None };
             let Some(call) = is else { continue };
             let better = match best { None => true, Some((b, bc)) => (call, o) < (bc, b) };

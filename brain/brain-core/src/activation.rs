@@ -50,9 +50,13 @@ pub struct Act {
     /// union of what it covered.
     pub lo: Pos,
     pub hi: Pos,
-    /// The age at which an accepted call covered it (D9, D10).
+    /// The age at which an accepted call first landed on it as a fixed node (D10, D24): from then it is off the apex.
     pub covered_at: Option<u32>,
-    pub coverer: Option<ActRef>,
+    /// Every accepted call that landed on it as a fixed node (D24, D10).
+    pub coverers: Vec<ActRef>,
+    /// The combinations of dimensions it is covered in (D5, D24): bit `1 << c`, `c` the mask of the dimensions an
+    /// offset differs in, for each combination an accepted call's relation at it ran in.
+    pub covered_in: u8,
     /// What its call covered (§6.4): the activations its fixed nodes landed on and the calls it landed on.
     pub covers: Vec<ActRef>,
     pub fired_by: Option<FiredBy>,
@@ -71,6 +75,24 @@ pub struct Act {
 
 impl Act {
     pub fn on_apex(&self) -> bool { self.covered_at.is_none() && !self.gone }
+    /// Whether it is covered in the combination of dimensions an offset differs in (D5).
+    pub fn covered_for(&self, off: &Offset) -> bool { self.covered_in & (1u8 << combination(off)) != 0 }
+}
+
+/// The combination of an offset (D5): the mask of the dimensions it differs in.
+pub fn combination(off: &Offset) -> u8 {
+    let mut c = 0u8;
+    for d in 0..MAX_DIMS { if off[d] != 0 { c |= 1 << d; } }
+    c
+}
+
+/// The offset from one activation to another in the dimensions both are laid out over, and time (D6).
+pub fn offset_between(a: &Act, b: &Act) -> Offset {
+    let shared = a.axes & b.axes;
+    let mut o = [0i32; MAX_DIMS];
+    o[0] = b.pos[0] - a.pos[0];
+    for d in 1..MAX_DIMS { if shared & (1 << d) != 0 { o[d] = b.pos[d] - a.pos[d]; } }
+    o
 }
 
 #[derive(Clone, Debug, Default)]

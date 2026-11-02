@@ -5,8 +5,10 @@
 //! The world names the digit itself for the first `teach` training images (a lesson), and wherever the machine is
 //! silent; after that what the machine says runs. Then `test` held-out images with the machine frozen: its answer
 //! runs, with no reward and no lesson, and nothing of the machine changes.
-//! The data files are the raw (gunzipped) MNIST idx files in `data-dir`, taken in the file's order.
-//! usage: cargo run --release --example mnist -- <data-dir> [train=all] [test=500] [h=2048] [size=14] [teach=all] [threshold=128] [trace-image=0]
+//! The data files are the raw (gunzipped) MNIST idx files in `data-dir`, taken in the file's order: the first
+//! `train` images, or with `per-class` the first that many of each digit among them, shown `episodes` times over.
+//! usage: cargo run --release --example mnist -- <data-dir> [train=all] [test=500] [h=2048] [size=14] [teach=all]
+//!        [threshold=128] [trace-image=0] [per-class=all] [episodes=1]
 use brain_core::machine::Machine;
 use brain_core::types::*;
 use std::time::Instant;
@@ -33,10 +35,20 @@ fn main() {
     let test_n = num(3).unwrap_or(500).min(test_imgs.len());
     let h = num(4).unwrap_or(2048);
     let size = num(5).unwrap_or(14);
-    let teach = num(6).unwrap_or(train_n).min(train_n);
+    let teach_arg = num(6);
     let threshold = num(7).unwrap_or(128) as u32;
-    // the one training image (counted from 1) to trace, or none
+    // the one training presentation (counted from 1, over every episode) to trace, or none
     let trace_n = num(8).unwrap_or(0);
+    let per_class = num(9);
+    let episodes = num(10).unwrap_or(1).max(1);
+    // the images shown each episode, in the file's order
+    let mut order: Vec<usize> = Vec::new();
+    let mut picked = [0usize; 10];
+    for i in 0..train_n {
+        let d = train_lbls[i] as usize;
+        if per_class.map_or(true, |k| picked[d] < k) { picked[d] += 1; order.push(i); }
+    }
+    let shown = order.len() * episodes;
     assert!(28 % size == 0, "size must divide 28");
     let f = 28 / size;
 
@@ -47,7 +59,9 @@ fn main() {
     let digit = m.declare_channel("digit", None, Some(("digit", 10)), &[]);
     let pix = m.channels[image as usize].event.unwrap();
     let dig = m.channels[digit as usize].action.unwrap();
-    println!("mnist: {}x{}, black and white pixels, train {} (first {} taught), test {}, H={}", size, size, train_n, teach, test_n, h);
+    let teach = teach_arg.unwrap_or(usize::MAX);
+    println!("mnist: {}x{}, black and white pixels, {} training images x {} episodes ({} taught), test {}, H={}", size, size, order.len(), episodes,
+        if teach >= shown { "all".to_string() } else { format!("first {}", teach) }, test_n, h);
 
     // the pixels of an image: 1 (black, ink) where the block's mean reaches the threshold, 0 (white) elsewhere
     let frame_of = |px: &[u8]| -> Vec<Input> {
@@ -84,28 +98,41 @@ fn main() {
     let t0 = Instant::now();
     let (mut spoke, mut right, mut lessons, mut ms, mut apex) = (0usize, 0usize, 0usize, 0.0f64, 0usize);
     let (mut w_spoke, mut w_right) = (0usize, 0usize);
-    for i in 0..train_n {
-        let label = train_lbls[i];
-        m.trace = trace_n > 0 && i + 1 == trace_n;
-        let (said, t) = run(&mut m, &train_imgs[i]);
-        ms += t;
-        if trace_n > 0 && i + 1 == trace_n { active_after(&m, &train_imgs[i], size, label, 0); active_after(&m, &train_imgs[i], size, label, 1); }
-        if trace_n > 0 && i + 1 == trace_n { eprintln!("[image {}] {:.0} ms, levels {}, apex {}, neurons {}, functions {}", i + 1, t, m.last_stats.levels, m.last_stats.apex_acts, m.alive, m.dict.len()); }
-        apex += m.last_stats.apex_acts;
-        if let Some(s) = said { spoke += 1; w_spoke += 1; if s == label { right += 1; w_right += 1; } }
-        let lesson = i < teach || said.is_none();
-        if lesson { lessons += 1; }
-        let ran = if lesson { label } else { said.unwrap() };
-        ms += answer(&mut m, Some(ran), Some(if ran == label { 1.0 } else { -1.0 }));
-        if (i + 1) % 1000 == 0 {
-            eprintln!("  image {}/{} | last 1000: spoke {} right {} ({:.1}% of spoken) | neurons {} functions {} | apex/image {:.1} | {:.1} ms/image",
-                i + 1, train_n, w_spoke, w_right, 100.0 * w_right as f64 / w_spoke.max(1) as f64, m.alive, m.dict.len(), apex as f64 / (i + 1) as f64, ms / (i + 1) as f64);
-            w_spoke = 0;
-            w_right = 0;
+    let mut k = 0usize;
+    for ep in 0..episodes {
+        let (mut e_right, mut e_spoke, mut e_levels, mut e_ms) = (0usize, 0usize, 0usize, 0.0f64);
+        let mut said_list = Vec::new();
+        for &i in &order {
+            k += 1;
+            let label = train_lbls[i];
+            m.trace = trace_n > 0 && k == trace_n;
+            let (said, t) = run(&mut m, &train_imgs[i]);
+            ms += t;
+            e_ms += t;
+            e_levels = e_levels.max(m.last_stats.levels);
+            if m.trace { active_after(&m, &train_imgs[i], size, label, 0); active_after(&m, &train_imgs[i], size, label, 1); }
+            if m.trace { eprintln!("[image {}] {:.0} ms, levels {}, apex {}, neurons {}, functions {}", k, t, m.last_stats.levels, m.last_stats.apex_acts, m.alive, m.dict.len()); }
+            apex += m.last_stats.apex_acts;
+            said_list.push(format!("{}:{}", label, said.map_or("-".to_string(), |s| s.to_string())));
+            if let Some(s) = said { spoke += 1; w_spoke += 1; e_spoke += 1; if s == label { right += 1; w_right += 1; e_right += 1; } }
+            let lesson = k <= teach || said.is_none();
+            if lesson { lessons += 1; }
+            let ran = if lesson { label } else { said.unwrap() };
+            ms += answer(&mut m, Some(ran), Some(if ran == label { 1.0 } else { -1.0 }));
+            if k % 1000 == 0 {
+                eprintln!("  image {}/{} | last 1000: spoke {} right {} ({:.1}% of spoken) | neurons {} functions {} | apex/image {:.1} | {:.1} ms/image",
+                    k, shown, w_spoke, w_right, 100.0 * w_right as f64 / w_spoke.max(1) as f64, m.alive, m.dict.len(), apex as f64 / k as f64, ms / k as f64);
+                w_spoke = 0;
+                w_right = 0;
+            }
+        }
+        if episodes > 1 {
+            println!("  episode {:2}: right {}/{} (spoke {}) | max levels {} | neurons {} functions {} | {:.0} ms/image | digit:said {}",
+                ep + 1, e_right, order.len(), e_spoke, e_levels, m.alive, m.dict.len(), e_ms / order.len().max(1) as f64, said_list.join(" "));
         }
     }
     println!("  train: {} images | spoke {} | right {} ({:.1}% of all, {:.1}% of spoken) | lessons {} | apex/image {:.1} | neurons {} functions {} | {:.0}s",
-        train_n, spoke, right, 100.0 * right as f64 / train_n.max(1) as f64, 100.0 * right as f64 / spoke.max(1) as f64, lessons, apex as f64 / train_n.max(1) as f64, m.alive, m.dict.len(), t0.elapsed().as_secs_f64());
+        shown, spoke, right, 100.0 * right as f64 / shown.max(1) as f64, 100.0 * right as f64 / spoke.max(1) as f64, lessons, apex as f64 / shown.max(1) as f64, m.alive, m.dict.len(), t0.elapsed().as_secs_f64());
 
     // what the dictionary holds: functions by relations and nodes, and by whether their interneuron is allocated
     {
@@ -150,7 +177,7 @@ fn active_after(m: &Machine, px: &[u8], size: usize, label: u32, level: u32) {
     let mut k = 0;
     for (i, a) in fr.acts.iter().enumerate() {
         if a.kind == Kind::Action || a.gone || a.level > top { continue; }
-        let hidden = a.coverer.and_then(|c| m.act(c)).map_or(false, |c| c.pos[0] as i64 == fno && c.level <= top);
+        let hidden = a.coverers.iter().filter_map(|c| m.act(*c)).any(|c| c.pos[0] as i64 == fno && c.level <= top);
         if hidden { continue; }
         let mut stack = vec![ActRef { frame: fno, index: i as u32 }];
         let mut pix = Vec::new();

@@ -151,7 +151,7 @@ impl Machine {
         for d in 1..MAX_DIMS { if origin.axes & (1 << d) != 0 { reach[d] = reach[d].max((origin.pos[d] - lo[d]).max(hi[d] - origin.pos[d]) + 1); } }
         let act = Act {
             neuron, kind: Kind::Inter, axes: origin.axes, pos: origin.pos, strong, reach, lo, hi,
-            covered_at: None, coverer: None, covers: covers.clone(),
+            covered_at: None, coverers: Vec::new(), covered_in: 0, covers: covers.clone(),
             fired_by: Some(FiredBy { func: f.id, failed: fit.failed.clone() }),
             rels: Vec::new(), inferences: Vec::new(), opened_at: fno, level: level + 1, height, gone: false,
         };
@@ -160,9 +160,16 @@ impl Machine {
         fr.acts.push(act);
         for r in &covers {
             if let Some(a) = self.act_mut(*r) {
-                if a.covered_at.is_none() { a.covered_at = Some((fno - r.frame) as u32); a.coverer = Some(me); }
+                if a.covered_at.is_none() { a.covered_at = Some((fno - r.frame) as u32); }
+                if !a.coverers.contains(&me) { a.coverers.push(me); }
             }
         }
+        // it covers each activation its true relations land at in the combinations those relations run in (D24)
+        let marks: Vec<(ActRef, u8)> = fit.edges.iter().filter_map(|&(u, w)| {
+            let (au, aw) = (self.act(u)?, self.act(w)?);
+            Some([(u, combination(&offset_between(au, aw))), (w, combination(&offset_between(au, aw)))])
+        }).flatten().collect();
+        for (r, c) in marks { if let Some(a) = self.act_mut(r) { a.covered_in |= 1u8 << c; } }
         // where the report built the strong call of a function an inference placed weakly, the weak one goes (D40)
         if strong {
             let pos = origin.pos;

@@ -35,7 +35,7 @@ impl Machine {
 
     /// The connect call on every open activation past age 0 (§7.1, R31, R33): one uncovered at this frame connects
     /// to every strong activation on this frame's apex within its reach that the policy admits; one covered this
-    /// frame connects once more, to its coverer; and each takes this frame's reward, and the shares of earlier
+    /// frame connects once more, to each call that covered it; and each takes this frame's reward, and the shares of earlier
     /// frames' at their distances.
     pub(crate) fn connect_all(&mut self) {
         if self.frozen { return; }
@@ -55,8 +55,9 @@ impl Machine {
                 let covered_before = a.covered_at.map_or(false, |c| c < age);
                 if covered_before { continue; }
                 if a.covered_at == Some(age) {
-                    // the last connection, to its coverer, unless it stands at the coverer's own place (D10)
-                    if let Some(c) = a.coverer.and_then(|c| self.act(c)) {
+                    // the last connection, to each call that covered it, unless it stands at that call's own place (D10)
+                    for c in a.coverers.iter().filter_map(|c| self.act(*c)) {
+                        if c.pos[0] as i64 != fno { continue; }
                         if c.strong && c.pos != a.pos && self.cfg.policy.future[a.kind as usize][c.kind as usize] {
                             if let Some(o) = self.conn_offset(a, c.axes, &c.pos, age) { writes.push((a.neuron, c.neuron, o, self.share_now(&rewards, c.neuron))); }
                         }
