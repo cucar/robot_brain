@@ -32,7 +32,7 @@ the frame after each request, and rewards it, every lesson the same. It mixes eq
 varies every digit. Afterwards it runs nothing, executes what the machine outputs, and pays what was right and
 what was wrong.
 
-**Prices.** A bare activation costs its relations, one edge each, less those the others imply (D13, D55). A
+**Prices.** A bare activation costs its relations, one relation each, less those the others imply (D13, D55). A
 call costs one per relation that did not come true and one per argument (D12, D22).
 
 **Why `a` and `b` are two positions of one dimension.** The only thing in the design that tests two places for
@@ -90,7 +90,7 @@ Offsets are written `(time, slot)`.
    bound beside `EQUAL`, and the digit the world shows beside it at `(0, 0)`. On the occasions where `c` is
    `8`, the relations to `EQUAL`, to the `8` at slot `3` and to the `8` beside `say` are held together, and
    grouping gives `{say, EQUAL@(−1, 0), 8@(0, 0), 8 after 8 at (−1, +3)}`: three relations, the `8` one node
-   read twice. It covers those relations and `EQUAL`'s count, four edges for nothing. The function for `5`
+   read twice. It covers those relations and `EQUAL`'s count, four relations for nothing. The function for `5`
    reaches it through the open ends, the differing node holds one neuron within each, and R52 makes `from-c`,
    with `Pc` tying slot `3` of the request to slot `0` of the answer. The same over unequal requests makes
    `from-d`, naming `run` bare at `(−1, 0)` and `Pd` from slot `4`. The two differ at a node, `EQUAL` against
@@ -116,7 +116,7 @@ Offsets are written `(time, slot)`.
 
 | Frame | input | on the apex | what happens |
 |---|---|---|---|
-| 1 | `run`, `3`, `3`, `8`, `5` | `EQUAL` at slot `0`; `3`, `3` bound at slots `1` and `2`; `8`, `5` bare | `equal` covers `run`'s two relations and binds `a` and `b`, two edges for one. Each apex activation infers at its age 0 (R36). The vote on frame 2 is below. |
+| 1 | `run`, `3`, `3`, `8`, `5` | `EQUAL` at slot `0`; `3`, `3` bound at slots `1` and `2`; `8`, `5` bare | `equal` covers `run`'s two relations and binds `a` and `b`, two relations for one. Each apex activation infers at its age 0 (R36). The vote on frame 2 is below. |
 | 2 | `say` reported as run; nothing reported in `digit` | `ANSWER-C` at slot `0`, over `say` and `EQUAL`; the `8` at slot `3` and the inferred `8` at slot `0` bound beside it | The inferred `8` stands, since nothing replaced it (D40). Everything open on the apex connects to `ANSWER-C` with the reward, the four digits among them; `EQUAL`, covered, connects once to it (D10). |
 | 3 | silence | nothing within reach | |
 
@@ -153,16 +153,16 @@ on those slots decides whether those connections keep placing them.
 
 # 5. The price
 
-| the request, priced as | edges |
+| the request, priced as | relations |
 |---|---|
 | flat: `run` and four digits, joined by four relations, the rest implied | 4 |
 | through `equal`, equal request: `P`'s binding, one; `c` and `d` bare, their relations to the call, two | 3 |
 | unequal request: `equal` does not fit, and the request stands flat | 4 |
 
 On the answer frame after an equal request, `from-c` covers `say`'s relation to `EQUAL`, to the digit beside
-it and to `c`, and `EQUAL`'s count, four edges, for one: `Pc`'s binding. `from-d` on the same frame names
+it and to `c`, and `EQUAL`'s count, four relations, for one: `Pc`'s binding. `from-d` on the same frame names
 `run` bare at slot `0`, where `EQUAL` stands instead, and `Pd` at slot `4`, where a `5` stands against the `8`
-beside `say`: two relations do not come true, and it covers one edge for three. `from-c` is taken first, and
+beside `say`: two relations do not come true, and it covers one relation for three. `from-c` is taken first, and
 `from-d` then covers nothing that is left (R24). After an unequal request `from-d` covers four for one the
 same way.
 

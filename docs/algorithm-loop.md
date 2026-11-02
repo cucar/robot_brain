@@ -23,7 +23,7 @@ of the cue and of the tap before it (D1). One base action runs per action dimens
 shows `done` in the fourth, and shows nothing for a while. Then again. Five runs are enough for every function
 below to be in the dictionary.
 
-**Prices.** A bare activation costs its relations, one edge each (D13), and a call one per relation that did
+**Prices.** A bare activation costs its relations, one relation each (D13), and a call one per relation that did
 not come true and one per argument (D12).
 
 # 2. The neurons
@@ -41,13 +41,13 @@ That is the whole machine: three neurons for the three states of the loop, and o
 
 1. **The first tap names the cue.** In the second run, the tap after `go` sees `go` at `−1`, and `tap`'s
    activate call returns that relation at strength 2 (R21). Grouping makes `{tap, go@−1}` of it (R50). It
-   covers the relation, one edge, for a call that costs nothing, and its entry is one relation, so its worth is
+   covers the relation, one relation, for a call that costs nothing, and its entry is one relation, so its worth is
    positive at strength 2 (D57). The election takes it (R24), it is allocated `go·tap` (R16),
    and `go·tap` fires at the tap's frame, the latest of what it covers (D53), at the frame's second level.
 2. **The second tap names the first interneuron.** Once `go·tap` stands, the next tap sees it at `−1`, since
    a call stands at its origin's place and is the neighbor there (D5). In the third run
    the relation to `go·tap` is at strength 2, and `{tap, go·tap@−1}` is grouped: it covers the tap's relation
-   to `go·tap` and the call's count, one edge for nothing (D22). Its interneuron
+   to `go·tap` and the call's count, one relation for nothing (D22). Its interneuron
    `go·tap²` covers `go·tap` and the tap, three frames of run.
 3. **The third tap names the second.** `{tap, go·tap²@−1}` in the fourth run, the same way, and `go·tap³`.
    Each state is one frame longer than the one before it. The chain grows one state per run, because an
@@ -129,7 +129,7 @@ interneuron that knows what came after it.
 
 Show a digit beside `go`, `go 3` or `go 5`, meaning tap that many times, and the machine does it the way
 [algorithm-copy.md](algorithm-copy.md) crosses from a digit to a write. `go` and the digit beside it are a
-function, `{go, 3@0}`, one edge for nothing, and what the first tap sees one back is its interneuron `go·3`.
+function, `{go, 3@0}`, one relation for nothing, and what the first tap sees one back is its interneuron `go·3`.
 A class over the digits beside `go` never pays: `m` such functions cost `m` in the dictionary and nothing per
 occurrence, a class `1` and one binding per occurrence (R52). So the chain is per digit: `go·3·tap`,
 `go·3·tap²`, `go·3·tap³` end in `done`, while `5` has a chain of five, with nothing shared between them but
@@ -143,7 +143,7 @@ Inside a frame nothing is back to back. Activations of one frame are at temporal
 and co-occur, with no order among them (D5, D26), and one base action runs per action dimension per position
 in a frame (D8). Three taps in one frame are therefore three action dimensions, one channel each (D1): three
 tappers, `tap-a`, `tap-b`, `tap-c`, run together. `tap-a` sees the other two at offset zero in every row, so
-`{tap-a, tap-b@0, tap-c@0}` is grouped, two edges for nothing, and its interneuron `triple` covers them; the
+`{tap-a, tap-b@0, tap-c@0}` is grouped, two relations for nothing, and its interneuron `triple` covers them; the
 loop of §4 then runs over triples, `go·triple`, `go·triple²`, `go·triple³`, and stops the same way. An order
 within the frame that mattered would mean the frame is the wrong tick, and the environment would declare a
 finer one.

@@ -46,11 +46,11 @@ executes what the machine outputs, and pays what was right and what was wrong.
 1. **The first showing of a digit.** The world shows `3` beside `run`. At frame 1 `run` and the `3` fire, and
    each sees the other at offset zero (D26): one relation at strength 1, and nothing is built on one occurrence
    (R21). At frame 2 `say` and a `3` fire. `say` sees the `3` at `0`, and `run` and the `3` at `−1`; the said
-   `3` sees `say` at `0` and the shown `3` at `−1`. All four stand bare, the lesson's graph three edges, since
+   `3` sees `say` at `0` and the shown `3` at `−1`. All four stand bare, the lesson's graph three relations, since
    the rest are implied by those (D13, D55). `run`
    and the `3` at frame 1 connect to `say` and to the `3` at `+1`, with the lesson's reward (R31).
 2. **The request is named at the second showing.** `(3, run, 0)` has strength 2. Grouping makes `{3, run@0}`
-   (R50). A request written bare is the edge between `run` and the `3`, `1`; through the function it is the
+   (R50). A request written bare is the relation between `run` and the `3`, `1`; through the function it is the
    call's count, nothing. That saves `1` per request against an entry of `1`, the one relation: worth `1` at
    strength 2 (D57). Find reaches nothing, so the function is new (R53). Elected, it covers `1` for `0` (R24).
    `RUN3` is
@@ -65,7 +65,7 @@ executes what the machine outputs, and pays what was right and what was wrong.
    `RUN3`'s origin is the `3`, a node of `{say, 3@0}`, so the relation is read as a relation to that node (R50,
    D54): the `3` a frame back, which is the `3` come again, and the relation that reaches it closes the cycle,
    `3` after `3` (D15). The said `3` answers for it over its history: it saw a `3` one back at every showing,
-   bare at the first and as `RUN3`'s origin after, so `with` is 3, `without` 0, and it costs one edge: it
+   bare at the first and as `RUN3`'s origin after, so `with` is 3, `without` 0, and it costs one relation: it
    joins (D57). The answer is `{say, 3@0, 3 after 3}`. Placed again, its fit lands on `say`, the said `3`, and
    the `3` at frame 1 as the call `RUN3` standing there, covering the call's whole count (D54, D22): the two
    relations, `2`, for `0`. Elected; `RUN3` leaves the apex and connects once more, to `SAY3` (D10).
@@ -83,7 +83,7 @@ executes what the machine outputs, and pays what was right and what was wrong.
    stand bare at frame 1: `(9, run, 0)` is at strength 1, its open reading reaches the `{d, run@0}` functions,
    and none fits, since `9` is not the digit any of them names. At frame 2 `write` lands on `say`, the `9` at
    `0`, and the `9` at `−1`, bare: `2` for `1`. `W` takes any neuron: the `9` is its value the first time and a
-   member from then on (D44). `run` stands bare at frame 1, with its edge to the `9`. The `9`'s second showing
+   member from then on (D44). `run` stands bare at frame 1, with its relation to the `9`. The `9`'s second showing
    gives it `RUN9` as any digit's does, and its third `SAY9`.
 6. **The class never pays.** Generalizing `{5, run@0}` with `{3, run@0}` differs at one node, which would be a
    class over the digits (R52). Priced as a replacement: `m` functions of one digit each cost `m` in the
@@ -128,15 +128,15 @@ parameter is for.
 
 # 5. The price
 
-A bare activation costs its relations, one edge each, and a call one per relation that did not come true and
+A bare activation costs its relations, one relation each, and a call one per relation that did not come true and
 one per argument (D12, D13).
 
-| a lesson, priced as | edges |
+| a lesson, priced as | relations |
 |---|---|
 | bare: the four activations, joined by three relations, the rest implied | 3 |
 | `RUN_d` over the request, the answer bare: `say` to the digit, and `say` to the call | 2 |
 | `SAY_d` over the answer and `RUN_d`'s call | 0 |
-| `write` over a bare request, the digit's first showing: `W`'s binding; and `run` bare, its edge to the digit | 2 |
+| `write` over a bare request, the digit's first showing: `W`'s binding; and `run` bare, its relation to the digit | 2 |
 
 `RUN_d`'s entry is `1`, `SAY_d`'s `2`, and `write`'s `2`. A function over `run` and a class of the digits would
 cost `1` and one binding per request, against `m` and nothing per request for the digits' own functions; it is

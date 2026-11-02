@@ -343,7 +343,7 @@ inferred pattern runs its actions and expects its events, weakly (R30). Nine cas
   neighbors. A parameter has no such lag: whatever stands at all its positions is its value. **Diagnostic:**
   occurrences of a function written with a class's failed neighbors, per class.
 - **The child's place moves.** A child is placed at the latest frame its bid covered and the center of the box
-  in space (D53). Re-centering that adds or drops a node at the edge of the box moves where the next activation
+  in space (D53). Re-centering that adds or drops a node at the relation of the box moves where the next activation
   of the child fires (D29), and what stood beside it a frame later is then at a different offset in the
   connections. Nothing shows how often that happens. **Diagnostic:** changes in a child's coordinate relative to
   its bidder, per pattern per call on stationary input; they should die out.

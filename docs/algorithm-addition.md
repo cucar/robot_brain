@@ -55,7 +55,7 @@ carry is inferring it; reading it is seeing it beside the next request.
    `carry` is shown. The three at frame 1 connect to both at `+1`, with the reward (R31).
 2. **A request and its column become one neuron.** At the second lesson `add` returns `(add, a1, 0)` and
    `(add, b1, 0)`, each at strength 2, and grouping makes `{add, a1@0, b1@0}` (R50). A request written bare is
-   two edges, the third implied (D55); through the function it is the call's count, nothing. That saves `2`
+   two relations, the third implied (D55); through the function it is the call's count, nothing. That saves `2`
    per lesson against an entry of `2`, two relations: worth `2` at strength 2 (D57). `a1` and `b1` return the
    same relations, and the same relations are the same function (D36). It is new (R53). Elected, it covers `2`
    for `0` (R24), and its interneuron, `C11`, fires at frame 1 covering all three (D53). Eight columns give
@@ -64,7 +64,7 @@ carry is inferring it; reading it is seeing it beside the next request.
    `−1`, the call standing at its origin's place (D5). `(out-0, carry, 0)` is at strength 2 and
    `(out-0, C11, −1)` at 1,
    since the first lesson had the three bare. At the third lesson both are at strength 2, and grouping makes
-   `{out-0, carry@0, C11@−1}`. A lesson's answer frame written bare is two edges, `out-0` to `carry` and
+   `{out-0, carry@0, C11@−1}`. A lesson's answer frame written bare is two relations, `out-0` to `carry` and
    `out-0` to `C11`; through the function it is the call's count, nothing, the call landing on `C11` as a node
    and covering its count (D22, D54). Savings `2` per lesson, entry `2`, worth `2` at strength 2 (D57).
    Elected, it covers `2` for `0`; `C11`'s activation leaves the apex (D10). `A11` fires at frame 2.
@@ -73,8 +73,8 @@ carry is inferring it; reading it is seeing it beside the next request.
    That is the only connection `C11` ever writes, and it strengthens at every lesson. `A11` connects to
    nothing: nothing stands within its window.
 5. **A carry coming in is a fourth neuron.** In the lessons with a carry, `carry` stands beside the request,
-   `C11` covers the other three for nothing, and `carry` stands bare with its edge to the call, `1`.
-   `{add, a1@0, b1@0, carry@0}` covers that edge too: it saves `1` over `C11` per lesson, against an entry of
+   `C11` covers the other three for nothing, and `carry` stands bare with its relation to the call, `1`.
+   `{add, a1@0, b1@0, carry@0}` covers that relation too: it saves `1` over `C11` per lesson, against an entry of
    `3`, so its worth is positive from the fourth carry lesson. Find reaches `C11` through `(add, a1, 0)` as it
    is and `(add, ?, 0)`
    open; the two do not differ only in which neuron stands at some of their nodes, since one has a node the
@@ -125,7 +125,7 @@ the next (R29).
 
 At frames 2, 3 and 4 the inferred `carry` is named twice: by the answer function, as what the column carried,
 and by the next case, as the carry coming in. Both fits are priced at nothing, so the election takes the one
-that covers more, the case, `3` edges, and the answer function after it for what is left, the digit's edge to
+that covers more, the case, `3` relations, and the answer function after it for what is left, the digit's relation to
 the case's call and that call's count, `1` for `0` (R22, R24, D28). The case's interneuron is strong, since
 the digits it covers are (D40). The answer dimension has one candidate each frame, placed at the estimate of
 the case's one connection, and it is output (R47).
@@ -139,7 +139,7 @@ next.
 Had the columns been mixed from the first lesson, the same ten functions would form, each at the second
 lesson of its case, since the digits' places never pay as classes (§4). A function over `add` and one digit
 may form first, where that digit stood beside `add` in two lessons of different cases: it saves `1` per
-lesson against an entry of `1`. Once the cases it stood in have their own functions, those cover both edges
+lesson against an entry of `1`. Once the cases it stood in have their own functions, those cover both relations
 for nothing and are taken first, and the function over two is placed and declined at every lesson. Its
 relation still recurs in `add`'s history, since the three fire bare at the base before anything covers them,
 so nothing prunes it: it stays in the dictionary, placed and never taken, the case the evaluation document

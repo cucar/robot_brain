@@ -18,7 +18,7 @@ before (D5), and a function may name both.
 
 There is no spatial dimension, so a function fits at one place per frame, and its origin is its node at the
 current bar: a call fires at the latest bar it covers and covers back from there (D15, D37). A bare bar counts
-its relation to the bar before it, one edge (D12, D13). A call counts one per relation that did not come true
+its relation to the bar before it, one relation (D12, D13). A call counts one per relation that did not come true
 and one per argument, and nothing else.
 
 **Out.** One action dimension per channel, with two base actions, `own` and `disown`: the state the machine
@@ -50,9 +50,9 @@ the action is strengthened and takes the reward in one write (R29, R31).
 
 | What stands | its reach | what forms |
 |---|---|---|
-| a bar's move | 1 (D4) | A move sees the move before it in its own channel, and the moves of the other instruments at this frame and the one before (D5). Each neighbor is one relation (D34, R21). At strength 2, `{m', m}` with `m'` one bar back is a function: two nodes, one offset, origin `m` (R50). Its fit covers the relation, one edge, for a call that costs nothing (D22), so it is accepted and gets an interneuron, which fires at `m`'s bar (R16, D53). `{m_A, m_B}` across two instruments at offset 0 is priced the same. |
+| a bar's move | 1 (D4) | A move sees the move before it in its own channel, and the moves of the other instruments at this frame and the one before (D5). Each neighbor is one relation (D34, R21). At strength 2, `{m', m}` with `m'` one bar back is a function: two nodes, one offset, origin `m` (R50). Its fit covers the relation, one relation, for a call that costs nothing (D22), so it is accepted and gets an interneuron, which fires at `m`'s bar (R16, D53). `{m_A, m_B}` across two instruments at offset 0 is priced the same. |
 | an interneuron over a pair | 1 beyond the farthest bar it stands for (D4): 2 | The next bar sees the interneuron at `−1`, standing at its origin's place (D5). At strength 2, `{PAIR, m}` is a function whose fit covers the relation and the call's count, 1 for 0. The plain pair fits at the same bar too: its first node comes true on the call whose origin it is, lands on it and covers the same, 1 for 0 (D54). The two measure the same, and the link is taken first, since its relation reads as it stands on the board (R24); the pair then lands on nothing uncovered. The link's interneuron stands for three bars and expands to them (R28). |
-| a longer shape | 1 beyond what it stands for | Each further recurrence of the stretch extends the chain by one bar, the next bar's function naming the interneuron that fired a frame before. An interneuron also sees the bar before its stretch, which stands on the board for as long as any neuron reaches (D9); where that recurs, the relation to it joins the pair at its past end, and the pair grows flat, one bar per recurrence, in its own interneuron (R50). Where a flat function and the chain both fit they cover the same edges, and the link, whose relation reads as it stands, is taken first (R24). Shapes across instruments form the same way: an interneuron in one channel beside one in another at offset `0`. |
+| a longer shape | 1 beyond what it stands for | Each further recurrence of the stretch extends the chain by one bar, the next bar's function naming the interneuron that fired a frame before. An interneuron also sees the bar before its stretch, which stands on the board for as long as any neuron reaches (D9); where that recurs, the relation to it joins the pair at its past end, and the pair grows flat, one bar per recurrence, in its own interneuron (R50). Where a flat function and the chain both fit they cover the same relations, and the link, whose relation reads as it stands, is taken first (R24). Shapes across instruments form the same way: an interneuron in one channel beside one in another at offset `0`. |
 
 **Where the stretch stops recurring.** A bar that has not stood after the interneuron twice holds the relation
 at strength 1; it is read in the index to find what already fits, and nothing is built on it (R21, R53). The
@@ -187,7 +187,7 @@ the chains that broke during learning stop recurring and are pruned (R18), and t
 decommissioned as their last activations leave the board (R38). The three base functions stay, placed at
 every bar and outbid by the ring: the alternation cycle and the two one-node cycles. After that the machine is
 13 neurons: the 4 base ones, `rise`, `fall`, `own`, `disown`, the 3 base functions, and the 6 in the ring. The
-dictionary is nine functions, 10 edges, and the run costs nothing: the ring's call at the latest bar relates
+dictionary is nine functions, 10 relations, and the run costs nothing: the ring's call at the latest bar relates
 to nothing outside it, the free root the evaluation document names.
 
 **Results.** The run of this case under the earlier rules, where a bar saw the move under a call and the pair

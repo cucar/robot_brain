@@ -21,7 +21,7 @@ the earlier (D34). `x` at frame 3 sees `y` one back: `(x, y, −1)`. Each neuron
 
 **The first function.** At frame 4, `(y, x, −1)` has strength 2 and no function holds it, so it starts one: two
 nodes, `x` and `y`, one relation, origin `y` (R50, D15). It is placed at frame 4, where it lands on `y` at 4
-and `x` at 3. It covers the relation, one edge, for a call that costs nothing, and is accepted (R24). Its
+and `x` at 3. It covers the relation, one relation, for a call that costs nothing, and is accepted (R24). Its
 interneuron, `XY`, fires at frame 4, the origin, covering frames 3 and 4 (D53).
 
 **The pair covers the letter after it from view.** At frame 5, `x` fires and sees the call `XY` at `−1` and
@@ -35,7 +35,7 @@ at 6 covering frames 5 and 6.
 as `x` after `y` (R50, D54): a candidate attached at `y` whose other end, `x`, is already a node. It closes the
 cycle (D15). `x` answers for it over its history, counting a row as holding `y` one back where it holds `y`
 or a call whose origin is `y` (R50): the `x` at 3 saw `y` bare, the ones at 5 and 7 saw the call, so `with`
-is 3 and `without` 0. It costs one edge in the dictionary and would save the edge between its own call and
+is 3 and `without` 0. It costs one relation in the dictionary and would save the relation between its own call and
 `XY` at each of the three, so its worth is 5 and it joins (D57, R54). The function is now `y` after `x` and
 `x` after `y`, two nodes, two relations, a cycle. The relation is in that function and starts none of its own
 (R50), so nothing forms over the call at the `x` frames. Placed again at frame 7 the function has no fit,
@@ -49,7 +49,7 @@ comes true on a call whose origin is that neuron, so the fit lands on the call a
 reach the fit reads one lap and lands on the call of the lap before. The call counts nothing for the lap; how
 many it covers is in what the calls cover (D24).
 
-| the fit at frame 8 | edges |
+| the fit at frame 8 | relations |
 |---|---|
 | A: the two relations, `y` to `x` and `x` to the call at 6, and the call's count, nothing | 2 |
 | B: the call's count, no failure and no argument | 0 |
@@ -57,13 +57,13 @@ many it covers is in what the calls cover (D24).
 It is accepted, `XY` fires at 8, and the call at 6 is covered and leaves the apex (D10). From then on the
 stretch is recognized at every `y`: the call fires there, covers the lap and the call before it, and the apex
 holds one call for the stretch, the latest (D49). The `x` between stands on the apex for a frame, with its
-relation back to the call, one edge, and is covered at the next `y`. The laps are in the calls, each under the
-one after it, and expansion follows them back (R28). The stretch costs nothing at a `y` and one edge at an
+relation back to the call, one relation, and is covered at the next `y`. The laps are in the calls, each under the
+one after it, and expansion follows them back (R28). The stretch costs nothing at a `y` and one relation at an
 `x`. The function costs 2 in the dictionary, its two relations (D56, D13).
 
 **After a break.** The stream falls silent and `x, y` comes again. At the first `y` the fit reads `y` after
 `x`, and `x` after `y` reaches silence. The relation that closes a cycle is never a failure: the fit ends
-there, a lap read once is the cycle run once (D54), so it covers one edge for nothing and is taken, and the
+there, a lap read once is the cycle run once (D54), so it covers one relation for nothing and is taken, and the
 call fires. At the next `y` the closing relation lands on that call through its origin, as in a run that
 never stopped. Nothing had to stay on the board for it but the call.
 

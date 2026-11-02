@@ -26,7 +26,7 @@ The field declares a radius of `4` in each of its two spatial dimensions and `1`
 that reach they are each other's neighbors on the apex (D5). Within the radius every distance is exact (D6);
 the distances this case uses are `2` and `4`.
 
-A bare activation costs its relations, one edge each (D13). A call costs one per relation that did not come
+A bare activation costs its relations, one relation each (D13). A call costs one per relation that did not come
 true and one per argument (D12, D22). Offsets are written `(time, x, y)`.
 
 # 3. The neurons
@@ -62,15 +62,15 @@ what it learns is a ball's habit, not a ball coming straight on.
 
 **The function of the action.** `hit` runs at the body a frame later, and sees `COMING` at `(−1, 0, 0)`.
 Where that recurs, grouping gives `{hit, COMING@(−1, 0, 0)}`: one relation, an entry of one. It covers that
-relation and `COMING`'s count, two edges for nothing, and its interneuron `COMING·hit` fires at the body. In
+relation and `COMING`'s count, two relations for nothing, and its interneuron `COMING·hit` fires at the body. In
 that frame `COMING` is covered, and connects once to `COMING·hit` at `(+1, 0, 0)`, with that frame's reward
 (D10). Inferred from `COMING` at its age 0, `COMING·hit` is placed a frame ahead at the body and expanded:
 `hit` at the body and `COMING` where it stands (R28). The match credits the relation to `COMING` and
 charges nothing (R49), so `hit` is proposed, and output (R30).
 
 **A lesson per thing on a course** is one level up. The bound ball stands two ahead of `COMING`, a neighbor
-at `(0, 0, +2)` (D26), and its binding is `COMING`'s one edge, so a function `{COMING, ball@(0, 0, +2)}`
-covers that relation and `COMING`'s count, two edges for nothing: an entry of one, worth positive at strength
+at `(0, 0, +2)` (D26), and its binding is `COMING`'s one relation, so a function `{COMING, ball@(0, 0, +2)}`
+covers that relation and `COMING`'s count, two relations for nothing: an entry of one, worth positive at strength
 2 (D57). Until then the first ball is answered by `COMING`, not by a lesson of its own.
 
 **How `T` came to be.** A ball stood in `approaching`'s rows at `(0, 0, +2)` and at `(−1, 0, +4)`, and
@@ -101,7 +101,7 @@ at `(10, 10)`.
 2. **The relations land, and the function with them.** `approaching`'s activate call returns its relations to
    the ball, each held in one row of its history or more (R21), and find reads them with the ball's end open
    and reaches `coming` (R53). Placed, every relation of `coming` comes true with `T` as `ball` (D31). The
-   election takes it, two edges for one (R24), and at the next level `COMING` fires at `(10, 10)`, its origin
+   election takes it, two relations for one (R24), and at the next level `COMING` fires at `(10, 10)`, its origin
    (D15, §6.4).
 3. **The call neuron speaks.** `COMING`'s connection names `COMING·hit` one frame on at `(+1, 0, 0)` (D25).
    Expanded, that is `hit` at the body. The match holds, and `hit` is proposed and output (R49, R47).

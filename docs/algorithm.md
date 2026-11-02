@@ -272,10 +272,11 @@ that fires through it (D8), and expansion ends on base symbols read back through
 > elapsed since the frame it fired in, `0` through `reach_t`; a new activation is the one at age 0, base and
 > interneuron alike.
 >
-> **Covered at** is the age at which an accepted function first covered the activation, none until one does.
-> Coverage is acquired late (R27), and a later call may take the activation from its coverer, covered still
-> (R23), so this one number says for every frame of the window whether the activation stood on the apex there:
-> it did at every age before it, and at none from it on.
+> **Covered at** is the age at which an accepted call first landed on the activation as a fixed node, none
+> until one does. That comes late (R27), and nothing undoes it: later calls may land on the activation too,
+> and on the call that covered it (R23), but it never returns to the apex. So this one number says for every
+> frame of the window whether the activation stood on the apex there: it did at every age before it, and at
+> none from it on. Which of its relations are covered, and by whom, is the coverage set's (D24).
 >
 > **An open activation carries no commitment beyond that.** It infers once, at age 0, and the machine keeps
 > what it inferred (R45); what it does for the rest of its life is connect to what ran, in the `connect` call.
@@ -343,14 +344,14 @@ connection read.
 >
 > - `b` is in the same frame as `a` or in an earlier one.
 > - `b` is within `a`'s reach in every activation dimension they share (D4), and is not at `a`'s own place.
-> - The edge between them is one no accepted call covers (D24). Coverage is per combination of dimensions:
+> - The relation between them is one no accepted call covers (D24). Coverage is per combination of dimensions:
 >   the combination of an offset is the dimensions it differs in, `x` alone, `y` alone, `x` and `y`
 >   together, time and `x`, and so on. A call covers an activation in the combinations its relations at that
 >   activation run in, and nowhere else. A covered activation stays a neighbor of anything within whose reach
 >   it stands, at an offset whose combination no call has covered. A pixel whose row a call covers in `x` is
 >   not seen again at an offset in `x` alone, and is still seen in `y` alone, diagonally in `x` and `y`, in
 >   time, and in any other combination. Where a call stands at `b`'s place, as the origin of its function,
->   the call is the neighbor there, and the edge to it is the edge to `b` (D53, D54).
+>   the call is the neighbor there, and the relation to it is the relation to `b` (D53, D54).
 > - Where `a` is a call, `b` is nothing its fit landed on, nor anything under what it landed on, at any depth:
 >   a call never sees what it stands for (D24, R28).
 > - The neighborhood policy allows `b`'s kind beside `a`'s (D50).
@@ -638,7 +639,7 @@ groups, places and keeps (§6).
 > ran, and what votes. It is the **wavefront** of recognition: where the frame's levels stopped (R26), and from
 > where the wave runs forward, each activation of it reading its own connections ahead. And it is the apex, the
 > top of the hierarchy as it stands. The four are one set: a call that lands on an activation as a fixed node
-> takes it out of every role at once. Its edges that no call covers still stand in the count and still make
+> takes it out of every role at once. Its relations that no call covers still stand in the count and still make
 > it a neighbor, through them alone (D24).
 >
 > **An expected input never reaches the apex.** An activation a function in the dictionary names at its origin
@@ -652,10 +653,10 @@ groups, places and keeps (§6).
 > run.
 
 > **D10 — Inhibition.** A call that lands on an activation as a fixed node does three things to it, all from
-> the frame it is covered in. It leaves the count: the cost counts its coverer's call, not it, while an edge
+> the frame it is covered in. It leaves the count: the cost counts its coverer's call, not it, while a relation
 > of it the call did not land on stands in the count as it is (D12). It is not heard: resolution reads its
 > coverer's standing inferences, not its own (R46). And it stops connecting: from the frame after it is covered
-> it writes nothing about what follows. Where two calls land on it, each covering edges of its own, both stand
+> it writes nothing about what follows. Where two calls land on it, each covering relations of its own, both stand
 > over it and both expand to it (R28).
 >
 > **The last connection.** In the frame it is covered, the activation connects once more, to the neuron that
@@ -744,13 +745,15 @@ counted with the call (D13), and expansion puts it back at its node (R28).
 one place and the same shape at another are counted the same, and nothing in the costs reads a coordinate
 (D11).
 
-> **D13 — Edge.** Every cost in the design is a count of edges: how many it takes to state a piece of the graph
-> (D55), over the fields the dictionary holds (D56). Nothing is stored for it; the count is how the machine
-> compares choices. Every edge costs the same, `1`, and a name costs nothing: a node is in the graph through
-> its edges. Three things are edges in the count: a relation standing on the apex; a failure, a relation of
-> the function that did not come true where its call stands; and a binding, the edge from a bound activation
-> to the call it is an argument of. A call's own edge, from its origin to the interneuron, costs nothing: the
-> relations from outside the function to its origin already join the call to the graph.
+> **D13 — Cost.** Every cost in the design is a count of edges of the graph, a relation between two activations
+> being one (D55, D34): how many it takes to state a piece of the graph, over the fields the dictionary holds
+> (D56). Nothing is stored for it; the
+> count is how the machine compares choices. Every edge costs the same, `1`, and a name costs nothing: a node
+> is in the graph through its edges. Three things are edges in the count: a relation standing on the apex; a
+> failure, a relation of the function that did not come true where its call stands; and a binding, the edge
+> from a bound activation to the call it is an argument of. A call's own edge, from its origin to the
+> interneuron, costs nothing: the relations from outside the function to its origin already join the call to
+> the graph.
 >
 > | What | Edges |
 > |---|---|
@@ -830,9 +833,9 @@ occurs is what the worth counts (D57).
 >
 > **A call's count is covered whole.** A fit that lands on a call as a node covers it: the call's count
 > leaves the count, the interneuron's activation leaves the apex, and the function is credited that count,
-> since it is what stood for everything under it (R23). What is under a call is covered edge by edge: an edge
+> since it is what stood for everything under it (R23). What is under a call is covered relation by relation: a relation
 > of those activations the call did not land on stands bare, and another fit may land on it (D24). So a
-> function saves what it takes out of the count, bare edges and the counts of calls.
+> function saves what it takes out of the count, bare relations and the counts of calls.
 
 **What a function's call stands in for is what it covers**; that is A. What it costs is its count; that is B.
 A neuron the function does not name is in neither: it costs what it cost whether the function exists or not.
@@ -847,14 +850,14 @@ A neuron the function does not name is in neither: it costs what it cost whether
 > |---|---|
 > | with | the activations of that neuron at which the function's other relations at it held, and this relation held with them |
 > | without | the activations at which the function's other relations at it held, and this relation did not |
-> | worth, in a function of two relations or more | `2 · with − without − 1`: two edges saved at each occasion it held with the function, one failure at each it did not, and one edge in the dictionary (D13) |
-> | worth, in a function of its own | `strength − 1`: one edge saved at each occasion it held, and one edge in the dictionary |
+> | worth, in a function of two relations or more | `2 · with − without − 1`: two relations saved at each occasion it held with the function, one failure at each it did not, and one relation in the dictionary (D13) |
+> | worth, in a function of its own | `strength − 1`: one relation saved at each occasion it held, and one relation in the dictionary |
 >
-> **Two edges, not one, where the function has other relations.** The relation itself is one. The other is
+> **Two relations, not one, where the function has other relations.** The relation itself is one. The other is
 > between two calls: held in a function of its own, the relation has a call of its own, standing within reach
-> of the function's call, and the edge between the two calls is on the apex at every occasion both fit (D26,
-> D12); held in the function, there is one call and no such edge. Nothing beyond that edge turns on it: what
-> the second call relates to besides, the one call relates to the same way, one edge each, and an edge two
+> of the function's call, and the relation between the two calls is on the apex at every occasion both fit (D26,
+> D12); held in the function, there is one call and no such relation. Nothing beyond that relation turns on it: what
+> the second call relates to besides, the one call relates to the same way, one relation each, and a relation two
 > others imply is not counted (D55).
 >
 > **A function's worth is the sum of its relations' worths.** A function of one relation is worth
@@ -875,17 +878,17 @@ are meant to:
 | the machine, keeping the dictionary (R50, R54, R18) | one relation in one function | the histories of the neurons the function stands in | which relations the dictionary holds, and in which function |
 | the machine, in the match (R49)       | one inferred function | the frames it reaches back into          | whether the inference is proposed  |
 
-One rule decides what a set of functions covers for a set of edges. The election runs it over the board. It
+One rule decides what a set of functions covers for a set of relations. The election runs it over the board. It
 is stated here and cited from there.
 
-> **D28 — Greedy cover.** The operation that covers a set of edges with **fits**, each landing its relations on
-> them, and pays each edge to exactly one fit. It repeats:
+> **D28 — Greedy cover.** The operation that covers a set of relations with **fits**, each landing its relations on
+> them, and pays each relation to exactly one fit. It repeats:
 >
-> 1. **Measure** every fit not yet taken against the edges no taken fit has covered: its coverage is what
+> 1. **Measure** every fit not yet taken against the relations no taken fit has covered: its coverage is what
 >    those it would cover cost, and the count of each call it lands on as a node (D54), and its price is its
 >    call's count there (D22), which may be zero.
 > 2. **Take** the one with the highest `coverage / price`, the fits priced at zero first and among them the
->    highest coverage, if `coverage > price`, and **stop** otherwise. It covers the edges it was measured on.
+>    highest coverage, if `coverage > price`, and **stop** otherwise. It covers the relations it was measured on.
 >    An activation at one of its variables stays on the apex, bound, and the relations the function does not
 >    fix at it stay in the set, so a later round may cover them (D10). The round repeats from 1.
 >
@@ -985,9 +988,8 @@ one winner per dimension.
 ## 4.2 History
 
 > **D18 — History.** A neuron's record of its own activations: the last `H` of them, oldest first, each holding
-> the neighborhood it observed in the frame it fired (D7), each neighbor at its offset (D6) and with what it
-> cost, and the activation's own cost beside them, since a function covers the activation too (D13, D22). It is
-> the evidence every strength is counted over, and it holds nothing else: the neuron's connections are not in
+> the neighborhood it observed in the frame it fired (D7), each neighbor at its offset (D6). It is the
+> evidence every strength is counted over, and it holds nothing else: the neuron's connections are not in
 > the history and `H` does not bound them (R31).
 >
 > **`H` is declared once for the machine and is the same for every neuron.** It counts that neuron's **own
@@ -1118,7 +1120,7 @@ With `A` activations this frame and `M` neighbors per row:
 
 # 6. Recognition
 
-> **D23 — Recognition.** The machine covers the board with interneurons, each fit taken when the edges it
+> **D23 — Recognition.** The machine covers the board with interneurons, each fit taken when the relations it
 > covers cost more than its call's count, never counting what its function costs in the dictionary (R22, R24).
 >
 > **Covering everything is not the goal.** An activation no accepted function covers stays in the count as
@@ -1225,7 +1227,7 @@ argument.
 > neuron the function does not name, which would be a new node, or a node the function has, which would close
 > the cycle where the function has none (D15). A relation to a call whose function has a node of this function
 > as its origin is read as a relation to that node (D54): it is attached there. The relation to the call and
-> the relation to its origin's neuron are one board edge, and a function holds that edge as one or the other,
+> the relation to its origin's neuron are one board relation, and a function holds that relation as one or the other,
 > never both: where the fit already lands on it, under either name, it is no candidate. It is no candidate
 > where its new node would be the origin, later
 > in time or at a lesser place in the same frame, since the origin is fixed (D15); where the function has a
@@ -1255,8 +1257,8 @@ argument.
 >
 > **Distance and worth.** A candidate's distance to a function is `1 − with / (with + without)`: zero where it
 > stood at every occasion the function did, one where it never did. Its worth in the function is
-> `2 · with − without − 1`: the relation and the edge between its own call and the function's, saved at each
-> occasion it held with the function, a failure at each it did not, and its one edge in the dictionary (D57). A
+> `2 · with − without − 1`: the relation and the relation between its own call and the function's, saved at each
+> occasion it held with the function, a failure at each it did not, and its one relation in the dictionary (D57). A
 > candidate joins the function where its worth is highest, where that is positive and higher than where it
 > is, and where two functions tie on worth, the one it is nearest to (R54). A relation of a
 > function leaves it where its worth is higher in a function of its own, `strength − 1`, and for nothing
@@ -1353,16 +1355,16 @@ machine works out itself (R22).
 > | per node | the accepted calls that have landed on it as a fixed node, if any; the call it is bound to as an argument, if any |
 >
 > **Covered and bound are read off it.** An activation is **covered** when a call has landed on it as a fixed
-> node: it has left the apex (D10), and the edges of it no call has landed on stand in the count and keep it a
+> node: it has left the apex (D10), and the relations of it no call has landed on stand in the count and keep it a
 > neighbor through them (D5). It is **bound** when a call binds it as an argument: it stays on the apex, and
 > its binding is counted with the call. It is on the apex, bare, when neither holds.
 >
 > **Credit is what blocks later payment, and coverage is what hides.** A relation a call covers is paid for
-> through that call, and no later fit reaches it, since a covered edge is not returned again (D5). A later fit
+> through that call, and no later fit reaches it, since a covered relation is not returned again (D5). A later fit
 > reaches the call, by landing on it as a node, and is then paid the call's count (R23). A bound activation is
 > still on the
 > apex and is a neighbor to every later function. A later fit that lands on it covers the relations of its own
-> that no call has covered, and nothing else (D10). So every edge is paid for once. The coverage set spans one
+> that no call has covered, and nothing else (D10). So every relation is paid for once. The coverage set spans one
 > frame more than the longest reach in time among the neurons the machine holds, no function reaches further
 > back, which is the span an activation stands on the board (D9), and the box every other activation dimension
 > gives, and ages out with it, and over the same span the
@@ -1370,25 +1372,25 @@ machine works out itself (R22).
 > (R33). **The machine holds
 > nothing on the scale of the run.**
 >
-> The coverage set is about **credit**: an edge is a fact that needs paying for exactly once, so one a call
+> The coverage set is about **credit**: a relation is a fact that needs paying for exactly once, so one a call
 > covers is paid for through that call until a later call covers that call (R23). It is not about naming: an
 > interneuron expands to everything its function names, credited or not (R24).
 
 > **R23 — This frame's fits against the board as it stands.** Only what is counted is in play: a bare node's
 > relations at their cost, a bound node's binding, and the relations a call covers at that call's count,
-> together. So no edge is paid for twice. Within the electing frame a relation is
+> together. So no relation is paid for twice. Within the electing frame a relation is
 > covered once, by the first accepted fit whose relation lands on it (R24), and never moves.
 >
-> **A later frame covers the past through its calls.** An edge a call at an earlier frame covers is out of
-> reach: it is not returned again (D5), so no fit lands on it again. An edge the call did not land on stands,
+> **A later frame covers the past through its calls.** A relation a call at an earlier frame covers is out of
+> reach: it is not returned again (D5), so no fit lands on it again. A relation the call did not land on stands,
 > and a later fit may land on it. A fit at `f` reaches the call itself by landing on it as a node, as the
 > node's neuron or as a call whose origin is that neuron (D54): the new call covers the old one's count whole,
 > and the old call's activation leaves the apex. What that interneuron learned stands. So the past is
-> re-elected edge by edge, and a call's count only entire, where that pays on the board (D28).
+> re-elected relation by relation, and a call's count only entire, where that pays on the board (D28).
 
-**The cost over one frame is the calls made plus the activations no function covered**: the price of every
-accepted fit, and what each activation no function covered cost, the graph's half of the objective (§3.12) over
-the frames the election can see. **The two terms do not overlap**: a neuron a promoted neuron fails to name is
+**The cost over one frame is the calls made plus the relations no call covered**: the price of every
+accepted fit, and one for each relation on the board no call covers, the graph's half of the objective (§3.12)
+over the frames the election can see. **The two terms do not overlap**: a neuron a promoted neuron fails to name is
 in the second and not the first, which is why the price counts only the neighbors named and absent (R22). The
 dictionary half is the worth's (D57), and neither test touches the other's sum.
 
@@ -1415,13 +1417,13 @@ one fit**, which is what stops an activation being paid for twice.
 > the older activation.
 >
 > **The bound is structural.** A fit is taken only while it covers more than it costs, and a fit without
-> failures or arguments costs nothing, so it is taken whenever it covers an edge nothing else has. Each round
+> failures or arguments costs nothing, so it is taken whenever it covers a relation nothing else has. Each round
 > takes one fit, so the rounds are never more than the fits.
 >
 > **A fit that never reached the top held nothing.** There is nothing to hand back and nothing to settle: an
-> edge it landed on is either covered by a fit that did pay or stands bare.
+> relation it landed on is either covered by a fit that did pay or stands bare.
 >
-> **Ownership is a partition of the edges the accepted fits land on**, and that is the whole of the
+> **Ownership is a partition of the relations the accepted fits land on**, and that is the whole of the
 > inhibition: no function is ever edited or forbidden, and **overlap is legal and priced**: a fit that lands on
 > a relation an earlier round covered gains nothing for it and pays nothing for it (R23). One that binds a
 > bound node again gains nothing (D10, R22). **Covered by an accepted fit**
@@ -1429,7 +1431,7 @@ one fit**, which is what stops an activation being paid for twice.
 > (R27) are one question with one answer.
 >
 > **Outcome**: accepted fits are promoted, each **whole**, and an interneuron expands to everything its function
-> names, credited or not; the activations they land on as fixed nodes leave the apex, their uncovered edges
+> names, credited or not; the activations they land on as fixed nodes leave the apex, their uncovered relations
 > standing in the count, and what they bind stays on it (D24), and every active neuron no accepted fit lands
 > on stands as itself. **The election delivers nothing to
 > anyone**: it writes the coverage set and stops. No neuron is told what was bought; a neuron's history is what
@@ -1478,7 +1480,7 @@ which is what it expands to (R28). Every activation no accepted fit covers stand
 > fixed node** (D49), base neurons and interneurons alike, so a base neuron no function found worth naming
 > stands in it beside an interneuron many functions deep. This is **the set that learns what ran** (D25) and
 > **the set that votes** (§8.4); what the cost counts and what a neuron sees as its neighborhood are the
-> uncovered edges (D12, D5), which an activation off the apex may still have. A call landing on a neuron
+> uncovered relations (D12, D5), which an activation off the apex may still have. A call landing on a neuron
 > silences it as a learner and a voter at once, its one last connection aside (D10). A reward for a frame
 > already counted reaches its connection regardless (R33). Everything underneath the current frontier is
 > recovered by expanding it.
@@ -1486,10 +1488,10 @@ which is what it expands to (R28). Every activation no accepted fit covers stand
 > **Named, not covered.** A neuron a declined fit named, with nothing else covering it, is still on the
 > frontier, and stands in the count as itself.
 >
-> **Coverage is acquired late and passes only whole.** An activation that fires at `g` is uncovered until some
-> fit takes it, and a fit can take it for as long as it lies within reach of its origin (D4), so an activation
-> may speak for a few frames and then fall silent. A later call may take it from its coverer, with everything
-> that coverer covered, and it stays covered (R23).
+> **Coverage is acquired late.** An activation that fires at `g` is on the apex until some accepted fit lands
+> on it as a fixed node, and a fit can land on it for as long as it stands on the board (D9), so an activation
+> may speak for a few frames and then fall silent. Its relations are covered one by one, by the fits that land
+> on them, and a later call may cover the call that covered it (R23); it does not return to the apex.
 
 The frontier cuts across the hierarchy:
 

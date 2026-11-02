@@ -12,7 +12,7 @@ One channel, `text`, laid out over time alone: a letter sees the letter before i
 declares one event dimension, `letter`, with a bucket per letter and one for the space; each bucket is a base
 neuron (D52). One frame is one letter. There is no action dimension: this machine reads.
 
-A bare letter costs its relation to the letter before it, one edge (D12, D13). A call costs one per relation
+A bare letter costs its relation to the letter before it, one relation (D12, D13). A call costs one per relation
 that did not come true and one per argument, and nothing else.
 
 # 2. The base: one letter back
@@ -26,7 +26,7 @@ is built on it (R21, R53). At strength 2 it is grouped into a function of two fi
 Once `h` has seen `t` one back twice, `{h, t@−1}` is a function: `t` and `h` one frame apart, origin `h`
 (D15). Its price:
 
-| | edges |
+| | relations |
 |---|---|
 | A, the relation between the two | 1 |
 | B, the call's count | 0 |
@@ -80,7 +80,7 @@ reach the machine's neurons have (D9), so the interneuron also sees the bare let
 before its stretch. Where that recurs twice, the relation to it is a candidate at the function's past end,
 answered by the interneuron, and joins (R50): the function grows one letter toward its past per recurrence,
 flat, in one interneuron. So a stretch is reached two ways, as a chain of calls growing at the future end, one
-function per length, and as one function growing at the past end; where both fit, they cover the same edges,
+function per length, and as one function growing at the past end; where both fit, they cover the same relations,
 and the election takes the one whose relations read as they stand on the board (R24).
 
 **One word, several interneurons.** Which stretch an interneuron stands for is decided by what recurred twice

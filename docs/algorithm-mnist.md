@@ -12,12 +12,12 @@ what the levels leave on the apex, and how the digit is taught and then inferred
 time (D1): a pixel sees the eight pixels around it, and the nine at those places and its own in the frame
 before (D5). It declares one event dimension, `pixel`, with two buckets, black and white, so the
 channel has two base neurons, and every point of the image fires one of them in every frame (D52). Nothing is
-silent: a blank region is white pixels, each an activation, and the edge of a stroke is where black stands
+silent: a blank region is white pixels, each an activation, and the relation of a stroke is where black stands
 beside white. A diagonal is two black pixels one step apart in `x` and in `y` at once, one relation with a
 component in each (D34), and the arrangement of black and white around a pixel is its neighborhood (D7). Each
 image is one frame, and consecutive images are unrelated.
 
-A bare pixel costs its relations to the pixels around it, black and white alike, one edge each, less those
+A bare pixel costs its relations to the pixels around it, black and white alike, one relation each, less those
 the others imply (D12, D13, D55). A call costs one per relation that did not come true and one per argument.
 
 The resolution is the environment's to raise. With 256 buckets the dimension reports a gray level at each point.
@@ -50,7 +50,7 @@ policy every connection is to a digit action, and a reward scoped to the digit c
 **What a function saves.** Take a function of `k` relations from ink's history, each landing on a pixel at
 the offset it names in `x` and `y` (D15, D22):
 
-| | edges |
+| | relations |
 |---|---|
 | A, the `k` relations it lands on | `k` |
 | B, the call's count | `0` |
@@ -58,7 +58,7 @@ the offset it names in `x` and `y` (D15, D22):
 | entry in the dictionary: `k` relations | `k` |
 | worth at strength 2 | `k` |
 
-A relation that lands on nothing is a failure, one edge with the call (D12), so a function of `k` relations is
+A relation that lands on nothing is a failure, one relation with the call (D12), so a function of `k` relations is
 taken where fewer than half of them fail. The worth is positive at strength 2 for any `k`, and ink's history
 holds such occasions by the hundred.
 
@@ -75,7 +75,7 @@ fixes its neighbor in every dimension at once.
 and the greedy cover takes the placement with the highest coverage over price each round, a placement's
 coverage falling as earlier rounds cover its neighbors (D28, R24). What is left is a tiling: placements that do
 not overlap, each covering a pixel and the neighbors its relations landed on, and the pixels no placement pays
-for standing bare (R27). A placement at the edge of a stroke has relations that did not come true, one edge
+for standing bare (R27). A placement at the relation of a stroke has relations that did not come true, one relation
 each, and is taken while fewer than half of its relations fail.
 
 **Time.** At `t:−1` a pixel sees the previous image's calls, and its pixels in time, a dimension no call over
