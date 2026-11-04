@@ -678,11 +678,13 @@ groups, places and keeps (§6).
 > relations to the outside, and where it lay between, they are gone (D12, D5). Every relation to an activation
 > an end replaced, in the row of each neuron that saw it as on the board, the machine changes to the call's
 > activation at that offset, in the pass that tells the covered activation who covered it: a row written at a
-> lower level of the frame holds the call there from then on, and counts it (D18, R50). It is not heard:
-> resolution reads its coverer's standing inferences, not its own (R46). And it stops connecting: from the
-> frame after it is covered it writes nothing about what follows, though its row still takes what followed,
-> since the history is what happened and not what was heard (D18). Where two calls end at it, both stand at
-> its place and both expand to it (R28); nothing lands on an activation between another call's ends (D28).
+> lower level of the frame holds the call there from then on, and counts it (D18, R50). Where several calls
+> end at it, the row holds one relation per call, each to that call's neuron at the offset, and one where two
+> of them are the same neuron at the same offset (D34). It is not heard: resolution reads its coverer's
+> standing inferences, not its own (R46). And it stops connecting: from the frame after it is covered it
+> writes nothing about what follows, though its row still takes what followed, since the history is what
+> happened and not what was heard (D18). Where two calls end at it, both stand at its place and both expand
+> to it (R28); nothing lands on an activation between another call's ends (D28).
 >
 > **The last connection.** In the frame it is covered, the activation connects once more, to the neuron that
 > covered it, the function's interneuron, and to each where two cover it. The connection is at the offset
