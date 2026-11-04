@@ -56,8 +56,8 @@ executes what the machine outputs, and pays what was right and what was wrong.
 3. **The answer is named at the second showing, whole.** At frame 2 of the second showing `(say, 3, 0)` has
    strength 2 and starts `{say, 3@0}`. At its fit, four relations are candidates at strength 2 (R50). The said
    `3` after the shown `3` leads back to a node the function has, closing a cycle, so it goes first (D15, R50):
-   the `3` answers for it, its row holding `say` at `0` and the `3` at `−1` at both answer frames, `with` 2,
-   `without` 0, worth 1. `say` after `run` adds a node: `say` answers, its row holding the `3` at `0` and `run`
+   the `3` counts it, its row holding `say` at `0` and the `3` at `−1` at both answer frames, `with` 2,
+   `without` 0, worth 1. `say` after `run` adds a node: `say` counts it, its row holding the `3` at `0` and `run`
    at `−1`, worth 1. The other two, `say` after the shown `3` and the said `3` after `run`, are implied once
    those hold (D34). Joined one at a time, each raises the function's worth, from −1 to 1, the three relations'
    worths less the two occasions (D57, R54). The answer is `{say, 3@0, run@−1, 3 after 3}`. Placed again

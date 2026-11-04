@@ -52,7 +52,7 @@ turns on.
    with its relations; the first and third are replaced by the call's activations (D10). At the second tap of
    any run the same fit reads one lap, 1 for 1, and is not taken: the first two taps stand bare.
 2. **The cue does not join the cycle.** `stop` stands beside one tap in three. Its relation to `tap` at offset
-   zero is a candidate of the cycle, and the `tap` answers: `with` one per run, `without` two, so it never
+   zero is a candidate of the cycle, and the `tap` counts it: `with` one per run, `without` two, so it never
    pays and never joins (D57, R50). `go` before the taps cannot join either: no relation leads on from a node
    of a cycle in the direction the cycle advances in (D15). So the cycle is the taps and nothing else.
 3. **The end of the loop is a function over the call.** `stop` fires in the frame `taps` does, and sees the

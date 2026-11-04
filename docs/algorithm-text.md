@@ -55,8 +55,8 @@ is named at three letters, where a call first covers more than it costs.
 
 Take `the`. The pair `{e, h@−1}`, origin `e`, is in the dictionary from the second `he`, never placed. At every
 `the` the relation `t` before `h` is a candidate at the pair's past end: it shares the node `h` with the fit
-(R50). The node it attaches at answers for it. `h`'s row holds `t` at `−1` and `e` at `+1` (D18), so `h`
-answers how many of its activations hold `e` after it together with `t` before it, and how many hold `e` after
+(R50). The node it attaches at counts it. `h`'s row holds `t` at `−1` and `e` at `+1` (D18), so `h`
+counts how many of its activations hold `e` after it together with `t` before it, and how many hold `e` after
 it without `t`: `with` and `without` (D47, R50). At the second `the`, `with` is 2. The candidate's worth in
 the function is `with − without − 1`, 1, and the function's worth with it is the two relations' worths less its
 two occasions, 0, against −1 without it: a gain of 1, higher than the relation's contribution alone, −1, so it
@@ -81,7 +81,7 @@ one interneuron for every `the` in the stream (D11).
 
 **The stretch grows at its past end.** `THE`'s end stands where `t` stood and sees one beyond it (D4), the
 letter before `t`. Where that recurs, the relation to it is a candidate at the function's past end, and `t`
-answers for it: its row holds the letter before it and `h` after it. After a space, `{e, h@−1, t@−2, space@−3}`
+counts it: its row holds the letter before it and `h` after it. After a space, `{e, h@−1, t@−2, space@−3}`
 forms at the second ` the`, four nodes, three relations, covering 3 for 1. So a stretch grows one letter per
 recurrence toward its past, flat, in one function, and nothing has to stand on the board for it but the
 letters.

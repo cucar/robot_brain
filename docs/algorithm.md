@@ -675,11 +675,14 @@ groups, places and keeps (§6).
 > **D10 — Inhibition.** A call that lands on an activation as a fixed node does three things to it, all from
 > the frame it is covered in. It leaves the count with every relation of it: the cost counts its coverer's
 > call, not it; where it was one of the call's ends, the call's activation stands at its place and holds its
-> relations to the outside, and where it lay between, they are gone (D12, D5). It is not heard: resolution
-> reads its coverer's standing inferences, not its own (R46). And it stops connecting: from the frame after it
-> is covered it writes nothing about what follows, though its row still takes what followed, since the history
-> is what happened and not what was heard (D18). Where two calls end at it, both stand at its place and both
-> expand to it (R28); nothing lands on an activation between another call's ends (D28).
+> relations to the outside, and where it lay between, they are gone (D12, D5). Every relation to an activation
+> an end replaced, in the row of each neuron that saw it as on the board, the machine changes to the call's
+> activation at that offset, in the pass that tells the covered activation who covered it: a row written at a
+> lower level of the frame holds the call there from then on, and counts it (D18, R50). It is not heard:
+> resolution reads its coverer's standing inferences, not its own (R46). And it stops connecting: from the
+> frame after it is covered it writes nothing about what follows, though its row still takes what followed,
+> since the history is what happened and not what was heard (D18). Where two calls end at it, both stand at
+> its place and both expand to it (R28); nothing lands on an activation between another call's ends (D28).
 >
 > **The last connection.** In the frame it is covered, the activation connects once more, to the neuron that
 > covered it, the function's interneuron, and to each where two cover it. The connection is at the offset
@@ -982,7 +985,7 @@ the price of seeing one position: a deeper hierarchy, never a number nobody can 
 
 # 4. Neuron
 
-What this section defines belongs to one neuron: what it holds, and what it answers. A neuron records, counts
+What this section defines belongs to one neuron: what it holds, and what it counts. A neuron records, counts
 and returns. It decides nothing about what is covered, and it does not know that functions exist.
 
 ## 4.1 Interface
@@ -997,12 +1000,12 @@ it is used.
 |-------------------|-------------------------------------------------------------------------------------------------------------------|------------|
 | allocate neuron   | The machine allocates it the first time a fit of a function is accepted and a neuron is free, holding nothing: the function's call neuron. | R16 |
 | activate          | At its level: record the frame's activations, and return the relations from each with their strengths.             | §5, R20    |
-| count             | At its level, after find: given the functions it stands in and their candidates, answer with and without for each relation and each candidate, over its history. | R50, D47   |
+| count             | At its level, after find: given the functions it stands in and their candidates, return with and without for each relation and each candidate, over its history. | R50, D47   |
 | forget neuron     | The machine removes a decommissioned neuron from every row and relation of the history that names it.              | R38        |
 | connect           | After the frame's last level, reaching every open activation at age 1 and beyond: it delivers what stood on the apex this frame and any reward; the activation's row takes what stood as what followed it, its connections strengthen while it is uncovered, and the call collects nothing. | §7.1, D18 |
 | infer             | After the frame's last level, reaching every activation at age 0: it delivers nothing and collects what the activation infers. | §7.2 |
 
-In `activate` a neuron records and returns, in the frame it fires. In `count` it answers over its history. In
+In `activate` a neuron records and returns, in the frame it fires. In `count` it counts over its history. In
 recognition the machine places what the dictionary holds, moves relations between functions, elects and
 allocates. In `connect` and `infer` a
 neuron learns what followed and infers what comes next. In selection the machine chooses among those inferences
@@ -1043,8 +1046,8 @@ no neuron records it. The machine makes it (R52).
 
 > **D47 — Relation index.** What a neuron counts over its history (D18): every relation from its own activation
 > that its rows hold, each with its **strength**, the number of rows that hold it. It is updated when a row is
-> admitted, when a row takes what followed (D18) and when a row is evicted, and at no other time. Asked for a set
-> of relations it is an end of and one more, it answers how many rows hold the set with the one more and how many
+> admitted, when a row takes what followed (D18) and when a row is evicted, and at no other time. Handed a set
+> of relations it is an end of and one more, it returns how many rows hold the set with the one more and how many
 > hold the set without it (R50).
 
 How the index is laid out is the implementation's. What it holds is not: a relation's strength is the number of
@@ -1178,8 +1181,8 @@ frame reported, each after it over what the level before accepted, until a level
 |------------|-------------|
 | activate   | Fire every interneuron the level below accepted, at its fit's two ends (D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations with strengths. |
 | find       | Read every returned relation in the index, as it is and with either end open, and place every function it reaches on the board wherever its relations match, one fit per place (R53, D31). |
-| count      | Hand each neuron every function it stands in, placed at this level or not, with the candidates of the placed ones, and call `count` on it: it answers with and without for each relation and each candidate (R50, D47). |
-| group      | Over those answers, move each relation where the dictionary's worth rises most, to a function it is a candidate of, one that closes a cycle before one that adds a node, the nearest on a tie, to its own function or to none, and start a function for each recurring relation no function holds (R50, R54, R18). |
+| count      | Hand each neuron every function it stands in, placed at this level or not, with the candidates of the placed ones, and call `count` on it: it returns with and without for each relation and each candidate (R50, D47). |
+| group      | Over those counts, move each relation where the dictionary's worth rises most, to a function it is a candidate of, one that closes a cycle before one that adds a node, the nearest on a tie, to its own function or to none, and start a function for each recurring relation no function holds (R50, R54, R18). |
 | elect      | Take the fits best first, the highest coverage over price each round, stopping when the board is covered (R24). |
 | allocate   | Give each accepted function with no interneuron one, reused where a stretch comes round (R43), allocated otherwise where a neuron is free (R16). It fires at the next level. |
 
@@ -1207,8 +1210,8 @@ argument.
 > different frames.
 >
 > **Within a level the order is activate, find, count, group, elect, allocate.** It cannot be otherwise: what
-> fires is what the level before accepted; what a neuron returns is what is placed; the neurons are asked over
-> what was placed; the moves read their answers; the election is over everything placed, as the functions now
+> fires is what the level before accepted; what a neuron returns is what is placed; the neurons count over
+> what was placed; the moves read their counts; the election is over everything placed, as the functions now
 > stand, since a function changed last may cover the board better than any placed first, so nothing is taken
 > until the whole board has been read; and an interneuron is allocated only for a fit the election accepted
 > (R16). The dictionary changes in group, and the index is read before and after it.
@@ -1267,25 +1270,25 @@ argument.
 > cycle and it leads on from a node of the cycle in the direction the cycle advances in; or where the function
 > has a cycle and it would close another.
 >
-> **What the neurons answer.** The machine hands each neuron every function it stands in, which the index
+> **What the neurons count.** The machine hands each neuron every function it stands in, which the index
 > gives by neuron (D36), placed at this level or not, with the candidates of the ones that were placed. A
 > function nothing reaches any more, one naming a call that no longer fires, is still handed to the neurons
 > that stand in it, so its worth is still read and it can still leave (R18). For each relation of the
 > function the neuron is an end of, and for each
-> candidate it shares, the neuron answers two numbers over its history (D47): **with**, how many of its
+> candidate it shares, the neuron returns two numbers over its history (D47): **with**, how many of its
 > activations hold the function's other relations at it together with this one, and **without**, how many hold
-> them and not this one. Every activation of an interneuron is a fit of its function, so it answers over all
+> them and not this one. Every activation of an interneuron is a fit of its function, so it counts over all
 > its activations, for any candidate within its reach (D4). A row holds the frame around the activation on both
-> sides in time (D18), so a candidate at either end of a function is answered by the node it attaches at: for
+> sides in time (D18), so a candidate at either end of a function is counted by the node it attaches at: for
 > a candidate at the past end, the node sees the function's relation after it and the candidate before it in
-> one row. **A relation is answered only by an end that can see it**: a neuron whose reach covers the
-> relation's offset (D4); an end whose reach falls short of the offset holds nothing of it and answers for it
-> never. Among the ends that can see it, a relation two of them answer for is read at the answer with the more
+> one row. **A relation is counted only by an end that can see it**: a neuron whose reach covers the
+> relation's offset (D4); an end whose reach falls short of the offset holds nothing of it and counts it
+> never. Among the ends that can see it, a relation two of them count is read at the count with the more
 > activations behind it, as a returned relation is (R21).
 >
-> **A relation to a node is asked for through the calls that stand at it.** A fit lands a node on its neuron
+> **A relation to a node is counted through the calls that stand at it.** A fit lands a node on its neuron
 > or on an end of a call that replaced an activation of that neuron (D54), so the count must read both as the node.
-> The machine holds the dictionary and knows every such call; it writes the relation into the query as a set,
+> The machine holds the dictionary and knows every such call; it hands the relation as a set,
 > the node's neuron and each of those calls at the same offset, and the neuron counts a row as holding the
 > relation when it holds any of them. The neuron knows nothing of calls or their ends; the mapping is the
 > machine's, the one the fit makes. Without it a relation that keeps landing on a call would count as never
@@ -1579,7 +1582,7 @@ With `G` relations returned per activation, `F` functions reached per relation, 
 | Step | Work |
 |---|---|
 | find | per relation, three index reads, widened by the classes its far neuron is in; per function reached, `L` relations matched per fit |
-| count | per neuron, per function it stands in, placed or not, `L + C` answers, each a pass over its `H` rows |
+| count | per neuron, per function it stands in, placed or not, `L + C` counts, each a pass over its `H` rows |
 | group | per candidate, the worth of every relation of the function it would join, with it and without it, and the same for the function it stands in; one worth per relation of each function placed |
 | elect | the fits placed, a greedy cover over the board, stopping when it is covered |
 

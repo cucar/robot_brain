@@ -28,7 +28,7 @@ the dictionary at a worth of −1 (D57).
 
 **The cycle closes from the bare letters.** At frame 6 the pair's fit is placed again, at `y`, landing on the
 `x` at 5. `(x, y, −1)` is at strength 2 and shares `x` with the fit, so it is a candidate; its other end, `y`,
-is a node the function has, so it would close the cycle (R50, D15). The node it attaches at answers for it.
+is a node the function has, so it would close the cycle (R50, D15). The node it attaches at counts it.
 `x`'s row holds `y` before it and `y` after it, so `x` counts its activations that hold `y` after together
 with `y` before, the `x` at 3 and at 5: `with` 2. The `x` at 1 has `y` after it and nothing before, but the
 relation closes the cycle, and where it does not land the lap ends, which is no failure, so its `without` is
@@ -88,7 +88,7 @@ already.
 # 4. The worth
 
 Nothing is kept for the function: its worth is read from the neurons at every level it is placed at (R50,
-D57). `y` answers for `y` after `x`, `x` for `x` after `y`, each over its own history. In a stretch `y` after
+D57). `y` counts `y` after `x`, `x` counts `x` after `y`, each over its own history. In a stretch `y` after
 `x` holds at every `y`, so its `with` climbs and its `without` stays at zero. `x` after `y` holds at every `x`
 but the first of each stretch, and there the lap ends, which is no failure, so its `without` stays at zero too.
 Each relation is worth `with − 1`, and the function the two less one per run, since each call covers
