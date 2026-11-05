@@ -14,11 +14,12 @@ of space, and it is the only record the machine keeps of what happened: it holds
 neuron sees the edges around each of its own activations and reports them with how often each has held. The
 machine groups the edges into **functions**, graphs over neurons that keep recurring, names each with an
 interneuron, and from then on the name stands where the graph recurs. A function is recognized from any node of
-it, in the frame its latest node fires, and its call stands at the two ends of what it covers, with a relation
-between them; what always followed it is a function at the level above, over its call. Where a function is general
-it leaves a **variable**, a node whose neuron changes from one occurrence to the next and is filled by what stands
-there. The interneurons are nodes like any other, so the next level groups them in turn, and the dictionary is a
-hierarchy of named graphs.
+it, in the frame its latest node fires, and its call is one activation of the interneuron in a **pose**: which
+node the fit ran from and to, in which direction, and how many laps. The call stands in place of what it covers
+and inherits every relation of it; what always followed it is a function at the level above, over its call.
+Where a function is general it leaves a **variable**, a node whose neuron changes from one occurrence to the
+next and is filled by what stands there. The interneurons are nodes like any other, so the next level groups
+them in turn, and the dictionary is a hierarchy of named graphs.
 
 **A function is a procedure in a very small language.** Its instructions are the base symbols, each at a
 position in space and time; a line may call another procedure at a position; a variable is bound where it is
@@ -66,7 +67,7 @@ is.
 | Loss      | Description                                                                                                                                       | Reference |
 |-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
 | memory    | A neuron has limited memory: it remembers only its most recent activations, and reports its relations over those, so what it saw earlier no longer shapes the dictionary. | D18       |
-| laps      | The dictionary holds shapes without their sizes: a cycle says that a pattern comes round, never how many times. The size is on the board, as the relation between a call's two ends, and it reaches the dictionary only where one size recurs and a function above fixes that relation. | D15, D37, D13 |
+| laps      | A call's pose says how many laps its cycle ran, and a relation to the call names that count, so the dictionary holds a stretch at each length it recurred at: the same shape at two lengths is two functions until a variable over counts joins them. | D15, D37, D34 |
 
 **A neuron's vision is a limit, not a loss.** A base neuron sees its neighbors one position away in each
 dimension and nothing beyond (D4). What lies farther reaches the dictionary through the hierarchy: an interneuron
@@ -242,15 +243,16 @@ that fires through it (D8), and expansion ends on base symbols read back through
 > one symbol per channel at each point, and a dimension with nothing to report there is silent. That bound is a
 > property of the input, not a rule the machine imposes.
 >
-> **Above the base, several neurons can fire at one place.** Several accepted fits may end at one activation
+> **Above the base, several neurons can fire at one place.** Several accepted fits may land on one activation
 > (D28), so several interneurons may stand at one place (D53), and one function fitting at several places is
 > one interneuron that fires at each (D15).
 >
-> **An activation has a place, and a call stands at two.** A base activation stands where the input laid it. A
-> call is two activations of the interneuron, its **start** at the latest activation the fit landed on and its
-> **end** at the earliest (D37, D53), and between them lies everything its function's relations landed on, all
-> of it already happened (D54). An activation that is the end of one call may be the start or the end of
-> another: two lines meet at a corner.
+> **An activation has a place and a pose.** A base activation stands where the input laid it, in the one pose a
+> base neuron has. A call is one activation of the interneuron, at the place of the latest activation the fit
+> landed on, in the pose the fit read (D37, D53): its **phase**, the node the fit started at, the node it ended
+> at and the direction it read the cycle in, and its **laps**, how many times it went round. Everything the
+> fit landed on has already happened (D54). A pose is a name: a relation to the activation names the neuron in
+> that pose (D34), and nothing in it is counted (D13).
 
 > **D9 — Activation window.** An activation at place `f` in time has two spans. It **stands on the board**
 > through `f + S`, where `S` is the longest reach in time among the neurons the machine holds, one beyond the
@@ -267,14 +269,13 @@ that fires through it (D8), and expansion ends on base symbols read back through
 >
 > The machine holds the activation open, not the neuron. There is one open activation per neuron and place, and
 > it holds: the activation, its place on the board, its age, and the age it was covered at, if it has been. An
-> interneuron's activation holds besides what expansion reads (R28): the function that fired it, which of the
-> function's relations did not come true, and the activations its fit landed on and bound, credited or not.
+> interneuron's activation holds besides what expansion reads (R28): the function that fired it, its pose, which
+> of the function's relations did not come true, and the activations its fit landed on and bound, credited or
+> not.
 >
 > **Age is per activation, and a neuron can carry several ages at once.** An activation's age is the frames
 > elapsed since the frame of its place, `0` through `reach_t`; a new activation is the one at age 0, base and
-> interneuron alike. A call's end stands at an earlier place and is born at that place's age; it is open as
-> long as the call's start is, and connects at its own age (D53, R31). It never stands at the present, so it
-> infers nothing and votes nothing (R36, R46): the start speaks for the call.
+> interneuron alike.
 >
 > **Covered at** is the age at which an accepted call first landed on the activation as a fixed node, none
 > until one does. That comes late (R27), and nothing undoes it: later calls may land on the activation too,
@@ -307,17 +308,19 @@ assumes for anything no node states.
 > activation it covers or binds is strong, and weak when every one of them is: a situation made entirely of
 > inferred inputs is inferred.
 
-> **D37 — Call.** One activation of a call neuron (D48), together with its **arguments**: the activations bound in
-> its function's variables on that occasion (D10, D38). It is made in one of two ways and is the same thing either
-> way. **Recognized**: the election accepts a fit (R24), and the call neuron fires at the fit's two ends (D53),
-> its **start**, the latest activation the fit landed on, at age 0, and its **end**, the earliest, at the age of
-> that place, both as strong as what it covers (D40); the relation between the two is the call's own, one edge
-> (D13); its arguments are what stood in the variables. **Inferred**: a connection names the call neuron at an
-> offset, and an expansion places the call there, at its completion, weakly (R36), its nodes at the frames back
-> from it; the part that lies ahead is what it proposes, for the report to make strong what it placed (R30), and
-> its arguments are bound from what has happened where a variable's node has happened, and placed where it has not
-> (D44, R28). A call carries its own relation and nothing else: what it is stands in its function, and what its
-> arguments are stands on the apex beside it. What it records is what expansion needs (D9).
+> **D37 — Call.** One activation of a call neuron (D48), in a pose (D8), together with its **arguments**: the
+> activations bound in its function's variables on that occasion (D10, D38). It is made in one of two ways and
+> is the same thing either way. **Recognized**: the election accepts a fit (R24), and the call neuron fires once,
+> at the place of the latest activation the fit landed on, at age 0, in the pose the fit read, as strong as what
+> it covers (D40, D53); among several at one frame the latest is the one at the least place in the order the
+> dimensions are declared, as the origin is (D15), so a row's call stands at its least `x`. It costs one (D13);
+> its arguments are what stood in the variables. **Inferred**: a
+> connection names the call neuron in a pose at an offset, and an expansion places the call there, at its
+> completion, weakly (R36), its nodes at the frames back from it; the part that lies ahead is what it proposes,
+> for the report to make strong what it placed (R30), and its arguments are bound from what has happened where
+> a variable's node has happened, and placed where it has not (D44, R28). A call carries its pose and nothing
+> else: what it is stands in its function, and what its arguments are stands on the apex beside it. What it
+> records is what expansion needs (D9).
 
 **A function is recognized or inferred, and both kinds of member take part in both.** Recognized, a function
 says that its events stood and its actions ran. Inferred, it is expanded (R28): its actions are placed as the
@@ -329,10 +332,11 @@ connection read.
 
 > **D4 — Reach.** How far an activation sees, in each activation dimension (D1), and in all of them at once. A
 > base activation sees one position: the places within one of it in every dimension of space, in this frame and
-> the frame before. Each of an interneuron's activations sees one position beyond the farthest node its function
-> places from its latest (D15, R28), in each dimension, from its own place. In time the start is the latest node,
-> so it sees back over all of what the call stands for, and one frame more. Where what it stands for comes back to
-> an interneuron already expanded, it stops there (D36), and so does its reach.
+> the frame before. Each of an interneuron's activations sees one position beyond the farthest activation its
+> fit landed on (D53, R28), in each dimension and in each direction: it sees what every activation it stands for
+> saw, and no further. In time its place is the latest activation it landed on, so it sees back over all of what
+> it stands for, and one frame more. Where what it stands for comes back to an interneuron already expanded, it
+> stops there (D36), and so does its reach.
 >
 > In space the reach runs either way; in time it runs back, and the same number runs forward as the span over
 > which the activation's row takes what followed it and its neuron connects (D9, D18). `reach_t` is the reach
@@ -351,9 +355,9 @@ connection read.
 > - `b` is in the same frame as `a` or in an earlier one.
 > - `b` is within `a`'s reach in every activation dimension they share (D4), and is not at `a`'s own place.
 > - `b` stands on the apex: no accepted call has landed on it (D24). A covered activation is a neighbor of
->   nothing. Where a call's start or end stands at `b`'s place, the call is the neighbor there, and the
->   relation to it is the relation `b` had: the call's ends keep the relations of the activations they
->   replaced, and what lay between is gone with its relations (D53, D54, D10).
+>   nothing. Where a call landed on `b`, the call is the neighbor there, in its pose, and the relation to it is
+>   the relation `b` had: a call inherits every relation of the activations it landed on that its fit did not
+>   cover, and where several calls landed on `b`, each is a neighbor there (D53, D54, D10).
 > - Where `a` is a call, `b` is nothing its fit landed on, nor anything under what it landed on, at any depth:
 >   a call never sees what it stands for (D24, R28).
 > - The neighborhood policy allows `b`'s kind beside `a`'s (D50).
@@ -380,14 +384,15 @@ what was done together.
 > off removes that kind of target from that kind of holder's neighborhoods or connections, and nothing else:
 > what stands on the apex infers in every setting (D49), and the policy restricts only what it reaches.
 
-> **D26 — Neighbor.** **A neighbor is a neuron at an offset**: the neuron of an adjacent activation (D5), at its
-> offset (D6). At temporal offset 0 a neighbor co-occurs and at negative offsets it led here; **both are the same
-> kind of thing**, and a neighbor in space, or in space and time at once, is one more of the same.
+> **D26 — Neighbor.** **A neighbor is a neuron in a pose at an offset**: the neuron of an adjacent activation
+> (D5), in the pose it fired in (D8), at its offset (D6). At temporal offset 0 a neighbor co-occurs and at
+> negative offsets it led here; **both are the same kind of thing**, and a neighbor in space, or in space and
+> time at once, is one more of the same.
 >
 > **A neuron can be its own neighbor.** Two activations of one type at different places each name the other at a
 > nonzero spatial offset, and in time a neuron stands beside its own earlier activation. Offset zero in every
 > component is where the activation itself sits, and an activation is not its own neighbor there. Above the base
-> several interneurons standing at one place are each other's neighbors at offset zero.
+> two calls that landed on one activation are each other's neighbors, at the offset between their places.
 
 > **D7 — Neighborhood.** The set of neighbors (D26) one activation observes is its **neighborhood**. In a text
 > stream, with time its one dimension, the neighborhood of `s` in `p a r i s` is `i` at −1, and `p a r` are out
@@ -403,18 +408,18 @@ what was done together.
 > **An activation bound in a variable is a neighbor like any other** (D10): the neuron that stood, at its own
 > place. Which variable it stood in is the call's business, not the neighbor's.
 
-> **D34 — Relation.** Two neurons and the offset between them, one component per activation dimension the two
-> share (D1, D6): the same shape as a connection (D25). There is one kind of relation in the design: what a
-> neuron returns is a relation, what a function holds is a relation, and they are the same object. Two nodes
-> that differ in several dimensions are in one relation, with a component in each. In a neuron's relation
-> index, one end is the neuron's own activation and the other a neighbor. In a function, both ends are its
-> nodes, and a relation from a neuron to itself joins one node to itself.
+> **D34 — Relation.** Two neurons, each in a pose, and the offset between them, one component per activation
+> dimension the two share (D1, D6): the same shape as a connection (D25). There is one kind of relation in the
+> design: what a neuron returns is a relation, what a function holds is a relation, and they are the same
+> object. Two nodes that differ in several dimensions are in one relation, with a component in each. In a
+> neuron's relation index, one end is the neuron's own activation and the other a neighbor. In a function, both
+> ends are its nodes, and a relation from a neuron to itself joins one node to itself.
 >
-> **A call's end is part of its name.** An interneuron's activation is the start or the end of a call (D53),
-> and a relation to it names which, as it names the neuron: the start and the end are two symbols a relation
-> can name, at no cost (D13). The relation a call holds between its own two ends is a relation of the
-> interneuron to itself, and the index keeps it apart from a relation between the ends of two calls of that
-> interneuron, which can read the same at the same offset (D47).
+> **A call's pose is part of its name.** A relation to an interneuron names it in the pose its activation fired
+> in (D8, D53): which node the fit ran from and to, in which direction, and how many laps. A base neuron has one
+> pose, so at the base a relation is two neurons and an offset. Two calls of one interneuron in different
+> poses are different ends for a relation, as two neurons are, and two in one pose at one offset are one
+> relation. A pose is a name, and costs nothing (D13).
 >
 > **A relation has one form, and in time it runs backward.** Where the offset has a component in time, the
 > relation runs from the later neuron to the earlier one, at a negative offset there: that is how the neuron
@@ -437,8 +442,8 @@ what was done together.
 ## 3.5 The graph
 
 > **D55 — Graph.** What a run leaves: a set of **nodes**, each an activation of a neuron (D8), and a set of
-> **edges**, each a relation between two nodes (D34). A node carries its neuron's name and nothing else. An edge
-> carries an offset, one component per dimension (D6). Two nodes are joined by at most one edge. A node's place
+> **edges**, each a relation between two nodes (D34). A node carries its neuron's name and its pose, and nothing
+> else. An edge carries an offset, one component per dimension (D6). Two nodes are joined by at most one edge. A node's place
 > in the world is not in the graph: it is wherever the edges put it relative to the nodes it is joined to, and
 > two nodes joined by no path stand in no particular relation.
 >
@@ -449,13 +454,13 @@ what was done together.
 >
 > **A piece of the graph is stated as nodes and edges, nothing more.** A piece, in the dictionary or on the
 > board, is its nodes and its edges, each between two of those nodes, with an offset. Two parts joined by no
-> edge need nothing between them. The cost of a piece is its edges, one each: a node is in the graph through
-> its edges and costs nothing of its own (D13).
+> edge need nothing between them. The cost of a piece is its edges, one each, and one per call: a base node is
+> in the graph through its edges and costs nothing of its own, and a call costs one, for standing in place of
+> a piece (D13).
 >
-> **A call is two nodes and one edge.** On the board a call stands in place of the piece it covers: its two
-> nodes, start and end, joined by its own edge, with the edges that reached the piece's two ends now reaching
-> the call's. The nodes between the ends and their edges are not in the board's graph; expansion puts them
-> back (R28).
+> **A call is one node.** On the board a call stands in place of the piece it covers: one node, in its pose,
+> with every edge that reached the piece from outside now reaching it. The piece's nodes and the edges among
+> them are not in the board's graph; expansion puts them back (R28).
 >
 > **An edge implied by others is not counted.** A path of edges fixes the offset between its two end nodes,
 > component by component, so an edge between them says nothing new (D34), and the count holds one of them.
@@ -477,11 +482,12 @@ once each. The board is the graph of the frame as it stands, with the calls in p
 >
 > **Its origin** is its latest node, fixed in the dictionary (D56): the node later than every other in time,
 > and among several at one frame, the one at the least place in the order the dimensions are declared (D1).
-> The call's start fires there (D37, D53), and expansion runs back from there (R28). The origin never moves: a
+> The call fires at the place of the latest activation the fit landed on, which is the origin's where the fit
+> reached it (D37, D53), and expansion runs from the node the pose starts at (R28). The origin never moves: a
 > relation that would make another node later than it is no candidate (R50). A fit may enter the function at
-> any node (D54): the origin is where the call's start stands, not where recognition begins. A function whose
-> latest node is in its cycle has no fixed origin, since the last lap may stop at any node of it; its call's
-> start is the latest activation the fit landed on, whatever node that is, and its end the earliest (D37).
+> any node (D54): the origin is where the function is listed from, not where recognition begins. A function
+> whose latest node is in its cycle has no fixed origin, since the last lap may stop at any node of it; its
+> call's pose says which node the fit started at and which it ended at (D37).
 >
 > **A function is listed from its origin.** Node after node, each relation leads from the node before to the
 > next. A node is listed once. An open node is listed as a neuron is (D38).
@@ -575,18 +581,17 @@ never placed alone, and promotes no interneuron: what stands in it stays on the 
 
 > **D53 — Interneuron.** The neuron the machine allocates for a function, its **call neuron** (D48). It is
 > allocated the first time a fit of the function is accepted and a neuron is free (R16). It has an id and no
-> dimension and no channel. **It fires at the fit's two ends** (D37): at the start, the latest activation the
-> fit landed on, in the frame the fit is accepted, at age 0; and at the end, the earliest, at the age of that
-> place. Two activations per fit, standing where the two activations they replace stood, and between them
-> everything the fit landed on (D54). A call the fit lands on stands for both its ends: the new call's start
-> is the latest of the activations the fit landed on and the starts of the calls it landed on, and its end the
-> earliest of them and those calls' ends, so the end of a stretch is one activation however many calls have
-> grown over it (R23). The relation between a call's two ends is its own, one edge (D13), and it says how far
-> the call reaches: for a cycle, that offset over the lap's is the laps it ran.
+> dimension and no channel. **It fires once per accepted fit, in a pose** (D37): at the place of the latest
+> activation the fit landed on, in the frame the fit is accepted, at age 0. The pose is read off the fit: the
+> node the fit started at, the node it ended at, the direction it read the cycle in, and how many laps it went
+> round (D54). The call stands in place of everything the fit landed on, inherits every relation of it the fit
+> did not cover (D10), and sees what it saw (D4). A call the fit lands on is covered whole, with what it stood
+> for, and where it is a call of the same function the new call's laps are those it read and the old call's
+> together, so a stretch is one call however many have grown over it (R23). The call costs one (D13).
 
-An interneuron is not an event or an action, though what it stands for may be either. Where its two ends stand
-is read off the fit, so that other neurons hold it as a neighbor at either end and expansion starts from its
-start. Nothing in the pricing reads where.
+An interneuron is not an event or an action, though what it stands for may be either. Its pose is read off the
+fit, so that other neurons hold it as a neighbor in that pose and expansion reads it. Nothing in the pricing
+reads where it stands.
 
 A neuron is never made or destroyed. It is **allocated** when an interneuron is needed, and **decommissioned**
 when its last function leaves the dictionary, to be allocated again. When none of the machine's `N` neurons is
@@ -597,7 +602,7 @@ free, no interneuron is granted (R16, R24).
 >
 > | Thing | Field | What it holds | Counted |
 > |---|---|---|---|
-> | a function | relations | its relations, each a neuron relation as the neurons return it: two neurons and an offset (D34); together they name its nodes, one per neuron | one per relation; nothing per node |
+> | a function | relations | its relations, each a neuron relation as the neurons return it: two neurons, each in a pose, and an offset (D34); together they name its nodes, one per neuron | one per relation; nothing per node |
 > | | origin | which of its nodes is the origin, its latest (D15); none where the latest node is in a cycle | nothing: the node list begins with it |
 > | | open nodes | which of its nodes are variables, each a class by id or a parameter (D38) | nothing |
 > | | interneuron | the neuron allocated for it, or none (D53) | nothing: the function is reached through it, not stated by it |
@@ -634,21 +639,22 @@ free, no interneuron is granted (R16, R24).
 > **The index is searched by what an interneuron would stand for** (R43): a function's expansion, read from its
 > origin. The search finds an interneuron when three things hold: reading that expansion, it meets the
 > interneuron no further back than the interneuron's own length, that far included; over exactly that length
-> the two expansions are the same; and the meeting is not at the origin. That is how something that comes
-> round again finds the interneuron it had the first time.
+> the two expansions are the same, a cycle's length being one lap; and the meeting is not at the origin. That
+> is how something that comes round again finds the interneuron it had the first time.
 
 **A function and its interneuron are held together.** The machine holds both in its dictionary. No neuron holds
 a function or points at an interneuron: a neuron records what it sees and returns it (§5), and the machine
 groups, places and keeps (§6).
 
 > **D48 — Call neuron.** A function's interneuron: the neuron the machine allocates for a function the first
-> time a fit of it is accepted (R16). It fires when a fit of its function is accepted, at the fit's two ends
-> (D53), covering the function's fixed nodes between them (§6.4); what stands in the function's
-> variables is bound beside it, on the apex (D10). It says which function ran. Its connections are one set for
-> every value its variables have taken, so a function above learns about it regardless of its arguments by
-> naming the call neuron alone, and about one argument by naming the call neuron and the activation bound in
-> that variable. It holds a history, a relation index and connections of its own, like any neuron, and an
-> activation of it expands to what its fit landed on and bound (R28).
+> time a fit of it is accepted (R16). It fires when a fit of its function is accepted, once, in the pose the
+> fit read (D53), covering the function's fixed nodes the fit landed on (§6.4); what stands in the function's
+> variables is bound beside it, on the apex (D10). It says which function ran, and its pose says how. Its
+> connections are one set per pose it has fired in, and for every value its variables have taken, so a
+> function above learns about it regardless of its arguments by naming the call neuron in a pose alone, and
+> about one argument by naming the call neuron and the activation bound in that variable. It holds a history,
+> a relation index and connections of its own, like any neuron, and an activation of it expands to what its
+> fit landed on and bound (R28).
 
 ## 3.8 Apex
 
@@ -664,7 +670,7 @@ groups, places and keeps (§6).
 >
 > **An expected input never reaches the apex.** An activation a function in the dictionary names at its latest
 > node is covered at age 0 by that function's call, recognized in the frame it fires. Where the function holds a
-> cycle, the call at the next lap lands on the start of the call of the lap before and covers it (D54);
+> cycle, the call at the next lap lands on the call of the lap before and covers it (D54);
 > where a function at the level above names the call, its call covers it (D22). So where a function keeps coming true
 > the apex holds one call, the latest, and what arrives is covered as it arrives.
 >
@@ -673,25 +679,27 @@ groups, places and keeps (§6).
 > run.
 
 > **D10 — Inhibition.** A call that lands on an activation as a fixed node does three things to it, all from
-> the frame it is covered in. It leaves the count with every relation of it: the cost counts its coverer's
-> call, not it; where it was one of the call's ends, the call's activation stands at its place and holds its
-> relations to the outside, and where it lay between, they are gone (D12, D5). Every relation to an activation
-> an end replaced, in the row of each neuron that saw it as on the board, the machine changes to the call's
-> activation at that offset, in the pass that tells the covered activation who covered it: a row written at a
-> lower level of the frame holds the call there from then on, and counts it (D18, R50). Where several calls
-> end at it, the row holds one relation per call, each to that call's neuron at the offset, and one where two
-> of them are the same neuron at the same offset (D34). It is not heard: resolution reads its coverer's
-> standing inferences, not its own (R46). And it stops connecting: from the frame after it is covered it
-> writes nothing about what follows, though its row still takes what followed, since the history is what
-> happened and not what was heard (D18). Where two calls end at it, both stand at its place and both expand
-> to it (R28); nothing lands on an activation between another call's ends (D28).
+> the frame it is covered in. It takes it out of the count: the relations of it the fit landed on are covered,
+> paid through the call, and every other relation of it the call inherits, standing in its place, at the
+> offset from the call's place (D12, D5). Every relation to the covered activation, in the row of each neuron
+> that saw it as on the board, the machine changes to the call in its pose at that offset, in the pass that
+> tells the covered activation who covered it: a row written at a lower level of the frame holds the call there
+> from then on, and counts it (D18, R50). Where several calls land on one activation, each covers relations of
+> its own and inherits the rest; an inherited relation is counted once, between places, however many calls
+> hold it; the calls hold one edge between them, at their two poses; and a row that saw the activation holds
+> one relation per call, each to that call's neuron in its pose at the offset, and one where two of them are
+> the same neuron in the same pose at the same offset (D34, D28). It is not heard: resolution reads its
+> coverer's standing inferences, not its own (R46). And it stops connecting: from the frame after it is
+> covered it writes nothing about what follows, though its row still takes what followed, since the history
+> is what happened and not what was heard (D18). Every call that landed on it expands to it (R28); nothing
+> lands on a relation a call covers (D28).
 >
 > **The last connection.** In the frame it is covered, the activation connects once more, to the neuron that
 > covered it, the function's interneuron, and to each where two cover it. The connection is at the offset
 > from the activation to its coverer (D6), in time and in every other activation dimension, as every
 > connection is (D25), and it takes that frame's
-> reward (R31). Then the activation is silent. An activation its coverer's start or end replaced writes
-> nothing, as one covered at age 0 does. Where a later call covers its coverer (R23), the
+> reward (R31). Then the activation is silent. An activation covered at age 0 writes nothing but that. Where a
+> later call covers its coverer (R23), the
 > coverer connects once more the same way, to the new call, and the activation under it stays silent. Without
 > this connection the activation could
 > never learn the neuron built over it: the interneuron did not exist in the frames it was uncovered, and it is
@@ -699,7 +707,7 @@ groups, places and keeps (§6).
 > followed it learns that one neuron, the interneuron, and from then on infers it; the interneuron learns what
 > follows.
 >
-> **A start is covered at age 0.** A call recognized at the present covers the activation its start replaces in
+> **The present is covered at age 0.** A call recognized at the present covers the activation at its place in
 > the frame it fires (D54). That activation never stands on the apex: it writes nothing but its last
 > connection, to the call. Only a recognized call covers. What an inference placed covers nothing (R40).
 >
@@ -731,26 +739,26 @@ groups, places and keeps (§6).
 ## 3.9 Costs
 
 > **D12 — Cost of the graph.** What it takes to state the graph of the run as it stands on the apex, with the
-> accepted calls in place of what they cover: every edge between activations on the apex, the calls' ends
-> among them, and the calls. Nothing joins a node to the graph but the relations the neurons returned, and a node
-> costs nothing of its own: one its neuron related to nothing has no place in the count.
+> accepted calls in place of what they cover: every edge between activations on the apex, the calls among
+> them, and one per call. Nothing joins a base node to the graph but the relations the neurons returned, and a
+> base node costs nothing of its own: one its neuron related to nothing has no place in the count.
 >
 > | On the apex | Counted as |
 > |---|---|
 > | a bare activation | nothing of its own |
 > | a relation between two activations on the apex | its offset, once per pair, and not where other relations on the apex imply it (D55) |
-> | a call | its own edge, between its two ends, one; each relation of its function that did not come true, one each; and each of its arguments, the edge that binds the activation to it, one each |
+> | a call | one, for the activation; each relation of its function that did not come true, one each; and each of its arguments, the edge that binds the activation to it, one each |
 > | an activation bound in a variable | nothing of its own: its binding is counted with the call, and the relations the function fixes are the call's |
 >
-> **What a call takes out of the board** is the nodes its true relations landed on between its two ends, with
-> every edge of theirs, which its function holds once in the dictionary. A node at a variable stays on the
-> apex, bound, and the edge that binds it is counted with the call. An edge between one of the call's ends and a
-> node outside stands as it was, from the call's activation there: it joins the call to the rest of the graph.
-> The call adds one edge of its own, between its ends.
+> **What a call takes out of the board** is the relations its true relations landed on, which its function
+> holds once in the dictionary, and the nodes they joined, which it stands in place of. A node at a variable
+> stays on the apex, bound, and the edge that binds it is counted with the call. Every other edge of a node the
+> call stands for stands as it was, from the call: it joins the call to the rest of the graph, and where two
+> calls stand for one node it is counted once (D10). The call adds one of its own: the activation.
 
 **A call counts its body once and its differences every time.** The function's relations are in the
-dictionary. Each call counts its own edge, which of its relations did not come true and what it binds. What the relations
-fix is not counted again: the offsets among the nodes they join.
+dictionary. Each call counts itself, which of its relations did not come true and what it binds. What the
+relations fix is not counted again: the offsets among the nodes they join.
 
 **A failure is a relation that did not come true.** It is counted with the call, one edge. Whatever stood
 where the relation said is on the apex, uncovered, with its own relations. So a wrong neuron costs the failure
@@ -776,17 +784,18 @@ one place and the same shape at another are counted the same, and nothing in the
 > **D13 — Cost.** Every cost in the design is a count of edges of the graph, a relation between two activations
 > being one (D55, D34): how many it takes to state a piece of the graph, over the fields the dictionary holds
 > (D56). Nothing is stored for it; the
-> count is how the machine compares choices. Every edge costs the same, `1`, and a name costs nothing: a node
-> is in the graph through its edges. Four things are edges in the count: a relation standing on the apex; a call's own
-> edge, between its two ends; a failure, a relation of the function that did not come true where its call
-> stands; and a binding, the edge from a bound activation to the call it is an argument of. A call's own edge
-> is the one edge every call costs: it is what joins its two ends, and it says how far the call reaches (D53).
+> count is how the machine compares choices. Every edge costs the same, `1`, and a name costs nothing: a base
+> node is in the graph through its edges, and a pose is a name (D8). Four things are counted: a relation
+> standing on the apex; a call, one, the price of a node that stands for a piece and so is not in the graph
+> through its edges alone; a failure, a relation of the function that did not come true where its call
+> stands; and a binding, the edge from a bound activation to the call it is an argument of. The one is the one
+> edge every call costs, whatever it covers (D53).
 >
 > | What | Edges |
 > |---|---|
 > | a bare activation on the apex | nothing of its own |
 > | a relation on the apex | `1` |
-> | a call on the apex | its own edge, `1`; one per relation that did not come true, one per argument (D12) |
+> | a call on the apex | `1`; one per relation that did not come true, one per argument (D12) |
 > | a function in the dictionary, of `m` relations | `m` (D56) |
 > | a class or a parameter, in the dictionary | nothing |
 
@@ -818,18 +827,19 @@ occurs is what the worth counts (D57).
 > **A fit is read at the present, over what has happened.** It enters at any node of the function, on an
 > activation at the frame being recognized whose neuron is that node's, and reads the function's relations
 > from there (D31); every node is at or before the present, so every relation of the function is true or
-> failed when the fit is placed, and nothing is pending. Its start is the latest activation it lands on and
-> its end the earliest (D37). Without an activation at the present that some node admits there is no fit.
+> failed when the fit is placed, and nothing is pending. Its pose is the node of the latest activation it lands
+> on, the node of the earliest, the direction it read the cycle in, and the laps it read (D37). Without an
+> activation at the present that some node admits there is no fit.
 >
 > **A cycle is read round, lap after lap.** The relation that closes the cycle (D15) is matched again from the
 > node it reached, and the cycle's relations are matched again after it, one lap further back. The fit goes
 > round while that relation lands, and ends at the lap where it does not. The relation that closes the cycle
 > is never a failure: every fit of a cycle ends where it stops landing, and a lap read once is the cycle run
-> once (D12). So a node of the cycle may land on several activations, one per lap; how many is the
-> relation between the call's ends over the lap's offset (D53). Where the node it reaches is the start of an
-> earlier call of the same function, it lands on that call, covers it whole, and takes its end as its own: at
-> the base reach, in time, a fit reads one lap on the board and covers the call of the lap before. Nothing is
-> read past the cycle. A relation of the cycle's body came true when it held anywhere in the fit, and did not
+> once (D12). So a node of the cycle may land on several activations, one per lap; how many is the call's laps
+> (D53). Where the node it reaches is an earlier call of the same function whose pose starts at that node, it
+> lands on that call, covers it whole, and its laps are those it read and the call's together: at the base
+> reach, in time, a fit reads one lap on the board and covers the call of the lap before. Nothing is read past
+> the cycle. A relation of the cycle's body came true when it held anywhere in the fit, and did not
 > when it held nowhere.
 >
 > **Coming true.** Each relation of a function comes true or does not. It comes true where the board holds a
@@ -838,7 +848,7 @@ occurs is what the worth counts (D57).
 >
 > | Relation, at its far node | Comes true where the far end is |
 > |---|---|
-> | a fixed node | its neuron; or an end of a call that replaced an activation of that neuron, standing at its place (D53): the fit lands on the call and covers its whole count (D22) |
+> | a fixed node | its neuron; or a call whose pose starts at that node, standing at its place (D53): the fit lands on the call and covers its whole count (D22) |
 > | a class | a member; it takes members only (D41) |
 > | a parameter | any neuron where the node is first reached, reading from the node the fit entered at, and the value already bound where it is reached again (D44) |
 >
@@ -851,24 +861,24 @@ occurs is what the worth counts (D57).
 >
 > | | Edges |
 > |---|---|
-> | A | for each relation of the fit that came true, the board relation it stands in for, one; and the whole count of each call the fit lands on at an end, where an end of a call stands at that place for the node's neuron (D12, D54, R23) |
-> | B | the call's count (D12): its own relation, one; one failure per relation that did not come true; one binding per argument |
+> | A | for each relation of the fit that came true, the board relation it stands in for, one; and the whole count of each call the fit lands on, where a call whose pose starts at the node stands at that place (D12, D54, R23) |
+> | B | the call's count (D12): one for the call; one failure per relation that did not come true; one binding per argument |
 > | savings | A less B |
 >
 > A relation that did not come true is in neither: whatever stands there is counted bare either way. What a
 > relation is worth is always what it cost (D13).
 >
-> **A call's count is covered whole.** A fit that lands on a call at one of its ends covers it: the call's
-> count leaves the count, both activations of the interneuron leave the apex, and the function is credited
-> that count, since it is what stood for everything under it (R23). What is under a call went with it: an
-> activation between its ends has no relation left for another fit to land on (D24). So a function saves what
-> it takes out of the count, bare relations and the counts of calls.
+> **A call's count is covered whole.** A fit that lands on a call covers it: the call's count leaves the count,
+> the activation leaves the apex, and the function is credited that count, since it is what stood for
+> everything under it (R23). What a call covers went with it: a relation it covers is there for no other fit to
+> land on, and what it inherited stands, from the call, for a later fit to land on the call through (D24). So
+> a function saves what it takes out of the count, bare relations and the counts of calls.
 
 **What a function's call stands in for is what it covers**; that is A. What it costs is its count; that is B.
 A neuron the function does not name is in neither: it costs what it cost whether the function exists or not.
 
 > **D57 — Worth.** A relation saves nothing by itself: only a call takes anything out of the graph, the board
-> relations its function's relations land on, for the call's own relation, failures and bindings (D12). The worth is that
+> relations its function's relations land on, for the call, failures and bindings (D12). The worth is that
 > saving shared out among the function's relations, since grouping decides relation by relation which belong
 > to a function (R50, R54). The machine keeps no count for it: one relation's share, in one function, is read
 > from the neuron the relation and the function share, over that neuron's history (D18, D47, R50):
@@ -878,14 +888,14 @@ A neuron the function does not name is in neither: it costs what it cost whether
 > | with | the activations of that neuron at which the function's other relations at it held, and this relation held with them |
 > | without | the activations at which the function's other relations at it held, and this relation did not |
 > | worth of a relation | `with − without − 1`: one relation saved at each occasion it held with the function, one failure at each it did not, and one relation in the dictionary (D13). The relation that closes a cycle has no `without`: where it does not land the lap ends, and that is never a failure (D54) |
-> | worth of a function | the sum of its relations' worths, less one per call that stands: one per occasion, and one per run where a cycle's calls in time each cover the call before, since a covered call's own relation is paid through its coverer (D13, D54, R23) |
+> | worth of a function | the sum of its relations' worths, less one per call that stands: one per occasion, and one per run where a cycle's calls in time each cover the call before, since a covered call's price is paid through its coverer (D13, D54, R23) |
 >
-> **One relation per call, whatever it covers.** A call costs its own relation once, however many relations
-> it covers, so the first relation of a function pays for the call and every relation after it saves one at
-> each occasion. A function of one relation is worth `−1`: its call covers one for one and is never placed
-> (R24), and the function is kept for what may join it (R50), until its relation's strength slides below 2
-> (R18). A function of two relations that hold together is worth its occasions less two, positive once it has
-> fit three times: nothing is built on one occurrence (R21).
+> **One per call, whatever it covers.** A call costs one once, however many relations it covers, so the first
+> relation of a function pays for the call and every relation after it saves one at each occasion. A function
+> of one relation is worth `−1`: its call covers one for one and is never taken (R24), and the function is
+> kept for what may join it (R50), until its relation's strength slides below 2 (R18). A function of two
+> relations that hold together is worth its occasions less two, positive once it has fit three times: nothing
+> is built on one occurrence (R21).
 >
 > **A relation's contribution to a function** is the function's worth with it less its worth without it, every
 > other relation priced with it and without it, since each is conditioned on the others. Alone, in a function
@@ -910,15 +920,17 @@ are meant to:
 One rule decides what a set of functions covers for a set of relations. The election runs it over the board. It
 is stated here and cited from there.
 
-> **D28 — Greedy cover.** The operation that covers a board with **fits**, each landing on activations, and pays
-> each activation to exactly one fit, its ends excepted, which several fits may share (D8). It repeats:
+> **D28 — Greedy cover.** The operation that covers a board with **fits**, each landing on relations, and pays
+> each relation to exactly one fit; an activation may be landed on by several fits, each covering relations
+> of its own (D8, D10). It repeats:
 >
 > 1. **Measure** every fit not yet taken against the board as the taken fits have left it. A fit lands on no
->    activation a taken fit covers, so one read through such an activation is read again over what stands, and
->    a cycle's laps past it are a fit of their own. Its coverage is what it would take off the board: the
->    relations among the activations it lands on, and the count of each call it lands on at an end (D54). Its
->    price is its call's count there (D22), its own relation and up.
-> 2. **Take** the one with the highest `coverage / price`, if `coverage > price`, and **stop** otherwise. It
+>    relation a taken fit covers, so one read through such a relation is read again over what stands, and a
+>    cycle's laps past it are a fit of their own. Its coverage is what it would take off the board: the
+>    relations it lands on, and the count of each call it lands on (D54). Its price is its call's count there
+>    (D22), one and up, and what it would add: one edge to each taken call that stands for an activation it
+>    lands on (D10).
+> 2. **Take** the one whose `coverage` exceeds its `price` by the most, if any does, and **stop** otherwise. It
 >    covers what it was measured on.
 >    An activation at one of its variables stays on the apex, bound, and the relations the function does not
 >    fix at it stay in the set, so a later round may cover them (D10). The round repeats from 1.
@@ -982,7 +994,7 @@ A base neuron sees one position because that is where every longer distance come
 stretch is a chain of relations of one, each a function of its own or part of one, and the interneuron over the
 chain sees one position beyond it, so its relations span the stretch in one offset. Every distance the
 dictionary holds is built this way, level by level, and none is declared. Where a stretch is unpredictable
-between its two ends, a variable has to form in the middle before the stretch can be covered (R52), and that is
+in its middle, a variable has to form there before the stretch can be covered (R52), and that is
 the price of seeing one position: a deeper hierarchy, never a number nobody can derive.
 
 # 4. Neuron
@@ -1014,16 +1026,17 @@ neuron learns what followed and infers what comes next. In selection the machine
 one winner per dimension.
 
 > **R1 — One decision point: the frame it fires.** A neuron is called once per level it fires at, for every
-> activation of that level together, each at age 0, a call's end at the age of its place (D53): it refreshes its
-> history and its relation index, and returns the relations from each activation (R20). Nothing else reads it
+> activation of that level together, each at age 0 (D53): it refreshes its history and its relation index, and
+> returns the relations from each activation (R20). Nothing else reads it
 > until its next activation.
 
 ## 4.2 History
 
 > **D18 — History.** A neuron's record of its own activations: the last `H` of them, oldest first, each holding
-> the neighborhood it observed in the frame it fired (D7), each neighbor at its offset (D6), and what followed
-> it within its reach, each at its offset too. **A row is written when the activation fires and takes what
-> followed as it comes**: at every frame of the activation's window the connect call hands the neuron what
+> the pose it fired in (D8), the neighborhood it observed in the frame it fired (D7), each neighbor in its pose
+> at its offset (D6, D26), and what followed it within its reach, each at its offset too. **A row is written
+> when the activation fires and takes what followed as it comes**: at every frame of the activation's window
+> the connect call hands the neuron what
 > stood on the apex (§7.1), and the row takes it at the activation's age, whether the activation is covered or
 > not (D10). So in the history the frame around an activation is whole on both sides in time, as it is in
 > space, and the relation between two activations is held by both of them, each from its own side (D34). It is
@@ -1060,22 +1073,25 @@ rows of the history that hold it, and which rows those are leaves the neuron for
 What follows an activation enters no cost (D12) and no test. It is held only here, as connections: what stood
 on the apex in the frames after it, event and action alike.
 
-> **D25 — Connections.** A neuron holds, per `(neuron, offset)`, one **connection**: a **strength**, the number
-> of times an activation of the neuron saw that neuron stand on the apex at that offset, and its **earnings**,
-> the total reward the actions of those frames received. Its **estimate** is its earnings over its strength,
+> **D25 — Connections.** A neuron holds, per pose of its own and per `(neuron, offset)`, the neuron in its
+> pose, one **connection**: a **strength**, the number of times an activation of the neuron in that pose saw
+> that neuron stand on the apex at that offset, and its **earnings**, the total reward the actions of those
+> frames received. Its **estimate** is its earnings over its strength,
 > and is read, never stored. The offset is a full D6 offset from the holder's activation's place: positive in
 > time, because what is connected to comes after, and signed in every other activation dimension. A connection
-> to a call names one of its ends and is at that end's offset (D53, D34). **A connection reaches as far as a
+> to a call names it in its pose and is at its offset (D53, D34). **A connection reaches as far as a
 > neighbor does, in every dimension at once** (D4): an activation connects to what stands on the apex within
 > its reach in every activation dimension the two share, the window in time (D9) and the same reach in every
 > other, and to nothing beyond it. What is connected to may differ from the activation in several dimensions,
 > as a neighbor may (D5), so a thing that moved is connected to where it went: that is where displacement is
 > learned. **A connection is written only where the future table of the policy admits the target's kind among
-> the holder's kind's connections** (D50). Nothing about any one activation is kept.
+> the holder's kind's connections** (D50). Nothing about any one activation is kept. A call's connections are
+> keyed by its pose, so a cycle's call standing at one node of the cycle learns apart from one standing at
+> another, in one neuron (D48).
 >
 > | Component | Description                                                                              |
 > |-----------|------------------------------------------------------------------------------------------|
-> | key       | `(neuron, offset)`, the offset strictly positive in time                                 |
+> | key       | the holder's pose, and `(neuron, offset)`, the neuron in its pose, the offset strictly positive in time |
 > | strength  | the number of exposures: the times an activation saw that neuron on the apex at that offset |
 > | earnings  | the total reward those exposures received                                                |
 > | estimate  | earnings / strength, read whenever the connection is read                                |
@@ -1181,11 +1197,11 @@ frame reported, each after it over what the level before accepted, until a level
 
 | Step       | Description |
 |------------|-------------|
-| activate   | Fire every interneuron the level below accepted, at its fit's two ends (D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations with strengths. |
+| activate   | Fire every interneuron the level below accepted, once, in its fit's pose (D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations with strengths. |
 | find       | Read every returned relation in the index, as it is and with either end open, and place every function it reaches on the board wherever its relations match, one fit per place (R53, D31). |
 | count      | Hand each neuron every function it stands in, placed at this level or not, with the candidates of the placed ones, and call `count` on it: it returns with and without for each relation and each candidate (R50, D47). |
 | group      | Over those counts, move each relation where the dictionary's worth rises most, to a function it is a candidate of, one that closes a cycle before one that adds a node, the nearest on a tie, to its own function or to none, and start a function for each recurring relation no function holds (R50, R54, R18). |
-| elect      | Take the fits best first, the highest coverage over price each round, stopping when the board is covered (R24). |
+| elect      | Take the fits best first, the largest coverage less price each round, stopping when the board is covered (R24). |
 | allocate   | Give each accepted function with no interneuron one, reused where a stretch comes round (R43), allocated otherwise where a neuron is free (R16). It fires at the next level. |
 
 Then, once the last level has run:
@@ -1263,8 +1279,8 @@ argument.
 > **A candidate** is a board relation the neurons returned with strength 2 or more, that the fit did not land
 > on, and that shares a neuron with an activation the fit landed on or with the call. Its other end is a
 > neuron the function does not name, which would be a new node, or a node the function has, which would close
-> the cycle where the function has none (D15). A relation to a call one of whose ends replaced an activation of a node
-> of this function is read as a relation to that node (D54): it is attached there. The relation to the call and
+> the cycle where the function has none (D15). A relation to a call whose pose starts at a node of this
+> function is read as a relation to that node (D54): it is attached there. The relation to the call and
 > the relation to that node's neuron are one board relation, and a function holds that relation as one or the other,
 > never both: where the fit already lands on it, under either name, it is no candidate. It is no candidate
 > where its new node would be the origin, later
@@ -1289,11 +1305,11 @@ argument.
 > activations behind it, as a returned relation is (R21).
 >
 > **A relation to a node is counted through the calls that stand at it.** A fit lands a node on its neuron
-> or on an end of a call that replaced an activation of that neuron (D54), so the count must read both as the node.
-> The machine holds the dictionary and knows every such call; it hands the relation as a set,
-> the node's neuron and each of those calls at the same offset, and the neuron counts a row as holding the
-> relation when it holds any of them. The neuron knows nothing of calls or their ends; the mapping is the
-> machine's, the one the fit makes. Without it a relation that keeps landing on a call would count as never
+> or on a call whose pose starts at that node (D54), so the count must read both as the node. The machine
+> holds the dictionary and knows every such call; it hands the relation as a set, the node's neuron and each
+> such interneuron in each such pose at the same offset, and the neuron counts a row as holding the relation
+> when it holds any of them. The neuron knows nothing of calls or their poses; the mapping is the machine's,
+> the one the fit makes. Without it a relation that keeps landing on a call would count as never
 > holding, since where a call stands at a place the call is the neighbor there, not the node under it (D5).
 >
 > **Distance and worth.** A candidate's distance to a function is `1 − with / (with + without)`: zero where it
@@ -1306,14 +1322,13 @@ argument.
 > before one that would add a node (D15); and where two functions tie, the one it is nearest to (D57, R54). A
 > relation of a function leaves it for one of its own where `−1` is higher than its contribution, and for nothing
 > once its strength has slid below 2 (R54, R18). A relation the neurons returned with strength 2 or more that no
-> function holds starts a function of its own, two nodes and an offset, worth `−1` (D57), on which nothing is
-> placed until a second relation joins it. A relation held once is left where it is: nothing is built on one
+> function holds starts a function of its own, two nodes and an offset, worth `−1` (D57), placed wherever it
+> fits and never taken until a second relation joins it. A relation held once is left where it is: nothing is built on one
 > occurrence (R21).
 >
 > **Relations join only through a node, and a function grows toward its past.** A candidate is attached at the
 > node it shares, so every function stays connected (D15). Nothing joins a function at a later frame than its
-> origin: an activation after the call sees the call, standing at its start's place (D5), and the relation it
-> brings,
+> origin: an activation after the call sees the call, standing at its place (D5), and the relation it brings,
 > from itself back to the call, is a function at the level above, over the call (R26). Two relations that never
 > touch are never one function: where they recur together, the level above relates their two calls.
 >
@@ -1362,8 +1377,8 @@ argument.
 > | | |
 > |---|---|
 > | the fit | the function and its interneuron or none (D31), its relations landed on the board's relations, with what each variable binds |
-> | coverage | A: the board relations its true relations stand in for, where no accepted call has covered them, and the count of each call it lands on at an end (D54, D24, R23) |
-> | price | B: its call's count (D12, D22): its own relation, one failure per relation that did not come true, one binding per argument |
+> | coverage | A: the board relations its true relations stand in for, where no accepted call has covered them, and the count of each call it lands on (D54, D24, R23) |
+> | price | B: its call's count (D12, D22): one for the call, one failure per relation that did not come true, one binding per argument; and one edge to each accepted call that stands for an activation it lands on (D10, D28) |
 >
 > The machine places the function by D31's rule. Coverage less price is the savings over stating what it covers
 > bare, D22's expression over the board.
@@ -1397,18 +1412,18 @@ machine works out itself (R22).
 >
 > | | |
 > |---|---|
-> | per node | the accepted call whose fit landed on it between its ends, if any; the accepted calls whose start or end stands at its place, if any (D8); the call it is bound to as an argument, if any |
+> | per relation | the accepted call whose fit landed on it, if any |
+> | per node | the accepted calls whose fits landed on it, which stand in its place, if any (D8); the call it is bound to as an argument, if any |
 >
 > **Covered and bound are read off it.** An activation is **covered** when a call has landed on it as a fixed
-> node: it has left the apex with its relations (D10), and where it was an end, the call's activation stands at
-> its place with its relations to the outside (D5). It is **bound** when a call binds it as an argument: it stays
-> on the apex, and its binding is counted with the call. It is on the apex, bare, when neither holds.
+> node: it has left the apex, and the call stands at its place with the relations of it the fit did not cover
+> (D10, D5). It is **bound** when a call binds it as an argument: it stays on the apex, and its binding is
+> counted with the call. It is on the apex, bare, when neither holds.
 >
 > **Credit is what blocks later payment, and coverage is what hides.** A relation a call covers is paid for
 > through that call, and no later fit reaches it, since a covered activation is returned by no neuron (D5). A
-> later fit reaches the call, by landing on one of its ends, and is then paid the call's count (R23). A bound activation is
-> still on the
-> apex and is a neighbor to every later function. A later fit that lands on it covers the relations of its own
+> later fit reaches the call, by landing on it, and is then paid the call's count (R23). A bound activation is
+> still on the apex and is a neighbor to every later function. A later fit that lands on it covers the relations of its own
 > that no call has covered, and nothing else (D10). So every relation is paid for once. The coverage set spans one
 > frame more than the longest reach in time among the neurons the machine holds, no function reaches further
 > back, which is the span an activation stands on the board (D9), and the box every other activation dimension
@@ -1428,9 +1443,9 @@ machine works out itself (R22).
 >
 > **A later frame covers the past through its calls.** An activation a call at an earlier frame covers is out
 > of reach: no neuron returns it (D5), so no fit lands on it again. A fit at `f` reaches the call itself by
-> landing on one of its ends, where the end stands for the node's neuron (D54): the new call covers the old
-> one's count whole, both activations of the old call leave the apex, and where the new call reaches past the
-> old one's end it takes that end as its own (D53). What that interneuron learned stands. So the past is
+> landing on it, where its pose starts at the node's neuron (D54): the new call covers the old one's count
+> whole, the old call leaves the apex, and where the two are one function the new call's laps are those it
+> read and the old one's together (D53). What that interneuron learned stands. So the past is
 > re-elected call by call, each entire, where that pays on the board (D28).
 
 **The cost over one frame is the calls made plus the relations no call covered**: the price of every
@@ -1448,37 +1463,36 @@ one fit**, which is what stops an activation being paid for twice.
 > **R24 — The election is D28, run by the machine.** The fits are everything find placed at this level, over
 > the functions as grouping left them (R53, R50, R52), less any whose function would need a neuron when none is
 > free (R16), and what they cover is the **free set**: every activation on the board that some fit lands on and no
-> accepted call covers, with its relations, and every call a fit lands on at an end (D54), at that call's
-> count (R23).
+> accepted call covers, with its relations, and every call a fit lands on (D54), at that call's count (R23).
 >
-> Each fit stands on the board before the first round (D31), and `price` is R22's. Then D28 runs: the highest
-> `coverage / price` first, each while `coverage > price` against the board as it then stands, and it stops
-> when nothing on the board is left that a fit could cover for less than it costs.
+> Each fit stands on the board before the first round (D31), and `price` is R22's. Then D28 runs: the largest
+> `coverage` less `price` first, each while `coverage > price` against the board as it then stands, and it
+> stops when nothing on the board is left that a fit could cover for less than it costs.
 >
 > **Two fits that measure the same are told apart in this order**: a fit whose relations land on the board
-> relations as they read before one that lands a node on a call through one of its ends (D54); a function with an
+> relations as they read before one that lands a node on a call through its pose (D54); a function with an
 > interneuron before one without; between two with interneurons, the older interneuron; between two without,
 > the function that joined the dictionary first; and between two fits of one function, the one reached from
 > the older activation.
 >
-> **The bound is structural.** A fit is taken only while it covers more than it costs, and a fit costs its
-> own relation at least, so nothing is placed over one relation: a pair stands bare, and a run of three is the
-> least a call pays on. Each round takes one fit, so the rounds are never more than the fits.
+> **The bound is structural.** A fit is taken only while it covers more than it costs, and a fit costs one at
+> least, so nothing is taken over one relation: a pair stands bare, and a run of three is the least a call
+> pays on. Each round takes one fit, so the rounds are never more than the fits.
 >
 > **A fit that never reached the top held nothing.** There is nothing to hand back and nothing to settle: an
 > activation it landed on is either covered by a fit that did pay or stands bare.
 >
-> **Ownership is a partition of the activations the accepted fits land on between their ends**, and that is
-> the whole of the inhibition: no function is ever edited or forbidden. An end is not owned: several calls may
-> end at one activation (D8). A fit that lands between its ends on an activation an earlier round covered is
-> read again without it (D28), and one that binds a bound node again gains nothing (D10, R22). **Covered by an
-> accepted fit** and **landed on by an accepted fit** are therefore the same set, so coverage, credit and the
-> apex frontier (R27) are one question with one answer.
+> **Ownership is a partition of the relations the accepted fits land on**, and that is the whole of the
+> inhibition: no function is ever edited or forbidden. An activation is not owned: several calls may land on
+> one (D8), each covering relations of its own, and they hold one edge between them (D10). A fit that lands on
+> a relation an earlier round covered is read again without it (D28), and one that binds a bound node again
+> gains nothing (D10, R22). **Covered by an accepted fit** and **landed on by an accepted fit** are therefore
+> the same set, so coverage, credit and the apex frontier (R27) are one question with one answer.
 >
 > **Outcome**: accepted fits are promoted, each **whole**, and an interneuron expands to everything its function
-> names, credited or not; the activations they land on as fixed nodes leave the apex with their relations,
-> the calls' ends standing in place of the activations they replace, and what they bind stays on it (D24), and
-> every active neuron no accepted fit lands on stands as itself. **The election delivers nothing to
+> names, credited or not; the activations they land on as fixed nodes leave the apex, the calls standing in
+> their place with what the fits did not cover, and what they bind stays on it (D24), and every active neuron
+> no accepted fit lands on stands as itself. **The election delivers nothing to
 > anyone**: it writes the coverage set and stops. No neuron is told what was bought; a neuron's history is what
 > it saw, and the board is the machine's.
 
@@ -1502,24 +1516,24 @@ lost is given nothing.
 > once no other function of it remains (R38).
 >
 > **Allocating is immediate.** The machine allocates or reuses the interneuron the moment the fit is accepted,
-> which is all the next level needs to activate it at the fit's two ends (D53) and call it.
+> which is all the next level needs to activate it in the fit's pose (D53) and call it.
 
 > **R43 — Reuse.** An accepted fit fires its function's own interneuron where it has one. Where it has none,
 > the machine looks the function up in the interneuron index, by what its interneuron would stand for (D36).
 > Where one already stands for that, the function is added to it, and that interneuron fires. Otherwise the
 > machine allocates one.
 >
-> **Otherwise the machine allocates one** (R16): a free neuron, its first activations at the fit's two ends (D53).
-> Where none is free the fit was not in the election (R24).
+> **Otherwise the machine allocates one** (R16): a free neuron, its first activation at the fit, in its pose
+> (D53). Where none is free the fit was not in the election (R24).
 
 ## 6.4 Activate interneurons
 
 An interneuron fires at the level after the one its fit was accepted at, before that level is called. It fires
-at the fit's two ends (D53), twice per accepted fit, the start at age 0 and the end at the age of its place, and
-what stood in its function's variables stays on the apex beside it, bound (D10). Nothing sees an interneuron until it fires
-(D5). An interneuron's activation records the function that fired it, since it may have several (R43), and
-which of that function's relations did not come true, and what its fit landed on and bound, credited or not,
-which is what it expands to (R28). Every activation no accepted fit covers stands as itself.
+once per accepted fit, at the place of the latest activation the fit landed on, at age 0, in the pose the fit
+read (D53), and what stood in its function's variables stays on the apex beside it, bound (D10). Nothing sees an
+interneuron until it fires (D5). An interneuron's activation records the function that fired it, since it may
+have several (R43), its pose, which of that function's relations did not come true, and what its fit landed on
+and bound, credited or not, which is what it expands to (R28). Every activation no accepted fit covers stands as itself.
 
 > **R27 — The apex is a frontier.** It is every active neuron **no accepted function has landed on as a
 > fixed node** (D49), base neurons and interneurons alike, so a base neuron no function found worth naming
@@ -1599,8 +1613,8 @@ Two things that are cycles, told apart, because the design holds them in two dif
 a node already in it closes the cycle, the one a function may hold; the function says that the pattern comes
 round: `x` to `y` at 1 and `y` to `x` at 1 is `x y x y …` for as long as it runs (D15). A fit at either letter reads back
 round the cycle while the relation that closes it lands; at the base reach that is one lap, the call of the lap
-before landed on at its start and covered whole, its end taken over (D54); nothing is read past the cycle, and the
-relation between the call's two ends says how far it went (D53, D13). A relation a path of the function's
+before landed on and covered whole, its laps taken over (D54); nothing is read past the cycle, and the call's
+pose says how far it went (D53). A relation a path of the function's
 relations already implies is never held (D34), so a cycle is never a fact paid for twice.
 
 **Through interneurons, recursion.** A period no single function can hold, because the same neurons come in an
@@ -1657,7 +1671,8 @@ two things:
 | the reward | any reward that arrived, for the actions of this frame and for any earlier frame the reward spans, at the distance each one names, with the action that ran at that frame in each channel it pays (D24, R33). |
 
 The neuron writes each apex activation into the row at its offset (D18) and, while uncovered, strengthens a
-connection per apex activation: the connection at `(neuron, age)`, created at strength 1 or incremented (R31), and
+connection per apex activation: the connection at `(neuron, age)` under its own pose, created at strength 1 or
+incremented (R31), and
 for each reward share the earnings of the connections it names (R33). For this frame, the connections just
 strengthened, in the same write. A share for an earlier frame, at distance `d`, goes into the connection at offset
 `a − d`, the activation's age less the distance, to the action the machine hands it for that frame, where the
@@ -1684,7 +1699,7 @@ here**, and no test is waiting on any of it.
 > activation's place to the frame the call ran, exact (D6), so a neuron open at ages 1, 2 and 3 holds the same
 > neuron at three offsets, and the exposure at each age strengthens its own. A neuron that stood at two ages
 > over one activation is two exposures: each frame has its own reward, and each connection keeps its own (D25).
-> A connection to a call names one of its ends and is at that end's offset (D34).
+> A connection to a call names it in its pose and is at its offset (D34).
 >
 > **An exposure is written at its age, and an inference is placed at its offset.** An activation that saw a
 > neuron at age 2 strengthens the connection at offset 2, and an inference at that offset is placed exactly 2
@@ -1808,8 +1823,8 @@ is saved twice.
 > `b` was written when that neuron stood on the apex `b` frames after the activation's frame (R31), so an
 > inference at offset `b` is placed `b` frames after the activation that made it, and at the offset's components
 > in every other activation dimension from its place, as a neighbor is placed (R28). An inference that names a
-> base symbol places it there. One that names a call neuron places a call there, at the end it names, weak (D37), and
-> the call's function hangs from it (R28): its nodes at the frames back from its start, every one carrying
+> base symbol places it there. One that names a call neuron places a call there, in the pose it names, weak
+> (D37), and the call's function hangs from it (R28): its nodes at the frames back from it, every one carrying
 > the strength and the estimate of the connection it came from, its parameters bound from what stands at their
 > nodes where those have happened (D44). What its expansion puts at the frame ahead is what it proposes there,
 > and the machine expands no more of it than that (R45): at distance 1 the last thing a function places, at
@@ -1879,16 +1894,15 @@ happened (R32).
 > **An inferred call expands through its function**, since it covers nothing yet (R36). It follows the
 > function's relations back from the node it was placed at, one dimension at a time:
 >
-> 1. **Start** at the node the inference placed, the start or the end of the call (R36), at the call's place
->    in every dimension.
-> 2. **Follow** each relation from a placed node to the node at its far end, in that relation's dimension.
->    Offsets compose because each is a difference (D34). Round a cycle while the node it reaches has
->    something to land on in the frames that have happened; beyond them, round up to the nearest node the
->    function places past the cycle in that direction, where it has one, and once where it has none (D54).
->    Repeat until no relation leads to an unplaced node in any dimension.
-> 3. **Expand** each placed node that is an interneuron the same way, through its function, from its own
->    start, which is where it was placed. Expand each variable to its argument where one is bound, and
->    otherwise as the next paragraph says.
+> 1. **Start** at the node the call's pose starts at (R36, D37), at the call's place in every dimension.
+> 2. **Follow** each relation from a placed node to the node at its far end, in that relation's dimension and
+>    in the direction the pose names, to the node the pose ends at. Offsets compose because each is a
+>    difference (D34). Round a cycle the laps the pose says; where the pose leaves the laps open, round while
+>    the node it reaches has something to land on in the frames that have happened, and beyond them round up
+>    to the nearest node the function places past the cycle in that direction, where it has one, and once
+>    where it has none (D54). Repeat until no relation leads to an unplaced node in any dimension.
+> 3. **Expand** each placed node that is an interneuron the same way, through its function, in its own pose.
+>    Expand each variable to its argument where one is bound, and otherwise as the next paragraph says.
 >
 > A fixed node expands to its neuron; a variable expands to its argument.
 >
@@ -1934,7 +1948,7 @@ happened (R32).
 >
 > **Execution activates what it expands, where it won.** A base action or a base event fires weakly in the frame
 > R47 selected it, and an interneuron the expansion passed through fires weakly when its expansion completes, at
-> its start, the last frame of what it covers, which is the place recognition would have given it, provided the
+> its place, the last frame of what it covers, which is the place recognition would have given it, provided the
 > standing inference that placed it still stands (R45) and what it placed at that frame was selected (R47). An
 > inference that lost its dimensions, or whose match failed on the way, fires nothing. Where the report makes
 > its actions strong, recognition builds the strong activation of the same function at the same place, and it

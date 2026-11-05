@@ -3,7 +3,9 @@
 A worked case for [algorithm.md](algorithm.md): an image channel, a digit action, and a machine that learns to
 name what it sees. Nothing here is normative. It follows the definitions through what forms over an image,
 runs of one color first and the shapes over them after, through one small image level by level, and through
-how the digit is taught and then inferred.
+how the digit is taught and then inferred. The recognition here is strict: every length and every offset is
+exact, and a shape at another size is another shape. The variables over counts, which will let one function
+stand for a shape at every size, are not in this case.
 
 ---
 
@@ -19,8 +21,7 @@ with a component in each (D34), and the arrangement of colors around a pixel is 
 image is one frame, and consecutive images are unrelated.
 
 A bare pixel costs its relations to the pixels around it, one relation each, less those the others imply
-(D12, D13, D55). A call costs its own relation, the one between its two ends, one per relation that did not
-come true and one per argument.
+(D12, D13, D55). A call costs one, one per relation that did not come true and one per argument.
 
 The resolution is the environment's to raise. With 256 buckets the dimension reports a gray level at each point.
 With three channels sharing the layout, each with one event dimension, it reports red, green and blue; neurons of
@@ -52,50 +53,53 @@ functions per color, eight in all, and nothing joins them: a relation to the oth
 at a few of a run's pixels and fails at the rest, so its `without` outweighs its `with` and it never pays
 (D57).
 
-**The election is per pixel, and the longest run wins.** At a white pixel the four white line functions are
+**The election is per relation, and the longest run wins.** At a white pixel the four white line functions are
 placed, each reading the run through that pixel along its own direction, as many laps as hold (D54). A fit
-covers the run's relations, one fewer than its pixels, for the call's own relation, so a run of two covers one
-for one and is not taken, a run of three two for one, and the longest run through a pixel has the highest
-coverage over price and is taken first (D28, R24). A pixel is covered by one line: a fit that read through a
-pixel a taken fit covers is read again without it, so a line crossing a longer one breaks there, into the
-runs on either side, each taken if it still pays. Two lines may end at one pixel: an activation may be the end
-of several calls, and a corner is exactly that (D8, D28). Two runs of the same length through a pixel tie, and
-the older line function takes it.
+covers the run's relations, one fewer than its pixels, for one, so a run of two covers one for one and is not
+taken, a run of three two for one, and the longest run through a pixel covers the most for its one and is taken
+first (D28, R24). A call covers relations, not pixels: a row covers a pixel's relations along `x` and a column
+its relations along `y`, so a pixel may be in both, and where two lines cross both are whole (D10). The two
+calls then hold one edge between them, and the second taken pays it: a run of three crossing a taken line
+covers two for its one and that edge, and is not taken, while a run of four is (D28). Two runs of the same
+length along one direction through a pixel share its relations and tie, and the older line function takes it.
 
-**What a line is on the board.** A line's call is two activations, at the run's two ends, with the run's
-length between them as its own relation (D53): a row's start at its least `x`, a column's start at its least
-`y`. The pixels between are gone with their relations; the end activations keep the relations the end pixels
-had to the outside, so a pixel beside a line's end sees the line there, and a pixel beside its middle sees
-nothing (D10, D5). After the first level the board holds lines, each two ends and one relation, and the pixels
-no run of three reached, bare: lone pixels and pairs.
+**What a line is on the board.** A line's call is one activation of the line's interneuron, at the run's first
+pixel, the least `x` of a row and the least `y` of a column (D37), in a pose that says the direction it ran and
+its laps, one fewer than its pixels (D53). The run's pixels are gone from the apex, and the call inherits every
+relation they had that the fit did not cover: a pixel beside any pixel of the run now relates to the line, at
+its offset to the line's place, so beside the middle and beside the end are two relations, as every relation
+at the base is one offset (D10, D5). After the first level the board holds lines, each one activation with its
+laps, and the pixels no run of three reached, bare: lone pixels and pairs.
 
-**Strokes and corners, over the lines.** A line's interneuron sees one beyond what it covers at each end
-(D4), and its activations across images hold relations to what stood there: another line's end at offset zero,
-a parallel line one position over, a lone pixel. Each at strength 2 is a function over the line call, and a fit
-that lands on a call covers its whole count (D22), so a function of two nodes over calls pays where a pair of
-pixels does not: two parallel rows one position apart are a row after a row at `(0, +1)`, a cycle over the row
-interneuron, and its fit over two rows covers the relation and both calls' counts, 3 for 1. A stroke three
-pixels thick is three rows and two laps of that cycle, one call. Two lines meeting at a pixel are a motif of
-two nodes at offset zero, the one line's end beside the other's, a corner, 3 for 1 over the two calls. A lone
-pixel beside a line's end is a motif of the line and the pixel, 2 for 1. Which of these a pixel ends up under
-is the election's again, by coverage over price, and a call's count is paid to one fit, so two corners cannot
-both take one line.
+**Strokes and corners, over the lines.** A line's interneuron sees what its pixels saw (D4), and its rows
+hold relations to what stood there: another line at the offset between their places, a lone pixel, the other
+color's line beside it. Each at strength 2 is a function over the line call, and a fit that lands on a call
+covers its whole count (D22), so a function of two nodes over calls pays where a pair of pixels does not. Two
+parallel rows of one length one position apart are a row after a row at `(0, +1)`, a cycle over the row
+interneuron in that pose, and its fit over two rows covers the relation and both calls' counts, 3 for 1. A
+stroke three pixels thick is three rows and two laps of that cycle, one call. Two lines that share a pixel hold
+one edge between them, at the offset between their places (D10): a row of five and a column of five meeting at
+the row's first pixel are at offset `(0, 0)`, and meeting at its last at `(4, 0)`, so a corner is a motif of two
+calls at one offset, each corner its own, 3 for 1 over the two calls, and a crossing the same with the offset
+inside both lines. A lone pixel beside a line is a motif of the line and the pixel, 2 for 1. Which of these a
+line ends up under is the election's again, by what each covers less its price, and a call's count is paid to
+one fit, so two corners cannot both take one line.
 
 **Above.** Each level's calls are the next level's neurons: strokes beside strokes, corners joined to corners
 at the offsets the image puts between them, until a level fires nothing (R26). A function at any level is its
 relations, offsets between its nodes (D15), so the same arrangement at another place in the image is another
 activation of the same interneuron (D11), and what is learned about it at one place holds at every other.
 
-**Time.** At `t:−1` a pixel sees the previous image's calls at their ends, and its bare pixels (D5).
-Consecutive images are unrelated, so no relation across them recurs, nothing is built on them (R21), and the
-functions that form are over `x` and `y` within the frame.
+**Time.** At `t:−1` a pixel sees the previous image's calls and its bare pixels (D5). Consecutive images are
+unrelated, so no relation across them recurs, nothing is built on them (R21), and the functions that form are
+over `x` and `y` within the frame.
 
-**Variables.** At the base every node is a color, so two functions never differ at a node and R52 makes
-nothing there. Above, two functions that differ in the interneuron at a node are generalized into one with a
-class there, or a parameter where the same interneuron stands at two nodes within each (R52). The general
-function is priced as a replacement of the two: each occurrence costs one binding more, and the dictionary one
-entry fewer, so it joins only where the entry saved outweighs the occurrences, and the specific functions
-stand otherwise. Sizes and slants are offsets, and no variable holds an offset yet.
+**Sizes are exact.** A relation to a line names the line in its pose, laps included (D34), so a line of four
+and a line of five are two different ends, a corner over them two different functions, and a frame of another
+size another frame. Nothing here rounds a length or an offset, and nothing stands for a shape across sizes:
+that is what the variables over counts will add, a parameter where two sides must be the same length and a
+class where a length may vary within a range. Until then the dictionary holds every shape at every size it
+recurred at, and recognizes each exactly.
 
 # 3. One image, level by level
 
@@ -106,57 +110,58 @@ recurred in earlier images, so each is in the dictionary with its interneuron.
 **Bare.** Twenty-five pixels, joined by twenty-four relations, the rest implied (D55).
 
 **Level 1: seven lines.** The black frame is four runs of five: the rows at `y = 0` and `y = 4`, the columns
-at `x = 0` and `x = 4`. Each covers four for one. The corner pixels are the ends of a row and of a column at
-once, and an activation may be the end of several calls, so all four are taken. The white square is three
-rows of three and three columns of three, two for one each; the rows and the columns tie at every pixel, and
-the older function, say the rows, takes them. Nothing is bare.
+at `x = 0` and `x = 4`. The rows are older and are taken first, four for one each. Each column shares a corner
+pixel with each row, so its price is one and two edges, and it covers four: taken. The white square is three
+rows of three and three columns of three. The rows are taken, two for one each; a column then shares a pixel
+with each of the three rows, so its price is one and three edges against two covered, and it is not taken.
+Nothing is bare.
 
 | after level 1 | |
 |---|---|
-| on the apex | seven calls, fourteen end activations |
-| the count | seven own relations, and the relations among the ends that the others do not imply |
+| on the apex | seven calls, each at its line's first pixel, in its pose |
+| the count | seven for the calls, the four corner edges, and the edges among the calls that the pixels' relations became, one per pair of calls at one offset |
 
-**Level 2: two corners and a stroke.** Each corner of the frame holds a row's end and a column's end at offset
-zero, and the corner function, the row's end beside the column's start, fits at all four. A call's count is
-paid once, so two of the four are taken, at opposite corners, each covering one row and one column, 3 for 1;
-the other two are read again without the covered calls and cover nothing. The three white rows are two laps
-of a row after a row at `(0, +1)`, one call over the three, 5 for 1.
+**Level 2: two corners and a stroke.** Each corner of the frame is a row and a column at an offset: the row
+at `y = 0` and the column at `x = 0` meet at `(0, 0)`, the same row and the column at `x = 4` at `(4, 0)`, and
+so on, four motifs of two calls, each in the dictionary from earlier frames. Each covers the edge between the
+two calls and both calls' counts, 3 for 1. A call's count is paid once, so two of the four are taken, at
+opposite corners, each covering one row and one column; the other two are read again without the covered
+calls and cover nothing. The three white rows are two laps of a row after a row at `(0, +1)`, one call over
+the three, 5 for 1.
 
 | after level 2 | |
 |---|---|
 | on the apex | three calls: two corners, each over two sides of the frame, and the white block |
-| the count | three own relations, and the relations among their six ends |
+| the count | three for the calls, and the edges among them |
 
-**Level 3 and 4: the frame, then the image.** The two corner calls stand at the frame's corners and relate at
-the offset the frame's size puts between them; that is a function of two nodes over calls, 3 for 1, and the
-frame is one call. The white block's ends stand one position inside the frame's, and the function of the frame
-and the block, 3 for 1, is the image: one call, its own relation from `(0, 0)` to `(4, 4)`.
+**Level 3 and 4: the frame, then the image.** The two corner calls stand at `(0, 0)` and at `(0, 4)`, the
+least place among what each landed on (D37), and relate at that offset; that is a function of two nodes over
+calls, 3 for 1, and the frame is one call. The white block's call stands at `(1, 1)`, one position inside the
+frame's, and the function of the frame and the block, 3 for 1, is the image: one call.
 
 | after the last level | |
 |---|---|
 | on the apex | one call |
 | the count | 1 |
 
-A larger square, or a frame of another size, makes the same lines, corners and stroke, and differs only in the
-offsets between the corner calls and in the own relations: another function at the third level, or another
-own relation under the same one.
+A 6×6 frame makes lines of six, which are other ends for every relation, so its corners, its frame and its
+image are other functions, each learned over its own recurrences. The same square at another place in a
+larger image is the same functions (D11).
 
-**What the walk shows about the design.** A call has two addressable ends, its start and its end. A corner's
-call covers two lines and stands at two of their four ends, so the square is two corners and a relation
-between them, not four corners: the two far ends of each corner's lines are gone with the call. And where
-two lines cross, the pixel belongs to the longer, and the shorter breaks: a stroke through the middle of a bar
-leaves the bar in two pieces and the stroke whole.
+**What the walk shows about the design.** A corner's call covers two lines and stands at one of their
+pixels, so the square is two corners and a relation between them, not four corners: the two far ends of each
+corner's lines are gone with the call. Where two lines cross, both are whole, and the crossing is the one edge
+between them. And every size is its own set of functions, which is the strictness the case starts from.
 
 # 4. The digit, taught and then inferred
 
 **Taught.** In the first stretch the environment executes the digit action itself, in the frame after each
 image: an action the world runs on its own is a lesson (R35). It arrives strong, with its reward. Every
 uncovered activation of the image's frame, the calls at the top and the pixels nothing covered, has a window
-of one frame (D9), is open at age 1, and connects to it (R31): a connection to `digit-7` at offset `+1`, with
-the reward it earned, and to nothing else, since the policy admits nothing else (D50). A call connects from
-its start; its end, born at the age of its place, infers nothing (D9). An interneuron that recurs over sevens
-accumulates exposures to `digit-7` and nothing else, so its estimate for it climbs; a pixel's connections are
-a marginal over every digit it has stood in (R35).
+of one frame (D9), is open at age 1, and connects to it (R31): a connection to `digit-7` at offset `+1`, under
+its own pose, with the reward it earned, and to nothing else, since the policy admits nothing else (D50). An
+interneuron that recurs over sevens accumulates exposures to `digit-7` and nothing else, so its estimate for
+it climbs; a pixel's connections are a marginal over every digit it has stood in (R35).
 
 **Inferred.** When the environment stops moving first, the voters are the apex of the image's frame (R46). Each
 proposes at the frame ahead the digits its connections at `+1` name, each with its strength and estimate (R36).
@@ -172,15 +177,18 @@ allocated interneuron has nothing for the frame ahead, so what it covers speaks 
 has run under it (R48). Where no voter has anything, the world names the image, and the apex learns it (R35).
 
 **What votes for a digit.** The lines of a digit are its strokes, and a stroke two or three pixels thick is one
-call whichever way it leans, with its length in its own relation and nothing above reading that. So a seven
-drawn larger makes the same calls as a seven drawn smaller, and the same voters. Where the strokes meet, the
-corners and the crossings are what tells a seven from a one; where the hand was unsteady, a stroke is several
-short lines rather than one, and what recurs across images at an exact offset is less than the walk above
-suggests. That is the case's risk, and it is a measurement, not a derivation.
+call, with its length in its pose. A connection is keyed by the pose, so a seven drawn larger makes lines of
+other laps, other corners and other voters than a seven drawn smaller, and each size is learned over its own
+images. That is the strictness of this case: it recognizes what it has seen, exactly, and nothing it has not.
+Where the strokes meet, the corners and the crossings are what tells a seven from a one; where the hand was
+unsteady, a stroke is several short lines rather than one, and what recurs across images at an exact offset
+and length is less than the walk above suggests. That is the case's risk, and it is a measurement, not a
+derivation. The variables over counts are what will let one line function vote for every length and one
+corner for every size.
 
 # 5. Where the levels stop
 
 The levels end on an image when one fires nothing (R26): when the interneurons at the top hold no relation
-twice over that pays. What stands there then is the image's description: calls for its parts, each at its two
-ends, and whatever pixels nothing covered. That is the apex that learns and votes (R27), and the level at
+twice over that pays. What stands there then is the image's description: calls for its parts, each in its
+pose, and whatever pixels nothing covered. That is the apex that learns and votes (R27), and the level at
 which it stands is nothing the machine was told.
