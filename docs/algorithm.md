@@ -1086,8 +1086,9 @@ on the apex in the frames after it, event and action alike.
 > as a neighbor may (D5), so a thing that moved is connected to where it went: that is where displacement is
 > learned. **A connection is written only where the future table of the policy admits the target's kind among
 > the holder's kind's connections** (D50). Nothing about any one activation is kept. A call's connections are
-> keyed by its pose, so a cycle's call standing at one node of the cycle learns apart from one standing at
-> another, in one neuron (D48).
+> keyed by its pose, laps included, so a cycle's call standing at one node of the cycle learns apart from one
+> standing at another, and a call at one lap count apart from one at another, in one neuron (D48): a running
+> cycle learns what follows it at each length it has reached, and nothing at a length it has not.
 >
 > | Component | Description                                                                              |
 > |-----------|------------------------------------------------------------------------------------------|

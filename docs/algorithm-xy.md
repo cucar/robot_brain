@@ -82,12 +82,22 @@ of two nodes and two relations with its own interneuron, and none of them shares
 # 3. The call at the present
 
 Each letter of the stretch the call fires anew at the present, at age 0, and infers from its connections what
-follows (R36). Its connections are keyed by its pose (D25): the activations that stood in a pose starting at
-`x` saw `y` on the apex at `+1`, and those in a pose starting at `y` saw `x`, so a call standing at an `x`
-infers `y` and one standing at a `y` infers `x`, in one neuron, and the vote is never split. The call it
-covered is gone from the apex. The letter that just fired is replaced by the call, writes one connection to
-it, and is silent (D10). So the call speaks for the stretch: at the base, a letter's own connections say only
-that `x` is followed by `y` and `y` by `x`, which the call says already.
+follows (R36). Its connections are keyed by its pose, laps included (D25, D34), and a running cycle's call is
+in a new pose every frame: from `y` round to `y` at one lap, from `x` to `y` at a lap and a half, from `y` to
+`x` at two. Each is covered at age 1 by the call after it and connects once, to that call in its pose at `+1`
+(D10): the call at a lap and a half holds the call at two laps and nothing else, since the letter under the
+new call left the apex at age 0. So what a pose learns is the pose a half lap on, and that connection is as
+strong as the stretches that reached it.
+
+A call at a length some stretch reached before infers the next pose at `+1`. That call expands from the node
+its pose starts at, the letter at the frame ahead, back over the letters that stand (R28), and the letter is
+proposed (R49). A call at a length no stretch reached before has nothing for the frame ahead, and speaking
+falls through the cover (R48): the letter it stands at speaks, and a base letter holds the other letter at
+`+1`, or a call in a pose that expands to it, from the frames it stood bare. So the stretch is continued
+either way, by the call where its length has recurred and by the letter under it where it has not. What the
+call adds, at a length it knows, is one voter for the whole stretch in place of a letter that knows only its
+neighbor. One pose that holds what follows at every length is what a variable over laps will give, and it is
+not in this case.
 
 # 4. The worth
 
