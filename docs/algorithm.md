@@ -852,7 +852,7 @@ occurs is what the worth measures (D57).
 >
 > | Relation, at its far node | Comes true where the far end is |
 > |---|---|
-> | a fixed node | its neuron; or a call whose pose starts at that node, standing at its position (D53): the fit lands on the call and covers its whole count (D22) |
+> | a fixed node | its neuron; or a call whose pose starts at that node, standing at its position (D53): the fit lands on the call and covers its whole cost (D22) |
 > | a class | a member; it takes members only (D41) |
 > | a parameter | any neuron where the node is first reached, reading from the node the fit entered at, and the value already bound where it is reached again (D44) |
 >
@@ -865,7 +865,7 @@ occurs is what the worth measures (D57).
 >
 > | | Edges |
 > |---|---|
-> | A | for each relation of the fit that came true, the board relation it stands in for, one; and the whole count of each call the fit lands on, where a call whose pose starts at the node stands at that position (D12, D54, R23) |
+> | A | for each relation of the fit that came true, the board relation it stands in for, one; and the whole cost of each call the fit lands on, where a call whose pose starts at the node stands at that position (D12, D54, R23) |
 > | B | the call's cost (D12): one for the call; one failure per relation that did not come true; one binding per argument |
 > | savings | A less B |
 >
@@ -1290,12 +1290,12 @@ argument.
 > **A candidate** is a board relation the neurons returned with strength 2 or more, that the fit did not land
 > on, and that shares a neuron with an activation the fit landed on or with the call. Its other end is a
 > neuron the function does not name, which would be a new node, or a node the function has, which would close
-> the cycle where the function has none (D15). A relation to a call whose pose starts at a node of this
-> function is read as a relation to that node (D54): it is attached there. The relation to the call and
-> the relation to that node's neuron are one board relation, and a function holds that relation as one or the other,
-> never both: where the fit already lands on it, under either name, it is no candidate. It is no candidate
-> where its new node would be the origin, later
-> in time or at a lesser position in the same frame, since the origin is fixed (D15); where the function has a
+> the cycle where the function has none (D15). A relation to a call, at an offset where the call's expansion
+> puts a node of this function, is read as a relation to that node, as the count reads it: it is attached
+> there. The relation to the call and the relation to that node's neuron are one board relation, and a
+> function holds that relation as one or the other, never both: where the fit already lands on it, under either
+> name, it is no candidate. It is no candidate where its new node would be the origin, later in time or at a
+> lesser position in the same frame, since the origin is fixed (D15); where the function has a
 > cycle and it leads on from a node of the cycle in the direction the cycle advances in; or where the function
 > has a cycle and it would close another.
 >
@@ -1314,13 +1314,18 @@ argument.
 > one row. **A relation is counted by an end whose rows hold it**, at whatever offset (D10). Where two ends
 > hold it, it is read at the count with the more activations behind it, as a returned relation is (R21).
 >
-> **A relation to a node is counted through the calls that stand at it.** A fit lands a node on its neuron
-> or on a call whose pose starts at that node (D54), so the count must read both as the node. The machine
-> holds the dictionary and knows every such call; it hands the relation as a set, the node's neuron and each
-> such interneuron in each such pose at the same offset, and the neuron counts a row as holding the relation
-> when it holds any of them. The neuron knows nothing of calls or their poses; the mapping is the machine's,
-> the one the fit makes. Without it a relation that keeps landing on a call would read as never
-> holding, since where a call stands at a position the call is the neighbor there, not the node under it (D5).
+> **A relation to a node is counted through the calls that stand for it.** A row that saw an activation a
+> call covered holds the call, at the offset to the call's position (D10), and the call's expansion from
+> there puts the covered node back at the offset the row saw it at (R28). So the count reads a call as every
+> node its expansion puts at the row's offset: the node at the call's own position, where its pose starts
+> (D54), and every other node it covered, each at its own offset from the call. The machine holds the
+> dictionary and knows every call and its expansion; it hands the relation as a set, the node's neuron at the
+> offset and each interneuron in each pose at each offset from which its expansion puts that node there, and
+> the neuron counts a row as holding the relation when it holds any of them. The neuron knows nothing of calls
+> or their poses; the mapping is the machine's. Without it a relation that keeps landing on a call would read
+> as never holding, since where a call stands the call is the neighbor there, not the node under it (D5), and
+> a row rewritten to a call would read its node at the call's position, where another node of the call may
+> have stood.
 >
 > **Distance and worth.** A candidate's distance to a function is `1 − with / (with + without)`: zero where it
 > stood at every occasion the function did, one where it never did. Its worth in the function is
