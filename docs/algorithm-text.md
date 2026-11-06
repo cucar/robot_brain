@@ -31,7 +31,7 @@ Once `h` has seen `t` one back twice, `{h, t@−1}` is a function: `t` and `h` o
 | | relations |
 |---|---|
 | A, the relation between the two | 1 |
-| B, the call's count: one for the call | 1 |
+| B, the call's cost: one for the call | 1 |
 | savings per occasion | 0 |
 | entry in the dictionary: one relation | 1 |
 | worth | −1 |
@@ -62,10 +62,10 @@ the function is `with − without − 1`, 1, and the function's worth with it is
 two occasions, 0, against −1 without it: a gain of 1, higher than the relation's contribution alone, −1, so it
 joins (D57, R54). The function is `{e, h@−1, t@−2}`, three nodes, two relations, origin `e`.
 
-A function that changed is placed again before the election (R50). Its fit at the second `the` lands on `t`,
+A function that changed is fit again before the election (R50). Its fit at the second `the` lands on `t`,
 `h` and `e`, two relations for one: 2 for 1, taken (R24). Its interneuron, call it `THE`, is allocated (R16)
-and fires once, at `e`'s place, at age 0, in the pose the fit read: from `e` back to `t`, one lap of a function
-with no cycle (D53, D37). It stands in place of the three letters and inherits the relation the fit did not
+and fires once, at `e`'s position, at age 0, in the pose the fit read: from `e` back to `t`, one lap of a function
+with no cycle (D53, D37). It stands for the three letters and inherits the relation the fit did not
 cover, `t`'s relation to the letter before it, now from the call at `−3` (D10). In the row of that earlier
 letter, which saw `t` at `+1`, the machine changes the entry to `THE` in that pose at `+3`. Each of the three
 letters connects once more, to `THE`, and is silent; `e`, covered at age 0, writes nothing else (D10). All
@@ -89,8 +89,8 @@ stretch grows one letter per recurrence toward its past, flat, in one function, 
 the board for it but the letters.
 
 **What follows is a function over the call.** The letter after `e` sees `THE` one back, the call standing at
-`e`'s place (D5). Where a space has stood after `THE` twice, `{space, THE@−1}` is a function. Its fit lands on
-the space and on the call, and covers the relation to the call and the call's whole count, one (D22): 2 for 1,
+`e`'s position (D5). Where a space has stood after `THE` twice, `{space, THE@−1}` is a function. Its fit lands on
+the space and on the call, and covers the relation to the call and the call's whole cost, one (D22): 2 for 1,
 taken. Its interneuron stands for `t h e ` through `THE` and expands to it (R28). So a stretch is reached two
 ways, flat at its past end and as a function over the call of what came before, and where both fit the
 election takes the one that covers the most for its price (R24): the flat ` the` at 3 for 1 before the pair
@@ -106,7 +106,7 @@ machine compresses the stretch that recurs, not the word.
 A stretch of any length forms this way, and nothing has to be a power of two long: a letter is on the apex,
 and the letter before it within reach can join the function that names it. A long stretch does not see far for
 being long: an interneuron standing for eight letters sees one beyond them at each end, eight back from its
-place and one further (D4).
+position and one further (D4).
 
 # 4. A doubled letter
 
@@ -116,7 +116,7 @@ entry is 1 and it is a cycle of one node (D15): `l` after `l` for as long as it 
 fit reads one lap, 1 for 1, and is not taken: two `l`'s stand bare. At `lll` the fit reads two laps, landing
 on all three, and covers 2 for 1 (D54): the call fires at the third `l`, in a pose of two laps (D53). A longer
 run is covered a letter per frame: each new call reads one lap, lands on the call before, whose pose starts at
-`l`, covers that call's count and the new relation, 2 for 1, and its laps are the one it read and the old
+`l`, covers that call's cost and the new relation, 2 for 1, and its laps are the one it read and the old
 call's together, so the run is one call however many have grown over it (R23). The same holds for `oo` from
 `o`'s history and `ss` from `s`'s. A doubling too rare to recur within `l`'s history, or too short to pay,
 stays as letters on the apex.
@@ -128,5 +128,5 @@ it in; the letters nothing covered; and the spaces, which are letters like any o
 them. The apex is what the next letter sees (D5), and what connects to what follows (D25): every uncovered
 activation open at the next frame connects to the letter that stood there (R31), a call under its pose like a
 letter. It is also what votes (R27): each activation that fired at the present proposes at the frame ahead the
-letters its connections name, and the letter the most voters place is output, weakly, for the report to
+letters its connections name, and the letter the most voters name is output, weakly, for the report to
 replace (R47, R40, D9).

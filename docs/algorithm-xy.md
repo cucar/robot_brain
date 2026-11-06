@@ -15,7 +15,7 @@ for longer than any reach, then runs `a, b, a, b, …`, then `m, n, m, n, …`, 
 long or short, and a pair may come once or often. Nothing follows a stretch but silence, so what a pass teaches
 is the alternation itself.
 
-An activation stands on the board one frame beyond the farthest node any function places from its latest
+An activation stands on the board one frame beyond the farthest node any function reaches from its latest
 (D9): while the dictionary holds pairs and cycles of offset 1, that is two frames, so at any frame the board
 holds that frame and the two before it.
 
@@ -30,7 +30,7 @@ nodes, `x` and `y`, one relation, origin `y` (R50, D15). Its fit at frame 4 cove
 and is not taken (R24): `x` and `y` stand bare, and the function waits in the dictionary at a worth of −1
 (D57).
 
-**The cycle closes from the bare letters.** At frame 6 the pair's fit is placed again, at `y`, landing on the
+**The cycle closes from the bare letters.** At frame 6 the pair fits again, at `y`, landing on the
 `x` at 5. `(x, y, −1)` is at strength 2 and shares `x` with the fit, so it is a candidate; its other end, `y`,
 is a node the function has, so it would close the cycle (R50, D15). The node it attaches at counts it.
 `x`'s row holds `y` before it and `y` after it, so `x` counts its activations that hold `y` after together
@@ -51,7 +51,7 @@ since the `x` at 3 left it after frame 5 (D9). The lap ends without a failure.
 | B: one for the call | 1 |
 
 It is taken. Its interneuron, `XY`, fires once, at the `y` at 6, at age 0, in the pose the fit read: from `y`
-round to `y`, one lap (D53). It stands in place of the three letters, which leave the apex, each connecting
+round to `y`, one lap (D53). It stands for the three letters, which leave the apex, each connecting
 once more to it (D10). The `y` at 4 had seen the `x` at 3, but that activation is off the board, so the call
 inherits nothing.
 
@@ -62,7 +62,7 @@ covers (D10).
 
 | the fit at frame 7 | relations |
 |---|---|
-| A: the relation from `x` to the call, and the call's count | 2 |
+| A: the relation from `x` to the call, and the call's cost | 2 |
 | B: one for the call | 1 |
 
 It is taken. `XY` fires again, at the `x` at 7, in the pose from `x` round to `y`: the relation it read and
@@ -95,13 +95,13 @@ proposed (R49). A call at a length no stretch reached before has nothing for the
 falls through the cover (R48): the letter it stands at speaks, and a base letter holds the other letter at
 `+1`, or a call in a pose that expands to it, from the frames it stood bare. So the stretch is continued
 either way, by the call where its length has recurred and by the letter under it where it has not. What the
-call adds, at a length it knows, is one voter for the whole stretch in place of a letter that knows only its
+call adds, at a length it knows, is one voter for the whole stretch where a letter knows only its
 neighbor. One pose that holds what follows at every length is what a variable over laps will give, and it is
 not in this case.
 
 # 4. The worth
 
-Nothing is kept for the function: its worth is read from the neurons at every level it is placed at (R50,
+Nothing is kept for the function: its worth is read from the neurons at every level it fits at (R50,
 D57). `y` counts `y` after `x`, `x` counts `x` after `y`, each over its own history. In a stretch `y` after
 `x` holds at every `y`, so its `with` climbs and its `without` stays at zero. `x` after `y` holds at every `x`
 but the first of each stretch, and there the lap ends, which is no failure, so its `without` stays at zero too.

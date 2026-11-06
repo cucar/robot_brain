@@ -47,7 +47,7 @@ below turns on.
    second, so at the third tap `tap` after `tap` is at strength 2 and starts a function (R50): one node with
    a relation to itself, a cycle of one node (D15). Placed at that frame, its fit reads back round the cycle,
    two laps, and ends at `go`, which is no tap, without a failure (D54): two relations for one, taken (R24).
-   Its interneuron `taps` fires once, at the third tap, in a pose of two laps (D53). It stands in place of the
+   Its interneuron `taps` fires once, at the third tap, in a pose of two laps (D53). It stands for the
    three taps, which leave the apex, and inherits what the fit did not cover: the first tap's relation to `go`,
    now from the call at `−3` (D10). At the second tap of any run the same fit reads one lap, 1 for 1, and is
    not taken: the first two taps stand bare.
@@ -59,7 +59,7 @@ below turns on.
    and records the bare third tap beside it at offset zero. When the call lands on that tap, the machine
    changes the entry in `stop`'s row to `taps` in its pose at offset zero (D10), so `stop` holds the call
    beside it in every run. In the second run that relation is at strength 2, and `{stop, taps@0}` is a
-   function. Its fit lands on `stop` and on the call, whole, and covers the relation and the call's count,
+   function. Its fit lands on `stop` and on the call, whole, and covers the relation and the call's cost,
    2 for 1, taken. `taps·stop` fires at the next level of the same frame, at that frame, in its pose. The
    cycle's call is covered at age 0, in the frame it fired.
 4. **The exit names the end of the loop.** `done` sees `taps·stop` one back. In the third run that relation is
@@ -84,7 +84,7 @@ below turns on.
 | 3 | `tap`, and `stop` shown | `taps·stop`, over `stop` and the cycle's call, the three taps under it | `done` at `+1`, and `taps·stop·done` at `+1`, which expands to `done` there | `done` |
 | 4 | `done` reported as run | `taps·stop·done` | nothing: it has no connection | nothing |
 
-At frames 1 and 2 one voter stands, the bare tap, and both its connections place a tap at the frame ahead. At
+At frames 1 and 2 one voter stands, the bare tap, and both its connections name a tap at the frame ahead. At
 frame 3 the voter is `taps·stop`; the cycle's call and the taps under it are covered and silent (D10). The
 match reads each inferred call back: the call it names at `0` stands, the relation to it is credited, nothing
 is charged, and the inference is proposed (R49). A tap after `stop`, if one ever ran, is paid negatively and
@@ -115,7 +115,7 @@ not its to end. The frame `stop` shows is the frame the end's function fires, an
 **Had the world shown nothing.** A connection is to what stood on the apex (D25), and nothing stands in
 silence: there is no rest value (§3.3). Without `stop`, the third tap is the cycle's call, uncovered, holding a
 tap or nothing, and a neuron with nothing to say does not keep the floor: **speaking falls through the
-cover**, so the taps under it speak in its place, down to the base (R48), and the base `tap` says tap. The cue
+cover**, so the taps under it speak for it, down to the base (R48), and the base `tap` says tap. The cue
 is not optional; it is how the loop ends.
 
 # 6. What this machine does not do
