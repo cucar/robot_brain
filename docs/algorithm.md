@@ -355,7 +355,9 @@ connection read.
 > **D5 — Adjacency.** An activation `b` is adjacent to an activation `a` when the following conditions hold:
 >
 > - `b` is in the same frame as `a` or in an earlier one.
-> - `b` is within `a`'s reach in every activation dimension they share (D4), and is not at `a`'s own position.
+> - `b` is within `a`'s reach in every activation dimension they share (D4), and is not `a` itself. Two
+>   activations at one position are neighbors at offset zero: base neurons of different channels, and
+>   calls standing at one position (D53, D10).
 > - `b` stands on the apex: no accepted call has landed on it (D24). A covered activation is a neighbor of
 >   nothing. Where a call landed on `b`, the call is the neighbor there, in its pose, and the relation to it is
 >   the relation `b` had: a call inherits every relation of the activations it landed on that its fit did not
