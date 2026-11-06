@@ -500,15 +500,9 @@ impl Machine {
                 }
             }
         }
-        // a recurring relation no function holds starts one (R50), unless a function holds it under the other name
-        // of a call standing at one of its ends (D54)
+        // a recurring relation no function holds starts one (R50)
         for e in fresh {
             if e.strength < 2 || joined.contains(&e.rel) || self.dict.holder(&e.rel).is_some() { continue; }
-            let (Some(near), Some(far)) = (self.act(e.near), self.act(e.far)) else { continue };
-            let (ns, fs) = (self.dict.start_of(near.sym).unwrap_or(near.sym), self.dict.start_of(far.sym).unwrap_or(far.sym));
-            let other_name = [(ns, far.sym), (near.sym, fs), (ns, fs)].iter()
-                .any(|&(x, y)| (x, y) != (near.sym, far.sym) && self.dict.holder(&canon(x, y, e.off)).is_some());
-            if other_name { continue; }
             let id = self.dict.start(e.rel);
             self.stats_added += 1;
             if self.trace { eprintln!("[new f{}] {}", fno, self.dict.describe(self.dict.get(id).unwrap())); }
