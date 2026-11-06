@@ -107,6 +107,10 @@ pub struct Machine {
     /// function is added, moved or pruned, no interneuron is allocated, no connection or reward is written,
     /// nothing is decommissioned.
     pub frozen: bool,
+    /// Experiment: at each level, elect the fits of the functions the dictionary already holds before grouping,
+    /// then group over what that left uncovered, then fit what grouping changed and elect again over the rest.
+    /// Off, a level is the spec's: find, count, group, elect.
+    pub recognize_first: bool,
 }
 
 impl Machine {
@@ -151,6 +155,7 @@ impl Machine {
             electing: FxHashSet::default(),
             expansions: std::cell::RefCell::new(FxHashMap::default()),
             frozen: false,
+            recognize_first: true,
         }
     }
 
@@ -358,6 +363,28 @@ impl Machine {
         let mut found = self.find(&fresh);
         if self.trace { for e in &fresh { eprintln!("[fresh f{} l{}] {}→{}{:?} s={} held {:?}", self.frame_no, level, self.dict.sym_text(e.rel.a), self.dict.sym_text(e.rel.b), &e.rel.off[..], e.strength, self.dict.holder(&e.rel)); } }
         let mut fits: Vec<_> = found.iter().flat_map(|id| self.fits_of(*id)).collect();
+        // experiment: what the dictionary holds covers the board first; grouping reads only what it left uncovered,
+        // and what grouping changed is elected over the rest
+        if !self.frozen && self.recognize_first {
+            let fired: FxHashSet<Sym> = refs.iter().filter_map(|r| self.act(*r)).map(|a| a.sym).collect();
+            self.last_fits = fits.len();
+            let (mut accepted, mut minted) = self.elect(level, fits);
+            let left: Vec<Fresh> = fresh.iter().filter(|e| self.act(e.near).map_or(false, |a| a.on_apex()) && self.act(e.far).map_or(false, |a| a.on_apex())).copied().collect();
+            let rest: Vec<_> = found.iter().flat_map(|id| self.fits_of(*id)).collect();
+            let changed = self.group(&rest, &left, &fired);
+            self.span_s = self.board_span();
+            found.extend(changed);
+            found.retain(|id| self.dict.get(*id).is_some());
+            found.sort_unstable();
+            found.dedup();
+            let again: Vec<_> = found.iter().flat_map(|id| self.fits_of(*id)).collect();
+            if self.trace { for f in &again { eprintln!("[fit2 f{} l{}] f{} entry {:?} at node {} landed {} calls {} edges {} failed {:?} laps {}", self.frame_no, level, f.func, f.entry.1, f.entry.0, f.landed.len(), f.calls.len(), f.edges.len(), f.failed, f.laps); } }
+            self.last_fits += again.len();
+            let (a2, m2) = self.elect(level, again);
+            accepted += a2;
+            minted += m2;
+            return (bids, accepted, minted);
+        }
         // count and group (R50, R54, R18); what changed is fit again before the election
         if !self.frozen {
             let fired: FxHashSet<Sym> = refs.iter().filter_map(|r| self.act(*r)).map(|a| a.sym).collect();
