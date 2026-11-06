@@ -71,7 +71,7 @@ count significantly lower than no-reuse; transfer effect present.
 Validate the path from specific corrections to abstract class neurons over long training (**10k+ frames**).
 
 **Monitor**:
-- Connection-strength distribution per correction — structural core strengthens, incidental edges stay
+- Connection-strength distribution per correction — structural core strengthens, incidental connections stay
   weak / decay (the reuse-then-decay sharpening of [§1.3](./neuron-reuse.md)).
 - **Reuse counts per neuron rising** — the signature of a correction becoming a class neuron.
 - **Action bindings on heavily-reused neurons staying correct** — the dilution risk.

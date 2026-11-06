@@ -42,7 +42,10 @@ export function parseBrainArgs(argv = process.argv) {
 		groupMode: str('--group-mode'),
 		regions: num('--regions', parseInt),
 		columns: num('--columns', parseInt),
-		consensus: str('--consensus')
+		consensus: str('--consensus'),
+		// Learning state, fixed for the life of the brain instance — a frozen evaluation is a separate
+		// instance constructed with learning off and loaded from a backup.
+		learning: has('--disable-learning') ? false : null,
 	};
 }
 
