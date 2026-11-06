@@ -276,8 +276,10 @@ impl Machine {
     /// `with` and `without` for one relation of a set (R50): over the rows of the end that answers for it, how
     /// many hold the set's other relations at that end together with it, and how many hold them and not it.
     /// Where that end holds none of the others, every row that holds it is `with`, and nothing is `without`.
-    pub(crate) fn answer(&self, rels: &[Rel], r: &Rel) -> (u32, u32) {
-        let Some((n, far, off)) = self.held_by(r) else { return (0, 0) };
+    pub(crate) fn answer(&self, rels: &[Rel], r: &Rel, at: Option<Sym>) -> (u32, u32) {
+        // at the node it attached at (R50), where it has one; else at an end whose rows hold it
+        let end = at.and_then(|n| r.ends().into_iter().find(|c| c.0 == n)).or_else(|| self.held_by(r));
+        let Some((n, far, off)) = end else { return (0, 0) };
         let mut cond: Vec<(Sym, Offset)> = Vec::new();
         for s in rels {
             if s == r { continue; }
@@ -299,8 +301,8 @@ impl Machine {
 
     /// A relation's worth in a set (D57): `with − without − 1`, and `with − 1` for the relation that closes a
     /// cycle; with its nearness, `with / (with + without)`, and its `with`.
-    pub(crate) fn worth_in(&self, rels: &[Rel], r: &Rel, closing: Option<Rel>) -> (f64, f64, u32) {
-        let (w, wo) = self.answer(rels, r);
+    pub(crate) fn worth_in(&self, rels: &[Rel], r: &Rel, at: Option<Sym>, closing: Option<Rel>) -> (f64, f64, u32) {
+        let (w, wo) = self.answer(rels, r, at);
         let near = if w + wo == 0 { 0.0 } else { w as f64 / (w + wo) as f64 };
         let x = if closing == Some(*r) { w as f64 - 1.0 } else { w as f64 - wo as f64 - 1.0 };
         (x, near, w)
@@ -308,32 +310,35 @@ impl Machine {
 
     /// A function's worth (D57): the sum of its relations' worths, less one per call that stands, one per
     /// occasion: the most rows any of its relations held with the rest.
-    pub(crate) fn worth_of(&self, origin: Sym, rels: &[Rel]) -> f64 {
+    pub(crate) fn worth_of(&self, origin: Sym, rels: &[Rel], at: &[Option<Sym>]) -> f64 {
         if rels.is_empty() { return 0.0; }
         let closing = Self::closing_of(origin, rels);
         let (mut sum, mut occasions) = (0.0, 0u32);
-        for r in rels {
-            let (x, _, w) = self.worth_in(rels, r, closing);
+        for (r, a) in rels.iter().zip(at) {
+            let (x, _, w) = self.worth_in(rels, r, *a, closing);
             sum += x;
             occasions = occasions.max(w);
         }
         sum - occasions as f64
     }
 
-    /// A relation's gain in a function (D57, R54): the function's worth with it less its worth without it.
-    pub(crate) fn gain(&self, f: &Func, c: &Rel) -> f64 {
+    /// A relation's gain in a function it attaches to at node `attach` (D57, R54, R50): the function's worth with it
+    /// less its worth without it, the relation counted at the node it attaches at.
+    pub(crate) fn gain(&self, f: &Func, c: &Rel, attach: Sym) -> f64 {
         let mut with = f.rels.clone();
         with.push(*c);
-        self.worth_of(f.origin(), &with) - self.worth_of(f.origin(), &f.rels)
+        let mut at = Func::meeting(&f.rels, &f.at, attach);
+        at.push(Some(attach));
+        self.worth_of(f.origin(), &with, &at) - self.worth_of(f.origin(), &f.rels, &f.at)
     }
 
     /// A relation's contribution to the function it is in (D57, R54): the function's worth with it less without
     /// it; `−1` alone.
     pub(crate) fn contribution(&self, f: &Func, r: &Rel) -> f64 {
-        let without: Vec<Rel> = f.rels.iter().filter(|x| *x != r).copied().collect();
+        let (without, wat): (Vec<Rel>, Vec<Option<Sym>>) = f.rels.iter().zip(&f.at).filter(|(x, _)| *x != r).map(|(x, a)| (*x, *a)).unzip();
         if without.is_empty() { return -1.0; }
         let origin = if without.iter().any(|x| x.a == f.origin() || x.b == f.origin()) { f.origin() } else { without[0].a };
-        self.worth_of(f.origin(), &f.rels) - self.worth_of(origin, &without)
+        self.worth_of(f.origin(), &f.rels, &f.at) - self.worth_of(origin, &without, &wat)
     }
 
     // ───────────────────────────── grouping (R50, R54, R18) ─────────────────────────────
@@ -414,7 +419,7 @@ impl Machine {
             }
         }
         // the candidates (R50)
-        let mut cands: FxHashMap<Rel, Vec<FuncId>> = FxHashMap::default();
+        let mut cands: FxHashMap<Rel, Vec<(FuncId, Sym)>> = FxHashMap::default();
         for e in fresh {
             if e.strength < 2 { continue; }
             for (fid, list) in &touch {
@@ -424,13 +429,13 @@ impl Machine {
                     if taken.get(fid).map_or(false, |t| t.contains(&edge(act, other))) { continue; }
                     for rel in self.candidates(f, act, as_node, &opos, other) {
                         let v = cands.entry(rel).or_default();
-                        if !v.contains(fid) { v.push(*fid); }
+                        if !v.iter().any(|x| x.0 == *fid) { v.push((*fid, as_node)); }
                     }
                 }
             }
         }
         // one that closes a cycle before one that adds a node (R50)
-        let closes = |m: &Machine, rel: &Rel, fs: &[FuncId]| fs.iter().filter_map(|id| m.dict.get(*id)).any(|f| f.node_of(rel.a).is_some() && f.node_of(rel.b).is_some());
+        let closes = |m: &Machine, rel: &Rel, fs: &[(FuncId, Sym)]| fs.iter().filter_map(|x| m.dict.get(x.0)).any(|f| f.node_of(rel.a).is_some() && f.node_of(rel.b).is_some());
         let mut keys: Vec<(bool, Rel)> = cands.iter().map(|(r, fs)| (!closes(self, r, fs), *r)).collect();
         keys.sort();
         let mut joined: FxHashSet<Rel> = FxHashSet::default();
@@ -441,27 +446,27 @@ impl Machine {
                 Some(g) => self.contribution(g, &rel),
                 None => -1.0,
             };
-            let mut best: Option<(f64, f64, u64, FuncId)> = None;
-            for fid in fs {
+            let mut best: Option<(f64, f64, u64, FuncId, Sym)> = None;
+            for (fid, attach) in fs {
                 let Some(f) = self.dict.get(fid) else { continue };
                 if f.holds(&rel) { continue; }
                 // read against the function as it now stands: it touches a node, and closes no second cycle
                 let (ka, kb) = (f.node_of(rel.a).is_some(), f.node_of(rel.b).is_some());
                 if !(ka || kb) || (ka && kb && f.has_cycle()) { continue; }
-                let w = self.gain(f, &rel);
+                let w = self.gain(f, &rel, attach);
                 let mut rels = f.rels.clone();
                 rels.push(rel);
-                let near = self.worth_in(&rels, &rel, None).1;
-                let better = match best { None => true, Some((bw, bn, bj, _)) => w > bw || (w == bw && (near > bn || (near == bn && f.joined < bj))) };
-                if better { best = Some((w, near, f.joined, fid)); }
+                let near = self.worth_in(&rels, &rel, Some(attach), None).1;
+                let better = match best { None => true, Some((bw, bn, bj, _, _)) => w > bw || (w == bw && (near > bn || (near == bn && f.joined < bj))) };
+                if better { best = Some((w, near, f.joined, fid, attach)); }
             }
-            let Some((w, _, _, fid)) = best else { continue };
+            let Some((w, _, _, fid, attach)) = best else { continue };
             if self.trace { eprintln!("[cand f{}] {} best f{} gain {:.0} | where it stands f{:?} {:.0}", fno, self.rel_text(&rel), fid, w, self.dict.holder(&rel), here); }
             if !(w > here) { continue; }
             if self.trace { eprintln!("[join f{}] {} into {} gain {:.0} over {:.0}", fno, self.rel_text(&rel), self.dict.describe(self.dict.get(fid).unwrap()), w, here); }
             if let Some(g) = self.dict.holder(&rel) { self.leave(g, &rel, &mut changed); }
             if self.dict.get(fid).is_none() { continue; }
-            self.dict.join(fid, rel);
+            self.dict.join(fid, rel, attach);
             self.expansions.borrow_mut().clear();
             joined.insert(rel);
             if !changed.contains(&fid) { changed.push(fid); }

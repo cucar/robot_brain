@@ -46,6 +46,9 @@ pub struct Func {
     pub id: FuncId,
     pub nodes: Vec<Sym>,
     pub rels: Vec<Rel>,
+    /// Per relation, the node it is counted at: where it attached to the function (R50), none for a relation
+    /// that has met no other yet.
+    pub at: Vec<Option<Sym>>,
     /// Its interneuron once a fit of it has been accepted (R16, R43).
     pub inter: Option<NeuronId>,
     /// When it joined the dictionary: earlier is older (R24).
@@ -69,7 +72,18 @@ impl Func {
     pub fn from_rels(origin: Sym, rels: &[Rel]) -> Func {
         let mut nodes = vec![origin];
         for r in rels { for x in [r.a, r.b] { if !nodes.contains(&x) { nodes.push(x); } } }
-        Func { id: 0, nodes, rels: rels.to_vec(), inter: None, joined: 0 }
+        Func { id: 0, nodes, rels: rels.to_vec(), at: vec![None; rels.len()], inter: None, joined: 0 }
+    }
+    /// Where each relation is counted once a relation attaches at `at`: a relation that had met none before and
+    /// has `at` for an end meets it there (R50).
+    pub fn meeting(rels: &[Rel], at: &[Option<Sym>], node: Sym) -> Vec<Option<Sym>> {
+        rels.iter().zip(at).map(|(r, a)| a.or(if r.a == node || r.b == node { Some(node) } else { None })).collect()
+    }
+    /// Keep the relations that pass, with where each is counted.
+    pub fn keep(&mut self, f: impl Fn(&Rel) -> bool) {
+        let (rels, at): (Vec<Rel>, Vec<Option<Sym>>) = self.rels.iter().zip(&self.at).filter(|(r, _)| f(r)).map(|(r, a)| (*r, *a)).unzip();
+        self.rels = rels;
+        self.at = at;
     }
     pub fn origin(&self) -> Sym { self.nodes[0] }
     pub fn node_of(&self, n: Sym) -> Option<usize> { self.nodes.iter().position(|x| *x == n) }
@@ -251,7 +265,7 @@ impl Dictionary {
     /// A new function of one relation, its origin the relation's first neuron (R50, D15).
     pub fn start(&mut self, r: Rel) -> FuncId {
         let nodes = if r.a == r.b { vec![r.a] } else { vec![r.a, r.b] };
-        self.insert(Func { id: 0, nodes, rels: vec![r], inter: None, joined: 0 })
+        self.insert(Func { id: 0, nodes, rels: vec![r], at: vec![None], inter: None, joined: 0 })
     }
 
     fn insert(&mut self, mut f: Func) -> FuncId {
@@ -266,12 +280,16 @@ impl Dictionary {
         id
     }
 
-    /// A relation joins a function (R54): a new node where its other neuron is not one, a cycle where it is.
-    pub fn join(&mut self, id: FuncId, r: Rel) {
+    /// A relation joins a function at node `at` (R54, R50): a new node where its other neuron is not one, a cycle
+    /// where it is. It is counted at that node, and so is each relation of the function it meets there that had
+    /// met none before.
+    pub fn join(&mut self, id: FuncId, r: Rel, at: Sym) {
         let Some(f) = self.funcs.get_mut(&id) else { return };
         if !f.nodes.contains(&r.a) { f.nodes.push(r.a); }
         if !f.nodes.contains(&r.b) { f.nodes.push(r.b); }
+        f.at = Func::meeting(&f.rels, &f.at, at);
         f.rels.push(r);
+        f.at.push(Some(at));
         self.by_rel.insert(r, id);
     }
 
@@ -280,7 +298,7 @@ impl Dictionary {
     /// returned.
     pub fn leave(&mut self, id: FuncId, r: &Rel) -> (Vec<Rel>, Option<Func>) {
         let Some(f) = self.funcs.get_mut(&id) else { return (vec![], None) };
-        f.rels.retain(|x| x != r);
+        f.keep(|x| x != r);
         self.by_rel.remove(r);
         // what the origin still reaches
         let mut reach = vec![f.nodes[0]];
@@ -293,7 +311,7 @@ impl Dictionary {
             if reach.len() == before { break; }
         }
         let cut: Vec<Rel> = f.rels.iter().copied().filter(|x| !(reach.contains(&x.a) && reach.contains(&x.b))).collect();
-        f.rels.retain(|x| reach.contains(&x.a) && reach.contains(&x.b));
+        f.keep(|x| reach.contains(&x.a) && reach.contains(&x.b));
         f.nodes.retain(|n| reach.contains(n));
         for x in &cut { self.by_rel.remove(x); }
         if f.rels.is_empty() { return (cut, self.remove(id)); }
