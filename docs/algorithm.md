@@ -890,6 +890,12 @@ A neuron the function does not name is in neither: it costs what it cost whether
 > | worth of a relation | `with − without − 1`: one relation saved at each occasion it held with the function, one failure at each it did not, and one relation in the dictionary (D13). The relation that closes a cycle has no `without`: where it does not land the lap ends, and that is never a failure (D54) |
 > | worth of a function | the sum of its relations' worths, less one per call that stands: one per occasion, and one per run where a cycle's calls in time each cover the call before, since a covered call's price is paid through its coverer (D13, D54, R23) |
 >
+> **No neuron counts the function.** A neuron's rows hold the relations at its own activations and nothing
+> beyond (D18), so an end of a relation sees of the function only the relations the function has at that
+> node. Its `with` says those held together with the candidate, whether or not the rest of the function held
+> at the same occasion: a partial reading, from one node. The function's worth is those readings summed over
+> its relations, each from the neuron that holds it, and no neuron and no count sees the whole.
+>
 > **One per call, whatever it covers.** A call costs one once, however many relations it covers, so the first
 > relation of a function pays for the call and every relation after it saves one at each occasion. A function
 > of one relation is worth `−1`: its call covers one for one and is never taken (R24), and the function is
@@ -1295,15 +1301,16 @@ argument.
 > that stand in it, so its worth is still read and it can still leave (R18). For each relation of the
 > function the neuron is an end of, and for each
 > candidate it shares, the neuron returns two numbers over its history (D47): **with**, how many of its
-> activations hold the function's other relations at it together with this one, and **without**, how many hold
-> them and not this one. Every activation of an interneuron is a fit of its function, so it counts over all
-> its activations, for any candidate within its reach (D4). A row holds the frame around the activation on both
-> sides in time (D18), so a candidate at either end of a function is counted by the node it attaches at: for
-> a candidate at the past end, the node sees the function's relation after it and the candidate before it in
-> one row. **A relation is counted only by an end that can see it**: a neuron whose reach covers the
-> relation's offset (D4); an end whose reach falls short of the offset holds nothing of it and counts it
-> never. Among the ends that can see it, a relation two of them count is read at the count with the more
-> activations behind it, as a returned relation is (R21).
+> activations hold the function's other relations at it, the ones it is an end of, together with this one,
+> and **without**, how many hold them and not this one. A neuron sees no more of the function than the
+> relations at it. Every activation of an interneuron is a fit of its function, so it counts over all its
+> activations, for any candidate its rows hold. A row holds the frame around the activation on both sides in
+> time (D18), so a candidate at either end of a function is counted by the node it attaches at: for a
+> candidate at the past end, the node sees the function's relation after it and the candidate before it in
+> one row. **A relation is counted by an end whose rows hold it.** At the base that is an end whose reach
+> covers the offset (D4); a call's rows hold what it inherited, at whatever offset the rewrite put it at
+> (D10), and it counts those. Where two ends hold it, it is read at the count with the more activations
+> behind it, as a returned relation is (R21).
 >
 > **A relation to a node is counted through the calls that stand at it.** A fit lands a node on its neuron
 > or on a call whose pose starts at that node (D54), so the count must read both as the node. The machine
