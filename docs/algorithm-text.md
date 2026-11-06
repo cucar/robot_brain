@@ -62,7 +62,7 @@ the function is `with − without − 1`, 1, and the function's worth with it is
 two occasions, 0, against −1 without it: a gain of 1, higher than the relation's contribution alone, −1, so it
 joins (D57, R54). The function is `{e, h@−1, t@−2}`, three nodes, two relations, origin `e`.
 
-A function that changed is fit again before the election (R50). Its fit at the second `the` lands on `t`,
+A function that changed is fit again before the second election (R50). Its fit at the second `the` lands on `t`,
 `h` and `e`, two relations for one: 2 for 1, taken (R24). Its interneuron, call it `THE`, is allocated (R16)
 and fires once, at `e`'s position, at age 0, in the pose the fit read: from `e` back to `t`, one lap of a function
 with no cycle (D53, D37). It stands for the three letters and inherits the relation the fit did not

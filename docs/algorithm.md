@@ -1212,9 +1212,10 @@ frame reported, each after it over what the level before accepted, until a level
 |------------|-------------|
 | activate   | Fire every interneuron the level below accepted, once, in its fit's pose (D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations with strengths. |
 | find       | Read every returned relation in the index, as it is and with either end open, and fit every function it reaches on the board wherever its relations match, one fit per position (R53, D31). |
+| elect      | Take the fits best first, the largest coverage less price each round, stopping when the board is covered (R24). The dictionary as it stands covers what it knows before anything in it changes. |
 | count      | Hand each neuron every function it stands in, fit at this level or not, with the candidates of the ones that fit, and call `count` on it: it returns with and without for each relation and each candidate (R50, D47). |
 | group      | Over those counts, move each relation where the dictionary's worth rises most, to a function it is a candidate of, one that closes a cycle before one that adds a node, the nearest on a tie, to its own function or to none, and start a function for each recurring relation no function holds (R50, R54, R18). |
-| elect      | Take the fits best first, the largest coverage less price each round, stopping when the board is covered (R24). |
+| elect      | Fit every function that changed or formed in group on what the first election left, and elect again over those fits the same way (R24). |
 | allocate   | Give each accepted function with no interneuron one, reused where a stretch comes round (R43), allocated otherwise where a neuron is free (R16). It fires at the next level. |
 
 Then, once the last level has run:
@@ -1240,12 +1241,14 @@ argument.
 > neuron: a neuron fires at whatever level accepts its function, and one neuron may fire at different levels of
 > different frames.
 >
-> **Within a level the order is activate, find, count, group, elect, allocate.** It cannot be otherwise: what
-> fires is what the level before accepted; what a neuron returns is what is fit; the neurons count over
-> what was fit; the moves read their counts; the election is over everything fit, as the functions now
-> stand, since a function changed last may cover the board better than any fit first, so nothing is taken
-> until the whole board has been read; and an interneuron is allocated only for a fit the election accepted
-> (R16). The dictionary changes in group, and the index is read before and after it.
+> **Within a level the order is activate, find, elect, count, group, elect, allocate.** What fires is what
+> the level before accepted; what a neuron returns is what is fit; the first election takes the best fits of
+> the dictionary as it stands, so what is known covers its pixels before anything in the dictionary changes;
+> the neurons count over what was fit; the moves read their counts; a function that changed or formed in
+> group is fit on what the first election left, and the second election is over those fits; and an
+> interneuron is allocated only for a fit an election accepted (R16). A function cannot form over what the
+> first election covered: a function that wins there keeps its pixels until its relations leave on their
+> worth (R18, R54). The dictionary changes in group, and the index is read before and after it.
 >
 > Every neuron runs the same rule at its own reach (D4). **Compression is spatio-temporal for every neuron, in
 > one pass**: a function may name neighbors in its own frame, in earlier ones, beside it in space, or in a mix.
@@ -1290,7 +1293,8 @@ argument.
 > neurons at the count step (§6.1), over their histories (D18, D47).
 >
 > **A candidate** is a board relation the neurons returned with strength 2 or more, that the fit did not land
-> on, and that shares a neuron with an activation the fit landed on or with the call. Its other end is a
+> on, that the first election left on the board, and that shares a neuron with an activation the fit landed
+> on or with the call. Its other end is a
 > neuron the function does not name, which would be a new node, or a node the function has, which would close
 > the cycle where the function has none (D15). A relation to a call, at an offset where the call's expansion
 > puts a node of this function, is read as a relation to that node, as the count reads it: it is attached
@@ -1349,9 +1353,9 @@ argument.
 > from itself back to the call, is a function at the level above, over the call (R26). Two relations that never
 > touch are never one function: where they recur together, the level above relates their two calls.
 >
-> **The fits the election chooses among** are every fit of this level, of functions with an interneuron
-> and without (R24). A function that changed at this level is fit again before the election, with its
-> relations as they now stand.
+> **The fits the first election chooses among** are every fit of this level, of functions with an interneuron
+> and without (R24). A function that changed or formed at this level is fit again before the second
+> election, with its relations as they now stand, on what the first election left.
 
 > **R54 — Moving.** A function changes by relations moving, one at a time, and by nothing else. There are three
 > moves, and each is the same decision, whether the dictionary's worth rises (D57), read from the neurons the
@@ -1477,10 +1481,12 @@ the election stops at the first that does not pay. **The election does not minim
 and returns a good solution, not a proved minimum. **Every activation a fit covers ends up credited to exactly
 one fit**, which is what stops an activation being paid for twice.
 
-> **R24 — The election is D28, run by the machine.** The fits are everything find fit at this level, over
-> the functions as grouping left them (R53, R50, R52), less any whose function would need a neuron when none is
-> free (R16), and what they cover is the **free set**: every activation on the board that some fit lands on and no
-> accepted call covers, with its relations, and every call a fit lands on (D54), at that call's cost (R23).
+> **R24 — The election is D28, run by the machine.** It runs twice in a level. The first time the fits are
+> everything find fit at this level, over the dictionary as it stands (R53); the second time they are the fits
+> of the functions grouping changed or formed, on what the first election left (R50, R52). Either time, less
+> any whose function would need a neuron when none is free (R16), and what they cover is the **free set**:
+> every activation on the board that some fit lands on and no accepted call covers, with its relations, and
+> every call a fit lands on (D54), at that call's cost (R23).
 >
 > Each fit stands on the board before the first round (D31), and `price` is R22's. Then D28 runs: the largest
 > `coverage` less `price` first, each while `coverage > price` against the board as it then stands, and it
