@@ -29,7 +29,8 @@ pub struct FiredBy {
 /// One standing inference (R45): a connection as it was read at age 0.
 #[derive(Clone, Copy, Debug)]
 pub struct Inference {
-    pub target: NeuronId,
+    /// The neuron in its pose the connection names (D25).
+    pub target: Sym,
     pub offset: Offset,
     pub strength: f64,
     pub estimate: f64,
@@ -41,12 +42,14 @@ pub struct Inference {
 #[derive(Clone, Debug)]
 pub struct Act {
     pub neuron: NeuronId,
+    /// The neuron in the pose it fired in (D8): its id for a base activation, the call's pose for a call.
+    pub sym: Sym,
     pub kind: Kind,
     pub axes: u8,
     pub pos: Pos,
     pub strong: bool,
     pub reach: Pos,
-    /// The box of places it stands for in space (D4): its own place for a base activation, and for a call the
+    /// The box of positions it stands for in space (D4): its own position for a base activation, and for a call the
     /// union of what it covered.
     pub lo: Pos,
     pub hi: Pos,
@@ -54,9 +57,9 @@ pub struct Act {
     pub covered_at: Option<u32>,
     /// Every accepted call that landed on it as a fixed node (D24, D10).
     pub coverers: Vec<ActRef>,
-    /// The dimensions it is covered in (D5, D24), one bit per dimension: an accepted call's relation at it covers it
-    /// in every dimension the relation's offset differs in (experiment: per dimension, a diagonal covering x and y).
-    pub covered_in: u8,
+    /// Each neuron and activation whose row holds it as a neighbor (D10): what the machine rewrites to the call in
+    /// its pose when a call lands on it.
+    pub seen_by: Vec<(NeuronId, ActRef)>,
     /// What its call covered (§6.4): the activations its fixed nodes landed on and the calls it landed on.
     pub covers: Vec<ActRef>,
     pub fired_by: Option<FiredBy>,
@@ -75,15 +78,6 @@ pub struct Act {
 
 impl Act {
     pub fn on_apex(&self) -> bool { self.covered_at.is_none() && !self.gone }
-    /// Whether it is covered in any dimension an offset differs in (experiment: per dimension).
-    pub fn covered_for(&self, off: &Offset) -> bool { self.covered_in & combination(off) != 0 }
-}
-
-/// The combination of an offset (D5): the mask of the dimensions it differs in.
-pub fn combination(off: &Offset) -> u8 {
-    let mut c = 0u8;
-    for d in 0..MAX_DIMS { if off[d] != 0 { c |= 1 << d; } }
-    c
 }
 
 /// The offset from one activation to another in the dimensions both are laid out over, and time (D6).

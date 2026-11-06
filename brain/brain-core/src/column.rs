@@ -41,7 +41,7 @@ impl Column {
     }
 
     /// `forget neuron` on every living neuron this column owns (§4.1).
-    pub fn forget(&mut self, dead: NeuronId) {
+    pub fn forget(&mut self, dead: &[Sym]) {
         for n in self.neurons.iter_mut().filter(|n| n.alive) { n.forget(dead); }
     }
 }

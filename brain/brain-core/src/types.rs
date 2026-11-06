@@ -14,6 +14,28 @@ pub type DimId = u32;
 pub type ChannelId = u32;
 pub type Frame = i64;
 
+/// A neuron in a pose (D8, D34): a base neuron's symbol is its id, its one pose; a call's is allotted from
+/// `SYM_CALL` up, one per interneuron and pose.
+pub type Sym = u32;
+pub const SYM_CALL: Sym = 1 << 28;
+
+/// A call's pose (D8, D53): the node of the latest activation its fit landed on, the node of the earliest, the
+/// direction it read the cycle in (0 where it has none), and how many laps it went round.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default)]
+pub struct Pose {
+    pub from: Sym,
+    pub to: Sym,
+    pub dir: i8,
+    pub laps: u32,
+}
+
+/// Whether position `a` is later than position `b` (D15): later in time, and in one frame at the lesser position in the
+/// order the dimensions are declared.
+pub fn later(a: &Pos, b: &Pos) -> bool {
+    if a[0] != b[0] { return a[0] > b[0]; }
+    a[1..] < b[1..]
+}
+
 /// The three kinds the neighborhood policy distinguishes (D50).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Kind {

@@ -31,7 +31,7 @@ impl Region {
     }
 
     /// Forget a decommissioned neuron in every column, in parallel.
-    pub fn forget(&mut self, dead: NeuronId) {
+    pub fn forget(&mut self, dead: &[Sym]) {
         self.columns.par_iter_mut().for_each(|col| col.forget(dead));
     }
 }

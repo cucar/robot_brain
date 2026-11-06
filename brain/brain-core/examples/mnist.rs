@@ -257,10 +257,10 @@ fn level1_view(m: &Machine, size: usize) {
     for (_, r) in &rows { eprintln!("[level1]{}", r); }
 }
 
-/// What level 0 left on the image: the board edges between pixels, covered or bare, by direction; and each pixel's
-/// combinations, covered or not.
+/// What level 0 left on the image: the board edges between pixels, covered or bare, by direction; and how many
+/// calls landed on each pixel.
 fn level0_view(m: &Machine, px: &[u8], size: usize) {
-    use brain_core::machine::{combination, offset_between, ActRef};
+    use brain_core::machine::ActRef;
     let fno = m.frame_no;
     let Some(fr) = m.frames.iter().find(|f| f.no == fno) else { return };
     let f = 28 / size;
@@ -287,15 +287,11 @@ fn level0_view(m: &Machine, px: &[u8], size: usize) {
         total += t; bare += b;
     }
     eprintln!("[level0] all          edges {:3} | covered {:3} | bare {:3}", total, total - bare, bare);
-    // per pixel: the combinations it is covered in
+    // per pixel: how many calls landed on it
     let mut kinds = std::collections::BTreeMap::new();
     for y in 0..size { for x in 0..size {
         let a = m.act(at[y][x].unwrap()).unwrap();
-        let mut s = String::new();
-        for (c, n) in [(2u8, "x"), (4, "y"), (1, "time")] { if a.covered_in & c != 0 { if !s.is_empty() { s.push('+'); } s.push_str(n); } }
-        if s.is_empty() { s = "none".into(); }
-        *kinds.entry((s, a.coverers.len())).or_insert(0) += 1;
+        *kinds.entry(a.coverers.len()).or_insert(0) += 1;
     }}
-    for ((s, n), k) in &kinds { eprintln!("[level0] pixels covered in {:10} by {} calls: {}", s, n, k); }
-    let _ = (combination, offset_between);
+    for (n, k) in &kinds { eprintln!("[level0] pixels landed on by {} calls: {}", n, k); }
 }

@@ -47,9 +47,10 @@ impl Machine {
         n.history.clear();
         n.index.clear();
         n.connections.clear();
-        self.thalamus.forget(c);
+        let dead = self.dict.drop_syms(c);
+        self.thalamus.forget(&dead);
         for f in self.frames.iter_mut() {
-            for a in f.acts.iter_mut() { a.inferences.retain(|i| i.target != c); }
+            for a in f.acts.iter_mut() { a.inferences.retain(|i| !dead.contains(&i.target)); }
         }
     }
 }

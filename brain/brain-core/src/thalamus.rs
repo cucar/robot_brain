@@ -86,7 +86,7 @@ impl Thalamus {
     }
 
     /// Forget a decommissioned neuron in every living neuron, in parallel (§4.1).
-    pub fn forget(&mut self, dead: NeuronId) {
+    pub fn forget(&mut self, dead: &[Sym]) {
         self.regions.par_iter_mut().for_each(|region| region.forget(dead));
     }
 }

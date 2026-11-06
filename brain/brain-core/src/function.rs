@@ -14,15 +14,15 @@ pub type FuncId = u32;
 /// neuron is first.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct Rel {
-    pub a: NeuronId,
-    pub b: NeuronId,
+    pub a: Sym,
+    pub b: Sym,
     pub off: Offset,
 }
 
 fn neg(o: &Offset) -> Offset { let mut r = *o; for x in r.iter_mut() { *x = -*x; } r }
 
 /// The one form of the relation from `n` to `m` standing at `off` from it (D34).
-pub fn canon(n: NeuronId, m: NeuronId, off: Offset) -> Rel {
+pub fn canon(n: Sym, m: Sym, off: Offset) -> Rel {
     let first = off.iter().copied().find(|x| *x != 0);
     let keep = if off[0] != 0 { off[0] < 0 } else {
         match first { Some(x) => x > 0, None => n <= m }
@@ -31,18 +31,20 @@ pub fn canon(n: NeuronId, m: NeuronId, off: Offset) -> Rel {
 }
 
 impl Rel {
-    /// The neuron that sees this relation from its own activation, and the neighbor and offset it records (D47):
-    /// in time the later end alone; in space either end, the first here.
-    pub fn recorders(&self) -> Vec<(NeuronId, NeuronId, Offset)> {
-        if self.off[0] != 0 { vec![(self.a, self.b, self.off)] } else { vec![(self.a, self.b, self.off), (self.b, self.a, neg(&self.off))] }
+    /// Each end of this relation as its own rows hold it, with the neighbor and offset there (D47, D34): both,
+    /// since the earlier end's row takes what followed it (D18); a relation from a node to itself is one relation,
+    /// read from the node toward the next it reaches.
+    pub fn ends(&self) -> Vec<(Sym, Sym, Offset)> {
+        if self.a == self.b { return vec![(self.a, self.b, self.off)]; }
+        vec![(self.a, self.b, self.off), (self.b, self.a, neg(&self.off))]
     }
 }
 
-/// A function (D15, D56): its nodes, the origin first, one per neuron, and its relations.
+/// A function (D15, D56): its nodes, the origin first, one per neuron in its pose, and its relations.
 #[derive(Clone, Debug)]
 pub struct Func {
     pub id: FuncId,
-    pub nodes: Vec<NeuronId>,
+    pub nodes: Vec<Sym>,
     pub rels: Vec<Rel>,
     /// Its interneuron once a fit of it has been accepted (R16, R43).
     pub inter: Option<NeuronId>,
@@ -52,30 +54,59 @@ pub struct Func {
 
 /// How a function reads from its origin (D15, D54): the relations of a spanning tree in the order they are
 /// reached, each as (relation, from node, to node, offset from the one to the other); the relation that closes the
-/// cycle, if there is one, the same way; and each node's place from the origin over one lap.
+/// cycle, if there is one, the same way; and each node's position from the origin over one lap.
 #[derive(Clone, Debug, Default)]
 pub struct Layout {
     pub tree: Vec<(usize, usize, usize, Offset)>,
     pub closing: Option<(usize, usize, usize, Offset)>,
-    pub place: Vec<Pos>,
+    pub position: Vec<Pos>,
     /// Per node, the tree relation that reached it and the node it came from.
     pub parent: Vec<Option<(usize, usize)>>,
 }
 
 impl Func {
-    pub fn origin(&self) -> NeuronId { self.nodes[0] }
-    pub fn node_of(&self, n: NeuronId) -> Option<usize> { self.nodes.iter().position(|x| *x == n) }
+    /// A function of these relations, listed from `origin` (D15).
+    pub fn from_rels(origin: Sym, rels: &[Rel]) -> Func {
+        let mut nodes = vec![origin];
+        for r in rels { for x in [r.a, r.b] { if !nodes.contains(&x) { nodes.push(x); } } }
+        Func { id: 0, nodes, rels: rels.to_vec(), inter: None, joined: 0 }
+    }
+    pub fn origin(&self) -> Sym { self.nodes[0] }
+    pub fn node_of(&self, n: Sym) -> Option<usize> { self.nodes.iter().position(|x| *x == n) }
     pub fn holds(&self, r: &Rel) -> bool { self.rels.contains(r) }
     pub fn has_cycle(&self) -> bool { self.rels.len() >= self.nodes.len() }
 
-    pub fn layout(&self) -> Layout {
+    pub fn layout(&self) -> Layout { self.layout_from(0) }
+
+    /// The offset a lap of its cycle advances by (D15), where it has one.
+    pub fn lap(&self) -> Option<Offset> {
+        let lay = self.layout();
+        let (_, ua, ub, off) = lay.closing?;
+        let mut l = [0i32; MAX_DIMS];
+        for d in 0..MAX_DIMS { l[d] = lay.position[ua][d] + off[d] - lay.position[ub][d]; }
+        Some(l)
+    }
+
+    /// The nodes of its cycle, where it has one.
+    pub fn cycle_nodes(&self) -> Vec<usize> {
+        let lay = self.layout();
+        let Some((_, ua, ub, _)) = lay.closing else { return vec![] };
+        let mut v = vec![ua, ub];
+        for s in Func::tree_path(&lay, ub, ua) { v.push(s.1); v.push(s.2); }
+        v.sort_unstable();
+        v.dedup();
+        v
+    }
+
+    /// How it reads entered at node `root` (D54): the same as `layout`, each position from that node.
+    pub fn layout_from(&self, root: usize) -> Layout {
         let n = self.nodes.len();
-        let mut place: Vec<Option<Pos>> = vec![None; n];
+        let mut position: Vec<Option<Pos>> = vec![None; n];
         let mut parent: Vec<Option<(usize, usize)>> = vec![None; n];
-        place[0] = Some([0; MAX_DIMS]);
+        position[root] = Some([0; MAX_DIMS]);
         let mut used = vec![false; self.rels.len()];
         let mut tree = Vec::new();
-        let mut queue = vec![0usize];
+        let mut queue = vec![root];
         let mut qi = 0;
         while qi < queue.len() {
             let u = queue[qi];
@@ -84,11 +115,11 @@ impl Func {
                 if used[ri] { continue; }
                 let (ua, ub) = (self.node_of(r.a).unwrap(), self.node_of(r.b).unwrap());
                 let (v, off) = if ua == u { (ub, r.off) } else if ub == u { (ua, neg(&r.off)) } else { continue };
-                if place[v].is_some() { continue; }
+                if position[v].is_some() { continue; }
                 used[ri] = true;
-                let mut p = place[u].unwrap();
+                let mut p = position[u].unwrap();
                 for d in 0..MAX_DIMS { p[d] += off[d]; }
-                place[v] = Some(p);
+                position[v] = Some(p);
                 parent[v] = Some((ri, u));
                 tree.push((ri, u, v, off));
                 queue.push(v);
@@ -98,7 +129,7 @@ impl Func {
             let (ua, ub) = (self.node_of(r.a).unwrap(), self.node_of(r.b).unwrap());
             (ri, ua, ub, r.off)
         });
-        Layout { tree, closing, place: place.into_iter().map(|p| p.unwrap_or([0; MAX_DIMS])).collect(), parent }
+        Layout { tree, closing, position: position.into_iter().map(|p| p.unwrap_or([0; MAX_DIMS])).collect(), parent }
     }
 
     /// The tree relations from `from` to `to` along the spanning tree, in order, each with its offset in that
@@ -106,7 +137,7 @@ impl Func {
     pub fn tree_path(lay: &Layout, from: usize, to: usize) -> Vec<(usize, usize, usize, Offset)> {
         let up = |mut x: usize| { let mut v = vec![x]; while let Some((_, p)) = lay.parent[x] { v.push(p); x = p; } v };
         let (pf, pt) = (up(from), up(to));
-        let lca = *pf.iter().find(|x| pt.contains(x)).unwrap_or(&0);
+        let lca = *pf.iter().find(|x| pt.contains(x)).unwrap_or(pf.last().unwrap_or(&0));
         let mut steps = Vec::new();
         // from `from` up to the meeting node, each step against the tree's direction
         let mut x = from;
@@ -130,27 +161,30 @@ impl Func {
         steps
     }
 
-    /// How far its activation sees (D4): one position beyond the farthest node it places from its origin, in each
+    /// How far its activation sees (D4): one position beyond its farthest node from its origin, in each
     /// dimension of `axes`.
     pub fn reach(&self, axes: u8) -> Pos {
         let lay = self.layout();
         let mut r = [0; MAX_DIMS];
         for d in 0..MAX_DIMS {
             if d > 0 && axes & (1 << d) == 0 { continue; }
-            r[d] = lay.place.iter().map(|p| p[d].abs()).max().unwrap_or(0) + 1;
+            r[d] = lay.position.iter().map(|p| p[d].abs()).max().unwrap_or(0) + 1;
         }
         r
     }
 
     /// Two functions with the same relations and the same origin are one (D36).
-    pub fn key(&self) -> (NeuronId, Vec<Rel>) {
+    pub fn key(&self) -> (Sym, Vec<Rel>) {
         let mut r = self.rels.clone();
         r.sort();
         (self.origin(), r)
     }
 }
 
-pub fn describe_rel(r: &Rel) -> String { format!("#{}→#{}{:?}", r.a, r.b, r.off) }
+pub fn describe_rel(r: &Rel) -> String { format!("{}→{}{:?}", sym_name(r.a), sym_name(r.b), r.off) }
+
+/// A symbol as the trace prints it: `#n` for a base neuron, `s<k>` for a call in a pose.
+pub fn sym_name(s: Sym) -> String { if s < SYM_CALL { format!("#{}", s) } else { format!("s{}", s - SYM_CALL) } }
 
 /// The dictionary (D36, D56).
 #[derive(Default)]
@@ -160,6 +194,9 @@ pub struct Dictionary {
     pub by_rel: FxHashMap<Rel, FuncId>,
     /// Per interneuron, its functions (R43: it may hold more than one).
     pub by_inter: FxHashMap<NeuronId, Vec<FuncId>>,
+    /// The names of the calls (D8): each interneuron in each pose it has fired in.
+    pub syms: Vec<(NeuronId, Pose)>,
+    sym_index: FxHashMap<(NeuronId, Pose), Sym>,
     next_id: FuncId,
     next_join: u64,
 }
@@ -169,14 +206,45 @@ impl Dictionary {
     pub fn len(&self) -> usize { self.funcs.len() }
     pub fn holder(&self, r: &Rel) -> Option<FuncId> { self.by_rel.get(r).copied() }
     pub fn of_inter(&self, n: NeuronId) -> &[FuncId] { self.by_inter.get(&n).map_or(&[], |v| v.as_slice()) }
-    /// The functions whose nodes name a neuron (R38, the subtree).
+    /// The functions whose nodes name a neuron, in any pose (R38, the subtree).
     pub fn naming(&self, n: NeuronId) -> Vec<FuncId> {
-        let mut v: Vec<FuncId> = self.funcs.values().filter(|f| f.nodes.contains(&n)).map(|f| f.id).collect();
+        let mut v: Vec<FuncId> = self.funcs.values().filter(|f| f.nodes.iter().any(|s| self.neuron_of(*s) == n)).map(|f| f.id).collect();
         v.sort_unstable();
         v
     }
-    /// Functions whose origin is a neuron (D54: a call stands for its origin's neuron).
-    pub fn find_key(&self, key: &(NeuronId, Vec<Rel>)) -> Option<FuncId> {
+
+    /// The neuron a symbol names.
+    pub fn neuron_of(&self, s: Sym) -> NeuronId { if s < SYM_CALL { s } else { self.syms.get((s - SYM_CALL) as usize).map_or(NeuronId::MAX, |x| x.0) } }
+    /// The pose a call's symbol names; none for a base neuron.
+    pub fn pose_of(&self, s: Sym) -> Option<Pose> { if s < SYM_CALL { None } else { self.syms.get((s - SYM_CALL) as usize).map(|x| x.1) } }
+    /// The node a call's pose starts at (D54): a fit lands that node on the call.
+    pub fn start_of(&self, s: Sym) -> Option<Sym> { self.pose_of(s).map(|p| p.from) }
+    /// The symbol of an interneuron in a pose, allotted the first time it is named.
+    pub fn sym_of(&mut self, n: NeuronId, pose: Pose) -> Sym {
+        if let Some(s) = self.sym_index.get(&(n, pose)) { return *s; }
+        let s = SYM_CALL + self.syms.len() as Sym;
+        self.syms.push((n, pose));
+        self.sym_index.insert((n, pose), s);
+        s
+    }
+    /// Every symbol of a neuron, and its poses are forgotten: a neuron allocated again names its poses afresh.
+    pub fn drop_syms(&mut self, n: NeuronId) -> Vec<Sym> {
+        let mut v = vec![n];
+        for (i, (m, _)) in self.syms.iter().enumerate() { if *m == n { v.push(SYM_CALL + i as Sym); } }
+        self.sym_index.retain(|(m, _), _| *m != n);
+        v
+    }
+    /// A symbol with its neuron and pose, for the trace.
+    pub fn sym_text(&self, s: Sym) -> String {
+        match self.pose_of(s) {
+            None => format!("#{}", s),
+            Some(p) => format!("#{}<{}..{}{}x{}>", self.neuron_of(s), self.sym_text_short(p.from), self.sym_text_short(p.to), if p.dir < 0 { "-" } else if p.dir > 0 { "+" } else { "" }, p.laps),
+        }
+    }
+    fn sym_text_short(&self, s: Sym) -> String { if s < SYM_CALL { format!("#{}", s) } else { format!("#{}'", self.neuron_of(s)) } }
+
+    /// Functions with the same relations and origin (D36).
+    pub fn find_key(&self, key: &(Sym, Vec<Rel>)) -> Option<FuncId> {
         self.funcs.values().find(|f| f.key() == *key).map(|f| f.id)
     }
 
@@ -250,8 +318,8 @@ impl Dictionary {
     }
 
     pub fn describe(&self, f: &Func) -> String {
-        let rels: Vec<String> = f.rels.iter().map(describe_rel).collect();
-        let mut s = format!("f{} origin #{} [{}]", f.id, f.origin(), rels.join(" "));
+        let rels: Vec<String> = f.rels.iter().map(|r| format!("{}→{}{:?}", self.sym_text(r.a), self.sym_text(r.b), &r.off[..])).collect();
+        let mut s = format!("f{} origin {} [{}]", f.id, self.sym_text(f.origin()), rels.join(" "));
         if f.has_cycle() { s.push_str(" cycle"); }
         if let Some(i) = f.inter { s.push_str(&format!(" -> #{}", i)); }
         s

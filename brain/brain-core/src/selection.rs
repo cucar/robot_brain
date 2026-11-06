@@ -1,4 +1,4 @@
-//! Selection (§8, R45–R49): the standing inferences, what they place at the frame ahead, the match, the
+//! Selection (§8, R45–R49): the standing inferences, what they expand to at the frame ahead, the match, the
 //! electorate and resolution.
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -9,22 +9,22 @@ use crate::types::*;
 fn add(a: &Pos, b: &Offset) -> Pos { let mut p = *a; for d in 0..MAX_DIMS { p[d] += b[d]; } p }
 
 impl Machine {
-    /// What one open activation places at the frame ahead (R46): the base symbols its standing inferences expand to
+    /// What one open activation infers at the frame ahead (R46): the base symbols its standing inferences expand to
     /// there, each with the strength and estimate of its connection.
-    pub(crate) fn placements(&self, r: ActRef, ahead: Frame, memo: &mut FxHashMap<(NeuronId, Pos), Vec<(NeuronId, Pos)>>) -> Vec<(NeuronId, Pos, f64, f64)> {
+    pub(crate) fn inferred_ahead(&self, r: ActRef, ahead: Frame, memo: &mut FxHashMap<(NeuronId, Pos), Vec<(NeuronId, Pos)>>) -> Vec<(NeuronId, Pos, f64, f64)> {
         let Some(a) = self.act(r) else { return vec![] };
         let mut out = Vec::new();
         for inf in &a.inferences {
-            if inf.struck || !self.thalamus.get(inf.target).map_or(false, |t| t.alive) { continue; }
+            if inf.struck || !self.thalamus.get(self.dict.neuron_of(inf.target)).map_or(false, |t| t.alive) { continue; }
             let at = add(&a.pos, &inf.offset);
-            // an expansion places back from where it completes, so one completed already places nothing ahead
+            // an expansion reads back from where it completes, so one completed already names nothing ahead
             if (at[0] as i64) < ahead { continue; }
-            let placed = memo.entry((inf.target, at)).or_insert_with(|| {
-                let mut placed = Vec::new();
-                self.expand_from(inf.target, at, ahead, true, &mut Vec::new(), &mut placed, None);
-                placed
+            let expanded = memo.entry((inf.target, at)).or_insert_with(|| {
+                let mut expanded = Vec::new();
+                self.expand_from(inf.target, at, ahead, true, &mut Vec::new(), &mut expanded, None);
+                expanded
             }).clone();
-            for (n, p) in placed {
+            for (n, p) in expanded {
                 if p[0] as i64 != ahead { continue; }
                 let nn = &self.thalamus[n];
                 let mut pp = p;
@@ -52,7 +52,7 @@ impl Machine {
         let mut memo: FxHashMap<(NeuronId, Pos), Vec<(NeuronId, Pos)>> = FxHashMap::default();
         while let Some(r) = stack.pop() {
             if !seen.insert(r) { continue; }
-            let p = self.placements(r, ahead, &mut memo);
+            let p = self.inferred_ahead(r, ahead, &mut memo);
             if !p.is_empty() { voters.push((r, p)); continue; }
             if let Some(a) = self.act(r) {
                 for c in &a.covers {
@@ -63,9 +63,9 @@ impl Machine {
         self.last_stats.voters = voters.len();
         self.last_stats.voters_above_base = voters.iter().filter(|(r, _)| self.act(*r).map_or(false, |a| a.height > 0)).count();
         if self.trace {
-            for (r, placed) in &voters {
+            for (r, named) in &voters {
                 let Some(a) = self.act(*r) else { continue };
-                let s: Vec<String> = placed.iter().map(|(n, p, st, e)| format!("#{}@{} s={:.0} e={:+.2}", n, p[0], st, e)).collect();
+                let s: Vec<String> = named.iter().map(|(n, p, st, e)| format!("#{}@{} s={:.0} e={:+.2}", n, p[0], st, e)).collect();
                 eprintln!("[vote f{}] #{} at {:?} : {}", fno, a.neuron, a.pos, s.join(", "));
             }
         }
@@ -73,14 +73,14 @@ impl Machine {
         struct Cand { share: f64, weighted: f64 }
         let mut table: FxHashMap<(DimId, Pos), FxHashMap<u32, Cand>> = FxHashMap::default();
         let mut voters_at: FxHashMap<(DimId, Pos), usize> = FxHashMap::default();
-        for (_, placed) in &voters {
+        for (_, named) in &voters {
             let mut totals: FxHashMap<(DimId, Pos), f64> = FxHashMap::default();
-            for (n, p, s, _) in placed {
+            for (n, p, s, _) in named {
                 let Some(d) = self.thalamus[*n].dim else { continue };
                 *totals.entry((d, *p)).or_default() += s;
             }
             for k in totals.keys() { *voters_at.entry(*k).or_default() += 1; }
-            for (n, p, s, e) in placed {
+            for (n, p, s, e) in named {
                 let nn = &self.thalamus[*n];
                 let Some(d) = nn.dim else { continue };
                 let share = s / totals[&(d, *p)];
@@ -118,22 +118,22 @@ impl Machine {
 
     // ───────────────────────────── the match (R49) ─────────────────────────────
 
-    /// Whether a neuron stood at a place that has happened (R49): an activation of it there, or a call standing for
-    /// it (D54).
-    pub(crate) fn stood(&self, n: NeuronId, q: &Pos) -> bool {
+    /// Whether a node stood at a position that has happened (R49): its neuron in its pose there, or a call whose pose
+    /// starts at it (D54).
+    pub(crate) fn stood(&self, n: Sym, q: &Pos) -> bool {
         let Some(f) = self.frames.iter().find(|f| f.no == q[0] as i64) else { return false };
         f.acts.iter().any(|a| {
             if a.gone { return false; }
             let mut p = a.pos;
             let mut qq = *q;
             for d in 1..MAX_DIMS { if a.axes & (1 << d) == 0 { p[d] = 0; qq[d] = 0; } }
-            p == qq && (a.neuron == n || self.call_origin(a) == Some(n))
+            p == qq && (a.sym == n || self.dict.start_of(a.sym) == Some(n))
         })
     }
 
     /// Read every standing inference that names an interneuron against the frames its function reaches back into,
     /// and strike it where the function would not pay there (R49): each node that has happened credits where its
-    /// neuron stands at its place and charges a failure where it does not; proposed while the credit exceeds the
+    /// neuron stands at its position and charges a failure where it does not; proposed while the credit exceeds the
     /// charges, or where nothing of it has happened yet.
     pub(crate) fn match_all(&mut self) {
         let fno = self.frame_no;
@@ -142,7 +142,7 @@ impl Machine {
         for f in self.frames.iter() {
             for (i, a) in f.acts.iter().enumerate() {
                 for (k, inf) in a.inferences.iter().enumerate() {
-                    if inf.struck || self.thalamus.get(inf.target).map_or(true, |t| t.kind != Kind::Inter) { continue; }
+                    if inf.struck || self.thalamus.get(self.dict.neuron_of(inf.target)).map_or(true, |t| t.kind != Kind::Inter) { continue; }
                     let at = add(&a.pos, &inf.offset);
                     let ok = *memo.entry((inf.target, at)).or_insert_with(|| {
                         let (mut credit, mut charge, mut judged) = (0, 0, 0);
