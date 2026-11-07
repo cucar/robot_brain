@@ -79,6 +79,9 @@ pub struct Machine {
     pub(crate) last_func: FxHashMap<NeuronId, FuncId>,
     /// Interneurons whose last function has left, waiting for their windows to close (R38).
     pub ledger: Vec<NeuronId>,
+    /// Per interneuron on the ledger, the frame before which its subtree still stands on the board: it is not
+    /// looked at again until then (R38).
+    pub(crate) ledger_due: FxHashMap<NeuronId, Frame>,
     pub(crate) stats_added: usize,
     pub(crate) stats_reused: usize,
     pub(crate) last_fits: usize,
@@ -140,6 +143,7 @@ impl Machine {
             retired_funcs: FxHashMap::default(),
             last_func: FxHashMap::default(),
             ledger: Vec::new(),
+            ledger_due: FxHashMap::default(),
             stats_added: 0,
             stats_reused: 0,
             last_fits: 0,
@@ -363,8 +367,8 @@ impl Machine {
         let mut found = self.find(&fresh);
         if self.trace { for e in &fresh { eprintln!("[fresh f{} l{}] {}→{}{:?} s={} held {:?}", self.frame_no, level, self.dict.sym_text(e.rel.a), self.dict.sym_text(e.rel.b), &e.rel.off[..], e.strength, self.dict.holder(&e.rel)); } }
         let mut fits: Vec<_> = found.iter().flat_map(|id| self.fits_of(*id)).collect();
-        // experiment: what the dictionary holds covers the board first; grouping reads only what it left uncovered,
-        // and what grouping changed is elected over the rest
+        // two elections (§6, R24, R50): what the dictionary holds covers the board first; grouping reads only what
+        // it left uncovered, and a function that changed or formed is fit on what it left and elected in the second
         if !self.frozen && self.recognize_first {
             let fired: FxHashSet<Sym> = refs.iter().filter_map(|r| self.act(*r)).map(|a| a.sym).collect();
             self.last_fits = fits.len();
@@ -373,11 +377,7 @@ impl Machine {
             let rest: Vec<_> = found.iter().flat_map(|id| self.fits_of(*id)).collect();
             let changed = self.group(&rest, &left, &fired);
             self.span_s = self.board_span();
-            found.extend(changed);
-            found.retain(|id| self.dict.get(*id).is_some());
-            found.sort_unstable();
-            found.dedup();
-            let again: Vec<_> = found.iter().flat_map(|id| self.fits_of(*id)).collect();
+            let again: Vec<_> = changed.iter().filter(|id| self.dict.get(**id).is_some()).flat_map(|id| self.fits_of(*id)).collect();
             if self.trace { for f in &again { eprintln!("[fit2 f{} l{}] f{} entry {:?} at node {} landed {} calls {} edges {} failed {:?} laps {}", self.frame_no, level, f.func, f.entry.1, f.entry.0, f.landed.len(), f.calls.len(), f.edges.len(), f.failed, f.laps); } }
             self.last_fits += again.len();
             let (a2, m2) = self.elect(level, again);

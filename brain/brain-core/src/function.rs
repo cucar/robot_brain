@@ -208,6 +208,8 @@ pub struct Dictionary {
     pub by_rel: FxHashMap<Rel, FuncId>,
     /// Per interneuron, its functions (R43: it may hold more than one).
     pub by_inter: FxHashMap<NeuronId, Vec<FuncId>>,
+    /// Per neuron, the functions with a node of it in any pose (R38): kept as the functions change.
+    by_node: FxHashMap<NeuronId, Vec<FuncId>>,
     /// The names of the calls (D8): each interneuron in each pose it has fired in.
     pub syms: Vec<(NeuronId, Pose)>,
     sym_index: FxHashMap<(NeuronId, Pose), Sym>,
@@ -222,9 +224,24 @@ impl Dictionary {
     pub fn of_inter(&self, n: NeuronId) -> &[FuncId] { self.by_inter.get(&n).map_or(&[], |v| v.as_slice()) }
     /// The functions whose nodes name a neuron, in any pose (R38, the subtree).
     pub fn naming(&self, n: NeuronId) -> Vec<FuncId> {
-        let mut v: Vec<FuncId> = self.funcs.values().filter(|f| f.nodes.iter().any(|s| self.neuron_of(*s) == n)).map(|f| f.id).collect();
+        let mut v = self.by_node.get(&n).cloned().unwrap_or_default();
         v.sort_unstable();
         v
+    }
+
+    /// Keep the index of functions by neuron as a function's nodes go from `before` to `after`.
+    fn reindex(&mut self, id: FuncId, before: &[Sym], after: &[Sym]) {
+        let old: Vec<NeuronId> = before.iter().map(|s| self.neuron_of(*s)).collect();
+        let new: Vec<NeuronId> = after.iter().map(|s| self.neuron_of(*s)).collect();
+        for n in &old {
+            if new.contains(n) { continue; }
+            if let Some(v) = self.by_node.get_mut(n) { v.retain(|x| *x != id); if v.is_empty() { self.by_node.remove(n); } }
+        }
+        for n in &new {
+            if old.contains(n) { continue; }
+            let v = self.by_node.entry(*n).or_default();
+            if !v.contains(&id) { v.push(id); }
+        }
     }
 
     /// The neuron a symbol names.
@@ -252,7 +269,7 @@ impl Dictionary {
     pub fn sym_text(&self, s: Sym) -> String {
         match self.pose_of(s) {
             None => format!("#{}", s),
-            Some(p) => format!("#{}<{}..{}{}x{}>", self.neuron_of(s), self.sym_text_short(p.from), self.sym_text_short(p.to), if p.dir < 0 { "-" } else if p.dir > 0 { "+" } else { "" }, p.laps),
+            Some(p) => format!("#{}<{}..{}x{}>", self.neuron_of(s), self.sym_text_short(p.from), self.sym_text_short(p.to), p.laps),
         }
     }
     fn sym_text_short(&self, s: Sym) -> String { if s < SYM_CALL { format!("#{}", s) } else { format!("#{}'", self.neuron_of(s)) } }
@@ -276,7 +293,9 @@ impl Dictionary {
         self.next_join += 1;
         for r in &f.rels { self.by_rel.insert(*r, id); }
         if let Some(n) = f.inter { self.by_inter.entry(n).or_default().push(id); }
+        let nodes = f.nodes.clone();
         self.funcs.insert(id, f);
+        self.reindex(id, &[], &nodes);
         id
     }
 
@@ -285,12 +304,15 @@ impl Dictionary {
     /// met none before.
     pub fn join(&mut self, id: FuncId, r: Rel, at: Sym) {
         let Some(f) = self.funcs.get_mut(&id) else { return };
+        let before = f.nodes.clone();
         if !f.nodes.contains(&r.a) { f.nodes.push(r.a); }
         if !f.nodes.contains(&r.b) { f.nodes.push(r.b); }
         f.at = Func::meeting(&f.rels, &f.at, at);
         f.rels.push(r);
         f.at.push(Some(at));
+        let after = f.nodes.clone();
         self.by_rel.insert(r, id);
+        self.reindex(id, &before, &after);
     }
 
     /// A relation leaves its function (R18, R54). The function stays connected: what the origin no longer reaches
@@ -298,6 +320,7 @@ impl Dictionary {
     /// returned.
     pub fn leave(&mut self, id: FuncId, r: &Rel) -> (Vec<Rel>, Option<Func>) {
         let Some(f) = self.funcs.get_mut(&id) else { return (vec![], None) };
+        let before = f.nodes.clone();
         f.keep(|x| x != r);
         self.by_rel.remove(r);
         // what the origin still reaches
@@ -313,14 +336,18 @@ impl Dictionary {
         let cut: Vec<Rel> = f.rels.iter().copied().filter(|x| !(reach.contains(&x.a) && reach.contains(&x.b))).collect();
         f.keep(|x| reach.contains(&x.a) && reach.contains(&x.b));
         f.nodes.retain(|n| reach.contains(n));
+        let after = f.nodes.clone();
+        let empty = f.rels.is_empty();
         for x in &cut { self.by_rel.remove(x); }
-        if f.rels.is_empty() { return (cut, self.remove(id)); }
+        self.reindex(id, &before, &after);
+        if empty { return (cut, self.remove(id)); }
         (cut, None)
     }
 
     /// Take a function out of the dictionary (R18, R38); returns it.
     pub fn remove(&mut self, id: FuncId) -> Option<Func> {
         let f = self.funcs.remove(&id)?;
+        self.reindex(id, &f.nodes, &[]);
         for r in &f.rels { if self.by_rel.get(r) == Some(&id) { self.by_rel.remove(r); } }
         if let Some(n) = f.inter { if let Some(v) = self.by_inter.get_mut(&n) { v.retain(|x| *x != id); } }
         Some(f)

@@ -13,7 +13,9 @@ impl Machine {
         let mut pending = std::mem::take(&mut self.ledger);
         while !pending.is_empty() {
             for c in pending.drain(..) {
-                if !self.thalamus[c].alive || !self.dict.of_inter(c).is_empty() { continue; }
+                if !self.thalamus[c].alive || !self.dict.of_inter(c).is_empty() { self.ledger_due.remove(&c); continue; }
+                // nothing of its subtree can have left the board before the frame it was found standing until
+                if self.ledger_due.get(&c).map_or(false, |d| *d > fno) { keep.push(c); continue; }
                 // it waits while an activation of it, or of any neuron in its subtree, still stands on the board
                 let mut subtree = vec![c];
                 let mut k = 0;
@@ -23,8 +25,9 @@ impl Machine {
                     }
                     k += 1;
                 }
-                let standing = self.frames.iter().any(|f| f.acts.iter().any(|a| subtree.contains(&a.neuron) && self.stands(a, fno)));
-                if standing { keep.push(c); continue; }
+                let latest = self.frames.iter().flat_map(|f| f.acts.iter()).filter(|a| subtree.contains(&a.neuron) && self.stands(a, fno)).map(|a| a.pos[0] as Frame).max();
+                if let Some(t) = latest { self.ledger_due.insert(c, t + self.span_s as Frame + 1); keep.push(c); continue; }
+                self.ledger_due.remove(&c);
                 self.decommission(c);
             }
             pending = std::mem::take(&mut self.ledger);

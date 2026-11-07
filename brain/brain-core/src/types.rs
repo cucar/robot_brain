@@ -19,13 +19,13 @@ pub type Frame = i64;
 pub type Sym = u32;
 pub const SYM_CALL: Sym = 1 << 28;
 
-/// A call's pose (D8, D53): the node of the latest activation its fit landed on, the node of the earliest, the
-/// direction it read the cycle in (0 where it has none), and how many laps it went round.
+/// A call's pose (D8, D53): the node of the latest activation its fit landed on, the node of the earliest, and how
+/// many laps it went round. A fit reads a cycle one way, the way its relations' offsets advance, so the pose names
+/// no direction.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default)]
 pub struct Pose {
     pub from: Sym,
     pub to: Sym,
-    pub dir: i8,
     pub laps: u32,
 }
 
