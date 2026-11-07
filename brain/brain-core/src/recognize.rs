@@ -308,19 +308,16 @@ impl Machine {
         (x, near, w)
     }
 
-    /// A function's worth (D57): the sum of its relations' worths, less one per call that stands, one per
-    /// occasion: the most rows any of its relations held with the rest.
+    /// A function's worth (D57): the sum of its relations' worths; a call costs nothing (experiment).
     pub(crate) fn worth_of(&self, origin: Sym, rels: &[Rel], at: &[Option<Sym>]) -> f64 {
         if rels.is_empty() { return 0.0; }
         let closing = Self::closing_of(origin, rels);
-        let (mut sum, mut occasions) = (0.0, 0u32);
-        for (r, a) in rels.iter().zip(at) {
-            let (x, _, w) = self.worth_in(rels, r, *a, closing);
-            sum += x;
-            occasions = occasions.max(w);
-        }
-        sum - occasions as f64
+        rels.iter().zip(at).map(|(r, a)| self.worth_in(rels, r, *a, closing).0).sum()
     }
+
+    /// A relation's worth in a function of its own (D57): its strength less one, a call costing nothing
+    /// (experiment).
+    pub(crate) fn alone(&self, r: &Rel) -> f64 { self.strength_of(r) as f64 - 1.0 }
 
     /// A relation's gain in a function it attaches to at node `attach` (D57, R54, R50): the function's worth with it
     /// less its worth without it, the relation counted at the node it attaches at.
@@ -333,10 +330,10 @@ impl Machine {
     }
 
     /// A relation's contribution to the function it is in (D57, R54): the function's worth with it less without
-    /// it; `−1` alone.
+    /// it; alone, its worth in a function of its own, its strength less one (experiment).
     pub(crate) fn contribution(&self, f: &Func, r: &Rel) -> f64 {
         let (without, wat): (Vec<Rel>, Vec<Option<Sym>>) = f.rels.iter().zip(&f.at).filter(|(x, _)| *x != r).map(|(x, a)| (*x, *a)).unzip();
-        if without.is_empty() { return -1.0; }
+        if without.is_empty() { return self.alone(r); }
         let origin = if without.iter().any(|x| x.a == f.origin() || x.b == f.origin()) { f.origin() } else { without[0].a };
         self.worth_of(f.origin(), &f.rels, &f.at) - self.worth_of(origin, &without, &wat)
     }
@@ -441,10 +438,10 @@ impl Machine {
         let mut joined: FxHashSet<Rel> = FxHashSet::default();
         for (_, rel) in keys {
             let fs = cands[&rel].clone();
-            // its contribution where it stands: to its function, or −1 alone (R54)
+            // its contribution where it stands: to its function, or alone, its strength less one (experiment)
             let here = match self.dict.holder(&rel).and_then(|g| self.dict.get(g)) {
                 Some(g) => self.contribution(g, &rel),
-                None => -1.0,
+                None => self.alone(&rel),
             };
             let mut best: Option<(f64, f64, u64, FuncId, Sym)> = None;
             for (fid, attach) in fs {
@@ -486,11 +483,12 @@ impl Machine {
                 for r in &rels {
                     // for nothing once its strength has slid below 2 (R18)
                     if self.strength_of(r) < 2 { if worst.map_or(true, |w| f64::INFINITY > w.0) { worst = Some((f64::INFINITY, *r, true)); } continue; }
-                    // for a function of its own where −1 is higher than its contribution (R54)
+                    // for a function of its own where its worth alone is higher than its contribution (R54, experiment)
                     if rels.len() > 1 {
                         let inside = self.contribution(f, r);
-                        if -1.0 > inside {
-                            let gain = -1.0 - inside;
+                        let alone = self.alone(r);
+                        if alone > inside {
+                            let gain = alone - inside;
                             if worst.map_or(true, |w| gain > w.0) { worst = Some((gain, *r, false)); }
                         }
                     }

@@ -12,25 +12,30 @@ use crate::types::*;
 
 impl Machine {
     /// What a fit would take off the board (R22, D28): each board relation its true relations land on, and the
-    /// cost of each call it lands on.
+    /// cost of each call it lands on, as a node or through its pose (D22): its failures, a call itself costing
+    /// nothing (experiment); unless a call this election has taken already landed on it and took its cost off.
     fn coverage(&self, fit: &Fit) -> f64 {
         let mut seen: FxHashSet<(ActRef, ActRef)> = FxHashSet::default();
         let mut c = 0.0;
         for &(a, b) in &fit.edges { if seen.insert(edge(a, b)) { c += 1.0; } }
-        for (k, _) in &fit.calls {
-            if let Some(a) = self.act(*k) { c += 1.0 + a.fired_by.as_ref().map_or(0.0, |fb| fb.failed.len() as f64); }
+        for (k, _) in fit.acts() {
+            let Some(a) = self.act(k) else { continue };
+            let Some(fb) = &a.fired_by else { continue };
+            if a.coverers.iter().any(|x| self.electing.contains(x)) { continue; }
+            c += fb.failed.len() as f64;
         }
         c
     }
 
-    /// What a fit costs (R22, D28): its call's cost, one and a failure per relation that did not come true; and
-    /// one edge to each call this election has taken that stands for an activation it lands on (D10).
+    /// What a fit costs (R22, D28): a failure per relation that did not come true, the call itself costing nothing
+    /// (experiment); and one edge to each call this election has taken that stands for an activation it lands on
+    /// (D10).
     fn price(&self, fit: &Fit) -> f64 {
         let mut taken: FxHashSet<ActRef> = FxHashSet::default();
         for (l, _) in &fit.landed {
             if let Some(a) = self.act(*l) { for c in &a.coverers { if self.electing.contains(c) { taken.insert(*c); } } }
         }
-        1.0 + fit.failed.len() as f64 + taken.len() as f64
+        fit.failed.len() as f64 + taken.len() as f64
     }
 
     /// The tie-break of two fits that measure the same (R24): a fit whose relations land on the board relations as

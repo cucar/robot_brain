@@ -3,7 +3,8 @@
 //! the digit 0 with a reward of +1. Reports, per showing, the levels, what stands on the apex and how much of it
 //! stood the time before, and the functions added; for the showings asked, every call each level made; at the
 //! end, the dictionary.
-//! usage: cargo run --release --example square -- [showings=30] [h=2048] [detail-every=10] [trace-showing=0]
+//! With `hollow` as the fifth argument the middle is silent: only the black border reports, nothing at (1..3, 1..3).
+//! usage: cargo run --release --example square -- [showings=30] [h=2048] [detail-every=10] [trace-showing=0] [hollow]
 use brain_core::machine::Machine;
 use brain_core::types::*;
 
@@ -13,6 +14,7 @@ fn main() {
     let h: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(2048);
     let every: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(10);
     let trace_at: usize = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let hollow = args.get(5).map_or(false, |s| s == "hollow");
     let size = 5;
     let mut m = Machine::new(h, Policy::events_to_actions(), 1);
     let ax = m.declare_axis("x", 1);
@@ -23,7 +25,8 @@ fn main() {
     let dig = m.channels[digit as usize].action.unwrap();
     let white = |x: usize, y: usize| (1..=3).contains(&x) && (1..=3).contains(&y);
     println!("a white 3x3 square at x=1..3, y=1..3, on a black {}x{} image, shown {} times, H={} (B = black #0, W = white #1)", size, size, showings, h);
-    for y in 0..size { println!("    {}", (0..size).map(|x| if white(x, y) { 'W' } else { 'B' }).collect::<String>()); }
+    if hollow { println!("hollow: the middle reports nothing (shown as .)"); }
+    for y in 0..size { println!("    {}", (0..size).map(|x| if white(x, y) { if hollow { '.' } else { 'W' } } else { 'B' }).collect::<String>()); }
 
     let mut last: Vec<String> = Vec::new();
     for k in 1..=showings {
@@ -32,6 +35,7 @@ fn main() {
             let mut pos = [0i32; MAX_DIMS];
             pos[ax] = x as i32;
             pos[ay] = y as i32;
+            if hollow && white(x, y) { continue; }
             inputs.push(Input { dim: pix, bucket: if white(x, y) { 1 } else { 0 }, pos });
         } }
         m.trace = k == trace_at;
