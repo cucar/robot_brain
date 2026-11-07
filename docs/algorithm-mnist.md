@@ -64,8 +64,8 @@ covers two for its one and that edge, and is not taken, while a run of four is (
 length along one direction through a pixel share its relations and tie, and the older line function takes it.
 
 **What a line is on the board.** A line's call is one activation of the line's interneuron, at the run's first
-pixel, the least `x` of a row and the least `y` of a column (D37), in a pose that says the direction it ran and
-its laps, one fewer than its pixels (D53). The run's pixels are gone from the apex, and the call inherits every
+pixel, the least `x` of a row and the least `y` of a column (D37), in a pose that says its laps, one fewer than its
+pixels (D53). The run's pixels are gone from the apex, and the call inherits every
 relation they had that the fit did not cover: a pixel beside any pixel of the run now relates to the line, at
 its offset to the line's position, so beside the middle and beside the end are two relations, as every relation
 at the base is one offset (D10, D5). After the first level the board holds lines, each one activation with its

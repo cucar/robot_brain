@@ -45,7 +45,7 @@ below turns on.
 
 1. **The taps are a cycle from the first run.** The second tap sees the first one back, and the third sees the
    second, so at the third tap `tap` after `tap` is at strength 2 and starts a function (R50): one node with
-   a relation to itself, a cycle of one node (D15). Placed at that frame, its fit reads back round the cycle,
+   a relation to itself, a cycle of one node (D15). Fit at that frame, it reads back round the cycle,
    two laps, and ends at `go`, which is no tap, without a failure (D54): two relations for one, taken (R24).
    Its interneuron `taps` fires once, at the third tap, in a pose of two laps (D53). It stands for the
    three taps, which leave the apex, and inherits what the fit did not cover: the first tap's relation to `go`,

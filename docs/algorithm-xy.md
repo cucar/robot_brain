@@ -41,7 +41,7 @@ the two worths less one for the run, 2, against −1 without it: a gain of 3, ab
 alone, so it joins (D57, R54). The function is `y` after `x` and `x` after `y`, two nodes, two relations, a
 cycle. Its latest node is in the cycle, so it has no fixed origin: a fit enters at either letter (D15, D54).
 
-**The first call, over what the board holds.** Placed again at frame 6, the fit enters at the `y` and reads
+**The first call, over what the board holds.** Fit again at frame 6, it enters at the `y` and reads
 back round the cycle while the closing relation lands (D54): `x` at 5, `y` at 4, and there the board ends,
 since the `x` at 3 left it after frame 5 (D9). The lap ends without a failure.
 

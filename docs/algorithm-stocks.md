@@ -143,7 +143,7 @@ after `fall` (R50, D15). The `rise` counts it: its row at bar 1 holds `fall` bef
 it, while the `rise` at bar 4 holds `rise` after and is not counted, and the first `rise` of the run holds
 nothing before, where the lap ends, which is no failure (D54): `with` 1, worth 0, and fall-after-rise worth 2.
 The dictionary's worth rises by the move, from −1 for each of two pairs to 0 for the one cycle, so it joins
-(D57, R54). Placed again at bar 2, the fit enters at the `fall` and reads back round the cycle over what the
+(D57, R54). Fit again at bar 2, it enters at the `fall` and reads back round the cycle over what the
 board holds: the `rise` at 1 and the `fall` at bar 6 of lap 1, where the board ends (D9), without a failure
 (D54).
 
