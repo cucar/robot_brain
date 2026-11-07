@@ -39,15 +39,32 @@ impl Machine {
     }
 
     /// The tie-break of two fits that measure the same (R24): a fit whose relations land on the board relations as
-    /// they read before one landing a node on a call through its pose; a function with an interneuron before one
-    /// without; the older interneuron; the function that joined first; the fit from the older activation.
-    fn rank(&self, fit: &Fit) -> (bool, u8, u64, u64, ActRef) {
+    /// they read before one landing a node on a call through its pose; experiment: the fit whose activations stand
+    /// for more of the same activations underneath; a function with an interneuron before one without; the older
+    /// interneuron; the function that joined first; the fit from the older activation.
+    fn rank(&self, fit: &Fit) -> (bool, i64, u8, u64, u64, ActRef) {
         let f = self.dict.get(fit.func);
         let via_call = !fit.calls.is_empty();
+        let shared = -(self.shared_under(fit) as i64);
         match f.and_then(|f| f.inter) {
-            Some(n) => (via_call, 0, n as u64, 0, fit.entry.1),
-            None => (via_call, 1, 0, f.map_or(u64::MAX, |f| f.joined), fit.entry.1),
+            Some(n) => (via_call, shared, 0, n as u64, 0, fit.entry.1),
+            None => (via_call, shared, 1, 0, f.map_or(u64::MAX, |f| f.joined), fit.entry.1),
         }
+    }
+
+    /// How many activations at the base stand under two or more of the activations a fit lands on (experiment).
+    fn shared_under(&self, fit: &Fit) -> usize {
+        let mut seen: rustc_hash::FxHashMap<ActRef, u32> = rustc_hash::FxHashMap::default();
+        for (k, _) in fit.acts() {
+            let Some(a) = self.act(k) else { continue };
+            let mut base: Vec<ActRef> = if a.covers.is_empty() { vec![k] } else {
+                self.under(a).into_iter().filter(|r| self.act(*r).map_or(false, |x| x.covers.is_empty())).collect()
+            };
+            base.sort();
+            base.dedup();
+            for b in base { *seen.entry(b).or_insert(0) += 1; }
+        }
+        seen.values().filter(|n| **n >= 2).count()
     }
 
     /// The reuse search (R43, D36): an interneuron that already stands for what this function's would. The
