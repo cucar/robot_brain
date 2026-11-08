@@ -21,11 +21,12 @@ pub const SYM_CALL: Sym = 1 << 28;
 
 /// A call's pose (D8, D53): the node of the latest activation its fit landed on, the node of the earliest, and how
 /// many laps it went round. A fit reads a cycle one way, the way its relations' offsets advance, so the pose names
-/// no direction.
+/// no direction. The node it ended at is named by its neuron alone, so a pose never holds another call's pose: in a
+/// ring of calls, each naming the call before it, the names would otherwise grow by one level every lap.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default)]
 pub struct Pose {
     pub from: Sym,
-    pub to: Sym,
+    pub to: NeuronId,
     pub laps: u32,
 }
 

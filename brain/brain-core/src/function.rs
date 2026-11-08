@@ -269,7 +269,7 @@ impl Dictionary {
     pub fn sym_text(&self, s: Sym) -> String {
         match self.pose_of(s) {
             None => format!("#{}", s),
-            Some(p) => format!("#{}<{}..{}x{}>", self.neuron_of(s), self.sym_text_short(p.from), self.sym_text_short(p.to), p.laps),
+            Some(p) => format!("#{}<{}..{}x{}>", self.neuron_of(s), self.sym_text_short(p.from), format!("#{}", p.to), p.laps),
         }
     }
     fn sym_text_short(&self, s: Sym) -> String { if s < SYM_CALL { format!("#{}", s) } else { format!("#{}'", self.neuron_of(s)) } }
