@@ -106,6 +106,12 @@ pub struct Machine {
     /// Per call in its pose, every node its expansion puts back, at any depth, each at its offset from the call's
     /// position (R28, R50); read from the dictionary and dropped whenever the dictionary changes.
     pub(crate) expansions: std::cell::RefCell<FxHashMap<Sym, std::rc::Rc<Vec<(Sym, Offset)>>>>,
+    /// Per expansion kept, the functions it was read through: a change to one drops the expansions that used it.
+    pub(crate) expansion_deps: std::cell::RefCell<FxHashMap<Sym, Vec<crate::function::FuncId>>>,
+    /// Within one grouping, the histories stand still: per relation, the end it is read from and its strength,
+    /// worked out once and dropped whenever a function changes.
+    pub(crate) held_memo: std::cell::RefCell<FxHashMap<crate::function::Rel, Option<(Sym, Sym, Offset)>>>,
+    pub(crate) strength_memo: std::cell::RefCell<FxHashMap<crate::function::Rel, u32>>,
     /// A test: the machine recognizes and predicts but changes nothing of itself. No rows enter a history, no
     /// function is added, moved or pruned, no interneuron is allocated, no connection or reward is written,
     /// nothing is decommissioned.
@@ -158,6 +164,9 @@ impl Machine {
             covered_rel: FxHashSet::default(),
             electing: FxHashSet::default(),
             expansions: std::cell::RefCell::new(FxHashMap::default()),
+            expansion_deps: std::cell::RefCell::new(FxHashMap::default()),
+            held_memo: std::cell::RefCell::new(FxHashMap::default()),
+            strength_memo: std::cell::RefCell::new(FxHashMap::default()),
             frozen: false,
             recognize_first: true,
         }

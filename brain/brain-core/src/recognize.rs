@@ -207,21 +207,44 @@ impl Machine {
     pub(crate) fn expansion_of(&self, s: Sym) -> std::rc::Rc<Vec<(Sym, Offset)>> {
         if let Some(v) = self.expansions.borrow().get(&s) { return v.clone(); }
         let mut out = Vec::new();
-        self.expand_nodes(s, [0; MAX_DIMS], &mut Vec::new(), &mut out);
+        let mut deps = Vec::new();
+        self.expand_nodes(s, [0; MAX_DIMS], &mut Vec::new(), &mut out, &mut deps);
         out.sort_unstable();
         out.dedup();
+        deps.sort_unstable();
+        deps.dedup();
         let v = std::rc::Rc::new(out);
         self.expansions.borrow_mut().insert(s, v.clone());
+        self.expansion_deps.borrow_mut().insert(s, deps);
         v
     }
 
-    fn expand_nodes(&self, s: Sym, at: Offset, path: &mut Vec<NeuronId>, out: &mut Vec<(Sym, Offset)>) {
+    /// Drop every expansion kept that was read through a function, which has changed, and with them the
+    /// strengths worked out this grouping.
+    pub(crate) fn forget_expansions(&self, fid: FuncId) {
+        self.held_memo.borrow_mut().clear();
+        self.strength_memo.borrow_mut().clear();
+        let gone: Vec<Sym> = self.expansion_deps.borrow().iter().filter(|(_, d)| d.contains(&fid)).map(|(s, _)| *s).collect();
+        let (mut e, mut d) = (self.expansions.borrow_mut(), self.expansion_deps.borrow_mut());
+        for s in gone { e.remove(&s); d.remove(&s); }
+    }
+
+    /// Drop every expansion kept.
+    pub(crate) fn forget_all_expansions(&self) {
+        self.held_memo.borrow_mut().clear();
+        self.strength_memo.borrow_mut().clear();
+        self.expansions.borrow_mut().clear();
+        self.expansion_deps.borrow_mut().clear();
+    }
+
+    fn expand_nodes(&self, s: Sym, at: Offset, path: &mut Vec<NeuronId>, out: &mut Vec<(Sym, Offset)>, deps: &mut Vec<FuncId>) {
         let Some(pose) = self.dict.pose_of(s) else { return };
         let n = self.dict.neuron_of(s);
         if path.contains(&n) || path.len() > 64 { return; }
         let f = self.dict.of_inter(n).iter().filter_map(|id| self.dict.get(*id)).find(|f| f.node_of(pose.from).is_some()).cloned()
             .or_else(|| self.func_of(n).cloned());
         let Some(f) = f else { return };
+        deps.push(f.id);
         let root = f.node_of(pose.from).unwrap_or(0);
         let lay = f.layout_from(root);
         let mut nodes: Vec<(Sym, Offset)> = f.nodes.iter().enumerate().map(|(i, m)| (*m, lay.position[i])).collect();
@@ -236,7 +259,7 @@ impl Machine {
             let mut p = at;
             for d in 0..MAX_DIMS { p[d] += q[d]; }
             out.push((m, p));
-            self.expand_nodes(m, p, path, out);
+            self.expand_nodes(m, p, path, out, deps);
         }
         path.pop();
     }
@@ -262,15 +285,34 @@ impl Machine {
     /// The neuron in its pose a relation is read from (D47, R50): an end whose rows hold it, at whatever offset
     /// (D10); where both ends hold it, the one with more activations behind it. None where no rows hold it.
     fn held_by(&self, r: &Rel) -> Option<(Sym, Sym, Offset)> {
+        if let Some(h) = self.held_memo.borrow().get(r) { return *h; }
+        let h = self.held_by_rows(r);
+        self.held_memo.borrow_mut().insert(*r, h);
+        h
+    }
+
+    fn held_by_rows(&self, r: &Rel) -> Option<(Sym, Sym, Offset)> {
         r.ends().into_iter()
-            .map(|c| (c, self.rows_of(c.0).count(), self.rows_of(c.0).any(|row| self.row_holds(row, c.1, &c.2))))
-            .filter(|x| x.2).max_by_key(|x| x.1).map(|x| x.0)
+            .filter(|c| self.rows_of(c.0).any(|row| self.row_holds(row, c.1, &c.2)))
+            .map(|c| (c, self.rows_count(c.0)))
+            .max_by_key(|x| x.1).map(|x| x.0)
+    }
+
+    /// How many rows a symbol's neuron holds in that pose: a base neuron has one pose, so all of its history.
+    fn rows_count(&self, s: Sym) -> usize {
+        if s < SYM_CALL { return self.thalamus.get(s).map_or(0, |n| n.history.len()); }
+        self.rows_of(s).count()
     }
 
     /// How many rows of its neuron hold a relation (D47), reading a call as the node its pose starts at.
     pub(crate) fn strength_of(&self, r: &Rel) -> u32 {
-        let Some((n, far, off)) = self.held_by(r) else { return 0 };
-        self.rows_of(n).filter(|row| self.row_holds(row, far, &off)).count() as u32
+        if let Some(s) = self.strength_memo.borrow().get(r) { return *s; }
+        let s = match self.held_by(r) {
+            Some((n, far, off)) => self.rows_of(n).filter(|row| self.row_holds(row, far, &off)).count() as u32,
+            None => 0,
+        };
+        self.strength_memo.borrow_mut().insert(*r, s);
+        s
     }
 
     /// `with` and `without` for one relation of a set (R50): over the rows of the end that answers for it, how
@@ -384,7 +426,7 @@ impl Machine {
     /// function that fit here leaves where it is worth more alone or nothing anywhere, and each recurring relation
     /// no function holds starts one. Returns the functions that changed.
     pub(crate) fn group(&mut self, fits: &[Fit], fresh: &[Fresh], fired: &FxHashSet<Sym>) -> Vec<FuncId> {
-        self.expansions.borrow_mut().clear();
+        self.forget_all_expansions();
         let mut changed: Vec<FuncId> = Vec::new();
         let fno = self.frame_no;
         // the activations each function touches here: what its fits landed on, each as its node, with the position
@@ -464,7 +506,7 @@ impl Machine {
             if let Some(g) = self.dict.holder(&rel) { self.leave(g, &rel, &mut changed); }
             if self.dict.get(fid).is_none() { continue; }
             self.dict.join(fid, rel, attach);
-            self.expansions.borrow_mut().clear();
+            self.forget_expansions(fid);
             joined.insert(rel);
             if !changed.contains(&fid) { changed.push(fid); }
         }
@@ -523,7 +565,7 @@ impl Machine {
     /// function of its own where it recurs; a function left with none leaves the dictionary.
     fn leave(&mut self, fid: FuncId, r: &Rel, changed: &mut Vec<FuncId>) {
         let (cut, gone) = self.dict.leave(fid, r);
-        self.expansions.borrow_mut().clear();
+        self.forget_expansions(fid);
         for c in cut {
             if self.strength_of(&c) >= 2 && self.dict.holder(&c).is_none() { let g = self.dict.start(c); changed.push(g); }
         }
