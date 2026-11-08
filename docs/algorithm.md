@@ -938,7 +938,7 @@ is stated here and cited from there.
 
 > **D28 — Greedy cover.** The operation that covers a board with **fits**, each landing on relations, and pays
 > each relation to exactly one fit; an activation may be landed on by several fits, each covering relations
-> of its own (D8, D10). It repeats:
+> of its own, within the one election that covers it (D8, D10). It repeats:
 >
 > 1. **Measure** every fit not yet taken against the board as the taken fits have left it. A fit lands on no
 >    relation a taken fit covers, so one read through such a relation is read again over what stands, and a
@@ -1464,8 +1464,12 @@ machine works out itself (R22).
 
 > **R23 — This frame's fits against the board as it stands.** Only what costs is in play: a bare node's
 > relations at their cost, a bound node's binding, and the relations a call covers at that call's cost,
-> together. So no relation is paid for twice. Within the electing frame an activation is
-> covered once, by the first accepted fit that lands on it (R24), and never moves.
+> together. So no relation is paid for twice. Within the electing frame an activation is covered once, by the
+> first accepted fit that lands on it (R24), and never moves. Other fits of that election may still land on
+> it, each covering relations of its own (D28). When the election is over the activation is gone from the
+> board: from the next level on, and in every later frame, only its calls stand at its position, and a fit
+> there lands on them through their poses (D54). The second election of a level fits what the first left, so
+> an activation the first covered is not there for it.
 >
 > **A later frame covers the past through its calls.** An activation a call at an earlier frame covers is out
 > of reach: no neuron returns it (D5), so no fit lands on it again. A fit at `f` reaches the call itself by
