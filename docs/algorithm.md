@@ -613,7 +613,7 @@ free, no interneuron is granted (R16, R24).
 >
 > | Thing | Field | What it holds | Costs |
 > |---|---|---|---|
-> | a function | relations | its relations, each a neuron relation as the neurons return it: two neurons, each in a pose, and an offset (D34); together they name its nodes, one per neuron | one per relation; nothing per node |
+> | a function | relations | its relations, each a neuron relation as the neurons return it: two neurons, each in a pose, and an offset (D34), and which of its two ends it attached to the function at, where its worth is read (D57); together they name its nodes, one per neuron | one per relation; nothing per node or attachment |
 > | | origin | which of its nodes is the origin, its latest (D15); none where the latest node is in a cycle | nothing: the node list begins with it |
 > | | open nodes | which of its nodes are variables, each a class by id or a parameter (D38) | nothing |
 > | | interneuron | the neuron allocated for it, or none (D53) | nothing: the function is reached through it, not stated by it |
@@ -897,7 +897,7 @@ A neuron the function does not name is in neither: it costs what it cost whether
 > relations its function's relations land on, for the call, failures and bindings (D12). The worth is that
 > saving shared out among the function's relations, since grouping decides relation by relation which belong
 > to a function (R50, R54). The machine keeps nothing for it: one relation's share, in one function, is read
-> from the neuron the relation and the function share, over that neuron's history (D18, D47, R50):
+> at the node it attached to the function at (D56), over that neuron's history (D18, D47, R50):
 >
 > | | |
 > |---|---|
@@ -1328,8 +1328,11 @@ argument.
 > activations, for any candidate its rows hold. A row holds the frame around the activation on both sides in
 > time (D18), so a candidate at either end of a function is counted by the node it attaches at: for a
 > candidate at the past end, the node sees the function's relation after it and the candidate before it in
-> one row. **A relation is counted by an end whose rows hold it**, at whatever offset (D10). Where two ends
-> hold it, it is read at the count with the more activations behind it, as a returned relation is (R21).
+> one row. **A relation is counted at the node it attached to the function at**, which the function keeps with
+> it (D56), at whatever offset that node's rows hold it (D10): that is the node the function already had
+> relations at when it joined, so the reading is conditioned on them, and it does not move as the histories
+> slide. A relation no function holds is read at its end with the more activations behind it, as a returned
+> relation is (R21).
 >
 > **A relation to a node is counted through the calls that stand for it.** A row that saw an activation a
 > call covered holds the call, at the offset to the call's position (D10), and the call's expansion from
