@@ -165,6 +165,23 @@ impl Machine {
         let neuron = match own.or(found) {
             Some(n) if own.is_some() => n,
             Some(n) => {
+                // an interneuron never holds two functions whose nodes are the same neurons: the older gives way,
+                // its relations leaving with it (R43, R54, R18)
+                let mut mine: Vec<NeuronId> = f.nodes.iter().map(|m| self.dict.neuron_of(*m)).collect();
+                mine.sort_unstable();
+                mine.dedup();
+                let older: Vec<crate::function::FuncId> = self.dict.of_inter(n).iter().copied().filter(|g| {
+                    self.dict.get(*g).map_or(false, |g| {
+                        let mut v: Vec<NeuronId> = g.nodes.iter().map(|m| self.dict.neuron_of(*m)).collect();
+                        v.sort_unstable();
+                        v.dedup();
+                        v == mine
+                    })
+                }).collect();
+                for g in older {
+                    if self.trace { if let Some(gf) = self.dict.get(g) { eprintln!("[gives way f{}] {} for {}", fno, self.dict.describe(gf), self.dict.describe(&f)); } }
+                    if let Some(gone) = self.dict.remove(g) { self.forget_expansions(g); self.retire(gone); }
+                }
                 self.dict.set_inter(f.id, n);
                 self.stats_reused += 1;
                 if self.trace { eprintln!("[reuse f{}] {} -> #{}", fno, self.dict.describe(&f), n); }

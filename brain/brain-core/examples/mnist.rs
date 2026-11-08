@@ -98,6 +98,7 @@ fn main() {
     let t0 = Instant::now();
     let (mut spoke, mut right, mut lessons, mut ms, mut apex) = (0usize, 0usize, 0usize, 0.0f64, 0usize);
     let (mut w_spoke, mut w_right, mut w_ms) = (0usize, 0usize, 0.0f64);
+    let (mut w_added, mut w_retired) = (0usize, 0usize);
     let mut k = 0usize;
     let mut last_apex: Vec<String> = Vec::new();
     for ep in 0..episodes {
@@ -112,6 +113,8 @@ fn main() {
             if tracing { m.stop_after_level = None; }
             m.trace = tracing;
             let (said, t) = run(&mut m, &train_imgs[i]);
+            w_added += m.last_stats.added;
+            w_retired += m.last_stats.retired;
             ms += t;
             e_ms += t;
             e_levels = e_levels.max(m.last_stats.levels);
@@ -136,8 +139,10 @@ fn main() {
             let ran = if lesson { label } else { said.unwrap() };
             ms += answer(&mut m, Some(ran), Some(if ran == label { 1.0 } else { -1.0 }));
             if k % 100 == 0 {
-                eprintln!("  image {}/{} | last 100: spoke {} right {} ({:.1}% of spoken) {:.0} ms/image | neurons {} functions {} | apex/image {:.1} | {:.1} ms/image so far",
-                    k, shown, w_spoke, w_right, 100.0 * w_right as f64 / w_spoke.max(1) as f64, (ms - w_ms) / 100.0, m.alive, m.dict.len(), apex as f64 / k as f64, ms / k as f64);
+                eprintln!("  image {}/{} | last 100: spoke {} right {} ({:.1}% of spoken) {:.0} ms/image, functions added {} retired {} | neurons {} functions {} | apex/image {:.1} | {:.1} ms/image so far",
+                    k, shown, w_spoke, w_right, 100.0 * w_right as f64 / w_spoke.max(1) as f64, (ms - w_ms) / 100.0, w_added, w_retired, m.alive, m.dict.len(), apex as f64 / k as f64, ms / k as f64);
+                w_added = 0;
+                w_retired = 0;
                 w_spoke = 0;
                 w_right = 0;
                 w_ms = ms;

@@ -16,18 +16,15 @@ fn dot(a: &Pos, b: &Pos) -> i64 { (0..MAX_DIMS).map(|d| a[d] as i64 * b[d] as i6
 impl Machine {
     /// The function an interneuron is read through when nothing fired it there: the one that fired it last, or
     /// any of its functions (R28).
-    /// The function a call in its pose expands through (D8, D36): of its interneuron's functions, the one with a
-    /// node of each of the two neurons its pose names, since the function's own definition says which pose those
-    /// nodes are in, and where several have (an interneuron reused for a stretch that came round, R43), the one that
-    /// fired it last; else one with a node of its start neuron; else the one that fired it last.
+    /// The function a call in its pose expands through (D8, D36, R28): of its interneuron's functions, the one with
+    /// a node of each of the two neurons its pose names, since an interneuron never holds two functions over the
+    /// same neurons (R43); else one with a node of its start neuron; else any of its functions.
     pub(crate) fn func_for(&self, s: Sym) -> Option<&Func> {
         let n = self.dict.neuron_of(s);
         let Some(p) = self.dict.pose_of(s) else { return self.func_of(n) };
         let fs: Vec<&Func> = self.dict.of_inter(n).iter().filter_map(|id| self.dict.get(*id)).collect();
         let has = |f: &Func, m: NeuronId| self.dict.node_by_neuron(f, m).is_some();
-        let last = self.last_func.get(&n).copied();
-        let both: Vec<&Func> = fs.iter().copied().filter(|f| has(f, p.from) && has(f, p.to)).collect();
-        both.iter().copied().find(|f| Some(f.id) == last).or_else(|| both.first().copied())
+        fs.iter().copied().find(|f| has(f, p.from) && has(f, p.to))
             .or_else(|| fs.iter().copied().find(|f| has(f, p.from)))
             .or_else(|| self.func_of(n))
     }

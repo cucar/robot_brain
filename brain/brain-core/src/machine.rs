@@ -384,7 +384,8 @@ impl Machine {
             let (mut accepted, mut minted) = self.elect(level, fits);
             let left: Vec<Fresh> = fresh.iter().filter(|e| self.act(e.near).map_or(false, |a| a.on_apex()) && self.act(e.far).map_or(false, |a| a.on_apex())).copied().collect();
             let rest: Vec<_> = found.iter().flat_map(|id| self.fits_of(*id)).collect();
-            let changed = self.group(&rest, &left, &fired);
+            let board = self.board_rels();
+            let changed = self.group(&rest, &left, &board, &fired);
             self.span_s = self.board_span();
             let again: Vec<_> = changed.iter().filter(|id| self.dict.get(**id).is_some()).flat_map(|id| self.fits_of(*id)).collect();
             if self.trace { for f in &again { eprintln!("[fit2 f{} l{}] f{} entry {:?} at node {} landed {} calls {} edges {} failed {:?} laps {}", self.frame_no, level, f.func, f.entry.1, f.entry.0, f.landed.len(), f.calls.len(), f.edges.len(), f.failed, f.laps); } }
@@ -397,7 +398,7 @@ impl Machine {
         // count and group (R50, R54, R18); what changed is fit again before the election
         if !self.frozen {
             let fired: FxHashSet<Sym> = refs.iter().filter_map(|r| self.act(*r)).map(|a| a.sym).collect();
-            let changed = self.group(&fits, &fresh, &fired);
+            let changed = self.group(&fits, &fresh, &fresh, &fired);
             self.span_s = self.board_span();
             if !changed.is_empty() {
                 found.extend(changed);

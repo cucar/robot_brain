@@ -280,10 +280,13 @@ impl Machine {
         })
     }
 
-    /// The rows of a symbol's neuron that it fired in that pose (D18).
+    /// The rows of a symbol's neuron that it fired in that pose (D18), each once it has taken what followed it: the
+    /// connect step gives a row what followed at the end of the frame after its own, so a row of this frame or the
+    /// one before has neither held nor failed a relation forward in time yet (R50).
     fn rows_of(&self, s: Sym) -> impl Iterator<Item = &Row> + '_ {
         let n = self.dict.neuron_of(s);
-        self.thalamus.get(n).into_iter().flat_map(move |nn| nn.history.iter().filter(move |r| r.own == s))
+        let fno = self.frame_no;
+        self.thalamus.get(n).into_iter().flat_map(move |nn| nn.history.iter().filter(move |r| r.own == s && r.act.frame + 1 < fno))
     }
 
     /// The neuron in its pose a relation is read from (D47, R50): an end whose rows hold it, at whatever offset
@@ -302,11 +305,8 @@ impl Machine {
             .max_by_key(|x| x.1).map(|x| x.0)
     }
 
-    /// How many rows a symbol's neuron holds in that pose: a base neuron has one pose, so all of its history.
-    fn rows_count(&self, s: Sym) -> usize {
-        if s < SYM_CALL { return self.thalamus.get(s).map_or(0, |n| n.history.len()); }
-        self.rows_of(s).count()
-    }
+    /// How many rows a symbol's neuron holds in that pose, of those that have taken what followed.
+    fn rows_count(&self, s: Sym) -> usize { self.rows_of(s).count() }
 
     /// How many rows of its neuron hold a relation (D47), reading a call as the node its pose starts at.
     pub(crate) fn strength_of(&self, r: &Rel) -> u32 {
@@ -365,21 +365,33 @@ impl Machine {
     /// (experiment).
     pub(crate) fn alone(&self, r: &Rel) -> f64 { self.strength_of(r) as f64 - 1.0 }
 
+    /// A relation's worth alone read at node `at` (R50): the rows of that node's neuron that hold it, less one, so
+    /// it is weighed against a function at the same neuron the function reads it at.
+    pub(crate) fn alone_at(&self, r: &Rel, at: Sym) -> f64 { self.answer(&[*r], r, Some(at)).0 as f64 - 1.0 }
+
+    /// A relation of a function alone, read at the node it attached at.
+    pub(crate) fn alone_in(&self, f: &Func, r: &Rel) -> f64 {
+        f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| *a).map_or_else(|| self.alone(r), |a| self.alone_at(r, a))
+    }
+
     /// A relation's gain in a function it attaches to at node `attach` (D57, R54, R50): the function's worth with it
     /// less its worth without it, the relation counted at the node it attaches at.
     pub(crate) fn gain(&self, f: &Func, c: &Rel, attach: Sym) -> f64 {
         let mut with = f.rels.clone();
         with.push(*c);
-        let mut at = Func::meeting(&f.rels, &f.at, attach);
+        // the function's relations read where they will be counted once it joins, with it and without it alike,
+        // so the comparison is at one neuron (R50)
+        let before = Func::meeting(&f.rels, &f.at, attach);
+        let mut at = before.clone();
         at.push(Some(attach));
-        self.worth_of(f.origin(), &with, &at) - self.worth_of(f.origin(), &f.rels, &f.at)
+        self.worth_of(f.origin(), &with, &at) - self.worth_of(f.origin(), &f.rels, &before)
     }
 
     /// A relation's contribution to the function it is in (D57, R54): the function's worth with it less without
     /// it; alone, its worth in a function of its own, its strength less one (experiment).
     pub(crate) fn contribution(&self, f: &Func, r: &Rel) -> f64 {
         let (without, wat): (Vec<Rel>, Vec<Option<Sym>>) = f.rels.iter().zip(&f.at).filter(|(x, _)| *x != r).map(|(x, a)| (*x, *a)).unzip();
-        if without.is_empty() { return self.alone(r); }
+        if without.is_empty() { return self.alone_in(f, r); }
         let origin = if without.iter().any(|x| x.a == f.origin() || x.b == f.origin()) { f.origin() } else { without[0].a };
         self.worth_of(f.origin(), &f.rels, &f.at) - self.worth_of(origin, &without, &wat)
     }
@@ -429,7 +441,32 @@ impl Machine {
     /// Grouping at one level (R50, R54, R18): each candidate goes where its gain is highest, each relation of a
     /// function that fit here leaves where it is worth more alone or nothing anywhere, and each recurring relation
     /// no function holds starts one. Returns the functions that changed.
-    pub(crate) fn group(&mut self, fits: &[Fit], fresh: &[Fresh], fired: &FxHashSet<Sym>) -> Vec<FuncId> {
+    /// The relations standing on the board (R50, D9): every relation the neurons returned, this frame or at one
+    /// before, whose two activations still stand on the apex, each edge once, at the strength its stronger end
+    /// returned.
+    pub(crate) fn board_rels(&self) -> Vec<Fresh> {
+        let fno = self.frame_no;
+        let mut out: FxHashMap<(ActRef, ActRef), Fresh> = FxHashMap::default();
+        for fr in self.frames.iter() {
+            for (i, a) in fr.acts.iter().enumerate() {
+                if !a.on_apex() || !self.stands(a, fno) { continue; }
+                let near = ActRef { frame: fr.no, index: i as u32 };
+                for br in &a.rels {
+                    let Some(b) = self.act(br.other) else { continue };
+                    if !b.on_apex() || !self.stands(b, fno) { continue; }
+                    if br.strength < 2 { continue; }
+                    let k = edge(near, br.other);
+                    if out.get(&k).map_or(false, |x| x.strength >= br.strength) { continue; }
+                    out.insert(k, Fresh { near, far: br.other, off: br.off, strength: br.strength, rel: canon(a.sym, b.sym, br.off) });
+                }
+            }
+        }
+        let mut v: Vec<Fresh> = out.into_values().collect();
+        v.sort_by(|a, b| (a.near, a.far).cmp(&(b.near, b.far)));
+        v
+    }
+
+    pub(crate) fn group(&mut self, fits: &[Fit], fresh: &[Fresh], board: &[Fresh], fired: &FxHashSet<Sym>) -> Vec<FuncId> {
         self.forget_all_expansions();
         let mut changed: Vec<FuncId> = Vec::new();
         let fno = self.frame_no;
@@ -447,7 +484,7 @@ impl Machine {
             for d in 0..MAX_DIMS { opos[d] -= lay.position[fit.entry.0][d]; }
             for (l, node) in fit.acts() { touch.entry(f.id).or_default().push((l, f.nodes[node], opos)); }
         }
-        for e in fresh {
+        for e in board {
             for end in [e.near, e.far] {
                 let Some(a) = self.act(end) else { continue };
                 if a.kind != Kind::Inter || !a.on_apex() || !self.stands(a, fno) { continue; }
@@ -464,16 +501,20 @@ impl Machine {
         }
         // the candidates (R50)
         let mut cands: FxHashMap<Rel, Vec<(FuncId, Sym)>> = FxHashMap::default();
-        for e in fresh {
+        let mut at_act: FxHashMap<ActRef, Vec<(FuncId, Sym, Pos)>> = FxHashMap::default();
+        let mut fids: Vec<FuncId> = touch.keys().copied().collect();
+        fids.sort_unstable();
+        for fid in fids { for &(act, as_node, opos) in &touch[&fid] { at_act.entry(act).or_default().push((fid, as_node, opos)); } }
+        for e in board {
             if e.strength < 2 { continue; }
-            for (fid, list) in &touch {
-                let Some(f) = self.dict.get(*fid) else { continue };
-                for &(act, as_node, opos) in list {
-                    let other = if e.near == act { e.far } else if e.far == act { e.near } else { continue };
-                    if taken.get(fid).map_or(false, |t| t.contains(&edge(act, other))) { continue; }
+            for (act, other) in [(e.near, e.far), (e.far, e.near)] {
+                let Some(list) = at_act.get(&act) else { continue };
+                for &(fid, as_node, opos) in list {
+                    let Some(f) = self.dict.get(fid) else { continue };
+                    if taken.get(&fid).map_or(false, |t| t.contains(&edge(act, other))) { continue; }
                     for rel in self.candidates(f, act, as_node, &opos, other) {
                         let v = cands.entry(rel).or_default();
-                        if !v.iter().any(|x| x.0 == *fid) { v.push((*fid, as_node)); }
+                        if !v.iter().any(|x| x.0 == fid) { v.push((fid, as_node)); }
                     }
                 }
             }
@@ -485,11 +526,10 @@ impl Machine {
         let mut joined: FxHashSet<Rel> = FxHashSet::default();
         for (_, rel) in keys {
             let fs = cands[&rel].clone();
-            // its contribution where it stands: to its function, or alone, its strength less one (experiment)
-            let here = match self.dict.holder(&rel).and_then(|g| self.dict.get(g)) {
-                Some(g) => self.contribution(g, &rel),
-                None => self.alone(&rel),
-            };
+            // its contribution where it stands: to its function, or alone, its strength less one; standing alone or
+            // in a function of one relation, a tie joins, since it leaves fewer functions (R54)
+            let holder = self.dict.holder(&rel).and_then(|g| self.dict.get(g));
+            let lone = holder.map_or(true, |g| g.rels.len() == 1);
             let mut best: Option<(f64, f64, u64, FuncId, Sym)> = None;
             for (fid, attach) in fs {
                 let Some(f) = self.dict.get(fid) else { continue };
@@ -505,8 +545,13 @@ impl Machine {
                 if better { best = Some((w, near, f.joined, fid, attach)); }
             }
             let Some((w, _, _, fid, attach)) = best else { continue };
+            // alone, read at the node it would attach at (R50)
+            let here = match holder {
+                Some(g) if !lone => self.contribution(g, &rel),
+                _ => self.alone_at(&rel, attach),
+            };
             if self.trace { eprintln!("[cand f{}] {} best f{} gain {:.0} | where it stands f{:?} {:.0}", fno, self.rel_text(&rel), fid, w, self.dict.holder(&rel), here); }
-            if !(w > here) { continue; }
+            if !(w > here || (lone && w == here)) { continue; }
             if self.trace { eprintln!("[join f{}] {} into {} gain {:.0} over {:.0}", fno, self.rel_text(&rel), self.dict.describe(self.dict.get(fid).unwrap()), w, here); }
             if let Some(g) = self.dict.holder(&rel) { self.leave(g, &rel, &mut changed); }
             if self.dict.get(fid).is_none() { continue; }
@@ -529,11 +574,13 @@ impl Machine {
                 let mut worst: Option<(f64, Rel, bool)> = None;
                 for r in &rels {
                     // for nothing once its strength has slid below 2 (R18)
-                    if self.strength_of(r) < 2 { if worst.map_or(true, |w| f64::INFINITY > w.0) { worst = Some((f64::INFINITY, *r, true)); } continue; }
+                    if self.alone_in(f, r) < 1.0 { if self.trace { eprintln!("[price f{}] {} in f{}: below 2, alone {:.0} at {:?}", fno, self.rel_text(r), fid, self.alone_in(f, r), f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| a.map(|a| self.dict.sym_text(a)))); }
+                        if worst.map_or(true, |w| f64::INFINITY > w.0) { worst = Some((f64::INFINITY, *r, true)); } continue; }
                     // for a function of its own where its worth alone is higher than its contribution (R54, experiment)
                     if rels.len() > 1 {
                         let inside = self.contribution(f, r);
-                        let alone = self.alone(r);
+                        let alone = self.alone_in(f, r);
+                        if self.trace { eprintln!("[price f{}] {} in f{}: contribution {:.0} alone {:.0} at {:?}", fno, self.rel_text(r), fid, inside, alone, f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| a.map(|a| self.dict.sym_text(a)))); }
                         if alone > inside {
                             let gain = alone - inside;
                             if worst.map_or(true, |w| gain > w.0) { worst = Some((gain, *r, false)); }
