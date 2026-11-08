@@ -251,9 +251,12 @@ that fires through it (D8), and expansion ends on base symbols read back through
 > base neuron has. A call is one activation of the interneuron, at the position of the latest activation the fit
 > landed on, in the pose the fit read (D37, D53): its **phase**, the node the fit started at and the node it
 > ended at, and its **laps**, how many times it went round. A fit reads a cycle one way, the way its relations'
-> offsets advance (D15), so the pose names no direction. Everything the fit landed on has already happened
-> (D54). A pose is a name: a relation to the activation names the neuron in
-> that pose (D34), and nothing in it costs (D13).
+> offsets advance (D15), so the pose names no direction. The pose names its two nodes by their neurons: a
+> function has one node per neuron (D15), so the neuron says which node, and the function's own definition says
+> which pose that node is in. So a pose is two neurons and a number, and never holds another pose: a ring of
+> calls, each ending at the call before it, keeps the same names lap after lap. Everything the fit landed
+> on has already happened (D54). A pose is a name: a relation to the activation names the neuron in that pose
+> (D34), and nothing in it costs (D13).
 
 > **D9 — Activation window.** An activation at position `f` in time has two spans. It **stands on the board**
 > through `f + S`, where `S` is the longest reach in time among the neurons the machine holds, one beyond the
@@ -421,8 +424,8 @@ what was done together.
 > ends are its nodes, and a relation from a neuron to itself joins one node to itself.
 >
 > **A call's pose is part of its name.** A relation to an interneuron names it in the pose its activation fired
-> in (D8, D53): which node the fit ran from and to, and how many laps. A base neuron has one
-> pose, so at the base a relation is two neurons and an offset. Two calls of one interneuron in different
+> in (D8, D53): which node the fit ran from and to, each by its neuron, and how many laps. A base neuron has
+> one pose, so at the base a relation is two neurons and an offset. Two calls of one interneuron in different
 > poses are different ends for a relation, as two neurons are, and two in one pose at one offset are one
 > relation. A pose is a name, and costs nothing (D13).
 >
@@ -588,7 +591,8 @@ never fit alone, and promotes no interneuron: what stands in it stays on the ape
 > allocated the first time a fit of the function is accepted and a neuron is free (R16). It has an id and no
 > dimension and no channel. **It fires once per accepted fit, in a pose** (D37): at the position of the latest
 > activation the fit landed on, in the frame the fit is accepted, at age 0. The pose is read off the fit: the
-> node the fit started at, the node it ended at, and how many laps it went round (D54). The call stands for
+> node the fit started at, the node it ended at, each by its neuron (D8), and how many laps it went round
+> (D54). The call stands for
 > everything the fit landed on, inherits every relation of it the fit did not cover (D10), and sees what it saw
 > (D4). A call the fit lands on is covered whole, with what it stood
 > for, and where it is a call of the same function the new call's laps are those it read and the old call's
