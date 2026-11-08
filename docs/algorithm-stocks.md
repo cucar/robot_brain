@@ -141,10 +141,11 @@ count reads as the `fall` under it (R50): rise-after-fall is at strength 2, from
 It shares the `rise` with `RF`'s function and leads back to `fall`, a node that function has, so it would close
 the cycle `fall` after `rise` and `rise` after `fall` (R50, D15). The `rise` counts it: its row at bar 4 of
 lap 1 holds `fall` before it and `rise` after it, where the function's own relation did not hold, so that
-activation is neither `with` nor `without`, and the `rise` at this bar has not seen what follows it: `with` 0,
-worth −1, against its strength less one alone, 1. It does not join, and starts a function of its own, `FR`,
-nodes `fall` and `rise`, origin the `rise`. Its fit lands `fall` on `RF`'s call, whose pose starts at `fall`,
-and covers it whole (D54): 1 for nothing, taken, and `FR`'s call stands for bars 5 to 1. At bar 2 `RF` fits
+activation is neither `with` nor `without`, and the `rise` at this bar has not taken what follows it and is not
+read: `with` 0, worth −1, against its strength over the same row less one, 0. It does not join, and starts a
+function of its own, `FR`, nodes `fall` and `rise`, origin the `rise`. Its fit lands `fall` on `RF`'s call,
+whose pose starts at `fall`, and covers it whole (D54): 1 for nothing, taken, and `FR`'s call stands for bars
+5 to 1. At bar 2 `RF` fits
 again, its `rise` landing on `FR`'s call, 1 for nothing. At bar 3 fall-after-fall is at strength 2: the count
 reads `fall` one back as the move or any call that expands to it there, and the `fall` at bar 3 saw a bare
 `fall` in lap 1 and `RF`'s call now (R50). That is a cycle of one node, `FF`. Its fit reads `fall` after

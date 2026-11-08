@@ -424,7 +424,9 @@ what was done together.
 > design: what a neuron returns is a relation, what a function holds is a relation, and they are the same
 > object. Two nodes that differ in several dimensions are in one relation, with a component in each. In a
 > neuron's relation index, one end is the neuron's own activation and the other a neighbor. In a function, both
-> ends are its nodes, and a relation from a neuron to itself joins one node to itself.
+> ends are its nodes, and a relation from a neuron to itself joins one node to itself. It is one relation, read
+> in the one direction its offset gives: the row that holds the same neighbor at the opposite offset is the
+> other end's reading of the same relation, not a second one (D47, R50).
 >
 > **A call's pose is part of its name.** A relation to an interneuron names it in the pose its activation fired
 > in (D8, D53): which node the fit ran from and to, each by its neuron, and how many laps. A base neuron has
@@ -1086,7 +1088,7 @@ no neuron records it. The machine makes it (R52).
 > that its rows hold, each with its **strength**, the number of rows that hold it. It is updated when a row is
 > admitted, when a row takes what followed (D18) and when a row is evicted, and at no other time. Handed a set
 > of relations it is an end of and one more, it returns how many rows hold the set with the one more and how many
-> hold the set without it (R50).
+> hold the set without it, over the rows that have taken what followed (R50).
 
 How the index is laid out is the implementation's. What it holds is not: a relation's strength is the number of
 rows of the history that hold it, and which rows those are leaves the neuron for nothing.
@@ -1304,9 +1306,9 @@ argument.
 > fit of it (R53) is one reading of it. The machine keeps nothing for it: what grouping reads, it asks the
 > neurons at the count step (§6.1), over their histories (D18, D47).
 >
-> **A candidate** is a board relation the neurons returned with strength 2 or more, that the fit did not land
-> on, that the first election left on the board, and that shares a neuron with an activation the fit landed
-> on or with the call. Its other end is a
+> **A candidate** is a board relation the neurons returned with strength 2 or more, this frame or at one
+> before while its activations still stand (D9), that the fit did not land on, that the first election left on
+> the board, and that shares a neuron with an activation the fit landed on or with the call. Its other end is a
 > neuron the function does not name, which would be a new node, or a node the function has, which would close
 > the cycle where the function has none (D15). A relation to a call, at an offset where the call's expansion
 > puts a node of this function, is read as a relation to that node, as the count reads it: it is attached
@@ -1332,8 +1334,16 @@ argument.
 > one row. **A relation is counted at the node it attached to the function at**, which the function keeps with
 > it (D56), at whatever offset that node's rows hold it (D10): that is the node the function already had
 > relations at when it joined, so the reading is conditioned on them, and it does not move as the histories
-> slide. A relation no function holds is read at its end with the more activations behind it, as a returned
-> relation is (R21).
+> slide. A relation alone is read at the node it would attach at in the function it is compared with, over
+> the same rows, so joining and leaving are one comparison at one neuron; a relation no function is a candidate
+> of is read at its end with the more activations behind it, as a returned relation is (R21). A relation of a
+> neuron to itself is read in one direction, from an activation toward the one its offset reaches (D34): a row
+> holds it where that neighbor stands, whether or not the same neighbor stands at the opposite offset, so the
+> ends of a run count as its middle does.
+
+> **The count reads a row once it has taken what followed it** (D18). A relation forward in time from an
+> activation of the present frame has neither held nor failed there yet, so that row is read from the next
+> frame on, by every reading alike: `with`, `without`, and a relation's strength alone.
 >
 > **A relation to a node is counted through the calls that stand for it.** A row that saw an activation a
 > call covered holds the call, at the offset to the call's position (D10), and the call's expansion from
@@ -1376,8 +1386,9 @@ argument.
 > **R54 — Moving.** A function changes by relations moving, one at a time, and by nothing else. There are three
 > moves, and each is the same decision, whether the dictionary's worth rises (D57), read from the neurons the
 > functions stand in (R50). A relation's **gain** in a function is that function's worth with it less without
-> it; its **contribution** where it stands is the same for the function it is in, and its strength less one
-> alone:
+> it; its **contribution** where it stands is the same for the function it is in, and alone its strength less
+> one, every number read at the node it attaches or would attach at, over the rows that have taken what
+> followed (R50):
 >
 > | Move | When |
 > |---|---|
@@ -1519,10 +1530,11 @@ one fit**, which is what stops an activation being paid for twice.
 > stops when nothing on the board is left that a fit could cover for less than it costs.
 >
 > **Two fits that measure the same are told apart in this order**: a fit whose relations land on the board
-> relations as they read before one that lands a node on a call through its pose (D54); a function with an
-> interneuron before one without; between two with interneurons, the older interneuron; between two without,
-> the function that joined the dictionary first; and between two fits of one function, the one reached from
-> the older activation.
+> relations as they read before one that lands a node on a call through its pose (D54); then the fit whose
+> calls stand for more of the same base activations, since an activation that stood under two calls then stands
+> under one (D10); a function with an interneuron before one without; between two with interneurons, the older
+> interneuron; between two without, the function that joined the dictionary first; and between two fits of one
+> function, the one reached from the older activation.
 >
 > **The bound is structural.** A fit is taken only while it covers more than it costs. A pair whose relation
 > came true covers one for nothing, so a pair is taken where it stands bare, and nothing recurs twice without a
@@ -1570,7 +1582,10 @@ lost is given nothing.
 > **R43 — Reuse.** An accepted fit fires its function's own interneuron where it has one. Where it has none,
 > the machine looks the function up in the interneuron index, by what its interneuron would stand for (D36).
 > Where one already stands for that, the function is added to it, and that interneuron fires. Otherwise the
-> machine allocates one.
+> machine allocates one. **An interneuron never holds two functions whose nodes are the same neurons**: the
+> two expand to one stretch, and when the second comes the older gives way, its relations leaving with it
+> (R54, R18). So the two neurons a pose names pick out one function of the interneuron, and a call in that pose
+> expands through it (R28).
 >
 > **Otherwise the machine allocates one** (R16): a free neuron, its first activation at the fit, in its pose
 > (D53). Where none is free the fit was not in the election (R24).
@@ -1940,8 +1955,9 @@ happened (R32).
 > expansion follows what actually fired, frame by frame, back to where it began, and it ends there, even
 > where a function comes back to its own interneuron (§6.7).
 >
-> **An inferred call expands through its function**, since it covers nothing yet (R36). It follows the
-> function's relations back from the node it entered at, one dimension at a time:
+> **An inferred call expands through its function**, since it covers nothing yet (R36): the function of its
+> interneuron whose nodes its pose names (R43). It follows the function's relations back from the node it
+> entered at, one dimension at a time:
 >
 > 1. **Start** at the node the call's pose starts at (R36, D37), at the call's position in every dimension.
 > 2. **Follow** each relation from an expanded node to the node at its far end, at that relation's offset, to

@@ -66,10 +66,11 @@ taken. Its interneuron, call it `HE`, fires at `e`'s position and stands for `e`
 At the third `the` the relation `t` before `h` is a candidate of `HE`'s function at its past end: it shares the
 node `h` with the fit, and `t` is earlier than the origin (R50). The node it attaches at counts it. `h`'s row
 holds `t` at `−1` and `e` at `+1` (D18), so `h` counts how many of its activations hold `e` after it together
-with `t` before it, and how many hold `e` after it without `t`: `with` and `without` (D47, R50). At the third
-`the`, `with` is 3 and `without` 0, so the candidate's worth in the function is `with − without − 1`, 2. Its
-contribution where it stands, alone in `TH`'s function, is that function's worth, its strength less one, 2. A
-tie, and a tie joins where it leaves fewer functions (R54): the relation moves, `TH`'s function is empty and
+with `t` before it, and how many hold `e` after it without `t`: `with` and `without` (D47, R50). Over the rows
+that have taken what followed them, the `h` of the first and second `the`, `with` is 2 and `without` 0, so the
+candidate's worth in the function is `with − without − 1`, 1. Its contribution where it stands, alone in
+`TH`'s function, read at the same node over the same rows, is its strength less one, 1. A tie, and a tie joins
+where it leaves fewer functions (R54): the relation moves, `TH`'s function is empty and
 goes with it (R18), and the function is `{e, h@−1, t@−2}`, three nodes, two relations, origin `e`, with `HE`
 as its interneuron (R54).
 

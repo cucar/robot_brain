@@ -33,42 +33,40 @@ to `x` (D53), and the two letters leave the apex. The function is worth its occa
 **The cycle closes over the call.** At frame 5 `x` fires and sees the call one back, which the count reads as
 the `y` under it (R50): `(x, y, −1)` is at strength 2 and shares `x` with the function, so it is a candidate;
 its other end, `y`, is a node the function has, so it would close the cycle (R50, D15). The node it attaches
-at counts it. `x`'s row holds `y` before it and `y` after it, so `x` counts its activations that hold `y`
-after together with `y` before: at frame 5 that is the `x` at 3 alone, since the `x` at 5 has not seen what
-follows it, `with` 1, worth 0. The `x` at 1 has `y` after it and nothing before, but the relation closes the
-cycle, and where it does not land the lap ends, which is no failure, so its `without` is nothing (D57, D54).
-Alone it is worth its strength less one, 1, so it starts a function of its own, whose fit lands `y` on `XY`'s
-call, whose pose starts at `y`, and is taken: one relation for nothing. At frame 6 the `x` at 5 holds `y`
-after it, `with` is 2, and the candidate's worth in `XY`'s function is 1, a tie with its worth alone. A tie
-joins where it leaves fewer functions (R54): the relation moves, its own function is empty and goes (R18), and
-the function is `y` after `x` and `x` after `y`, two nodes, two relations, a cycle. Its latest node is in the
-cycle, so it has no fixed origin: a fit enters at either letter (D15, D54).
+at counts it, over the rows that have taken what followed them, which at frame 5 is the `x` at 3 alone: its
+row holds `y` before it and `y` after it, `with` 1 and `without` 0, worth 0. The `x` at 1 has `y` after it and
+nothing before, but the relation closes the cycle, and where it does not land the lap ends, which is no
+failure, so its `without` is nothing (D57, D54). Alone, over the same row, it is worth its strength less one,
+0. A tie joins where it leaves fewer functions (R54), and the function is `y` after `x` and `x` after `y`, two
+nodes, two relations, a cycle. Its latest node is in the cycle, so it has no fixed origin: a fit enters at
+either letter (D15, D54).
 
-**The first call of the cycle, over what the board holds.** Fit again at frame 6, it enters at the `y` and
-reads `y` after `x` onto the `x` at 5, which stands under the pair's call, so it lands on that call whole and
-the lap stops there, since nothing lands on a relation another call covers (D54, D10).
+**The first call of the cycle, over what the board holds.** A function that changed is fit again before the
+second election (R50). At frame 5 it enters at the `x` and reads `x` after `y` onto the `y` at 4, which stands
+under the pair's call, whose pose starts at `y`, so it lands on that call whole and the lap stops there, since
+nothing lands on a relation another call covers (D54, D10).
+
+| the fit at frame 5 | relations |
+|---|---|
+| A: the relation from `x` to the call, and the call's cost, nothing | 1 |
+| B: nothing | 0 |
+
+It is taken. `XY` fires at the `x` at 5, at age 0, in the pose the fit read: from `x` to `y`, half a lap
+(D53). It stands for the `x` and for what the call under it stood for, and the covered call leaves the apex,
+connecting once more to it (D10).
+
+**Each letter from then on covers the call before it.** At frame 6 `y` fires and sees the call at `−1`, in its
+pose (D5). The fit enters at `y`: `y` after `x` comes true on the call, since a fixed node comes true on a call
+whose pose starts at that node (D54), and the lap stops there (D10).
 
 | the fit at frame 6 | relations |
 |---|---|
 | A: the relation from `y` to the call, and the call's cost, nothing | 1 |
 | B: nothing | 0 |
 
-It is taken. `XY` fires at the `y` at 6, at age 0, in the pose the fit read: from `y` to `x`, half a lap
-(D53). It stands for the `y` and for what the call under it stood for, and the covered call leaves the apex,
-connecting once more to it (D10).
-
-**Each letter from then on covers the call before it.** At frame 7 `x` fires and sees the call at `−1`, in its
-pose (D5). The fit enters at `x`: `x` after `y` comes true on the call, since a fixed node comes true on a call
-whose pose starts at that node (D54), and the lap stops there (D10).
-
-| the fit at frame 7 | relations |
-|---|---|
-| A: the relation from `x` to the call, and the call's cost, nothing | 1 |
-| B: nothing | 0 |
-
-It is taken. `XY` fires again, at the `x` at 7, in the pose from `x` round to `x`: the relation it read and
-the old call's half lap together, one lap (D53, R23). The old call leaves the apex. At frame 8 the same
-happens at `y`, a lap and a half, and so on: the apex holds one call for the stretch, the latest, in a pose
+It is taken. `XY` fires again, at the `y` at 6, in the pose from `y` round to `y`: the relation it read and
+the old call's half lap together, one lap (D53, R23). The old call leaves the apex. At frame 7 the same
+happens at `x`, a lap and a half, and so on: the apex holds one call for the stretch, the latest, in a pose
 that starts at `x` at `x` frames and at `y` at `y` frames and grows by half a lap each frame. The stretch
 costs nothing at any frame: the standing call has no failure and no binding. The function costs 2 in the
 dictionary (D56, D13).
