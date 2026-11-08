@@ -79,7 +79,7 @@ impl Machine {
             if used.contains(&o) || self.covered_rel.contains(&edge(from, o)) { continue; }
             let Some(w) = self.act(o) else { continue };
             if !self.landable(w) { continue; }
-            let is = if w.sym == want { Some(false) } else if w.kind == Kind::Inter && self.dict.start_of(w.sym) == Some(want) { Some(true) } else { None };
+            let is = if w.sym == want { Some(false) } else if w.kind == Kind::Inter && self.dict.starts_at(w.sym, want) { Some(true) } else { None };
             let Some(call) = is else { continue };
             let better = match best { None => true, Some((b, bc)) => (call, o) < (bc, b) };
             if better { best = Some((o, call)); }
@@ -184,7 +184,7 @@ impl Machine {
         for (root, node) in f.nodes.iter().enumerate() {
             for (i, a) in fr.acts.iter().enumerate() {
                 // the node admits its own neuron in its pose, or a call whose pose starts at it (D54)
-                let admits = a.sym == *node || (a.kind == Kind::Inter && self.dict.start_of(a.sym) == Some(*node));
+                let admits = a.sym == *node || (a.kind == Kind::Inter && self.dict.starts_at(a.sym, *node));
                 if !admits || !a.on_apex() || a.gone { continue; }
                 let fit = self.fit(f, root, ActRef { frame: fno, index: i as u32 });
                 if fit.edges.is_empty() { continue; }
@@ -247,11 +247,11 @@ impl Machine {
         let Some(pose) = self.dict.pose_of(s) else { return };
         let n = self.dict.neuron_of(s);
         if path.contains(&n) || path.len() > 64 { return; }
-        let f = self.dict.of_inter(n).iter().filter_map(|id| self.dict.get(*id)).find(|f| f.node_of(pose.from).is_some()).cloned()
+        let f = self.dict.of_inter(n).iter().filter_map(|id| self.dict.get(*id)).find(|f| self.dict.node_by_neuron(f, pose.from).is_some()).cloned()
             .or_else(|| self.func_of(n).cloned());
         let Some(f) = f else { return };
         deps.push(f.id);
-        let root = f.node_of(pose.from).unwrap_or(0);
+        let root = self.dict.node_by_neuron(&f, pose.from).unwrap_or(0);
         let lay = f.layout_from(root);
         let mut nodes: Vec<(Sym, Offset)> = f.nodes.iter().enumerate().map(|(i, m)| (*m, lay.position[i])).collect();
         if let Some(l) = f.lap() {
@@ -455,8 +455,9 @@ impl Machine {
                 if a.kind != Kind::Inter || !a.on_apex() || !self.stands(a, fno) { continue; }
                 let Some(fb) = &a.fired_by else { continue };
                 let Some(f) = self.dict.get(fb.func) else { continue };
-                let Some(start) = self.dict.start_of(a.sym) else { continue };
-                let Some(node) = f.node_of(start) else { continue };
+                let Some(n) = self.dict.start_of(a.sym) else { continue };
+                let Some(node) = self.dict.node_by_neuron(f, n) else { continue };
+                let start = f.nodes[node];
                 let lay = f.layout();
                 let mut opos = a.pos;
                 for d in 0..MAX_DIMS { opos[d] -= lay.position[node][d]; }

@@ -127,7 +127,7 @@ impl Machine {
             let mut p = a.pos;
             let mut qq = *q;
             for d in 1..MAX_DIMS { if a.axes & (1 << d) == 0 { p[d] = 0; qq[d] = 0; } }
-            p == qq && (a.sym == n || self.dict.start_of(a.sym) == Some(n))
+            p == qq && (a.sym == n || self.dict.starts_at(a.sym, n))
         })
     }
 

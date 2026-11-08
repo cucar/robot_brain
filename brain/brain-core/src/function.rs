@@ -249,7 +249,11 @@ impl Dictionary {
     /// The pose a call's symbol names; none for a base neuron.
     pub fn pose_of(&self, s: Sym) -> Option<Pose> { if s < SYM_CALL { None } else { self.syms.get((s - SYM_CALL) as usize).map(|x| x.1) } }
     /// The node a call's pose starts at (D54): a fit lands that node on the call.
-    pub fn start_of(&self, s: Sym) -> Option<Sym> { self.pose_of(s).map(|p| p.from) }
+    pub fn start_of(&self, s: Sym) -> Option<NeuronId> { self.pose_of(s).map(|p| p.from) }
+    /// Whether a call's pose starts at a node (D54): the pose's start neuron is the node's neuron.
+    pub fn starts_at(&self, call: Sym, node: Sym) -> bool { self.start_of(call).map_or(false, |n| n == self.neuron_of(node)) }
+    /// The node of a function that stands for a neuron: one node per neuron (D15).
+    pub fn node_by_neuron(&self, f: &Func, n: NeuronId) -> Option<usize> { f.nodes.iter().position(|s| self.neuron_of(*s) == n) }
     /// The symbol of an interneuron in a pose, allotted the first time it is named.
     pub fn sym_of(&mut self, n: NeuronId, pose: Pose) -> Sym {
         if let Some(s) = self.sym_index.get(&(n, pose)) { return *s; }
@@ -269,7 +273,7 @@ impl Dictionary {
     pub fn sym_text(&self, s: Sym) -> String {
         match self.pose_of(s) {
             None => format!("#{}", s),
-            Some(p) => format!("#{}<{}..{}x{}>", self.neuron_of(s), self.sym_text_short(p.from), format!("#{}", p.to), p.laps),
+            Some(p) => format!("#{}<{}..{}x{}>", self.neuron_of(s), format!("#{}", p.from), format!("#{}", p.to), p.laps),
         }
     }
     fn sym_text_short(&self, s: Sym) -> String { if s < SYM_CALL { format!("#{}", s) } else { format!("#{}'", self.neuron_of(s)) } }

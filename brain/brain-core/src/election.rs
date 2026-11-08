@@ -188,7 +188,7 @@ impl Machine {
                 if a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { laps += self.dict.pose_of(a.sym).map_or(0, |p| p.laps); }
             }
         }
-        let pose = Pose { from: f.nodes[latest.1], to: self.dict.neuron_of(f.nodes[earliest.1]), laps };
+        let pose = Pose { from: self.dict.neuron_of(f.nodes[latest.1]), to: self.dict.neuron_of(f.nodes[earliest.1]), laps };
         let sym = self.dict.sym_of(neuron, pose);
         let covers: Vec<ActRef> = all.iter().map(|x| x.0).collect();
         let strong = covers.iter().filter_map(|r| self.act(*r)).any(|a| a.strong);
