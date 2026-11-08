@@ -21,7 +21,7 @@ with a component in each (D34), and the arrangement of colors around a pixel is 
 image is one frame, and consecutive images are unrelated.
 
 A bare pixel costs its relations to the pixels around it, one relation each, less those the others imply
-(D12, D13, D55). A call costs one, one per relation that did not come true and one per argument.
+(D12, D13, D55). A call costs nothing of its own, one per relation that did not come true and one per argument.
 
 The resolution is the environment's to raise. With 256 buckets the dimension reports a gray level at each point.
 With three channels sharing the layout, each with one event dimension, it reports red, green and blue; neurons of
@@ -55,13 +55,13 @@ at a few of a run's pixels and fails at the rest, so its `without` outweighs its
 
 **The election is per relation, and the longest run wins.** At a white pixel the four white line functions
 fit, each reading the run through that pixel along its own direction, as many laps as hold (D54). A fit
-covers the run's relations, one fewer than its pixels, for one, so a run of two covers one for one and is not
-taken, a run of three two for one, and the longest run through a pixel covers the most for its one and is taken
-first (D28, R24). A call covers relations, not pixels: a row covers a pixel's relations along `x` and a column
-its relations along `y`, so a pixel may be in both, and where two lines cross both are whole (D10). The two
-calls then hold one edge between them, and the second taken pays it: a run of three crossing a taken line
-covers two for its one and that edge, and is not taken, while a run of four is (D28). Two runs of the same
-length along one direction through a pixel share its relations and tie, and the older line function takes it.
+covers the run's relations, one fewer than its pixels, for nothing, so a run of two covers one and is taken
+where nothing longer covers it, and the longest run through a pixel covers the most and is taken first (D28,
+R24). A call covers relations, not pixels: a row covers a pixel's relations along `x` and a column its
+relations along `y`, so a pixel may be in both, and where two lines cross both are whole (D10). The two calls
+then hold one edge between them, and the second taken pays it: a run of two crossing a taken line covers one
+for that edge, and is not taken, while a run of three is (D28). Two runs of the same length along one
+direction through a pixel share its relations and tie, and the older line function takes it.
 
 **What a line is on the board.** A line's call is one activation of the line's interneuron, at the run's first
 pixel, the least `x` of a row and the least `y` of a column (D37), in a pose that says its laps, one fewer than its
@@ -69,21 +69,23 @@ pixels (D53). The run's pixels are gone from the apex, and the call inherits eve
 relation they had that the fit did not cover: a pixel beside any pixel of the run now relates to the line, at
 its offset to the line's position, so beside the middle and beside the end are two relations, as every relation
 at the base is one offset (D10, D5). After the first level the board holds lines, each one activation with its
-laps, and the pixels no run of three reached, bare: lone pixels and pairs.
+laps, and the pixels no run reached, bare: lone pixels.
 
 **Strokes and corners, over the lines.** A line's interneuron sees what its pixels saw (D4), and its rows
 hold relations to what stood there: another line at the offset between their positions, a lone pixel, the other
-color's line beside it. Each at strength 2 is a function over the line call, and a fit that lands on a call
-covers its whole count (D22), so a function of two nodes over calls pays where a pair of pixels does not. Two
+color's line beside it. Each at strength 2 is a function over the line call, taken where it covers its
+relation (R24), and a fit that lands on a call covers its cost, its failures and bindings, with it (D22). Two
 parallel rows of one length one position apart are a row after a row at `(0, +1)`, a cycle over the row
-interneuron in that pose, and its fit over two rows covers the relation and both calls' costs, 3 for 1. A
-stroke three pixels thick is three rows and two laps of that cycle, one call. Two lines that share a pixel hold
-one edge between them, at the offset between their positions (D10): a row of five and a column of five meeting at
-the row's first pixel are at offset `(0, 0)`, and meeting at its last at `(4, 0)`, so a corner is a motif of two
-calls at one offset, each corner its own, 3 for 1 over the two calls, and a crossing the same with the offset
-inside both lines. A lone pixel beside a line is a motif of the line and the pixel, 2 for 1. Which of these a
-line ends up under is the election's again, by what each covers less its price, and a call's cost is paid to
-one fit, so two corners cannot both take one line.
+interneuron in that pose, and its fit over two rows covers the relation for nothing. A stroke three pixels
+thick is three rows and two laps of that cycle, one call. Two lines that share a pixel hold one edge between
+them, at the offset between their positions (D10): a row of five and a column of five meeting at the row's
+first pixel are at offset `(0, 0)`, and meeting at its last at `(4, 0)`, so a corner is a motif of two calls at
+one offset, each corner its own, 1 for nothing over the two calls, and a crossing the same with the offset
+inside both lines. A lone pixel beside a line is a motif of the line and the pixel, the same. Which of these a
+line ends up under is the election's again, by what each covers less its price: an activation is covered once,
+and a fit that lands on a call another fit has covered pays an edge for it, so two corners cannot both take one
+line. Motifs that share a call merge on the tie (R54): a corner takes in the relation of the next corner where
+the two share a line, and a function grows over the lines as far as its relations hold.
 
 **Above.** Each level's calls are the next level's neurons: strokes beside strokes, corners joined to corners
 at the offsets the image puts between them, until a level fires nothing (R26). A function at any level is its
@@ -110,39 +112,41 @@ recurred in earlier images, so each is in the dictionary with its interneuron.
 **Bare.** Twenty-five pixels, joined by twenty-four relations, the rest implied (D55).
 
 **Level 1: seven lines.** The black frame is four runs of five: the rows at `y = 0` and `y = 4`, the columns
-at `x = 0` and `x = 4`. The rows are older and are taken first, four for one each. Each column shares a corner
-pixel with each row, so its price is one and two edges, and it covers four: taken. The white square is three
-rows of three and three columns of three. The rows are taken, two for one each; a column then shares a pixel
-with each of the three rows, so its price is one and three edges against two covered, and it is not taken.
+at `x = 0` and `x = 4`. The rows are older and are taken first, four for nothing each. Each column shares a
+corner pixel with each row, so its price is two edges, and it covers four: taken. The white square is three
+rows of three and three columns of three. The rows are taken, two for nothing each; a column then shares a
+pixel with each of the three rows, so its price is three edges against two covered, and it is not taken.
 Nothing is bare.
 
 | after level 1 | |
 |---|---|
 | on the apex | seven calls, each at its line's first pixel, in its pose |
-| the cost | seven for the calls, the four corner edges, and the edges among the calls that the pixels' relations became, one per pair of calls at one offset |
+| the cost | the four corner edges, and the edges among the calls that the pixels' relations became, one per pair of calls at one offset |
 
-**Level 2: two corners and a stroke.** Each corner of the frame is a row and a column at an offset: the row
-at `y = 0` and the column at `x = 0` meet at `(0, 0)`, the same row and the column at `x = 4` at `(4, 0)`, and
-so on, four motifs of two calls, each in the dictionary from earlier frames. Each covers the edge between the
-two calls and both calls' costs, 3 for 1. A call's cost is paid once, so two of the four are taken, at
-opposite corners, each covering one row and one column; the other two are read again without the covered
-calls and cover nothing. The three white rows are two laps of a row after a row at `(0, +1)`, one call over
-the three, 5 for 1.
+**Level 2: three sides, a column and a stroke.** Each corner of the frame is a row and a column at an
+offset: the row at `y = 0` and the column at `x = 0` meet at `(0, 0)`, the same row and the column at `x = 4`
+at `(4, 0)`, and so on, four motifs of two calls. The motif at `(0, 0)` grew, on the tie, by the relation from
+the column at `x = 0` down to the row at `y = 4`, which leads back to the row, a node it has, and closes a
+cycle advancing by `(0, 4)` (D15, R54): a row, a column and a row again. Its fit lands on the top row, the
+left column and the bottom row, and the lap ends where no column stands at `(0, 4)`: two edges for nothing,
+taken. A relation from the bottom row to the right column would be a second edge between the same two nodes,
+and never joins (D55), so the right column stays its own call. The three white rows are two laps of a row
+after a row at `(0, +1)`, one call over the three, 2 for nothing.
 
 | after level 2 | |
 |---|---|
-| on the apex | three calls: two corners, each over two sides of the frame, and the white block |
-| the cost | three for the calls, and the edges among them |
+| on the apex | three calls: three sides of the frame, the right column, and the white block |
+| the cost | the edges among them |
 
-**Level 3 and 4: the frame, then the image.** The two corner calls stand at `(0, 0)` and at `(0, 4)`, the
-least position among what each landed on (D37), and relate at that offset; that is a function of two nodes over
-calls, 3 for 1, and the frame is one call. The white block's call stands at `(1, 1)`, one position inside the
-frame's, and the function of the frame and the block, 3 for 1, is the image: one call.
+**Level 3: the image.** The three calls stand at `(0, 0)`, `(4, 0)` and `(1, 1)`, the least position among
+what each landed on (D37), and relate pairwise at those offsets. Each pair over two of them was a function at
+its second image, and the pairs merged on the tie into one function of three calls and two relations (R54),
+which covers 2 for nothing: one call.
 
 | after the last level | |
 |---|---|
 | on the apex | one call |
-| the cost | 1 |
+| the cost | 0 |
 
 A 6×6 frame makes lines of six, which are other ends for every relation, so its corners, its frame and its
 image are other functions, each learned over its own recurrences. The same square at another position in a

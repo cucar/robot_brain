@@ -26,55 +26,56 @@ the earlier (D34). `x` at frame 3 sees `y` one back: `(x, y, −1)`. Each neuron
 row holds the letter on both sides: `x` at 3 holds `y` at `−1` and, from frame 4, `y` at `+1`.
 
 **The first function.** At frame 4, `(y, x, −1)` has strength 2 and no function holds it, so it starts one: two
-nodes, `x` and `y`, one relation, origin `y` (R50, D15). Its fit at frame 4 covers that one relation for one,
-and is not taken (R24): `x` and `y` stand bare, and the function waits in the dictionary at a worth of −1
-(D57).
+nodes, `x` and `y`, one relation, origin `y` (R50, D15). Its fit at frame 4 covers that one relation for
+nothing, and is taken (R24): its interneuron, `XY`, fires at the `y` at 4, at age 0, in the pose from `y` back
+to `x` (D53), and the two letters leave the apex. The function is worth its occasions less one (D57).
 
-**The cycle closes from the bare letters.** At frame 6 the pair fits again, at `y`, landing on the
-`x` at 5. `(x, y, −1)` is at strength 2 and shares `x` with the fit, so it is a candidate; its other end, `y`,
-is a node the function has, so it would close the cycle (R50, D15). The node it attaches at counts it.
-`x`'s row holds `y` before it and `y` after it, so `x` counts its activations that hold `y` after together
-with `y` before, the `x` at 3 and at 5: `with` 2. The `x` at 1 has `y` after it and nothing before, but the
-relation closes the cycle, and where it does not land the lap ends, which is no failure, so its `without` is
-nothing (D57, D54): worth 1. `y` after `x` is worth 2, `with` 3. The function's worth with the candidate is
-the two worths less one for the run, 2, against −1 without it: a gain of 3, above the relation's contribution
-alone, so it joins (D57, R54). The function is `y` after `x` and `x` after `y`, two nodes, two relations, a
-cycle. Its latest node is in the cycle, so it has no fixed origin: a fit enters at either letter (D15, D54).
+**The cycle closes over the call.** At frame 5 `x` fires and sees the call one back, which the count reads as
+the `y` under it (R50): `(x, y, −1)` is at strength 2 and shares `x` with the function, so it is a candidate;
+its other end, `y`, is a node the function has, so it would close the cycle (R50, D15). The node it attaches
+at counts it. `x`'s row holds `y` before it and `y` after it, so `x` counts its activations that hold `y`
+after together with `y` before: at frame 5 that is the `x` at 3 alone, since the `x` at 5 has not seen what
+follows it, `with` 1, worth 0. The `x` at 1 has `y` after it and nothing before, but the relation closes the
+cycle, and where it does not land the lap ends, which is no failure, so its `without` is nothing (D57, D54).
+Alone it is worth its strength less one, 1, so it starts a function of its own, whose fit lands `y` on `XY`'s
+call, whose pose starts at `y`, and is taken: one relation for nothing. At frame 6 the `x` at 5 holds `y`
+after it, `with` is 2, and the candidate's worth in `XY`'s function is 1, a tie with its worth alone. A tie
+joins where it leaves fewer functions (R54): the relation moves, its own function is empty and goes (R18), and
+the function is `y` after `x` and `x` after `y`, two nodes, two relations, a cycle. Its latest node is in the
+cycle, so it has no fixed origin: a fit enters at either letter (D15, D54).
 
-**The first call, over what the board holds.** Fit again at frame 6, it enters at the `y` and reads
-back round the cycle while the closing relation lands (D54): `x` at 5, `y` at 4, and there the board ends,
-since the `x` at 3 left it after frame 5 (D9). The lap ends without a failure.
+**The first call of the cycle, over what the board holds.** Fit again at frame 6, it enters at the `y` and
+reads `y` after `x` onto the `x` at 5, which stands under the pair's call, so it lands on that call whole and
+the lap stops there, since nothing lands on a relation another call covers (D54, D10).
 
 | the fit at frame 6 | relations |
 |---|---|
-| A: the two relations among the three letters | 2 |
-| B: one for the call | 1 |
+| A: the relation from `y` to the call, and the call's cost, nothing | 1 |
+| B: nothing | 0 |
 
-It is taken. Its interneuron, `XY`, fires once, at the `y` at 6, at age 0, in the pose the fit read: from `y`
-round to `y`, one lap (D53). It stands for the three letters, which leave the apex, each connecting
-once more to it (D10). The `y` at 4 had seen the `x` at 3, but that activation is off the board, so the call
-inherits nothing.
+It is taken. `XY` fires at the `y` at 6, at age 0, in the pose the fit read: from `y` to `x`, half a lap
+(D53). It stands for the `y` and for what the call under it stood for, and the covered call leaves the apex,
+connecting once more to it (D10).
 
 **Each letter from then on covers the call before it.** At frame 7 `x` fires and sees the call at `−1`, in its
 pose (D5). The fit enters at `x`: `x` after `y` comes true on the call, since a fixed node comes true on a call
-whose pose starts at that node (D54), and the lap stops there, since nothing lands on a relation another call
-covers (D10).
+whose pose starts at that node (D54), and the lap stops there (D10).
 
 | the fit at frame 7 | relations |
 |---|---|
-| A: the relation from `x` to the call, and the call's cost | 2 |
-| B: one for the call | 1 |
+| A: the relation from `x` to the call, and the call's cost, nothing | 1 |
+| B: nothing | 0 |
 
-It is taken. `XY` fires again, at the `x` at 7, in the pose from `x` round to `y`: the relation it read and
-the old call's lap together, a lap and a half (D53, R23). The old call leaves the apex. At frame 8 the same
-happens at `y`, two laps, and so on: the apex holds one call for the stretch, the latest, in a pose that
-starts at `x` at `x` frames and at `y` at `y` frames and grows by half a lap each frame. The stretch costs one
-at every frame, the standing call. The function costs 2 in the dictionary (D56, D13).
+It is taken. `XY` fires again, at the `x` at 7, in the pose from `x` round to `x`: the relation it read and
+the old call's half lap together, one lap (D53, R23). The old call leaves the apex. At frame 8 the same
+happens at `y`, a lap and a half, and so on: the apex holds one call for the stretch, the latest, in a pose
+that starts at `x` at `x` frames and at `y` at `y` frames and grows by half a lap each frame. The stretch
+costs nothing at any frame: the standing call has no failure and no binding. The function costs 2 in the
+dictionary (D56, D13).
 
 **After a break.** The stream falls silent and `x, y` comes again. At the first `y` the fit reads `y` after
-`x` and reaches silence: one relation for one, not taken, and both letters stand bare for a frame. At the next
-`x` the fit enters at `x`, reads `x` after `y` and `y` after `x` over the bare letters, two for one, and the
-call fires, from `x` round to `x`, one lap. From the next `y` on each call covers the one before, as above.
+`x` and reaches silence: one relation for nothing, taken, and the call fires from `y` to `x`, half a lap. From
+the next `x` on each call covers the one before, as above.
 
 **Other pairs.** `a, b, a, b, …` builds `AB` the same way, and `m, n, m, n, …` builds `MN`. Each is a function
 of two nodes and two relations with its own interneuron, and none of them shares a node with another.
@@ -105,9 +106,9 @@ Nothing is kept for the function: its worth is read from the neurons at every le
 D57). `y` counts `y` after `x`, `x` counts `x` after `y`, each over its own history. In a stretch `y` after
 `x` holds at every `y`, so its `with` climbs and its `without` stays at zero. `x` after `y` holds at every `x`
 but the first of each stretch, and there the lap ends, which is no failure, so its `without` stays at zero too.
-Each relation is worth `with − 1`, and the function the two less one per run, since each call covers
-the call before it and a run costs one in the end. A pair that stops coming sees its `with` slide out of the
-two histories, the worth falls, and the function leaves (R18).
+Each relation is worth `with − 1`, and the function the two together, since a call costs nothing of its own
+(D13). A pair that stops coming sees its `with` slide out of the two histories, the worth falls, and the
+function leaves (R18).
 
 # 5. The general function
 
@@ -115,21 +116,22 @@ two histories, the worth falls, and the function leaves (R18).
 the names ignored, they pair from any node, since none has a fixed origin, and the pairing that lands every
 relation is taken (R52): `y` with `b`, then along the relations `x` with `a`. At each node the two functions
 hold different neurons, so each node is a parameter, and the general function is two open nodes, `P` and `P′`,
-with `P′` after `P` and `P` after `P′` (D44). It costs 2 in the dictionary. Its call costs 3, one for the call
-and two bindings, against 1 for a specific function's, so it replaces nothing: the specific functions stand
-where they recur.
+with `P′` after `P` and `P` after `P′` (D44). It costs 2 in the dictionary. Its call costs 2, two bindings,
+against nothing for a specific function's, so it replaces nothing: the specific functions stand where they
+recur.
 
 Where it pays is a pair never seen. `u, v, u, v, …` is read by it from the second letter, but a fit is taken
 only while it covers more than it costs (R24), and the board holds three frames:
 
 | the general function on `u, v, u, v, …` | covers | for |
 |---|---|---|
-| at the third letter | 2 | 3 |
-| at the fourth, over the three on the board | 2 | 3 |
+| at the third letter | 2 | 2 |
+| at the fourth, over the three on the board | 2 | 2 |
 
-It is never taken over bare letters: the board never holds more than two of its relations at once. The
-pair's own function, `{v, u@−1}`, is in the dictionary from the fourth letter, and at the sixth its cycle
-closes as `XY`'s did and its call fires at 2 for 1. So in this stream the general function covers nothing,
+It is never taken over bare letters: the board never holds more than two of its relations at once, and two
+bindings cost as much. The pair's own function, `{v, u@−1}`, is in the dictionary from the fourth letter and
+taken there, 1 for nothing, and at the sixth its cycle closes as `XY`'s did. So in this stream the general
+function covers nothing,
 and the dictionary holds it only for a stream where a pair's stretch is longer than the board and its own
 function has not formed, which is where the variables case belongs.
 
