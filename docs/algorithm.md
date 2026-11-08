@@ -336,13 +336,15 @@ connection read.
 
 > **D4 — Reach.** How far an activation sees, in each activation dimension (D1), and in all of them at once. A
 > base activation sees one position: the positions within one of it in every dimension of space, in this frame and
-> the frame before. Each of an interneuron's activations sees one position beyond the farthest activation its
-> fit landed on (D53, R28), in each dimension and in each direction: it sees what every activation it stands for
-> saw, and no further. In time its position is the latest activation it landed on, so it sees back over all of what
-> it stands for, and one frame more. Where what it stands for comes back to an interneuron already expanded, it
-> stops there (D36), and so does its reach. How far an activation sees is one thing, and where its neighbors
-> stand is another. A call keeps every neighbor of what it covered (D10), and some of those stand farther away
-> than the call sees. That is fine: reach only says what an activation sees when it fires.
+> the frame before. Each of an interneuron's activations sees one position beyond the farthest of everything it
+> stands for, at any depth (D53, R28), in each dimension and on each side: it sees what every activation it
+> stands for saw, and no further. A fit that lands on a call stands for what that call stands for, so the
+> call's own position says nothing about how far it sees. In time its position is the latest activation it
+> landed on, so it sees back to the earliest frame of anything it stands for, and one frame more. Where what
+> it stands for comes back to an interneuron already expanded, it stops there (D36), and so does its reach. How
+> far an activation sees is one thing, and where its neighbors stand is another. A call keeps every neighbor
+> of what it covered (D10), and some of those stand farther away than the call sees. That is fine: reach only
+> says what an activation sees when it fires.
 >
 > In space the reach runs either way; in time it runs back, and the same number runs forward as the span over
 > which the activation's row takes what followed it and its neuron connects (D9, D18). `reach_t` is the reach
