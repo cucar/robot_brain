@@ -1334,9 +1334,13 @@ argument.
 > one row. **A relation is counted at the node it attached to the function at**, which the function keeps with
 > it (D56), at whatever offset that node's rows hold it (D10): that is the node the function already had
 > relations at when it joined, so the reading is conditioned on them, and it does not move as the histories
-> slide. A relation alone is read at the node it would attach at in the function it is compared with, over
-> the same rows, so joining and leaving are one comparison at one neuron; a relation no function is a candidate
-> of is read at its end with the more activations behind it, as a returned relation is (R21). A relation of a
+> slide. A function's first relation attached at no node: it is read at its end with the more activations
+> behind it until a second relation joins, and from then on at the node that relation joined at. A relation
+> alone is read at the node it would attach at in the function it is compared with, over the same rows, so
+> joining and leaving are one comparison at one neuron, and a function's worth with a candidate and its worth
+> without it are read at the same nodes, so a function of one relation is read, in both, at the node the
+> candidate would attach at; a relation no function is a candidate of is read at its end with the more
+> activations behind it, as a returned relation is (R21). A relation of a
 > neuron to itself is read in one direction, from an activation toward the one its offset reaches (D34): a row
 > holds it where that neighbor stands, whether or not the same neighbor stands at the opposite offset, so the
 > ends of a run count as its middle does.
