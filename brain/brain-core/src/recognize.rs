@@ -400,7 +400,7 @@ impl Machine {
                 if f.node_of(*s).is_none() { continue; }
                 let mut q = off;
                 for i in 0..MAX_DIMS { q[i] += d[i]; }
-                if q.iter().all(|x| *x == 0) || !(0..MAX_DIMS).all(|i| q[i].abs() <= sa.reach[i]) { continue; }
+                if q.iter().all(|x| *x == 0) || !(0..MAX_DIMS).all(|i| sa.sees(i, q[i])) { continue; }
                 reads.push((*s, q));
             }
         }

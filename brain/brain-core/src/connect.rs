@@ -28,7 +28,7 @@ impl Machine {
         for d in 1..MAX_DIMS {
             if shared & (1 << d) == 0 { continue; }
             o[d] = pos[d] - h.pos[d];
-            if o[d].abs() > h.reach[d] { return None; }
+            if !h.sees(d, o[d]) { return None; }
         }
         Some(o)
     }

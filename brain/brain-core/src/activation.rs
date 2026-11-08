@@ -78,6 +78,13 @@ pub struct Act {
 
 impl Act {
     pub fn on_apex(&self) -> bool { self.covered_at.is_none() && !self.gone }
+
+    /// Whether it sees an offset in dimension `d` (D4): in space, one position beyond the farthest of everything
+    /// it stands for on that side; in time, its reach back, and the same number forward.
+    pub fn sees(&self, d: usize, off: i32) -> bool {
+        if d == 0 { return off.abs() <= self.reach[0]; }
+        if off < 0 { -off <= self.pos[d] - self.lo[d] + 1 } else { off <= self.hi[d] - self.pos[d] + 1 }
+    }
 }
 
 /// The offset from one activation to another in the dimensions both are laid out over, and time (D6).
