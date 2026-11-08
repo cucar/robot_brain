@@ -687,11 +687,13 @@ groups, fits and keeps (§6).
 > the frame it is covered in. It takes it out of the cost: the relations of it the fit landed on are covered,
 > paid through the call, and every other relation of it the call inherits, standing for it, at the
 > offset from the call's position (D12, D5). Those are the call's neighbors from then on, however far away they
-> stand (D4). Every relation to the covered activation, in the row
-> of each neuron that saw it as on the board, the machine changes to the call in its pose at that offset, in
-> the pass that
-> tells the covered activation who covered it: a row written at a lower level of the frame holds the call there
-> from then on, and counts it (D18, R50). Where several calls land on one activation, each covers relations of
+> stand (D4). Every relation to the covered activation, in the row of each neuron outside the call that saw it
+> as on the board, the machine changes to the call in its pose at that offset, in the pass that tells the
+> covered activation who covered it: a row written at a lower level of the frame holds the call there from then
+> on, and counts it (D18, R50). An activation the call stands for keeps what it saw of the call's other parts:
+> those relations are the function's own, read from the rows that saw them (D57), and a part rewritten to its
+> whole would read itself among the nodes the call expands to (D5, R50). Where several calls land on one
+> activation, each covers relations of
 > its own and inherits the rest; an inherited relation is paid once, between positions, however many calls
 > hold it; the calls hold one edge between them, at their two poses; and a row that saw the activation holds
 > one relation per call, each to that call's neuron in its pose at the offset, and one where two of them are
