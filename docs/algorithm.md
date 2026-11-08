@@ -832,11 +832,12 @@ occurs is what the worth measures (D57).
 > one activation of its interneuron, and each fit is priced as it falls (D22).
 >
 > **A fit is read at the present, over what has happened.** It enters at any node of the function, on an
-> activation at the frame being recognized whose neuron is that node's, and reads the function's relations
-> from there (D31); every node is at or before the present, so every relation of the function is true or
-> failed when the function is fit, and nothing is pending. Its pose is the node of the latest activation it lands
-> on, the node of the earliest, and the laps it read (D37). Without an activation at the present that some node
-> admits there is no fit.
+> activation at the frame being recognized that the node admits, its own neuron in its pose or a call whose
+> pose starts at that node, standing at its position, which the fit lands on whole as it does anywhere (D53),
+> and reads the function's relations from there (D31); every node is at or before the present, so every
+> relation of the function is true or failed when the function is fit, and nothing is pending. Its pose is the
+> node of the latest activation it lands on, the node of the earliest, and the laps it read (D37). Without an
+> activation at the present that some node admits there is no fit.
 >
 > **A cycle is read round, lap after lap.** The relation that closes the cycle (D15) is matched again from the
 > node it reached, and the cycle's relations are matched again after it, one lap further back. The fit goes
@@ -1277,8 +1278,9 @@ argument.
 > they do not.
 >
 > **The fitting rule.** A fit is anchored at the node it enters at. The machine lands that node on an activation
-> at the present frame whose neuron is the node's, or is admitted at it where the node is a variable (D54), and
-> extends the match relation by relation from there: each next relation of the function that shares a node with
+> at the present frame the node admits, its own neuron in its pose or a call whose pose starts at it, standing
+> at its position, or one admitted at it where the node is a variable (D54), and extends the match relation by
+> relation from there: each next relation of the function that shares a node with
 > one already landed is matched to a board relation that shares that end and reads as it says. A parameter's value
 > is the far end where its node is first reached, and a relation reaching the node again is matched to that neuron
 > (D44). A relation that closes the cycle is matched to the node it reaches, and the match goes round from there,
