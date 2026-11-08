@@ -98,8 +98,11 @@ impl Machine {
         at[root] = Some(entry);
         let mut used: FxHashSet<ActRef> = FxHashSet::default();
         used.insert(entry);
-        let mut landed = vec![(entry, root)];
-        let mut calls = Vec::new();
+        // it starts on the node's own neuron in its pose, or on a call whose pose starts at the node, which it lands
+        // on whole and reads the function's relations from (D54, D31)
+        let on_call = self.act(entry).map_or(false, |a| a.sym != f.nodes[root]);
+        let mut landed = if on_call { vec![] } else { vec![(entry, root)] };
+        let mut calls = if on_call { vec![(entry, root)] } else { vec![] };
         let mut edges = Vec::new();
         let mut came = vec![false; f.rels.len()];
         let mut laps = 0u32;
@@ -170,7 +173,8 @@ impl Machine {
     }
 
     /// Every fit of a function this frame (R53, D54): one per node and activation of the present frame on the
-    /// apex whose neuron in its pose is that node's; the same landing reached from two entries is one fit.
+    /// apex that the node admits, its own neuron in its pose or a call whose pose starts at it; the same landing
+    /// reached from two entries is one fit.
     pub(crate) fn fits_of(&self, id: FuncId) -> Vec<Fit> {
         let Some(f) = self.dict.get(id) else { return vec![] };
         let fno = self.frame_no;
@@ -179,7 +183,9 @@ impl Machine {
         let Some(fr) = self.frames.iter().find(|fr| fr.no == fno) else { return out };
         for (root, node) in f.nodes.iter().enumerate() {
             for (i, a) in fr.acts.iter().enumerate() {
-                if a.sym != *node || !a.on_apex() || a.gone { continue; }
+                // the node admits its own neuron in its pose, or a call whose pose starts at it (D54)
+                let admits = a.sym == *node || (a.kind == Kind::Inter && self.dict.start_of(a.sym) == Some(*node));
+                if !admits || !a.on_apex() || a.gone { continue; }
                 let fit = self.fit(f, root, ActRef { frame: fno, index: i as u32 });
                 if fit.edges.is_empty() { continue; }
                 let mut key: Vec<ActRef> = fit.acts().map(|x| x.0).collect();
