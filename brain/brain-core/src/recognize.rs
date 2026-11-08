@@ -247,9 +247,7 @@ impl Machine {
         let Some(pose) = self.dict.pose_of(s) else { return };
         let n = self.dict.neuron_of(s);
         if path.contains(&n) || path.len() > 64 { return; }
-        let f = self.dict.of_inter(n).iter().filter_map(|id| self.dict.get(*id)).find(|f| self.dict.node_by_neuron(f, pose.from).is_some()).cloned()
-            .or_else(|| self.func_of(n).cloned());
-        let Some(f) = f else { return };
+        let Some(f) = self.func_for(s).cloned() else { return };
         deps.push(f.id);
         let root = self.dict.node_by_neuron(&f, pose.from).unwrap_or(0);
         let lay = f.layout_from(root);
