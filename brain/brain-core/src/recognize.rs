@@ -105,15 +105,18 @@ impl Machine {
         let mut calls = if on_call { vec![(entry, root)] } else { vec![] };
         let mut edges = Vec::new();
         let mut came = vec![false; f.rels.len()];
+        // the nodes past a call the fit landed on: the lap stops at the call, and nothing past it fails (D54, D10)
+        let mut beyond = vec![false; n];
+        let mut inside = vec![false; f.rels.len()];
         let mut laps = 0u32;
         // the cycle: its path once round, from the node the closing relation reaches back to where it starts
         let cycle_path: Vec<(usize, usize, usize, Offset)> = match lay.closing { Some((_, ua, ub, _)) => Func::tree_path(&lay, ub, ua), None => vec![] };
         let mut on_cycle: Vec<bool> = vec![false; n];
         if let Some((_, ua, ub, _)) = lay.closing { on_cycle[ua] = true; on_cycle[ub] = true; for s in &cycle_path { on_cycle[s.1] = true; on_cycle[s.2] = true; } }
         let path_rels: Vec<usize> = cycle_path.iter().map(|s| s.0).collect();
-        let try_step = |this: &Machine, ri: usize, u: usize, v: usize, off: Offset, at: &mut Vec<Option<ActRef>>, via_call: &mut Vec<bool>, used: &mut FxHashSet<ActRef>, landed: &mut Vec<(ActRef, usize)>, calls: &mut Vec<(ActRef, usize)>, edges: &mut Vec<(ActRef, ActRef)>, came: &mut Vec<bool>| -> Option<bool> {
+        let try_step = |this: &Machine, ri: usize, u: usize, v: usize, off: Offset, at: &mut Vec<Option<ActRef>>, via_call: &mut Vec<bool>, used: &mut FxHashSet<ActRef>, landed: &mut Vec<(ActRef, usize)>, calls: &mut Vec<(ActRef, usize)>, edges: &mut Vec<(ActRef, ActRef)>, came: &mut Vec<bool>, beyond: &mut Vec<bool>, inside: &mut Vec<bool>| -> Option<bool> {
+            if beyond[u] || (at[u].is_some() && via_call[u]) { inside[ri] = true; if at[v].is_none() { beyond[v] = true; } return None; }
             let au = at[u]?;
-            if via_call[u] { return None; }
             let (w, call) = this.step(au, off, f.nodes[v], used)?;
             came[ri] = true;
             edges.push((au, w));
@@ -127,8 +130,8 @@ impl Machine {
         let mut deferred = Vec::new();
         for &(ri, u, v, off) in &lay.tree {
             if lay.closing.is_some() && on_cycle[u] && !path_rels.contains(&ri) { deferred.push((ri, u, v, off)); continue; }
-            if at[u].is_none() { deferred.push((ri, u, v, off)); continue; }
-            try_step(self, ri, u, v, off, &mut at, &mut via_call, &mut used, &mut landed, &mut calls, &mut edges, &mut came);
+            if at[u].is_none() && !beyond[u] { deferred.push((ri, u, v, off)); continue; }
+            try_step(self, ri, u, v, off, &mut at, &mut via_call, &mut used, &mut landed, &mut calls, &mut edges, &mut came, &mut beyond, &mut inside);
         }
         // round the cycle, lap after lap, while the closing relation lands (D54)
         if let Some((ri, ua, ub, off)) = lay.closing {
@@ -148,7 +151,7 @@ impl Machine {
                 // the lap before, from the node it reached
                 let mut whole = true;
                 for &(pri, pu, pv, poff) in &cycle_path {
-                    if try_step(self, pri, pu, pv, poff, &mut at, &mut via_call, &mut used, &mut landed, &mut calls, &mut edges, &mut came).is_none() { whole = false; break; }
+                    if try_step(self, pri, pu, pv, poff, &mut at, &mut via_call, &mut used, &mut landed, &mut calls, &mut edges, &mut came, &mut beyond, &mut inside).is_none() { whole = false; break; }
                 }
                 if !whole { break; }
             }
@@ -159,8 +162,8 @@ impl Machine {
             progress = false;
             let mut rest = Vec::new();
             for (ri, u, v, off) in deferred {
-                if at[u].is_some() {
-                    try_step(self, ri, u, v, off, &mut at, &mut via_call, &mut used, &mut landed, &mut calls, &mut edges, &mut came);
+                if at[u].is_some() || beyond[u] {
+                    try_step(self, ri, u, v, off, &mut at, &mut via_call, &mut used, &mut landed, &mut calls, &mut edges, &mut came, &mut beyond, &mut inside);
                     progress = true;
                 } else { rest.push((ri, u, v, off)); }
             }
@@ -168,7 +171,7 @@ impl Machine {
         }
         // the relation that closes a cycle is never a failure: the fit ends where it stops landing (D54)
         let closing_ri = lay.closing.map(|c| c.0);
-        let failed: Vec<usize> = (0..f.rels.len()).filter(|ri| !came[*ri] && Some(*ri) != closing_ri).collect();
+        let failed: Vec<usize> = (0..f.rels.len()).filter(|ri| !came[*ri] && !inside[*ri] && Some(*ri) != closing_ri).collect();
         Fit { func: f.id, entry: (root, entry), landed, calls, edges, failed, laps }
     }
 
@@ -253,9 +256,19 @@ impl Machine {
         let lay = f.layout_from(root);
         let mut nodes: Vec<(Sym, Offset)> = f.nodes.iter().enumerate().map(|(i, m)| (*m, lay.position[i])).collect();
         if let Some(l) = f.lap() {
-            let cyc = f.cycle_nodes();
-            for k in 1..=pose.laps as i32 {
-                for &v in &cyc { let mut q = lay.position[v]; for d in 0..MAX_DIMS { q[d] += k * l[d]; } nodes.push((f.nodes[v], q)); }
+            // the cycle read back from the node the pose starts at, lap after lap, to the node it ends at (D53)
+            let order = f.back_order(root);
+            if !order.is_empty() {
+                let to = self.dict.node_by_neuron(&f, pose.to).unwrap_or(order[order.len() - 1]);
+                let total = f.stretch(root, to, pose.laps);
+                let c = order.len();
+                nodes.retain(|(m, _)| !order.iter().any(|v| f.nodes[*v] == *m));
+                for i in 0..total {
+                    let (v, k) = (order[i % c], (i / c) as i32);
+                    let mut q = lay.position[v];
+                    for d in 0..MAX_DIMS { q[d] += k * l[d]; }
+                    nodes.push((f.nodes[v], q));
+                }
             }
         }
         path.push(n);
@@ -280,13 +293,16 @@ impl Machine {
         })
     }
 
-    /// The rows of a symbol's neuron that it fired in that pose (D18): a row of the present frame has neither held
-    /// nor failed a relation forward in time yet, so it is read from the next frame on (R50).
+    /// The rows of a symbol's neuron that it fired in that pose (D18).
     fn rows_of(&self, s: Sym) -> impl Iterator<Item = &Row> + '_ {
         let n = self.dict.neuron_of(s);
-        let fno = self.frame_no;
-        self.thalamus.get(n).into_iter().flat_map(move |nn| nn.history.iter().filter(move |r| r.own == s && r.act.frame < fno))
+        self.thalamus.get(n).into_iter().flat_map(move |nn| nn.history.iter().filter(move |r| r.own == s))
     }
+
+    /// Whether a row has held or failed a relation at offset `off` from its activation yet (R50, D18): one backward
+    /// in time is on the row when it is written; one forward in time only once the row has taken what followed, at
+    /// the connect step of the frame it reaches, so from the frame after that on.
+    fn decided(&self, row: &Row, off: &Offset) -> bool { off[0] <= 0 || row.act.frame + (off[0] as i64) < self.frame_no }
 
     /// The neuron in its pose a relation is read from (D47, R50): an end whose rows hold it, at whatever offset
     /// (D10); where both ends hold it, the one with more activations behind it. None where no rows hold it.
@@ -299,19 +315,19 @@ impl Machine {
 
     fn held_by_rows(&self, r: &Rel) -> Option<(Sym, Sym, Offset)> {
         r.ends().into_iter()
-            .filter(|c| self.rows_of(c.0).any(|row| self.row_holds(row, c.1, &c.2)))
+            .filter(|c| self.rows_of(c.0).any(|row| self.decided(row, &c.2) && self.row_holds(row, c.1, &c.2)))
             .map(|c| (c, self.rows_count(c.0)))
             .max_by_key(|x| x.1).map(|x| x.0)
     }
 
-    /// How many rows a symbol's neuron holds in that pose, of those that have taken what followed.
+    /// How many rows a symbol's neuron holds in that pose: the activations behind that end.
     fn rows_count(&self, s: Sym) -> usize { self.rows_of(s).count() }
 
     /// How many rows of its neuron hold a relation (D47), reading a call as the node its pose starts at.
     pub(crate) fn strength_of(&self, r: &Rel) -> u32 {
         if let Some(s) = self.strength_memo.borrow().get(r) { return *s; }
         let s = match self.held_by(r) {
-            Some((n, far, off)) => self.rows_of(n).filter(|row| self.row_holds(row, far, &off)).count() as u32,
+            Some((n, far, off)) => self.rows_of(n).filter(|row| self.decided(row, &off) && self.row_holds(row, far, &off)).count() as u32,
             None => 0,
         };
         self.strength_memo.borrow_mut().insert(*r, s);
@@ -332,6 +348,8 @@ impl Machine {
         }
         let (mut with, mut without) = (0, 0);
         for row in self.rows_of(n) {
+            // a row that has not yet held or failed every relation read here counts nothing (R50)
+            if !self.decided(row, &off) || !cond.iter().all(|(_, o2)| self.decided(row, o2)) { continue; }
             if !cond.iter().all(|(f2, o2)| self.row_holds(row, *f2, o2)) { continue; }
             if self.row_holds(row, far, &off) { with += 1; } else if !cond.is_empty() { without += 1; }
         }

@@ -198,14 +198,31 @@ impl Machine {
         };
         self.ledger.retain(|x| *x != neuron);
         self.last_func.insert(neuron, f.id);
-        // its pose (D53): the laps it read, and those of a call of its own function it landed on, together (R23)
-        let mut laps = fit.laps;
-        for (c, _) in &fit.calls {
-            if let Some(a) = self.act(*c) {
-                if a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { laps += self.dict.pose_of(a.sym).map_or(0, |p| p.laps); }
+        // its pose (D53): from its latest node back to its earliest, round the laps it read; a call of its own
+        // function it landed on adds what that call stood for, so its half lap is counted with the rest (R23)
+        let order = f.back_order(latest.1);
+        let pose = if !order.is_empty() && order.contains(&latest.1) {
+            let mut len = 0usize;
+            for (r, node) in fit.acts() {
+                if !order.contains(&node) { continue; }
+                let own = self.act(r).and_then(|a| if a.kind == Kind::Inter && a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { self.dict.pose_of(a.sym) } else { None });
+                len += match own {
+                    Some(p) => match (self.dict.node_by_neuron(&f, p.from), self.dict.node_by_neuron(&f, p.to)) { (Some(a), Some(b)) => f.stretch(a, b, p.laps), _ => 1 },
+                    None => 1,
+                };
             }
-        }
-        let pose = Pose { from: self.dict.neuron_of(f.nodes[latest.1]), to: self.dict.neuron_of(f.nodes[earliest.1]), laps };
+            let len = len.max(1);
+            let c = order.len();
+            Pose { from: self.dict.neuron_of(f.nodes[latest.1]), to: self.dict.neuron_of(f.nodes[order[(len - 1) % c]]), laps: ((len - 1) / c) as u32 }
+        } else {
+            let mut laps = fit.laps;
+            for (c, _) in &fit.calls {
+                if let Some(a) = self.act(*c) {
+                    if a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { laps += self.dict.pose_of(a.sym).map_or(0, |p| p.laps); }
+                }
+            }
+            Pose { from: self.dict.neuron_of(f.nodes[latest.1]), to: self.dict.neuron_of(f.nodes[earliest.1]), laps }
+        };
         let sym = self.dict.sym_of(neuron, pose);
         let covers: Vec<ActRef> = all.iter().map(|x| x.0).collect();
         let strong = covers.iter().filter_map(|r| self.act(*r)).any(|a| a.strong);

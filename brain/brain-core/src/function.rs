@@ -101,6 +101,23 @@ impl Func {
         Some(l)
     }
 
+    /// The nodes of its cycle in the order a lap reads them back from node `root` (D53, D54), the root first.
+    pub fn back_order(&self, root: usize) -> Vec<usize> {
+        let Some(l) = self.lap() else { return vec![] };
+        let lay = self.layout_from(root);
+        let mut v = self.cycle_nodes();
+        v.sort_by_key(|&i| (lay.position[i].iter().zip(&l).map(|(a, b)| *a as i64 * *b as i64).sum::<i64>(), i != root, i));
+        v
+    }
+
+    /// How many nodes of its cycle a call in a pose from node `from` to node `to` round `laps` stands for (D53).
+    pub fn stretch(&self, from: usize, to: usize, laps: u32) -> usize {
+        let order = self.back_order(from);
+        let c = order.len();
+        let rank = order.iter().position(|x| *x == to).unwrap_or(c.saturating_sub(1));
+        laps as usize * c + rank + 1
+    }
+
     /// The nodes of its cycle, where it has one.
     pub fn cycle_nodes(&self) -> Vec<usize> {
         let lay = self.layout();
@@ -112,7 +129,9 @@ impl Func {
         v
     }
 
-    /// How it reads entered at node `root` (D54): the same as `layout`, each position from that node.
+    /// How it reads entered at node `root` (D54): the same as `layout`, each position from that node. Where two
+    /// relations would place a node, as in a cycle, the one that reads back from the node it is entered at places
+    /// it, and the one leading forward is the one that closes the cycle.
     pub fn layout_from(&self, root: usize) -> Layout {
         let n = self.nodes.len();
         let mut position: Vec<Option<Pos>> = vec![None; n];
@@ -125,11 +144,16 @@ impl Func {
         while qi < queue.len() {
             let u = queue[qi];
             qi += 1;
+            let mut steps: Vec<(bool, usize, usize, Offset)> = Vec::new();
             for (ri, r) in self.rels.iter().enumerate() {
                 if used[ri] { continue; }
                 let (ua, ub) = (self.node_of(r.a).unwrap(), self.node_of(r.b).unwrap());
                 let (v, off) = if ua == u { (ub, r.off) } else if ub == u { (ua, neg(&r.off)) } else { continue };
-                if position[v].is_some() { continue; }
+                steps.push((later(&off, &[0; MAX_DIMS]), ri, v, off));
+            }
+            steps.sort_by_key(|s| s.0);
+            for (_, ri, v, off) in steps {
+                if used[ri] || position[v].is_some() { continue; }
                 used[ri] = true;
                 let mut p = position[u].unwrap();
                 for d in 0..MAX_DIMS { p[d] += off[d]; }
