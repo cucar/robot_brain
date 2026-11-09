@@ -280,13 +280,12 @@ impl Machine {
         })
     }
 
-    /// The rows of a symbol's neuron that it fired in that pose (D18), each once it has taken what followed it: the
-    /// connect step gives a row what followed at the end of the frame after its own, so a row of this frame or the
-    /// one before has neither held nor failed a relation forward in time yet (R50).
+    /// The rows of a symbol's neuron that it fired in that pose (D18): a row of the present frame has neither held
+    /// nor failed a relation forward in time yet, so it is read from the next frame on (R50).
     fn rows_of(&self, s: Sym) -> impl Iterator<Item = &Row> + '_ {
         let n = self.dict.neuron_of(s);
         let fno = self.frame_no;
-        self.thalamus.get(n).into_iter().flat_map(move |nn| nn.history.iter().filter(move |r| r.own == s && r.act.frame + 1 < fno))
+        self.thalamus.get(n).into_iter().flat_map(move |nn| nn.history.iter().filter(move |r| r.own == s && r.act.frame < fno))
     }
 
     /// The neuron in its pose a relation is read from (D47, R50): an end whose rows hold it, at whatever offset
