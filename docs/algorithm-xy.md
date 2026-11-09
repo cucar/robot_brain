@@ -31,13 +31,16 @@ nothing, and is taken (R24): its interneuron, `XY`, fires at the `y` at 4, at ag
 to `x` (D53), and the two letters leave the apex. The function is worth its occasions less one (D57).
 
 **The cycle closes over the call.** At frame 5 `x` fires and sees the call one back, which the count reads as
-the `y` under it (R50): `(x, y, −1)` is at strength 2 and shares `x` with the function, so it is a candidate;
-its other end, `y`, is a node the function has, so it would close the cycle (R50, D15). The node it attaches
-at counts it, over the rows that have taken what followed them, which at frame 5 is the `x` at 3 alone: its
-row holds `y` before it and `y` after it, `with` 1 and `without` 0, worth 0. The `x` at 1 has `y` after it and
-nothing before, but the relation closes the cycle, and where it does not land the lap ends, which is no
-failure, so its `without` is nothing (D57, D54). Alone, over the same row, it is worth its strength less one,
-0. A tie joins where it leaves fewer functions (R54), and the function is `y` after `x` and `x` after `y`, two
+the `y` under it (R50): the row of the `x` at 3 holds `y` one back, and the row of the `x` at 5 holds the call,
+read as `y`, so `(x, y, −1)` is returned at strength 2 (D47), and it shares `x` with the function, so it is a
+candidate; its other end, `y`, is a node the function has, so it would close the cycle (R50, D15). Both its
+ends are nodes of the function, and the `x` at 5 returned it, so it attaches at `x`, not at the `y` read
+through the call (R50). The node it attaches at counts it, over the rows that have taken what followed them,
+which at frame 5 is the `x` at 3 alone: its row holds `y` before it and `y` after it, `with` 1 and `without`
+0, worth 0. The `x` at 1 has `y` after it and nothing before, but the relation closes the cycle, and where it
+does not land the lap ends, which is no failure, so its `without` is nothing (D57, D54). Alone, over the same
+row, it is worth its strength less one, 0. A tie joins where it leaves fewer functions (R54); its strength as
+returned is 2, so it does not leave for nothing (R18). The function is `y` after `x` and `x` after `y`, two
 nodes, two relations, a cycle. Its latest node is in the cycle, so it has no fixed origin: a fit enters at
 either letter (D15, D54).
 

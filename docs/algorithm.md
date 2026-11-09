@@ -1085,8 +1085,11 @@ What is general across neighbors, a position where different neurons stand, is n
 no neuron records it. The machine makes it (R52).
 
 > **D47 — Relation index.** What a neuron counts over its history (D18): every relation from its own activation
-> that its rows hold, each with its **strength**, the number of rows that hold it. It is updated when a row is
-> admitted, when a row takes what followed (D18) and when a row is evicted, and at no other time. Handed a set
+> that its rows hold, each with its **strength**, the number of rows that hold it. A row that holds a call
+> holds the nodes the call's expansion puts at their offsets (R28), so it holds a relation to each of them:
+> strength counts the rows that hold a relation through a call with those that hold it bare. It is updated
+> when a row is admitted, when a row takes what followed (D18) and when a row is evicted, and at no other time.
+> Handed a set
 > of relations it is an end of and one more, it returns how many rows hold the set with the one more and how many
 > hold the set without it, over the rows that have taken what followed (R50).
 
@@ -1375,14 +1378,18 @@ argument.
 > relation, and higher than its contribution in a function of more (R54); among the candidates of one function
 > that pay, one that leads back to a node the function has, closing its cycle, joins before one that would add
 > a node (D15); and where two functions tie, the one it is nearest to (D57, R54). A relation of a function
-> leaves it for one of its own where its worth alone is higher than its contribution, and for nothing once its
-> strength has slid below 2 (R54, R18). A relation the neurons returned with strength 2 or more that no function
+> leaves it for one of its own where its worth alone is higher than its contribution, and for nothing once the
+> neurons return it with strength below 2 (R54, R18): that asks whether it recurs at all, so it is read over
+> every row that holds it (D47), where a worth is read over the rows that have taken what followed. A relation
+> the neurons returned with strength 2 or more that no function
 > holds starts a function of its own, two nodes and an offset, worth its strength less one (D57), fit wherever
 > it fits and taken where it covers its relation (R24). A relation held once is left where it is: nothing is
 > built on one occurrence (R21).
 >
 > **Relations join only through a node, and a function grows toward its past.** A candidate is attached at the
-> node it shares, so every function stays connected (D15). Nothing joins a function at a later frame than its
+> node it shares, so every function stays connected (D15). Where both its ends are nodes of the function, it is
+> attached at the end whose activation returned it: a node read through a call is never the end a relation
+> attaches at (R50). Nothing joins a function at a later frame than its
 > origin: an activation after the call sees the call, standing at its position (D5), and the relation it brings,
 > from itself back to the call, is a function at the level above, over the call (R26). Two relations that never
 > touch are never one function: where they recur together, the level above relates their two calls.
@@ -1402,7 +1409,7 @@ argument.
 > |---|---|
 > | a relation joins | its gain in the function is at least its contribution where it stands, alone or in a function of one relation, or higher than its contribution in a function of more; and higher than its gain in any other function it is a candidate of, the nearest on a tie (R50) |
 > | a relation leaves for a function of its own | its worth alone is higher than its contribution to its function, and higher than its gain in any function it is a candidate of |
-> | a relation leaves for nothing | its strength has slid below 2 (R18) |
+> | a relation leaves for nothing | the neurons return it with strength below 2, over every row that holds it (R18) |
 > | two functions merge | a relation of one is a candidate of the other and joins it, and the rest follow one at a time, each where its gain is higher, and the last on a tie |
 
 > **A tie joins.** Two relations save the same edges in one function as in two, so the edges never prefer one
@@ -1419,9 +1426,9 @@ argument.
 > against the functions of the same shape, and generalized with them (R52).
 
 > **R18 — Prune.** A relation leaves its function where its contribution there is lower than its gain
-> elsewhere, in a function of its own or in another (R54), and leaves for nothing once its strength has slid below 2
-> (D57), read at
-> every level a neuron standing in the function fires at, fit or not (R50). A relation that leaves for
+> elsewhere, in a function of its own or in another (R54), and leaves for nothing once the neurons return it
+> with strength below 2, over every row that holds it (D47, D57), read at every level a neuron standing in the
+> function fires at, fit or not (R50). A relation that leaves for
 > nothing stands bare wherever it holds. A function leaves the dictionary when its last relation does.
 > **Relations leave one at a time**, the one that gains most by leaving first, and the function's other
 > relations are priced again before the next leaves, since what fails beyond a relation that left is priced
