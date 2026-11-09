@@ -636,7 +636,7 @@ free, no interneuron is granted (R16, R24).
 > | By | Reaches |
 > |---|---|
 > | a function | its interneuron, and back, for expansion (R28) |
-> | a relation (D34), or one of its neurons and its offset with the other end open | every function that holds it, or holds any relation with that neuron at that end and that offset |
+> | a relation (D34), or one of its neurons and its offset with the other end open | every function that holds it; or every function that holds a relation with that neuron at that end and that offset and a variable at the other, a class or a parameter (D38) |
 > | what an interneuron stands for | the interneuron, for reuse when a stretch comes round (R43), and the functions of the same shape, for generalizing (R52) |
 >
 > **The same relations are the same function.** A function is its set of relations, so the same neurons at the
@@ -1268,10 +1268,12 @@ argument.
 
 > **R53 — Finding.** For each relation `(a, b, δ)` a neuron returned, the machine reads the index (D36) three
 > ways: as it is; with `b` open, `(a, ?, δ)`; and with `a` open, `(?, b, δ)`. The reading as it is gives the
-> functions that hold that relation. An open reading gives the functions that hold any relation with that
-> neuron at that end and that offset, whatever stands at the other end: a neuron, a class or a parameter. Where
-> the open end holds a class the observed neuron is a member of, or a parameter, the dictionary function is fit
-> by the observed relation the way D54 reads it, and this is where variables are matched.
+> functions that hold that relation, and a relation to a call is read as the nodes the call's expansion puts
+> at that offset, as the count reads it (R50). An open reading gives the functions that hold a relation with
+> that neuron at that end and that offset and a variable at the other end, a class or a parameter (D38), and
+> no function whose node there is fixed: a fixed node is found as it is or not at all. Where the open end
+> holds a class the observed neuron is a member of, or a parameter, the dictionary function is fit by the
+> observed relation the way D54 reads it, and this is where variables are matched.
 >
 > Every function any reading reaches is **fit** on the board (D31), from the node the reading matched: a
 > reading tells the machine the function may fit, and the fit begins on an activation at the present frame
@@ -1345,9 +1347,11 @@ argument.
 > holds it where that neighbor stands, whether or not the same neighbor stands at the opposite offset, so the
 > ends of a run count as its middle does.
 
-> **The count reads a row once it has taken what followed it** (D18). A relation forward in time from an
-> activation of the present frame has neither held nor failed there yet, so that row is read from the next
-> frame on, by every reading alike: `with`, `without`, and a relation's strength alone.
+> **A relation forward in time is read once the row has taken what followed** (D18). A relation backward in
+> time from an activation is on its row when the row is written, and is read at once. A relation forward in
+> time is on the row only once the row has taken what followed it, at the connect step of the frame after
+> (§7.1), so it is read from two frames after the row's own. Until then it has neither held nor failed there,
+> and the row is neither `with` nor `without` for it and counts nothing toward its strength alone.
 >
 > **A relation to a node is counted through the calls that stand for it.** A row that saw an activation a
 > call covered holds the call, at the offset to the call's position (D10), and the call's expansion from
