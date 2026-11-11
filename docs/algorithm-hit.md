@@ -21,7 +21,7 @@ straight ahead of the body, `turn-left` and `turn-right`.
 
 # 2. What stands under them
 
-The field declares a radius of `4` in each of its two spatial dimensions and `1` in time (D1), so `approaching`,
+The field declares a radius of `4` in each of its two spatial dimensions (D1), so `approaching`,
 `ball` and `fist`, base events all, see four positions in every direction and one frame back (D4), and within
 that reach they are each other's neighbors on the apex (D5). Within the radius every distance is exact (D6);
 the distances this case uses are `2` and `4`.
@@ -62,7 +62,7 @@ what it learns is a ball's habit, not a ball coming straight on.
 
 **The function of the action.** `hit` runs at the body a frame later, and sees `COMING` at `(−1, 0, 0)`.
 Where that recurs, grouping gives `{hit, COMING@(−1, 0, 0)}`: one relation, an entry of one. It covers that
-relation and `COMING`'s count, two relations for nothing, and its interneuron `COMING·hit` fires at the body. In
+relation, one for nothing, and its interneuron `COMING·hit` fires at the body. In
 that frame `COMING` is covered, and connects once to `COMING·hit` at `(+1, 0, 0)`, with that frame's reward
 (D10). Inferred from `COMING` at its age 0, `COMING·hit` is placed a frame ahead at the body and expanded:
 `hit` at the body and `COMING` where it stands (R28). The match credits the relation to `COMING` and
@@ -70,7 +70,7 @@ charges nothing (R49), so `hit` is proposed, and output (R30).
 
 **A lesson per thing on a course** is one level up. The bound ball stands two ahead of `COMING`, a neighbor
 at `(0, 0, +2)` (D26), and its binding is `COMING`'s one relation, so a function `{COMING, ball@(0, 0, +2)}`
-covers that relation and `COMING`'s count, two relations for nothing: an entry of one, worth positive at strength
+covers that relation, one for nothing: an entry of one, worth positive at strength
 2 (D57). Until then the first ball is answered by `COMING`, not by a lesson of its own.
 
 **How `T` came to be.** A ball stood in `approaching`'s rows at `(0, 0, +2)` and at `(−1, 0, +4)`, and
@@ -78,12 +78,14 @@ grouping merged those relations where they recurred (R50): `coming-ball`, `{appr
 ball@(−1, 0, +4)}`, two relations, an entry of two, saving two per occasion. A fist did the same,
 `coming-fist`. When the second of the two was grouped, find read its relations with the thing's end open and
 reached the first (R53). The two differ only at nodes that hold one neuron within each function, so those
-nodes are one parameter (R52): `coming`, with `T`, an entry of two and one binding per occasion. It is priced
-as a replacement of the two: two entries of two and nothing per occasion, four, against one entry of two and
-one per occasion, `2 + n`, `n` being the occasions in `approaching`'s history on which a ball or a fist came
-straight on. `coming` is never cheaper once the two things have come twice each, so it replaces nothing (R52):
-a thing that recurs stands under its own function, and `coming` is taken for a thing coming straight on for
-the first time. The case shows the machine with `coming` in the dictionary.
+nodes are one parameter (R52): `coming`, with `T`, an entry of two and one binding per occasion. It saves one
+per occasion where `coming-ball` and `coming-fist` save two, and it has more occasions: every approach of a
+ball or a fist, and every approach of a thing that came once and has no function of its own (D47). It is
+taken where that comes to more (R52). After two balls and two fists the two save `2·2 − 2` each, `4`
+together, and `coming` saves `4 − 2`, `2`: it is not made. With three other things that each came once,
+`coming` saves `7 − 2`, `5`: it joins the dictionary, and `coming-ball` and `coming-fist` leave it. From
+then on a ball, a fist and a thing never seen stand under `COMING` alike, the thing bound beside it, two
+relations for one binding.
 
 **The habit.** Before `coming` existed, `approaching` stood uncovered while things came and `hit` ran, so it
 holds a connection of its own: after `approaching`, `hit`, with what those hits earned. Once `coming` holds,
@@ -125,10 +127,11 @@ never been followed by a hit and holds no such connection. `COMING` has: it fire
 came straight on, and its lesson says `hit`. The rock is hit, the hit is rewarded, and the rock, bound and open
 a frame later, connects to `COMING·hit` with that reward.
 
-Where `coming` is not in the dictionary, the rock's relations reach `coming-ball` and `coming-fist` as partial
-matches whose every relation fails, nothing covers the rock, and `approaching` stands bare and answers from
-its own habit (R35). The rock gets a function of its own at its second approach, and `coming` is priced again
-as a replacement of the three.
+A machine that has met only balls holds `coming-ball` and no `coming`. There no function fits the rock, since
+`coming-ball` holds `ball` at that end as a fixed node (R53): nothing covers the rock, and `approaching`
+stands bare and answers from its own habit (R35). The rock gets a function of its own at its second approach.
+That function and `coming-ball` have one shape, and `coming` is compared with the two: it is taken once
+enough other things have come a single time for it to save more than they do (R52).
 
 So what generalizes is the situation written without the thing: the function's interneuron, which says how
 something came and leaves what it was to the parameter, and it answers for every new thing.

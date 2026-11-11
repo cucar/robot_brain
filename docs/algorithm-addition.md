@@ -84,10 +84,12 @@ carry is inferring it; reading it is seeing it beside the next request.
    answer, `{out-1, carry@0, C11c@−1}`, forms once `C11c` has stood before it twice: `2` for `0` at each
    lesson, entry `2`, worth `2`. `C11c` connects once to its interneuron, `A11c`, at `+1`.
 6. **Classes never pay.** `{add, a0@0, b1@0}` is found through `C11`'s open end at `a1`, and generalizing
-   the two would put a class over `a0` and `a1` at that node (R52). Priced as a replacement: the two specifics
-   cost `4` in the dictionary and nothing per lesson; the one function over the class costs `2`, and one
-   binding per lesson. Over the four lessons the two came from that is `4` against `6`, and the gap widens
-   with every lesson. The same holds at every digit's place, so each case keeps its own function.
+   the two would put a class over `a0` and `a1` at that node (R52). It is taken only where it saves more than
+   the two save together. Each of the two saves two relations per lesson, less its entry of `2`. The function
+   over the class saves two relations less one binding per lesson, less its entry of `2`, and a class fits
+   only its members, so it has no lesson the two do not have. Over the four lessons the two came from that is
+   `4` together against `2`, and the gap widens with every lesson. The same holds at every digit's position, so
+   each case keeps its own function.
 
 | Case, beside `add` | its answer | names beside the digit |
 |---|---|---|

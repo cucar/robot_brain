@@ -73,10 +73,13 @@ Offsets are written `(time, slot)`.
    relations with the digit end open (R53) and reaches the function for `3`. The two differ only at the one
    node that holds a digit, which the fit reads twice, so that node is a parameter (R52, D38): `equal`, which
    is `{run, P@(0, +1), P after P at (0, +1)}`. Its entry is two relations, and its call costs one binding. It
-   is priced as a replacement of the two specific functions: two entries of two and nothing per occasion,
-   four, against one entry of two and one per occasion. It is never cheaper once each digit has been equal
-   twice, so it replaces nothing (R52): a digit's own function stands where it recurs, and `equal` is taken
-   for a digit equal for the first time.
+   saves one per equal request where a digit's own function saves two, and it has more occasions: every
+   equal request, those of digits that were equal once and have no function of their own among them (D47). It
+   is taken where that comes to more (R52). The functions for `3` and `4`, two requests each, save `2·2 − 2`
+   each, `4` together. With three other digits equal once each, `equal` saves `7 − 2`, `5`: it joins the
+   dictionary, and the functions for `3` and `4` leave it. From then on every equal pair of digits is one call
+   of `equal`, two relations for one binding, the digit bound beside `EQUAL`. A digit's own equality grouped
+   after that leaves at once, since `equal` already stands for it (R52).
 3. **Agreement is the whole test.** A parameter is open on its members (D44): a digit never seen equal before
    is `P`'s value the first time it stands at both slots, and a member from then on.
 4. **`equal` does not fit an unequal request.** `P`'s value is the digit where the node is first reached, slot
@@ -91,11 +94,13 @@ Offsets are written `(time, slot)`.
    `8`, the relations to `EQUAL`, to the `8` at slot `3` and to the `8` beside `say` are held together, and
    grouping gives `{say, EQUAL@(−1, 0), 8@(0, 0), 8 after 8 at (−1, +3)}`: three relations, the `8` one node
    read twice. It covers those relations and `EQUAL`'s count, four relations for nothing. The function for `5`
-   reaches it through the open ends, the differing node holds one neuron within each, and R52 makes `from-c`,
-   with `Pc` tying slot `3` of the request to slot `0` of the answer. The same over unequal requests makes
-   `from-d`, naming `run` bare at `(−1, 0)` and `Pd` from slot `4`. The two differ at a node, `EQUAL` against
-   `run`, which would be a class of the two, and the class is never cheaper than the two functions, so nothing
-   generalizes them further.
+   reaches it through the open ends, the differing node holds one neuron within each, and R52 reads `from-c`,
+   with `Pc` tying slot `3` of the request to slot `0` of the answer. Each digit's function saves one more at
+   an answer of its digit than `from-c` does, the binding, and `from-c` covers the answers of digits with no
+   function of their own besides. Once those make up the difference, `from-c` is taken and the functions for
+   `8` and `5` leave the dictionary (R52). The same over unequal requests makes `from-d`, naming
+   `run` bare at `(−1, 0)` and `Pd` from slot `4`. The two are not of one shape, since `Pc` is read from slot
+   `3` and `Pd` from slot `4`, two different offsets, so nothing generalizes them further (R52).
 6. **A copy is a parameter.** `Pc` writes its digit once, as `from-c`'s one value, and both of its nodes are
    covered by that (D13). A parameter is open on its members, so a digit never answered before is copied the
    first time it is shown.

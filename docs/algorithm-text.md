@@ -43,12 +43,14 @@ for the two letters, which leave the apex, each connecting once more to it (D10)
 to the letter before it, now from the call at `−2`. Every pair of letters that recurs is such a function with
 its interneuron, and leaves when its relation's strength slides below 2 (R18).
 
-**No variable forms in this stream.** Two functions that differ at a node, `the` and `she` below, are
-generalized into `{e, h@−1, C@−2}`, `C` a class whose members are `t` and `s`, and the general function is
-priced as a replacement of the two (R52). The two cost 2 each in the dictionary and nothing per occurrence.
-The class function costs 2 in the dictionary and one binding per occurrence, since the member that stood is an
-argument (D13). It is never cheaper from the second occurrence on, and it does not join. The dictionary holds
-one function per stretch that recurs, and nothing general.
+**No variable forms in this stream.** Two functions that differ at a node, `the` and `she` below, have one
+shape, and `{e, h@−1, C@−2}`, `C` a class whose members are `t` and `s`, would stand for both. It is taken
+only where it saves more than the two save together (R52, D57). Each of the two saves two relations per
+occurrence, less its entry of 2. The class function saves two relations less one binding per occurrence, less
+its entry of 2, and a class fits only its members, so it has no occurrence the two do not have. Over two
+occurrences of each that is `2·2 − 2` each, `4` together, against `4·1 − 2`, `2`, and the gap widens with
+every occurrence. It is not made: the dictionary holds one function per stretch that recurs, and nothing
+general.
 
 # 3. Words
 
@@ -58,24 +60,27 @@ second occurrence, and the longer stretch as its pairs merge.
 Take `the`. At the second `the`, `TH` fires at the `h`, and the `e` after it sees the call one back (D5): the
 count reads the call as the letters its expansion puts there, `h` at `−1` and `t` at `−2` (R50), so `e` after
 `h` is at strength 2. It is no candidate of `TH`'s function, since it would make `e` later than that function's
-origin `h` (R50), so it starts a function of its own, `{e, h@−1}`, origin `e`. Its fit lands `e` on the `e` and
-`h` on `TH`'s call, whose pose starts at `h`, and covers the call whole (D54): one relation for nothing,
-taken. Its interneuron, call it `HE`, fires at `e`'s position and stands for `e` and, through `TH`, for `t h`
+origin `h` (R50), so it starts a function of its own on the relation to the call, `{e, TH@−1}`, origin `e`,
+which stands for `e` after `h` and `e` two after `t` (R50). Its fit lands `e` on the `e` and on `TH`'s call:
+one relation for nothing, taken. Its interneuron, call it `HE`, fires at `e`'s position and stands for `e`
+and, through `TH`, for `t h`
 (D53).
 
-At the third `the` the relation `t` before `h` is a candidate of `HE`'s function at its past end: it shares the
-node `h` with the fit, and `t` is earlier than the origin (R50). The node it attaches at counts it. `h`'s row
+At the third `the` the relation `t` before `h`, the one `TH`'s function holds, is a candidate of `HE`'s
+function at its past end: `HE` names `TH`'s call, the relation is under it, and `t` is earlier than the
+origin (R50). The node it attaches at counts it. `h`'s row
 holds `t` at `−1` and `e` at `+1` (D18), so `h` counts how many of its activations hold `e` after it together
 with `t` before it, and how many hold `e` after it without `t`: `with` and `without` (D47, R50). Over the rows
 that have taken what followed them, the `h` of the first and second `the`, `with` is 2 and `without` 0, so the
 candidate's worth in the function is `with − without − 1`, 1. Its contribution where it stands, alone in
 `TH`'s function, read at the same node over the same rows, is its strength less one, 1. A tie, and a tie joins
 where it leaves fewer functions (R54): the relation moves, `TH`'s function is empty and
-goes with it (R18), and the function is `{e, h@−1, t@−2}`, three nodes, two relations, origin `e`, with `HE`
+goes with it (R18), the relation to the call is held from then on as the relation to the `h` it stood for,
+and the function is `{e, h@−1, t@−2}`, three nodes, two relations, origin `e`, with `HE`
 as its interneuron (R54).
 
 A function that changed is fit again before the second election (R50). Its fit at the third `the` lands `e` on
-the `e` and `h` on `TH`'s call, which stands for `t h`, and covers it whole: one relation for nothing, taken
+the `e` and reads `h` through `TH`'s call, which fired before its function left: one relation for nothing, taken
 (R24). `HE` fires once, at `e`'s position, at age 0, in the pose the fit read: from `e` back to `t`, one lap of
 a function with no cycle (D53, D37). From the fourth `the` on nothing fires at the `h`, since `h` after `t` is
 in no function of its own, and the fit at the `e` lands on three bare letters, two relations for nothing. The
@@ -104,7 +109,7 @@ but the letters.
 
 **What follows is a function over the call.** The letter after `e` sees `HE` one back, the call standing at
 `e`'s position (D5). Where a space has stood after `HE` twice, `{space, HE@−1}` is a function. Its fit lands on
-the space and on the call, and covers the relation to the call and the call's cost, nothing (D22): 1 for
+the space and on the call, and covers the relation to the call (D22): 1 for
 nothing, taken. Its interneuron stands for `t h e ` through `HE` and expands to it (R28). So a stretch is
 reached two ways, flat at its past end and as a function over the call of what came before, and where both
 fit the election takes the one that covers the most for its price (R24): the flat ` the` at 3 for nothing
@@ -128,9 +133,8 @@ position and one further (D4).
 neighbor at any offset but zero (D26). `{l, l@−1}` has one node and one relation from it to itself, so its
 entry is 1 and it is a cycle of one node (D15): `l` after `l` for as long as it runs. At a doubled letter its
 fit reads one lap, 1 for nothing, and is taken: the call fires at the second `l`, in a pose of one lap (D53).
-A longer run is covered a letter per frame: each new call reads one lap, lands on the call before, whose pose
-starts at `l`, covers that call's cost, nothing, and the new relation, 1 for nothing, and its laps are the one
-it read and the old call's together, so the run is one call however many have grown over it (R23). The same
+A longer run is covered a letter per frame: each new `l` is the call's own function going round, so the call
+takes the lap, 1 for nothing, and the run is one call however long it grows (D53). The same
 holds for `oo` from `o`'s history and `ss` from `s`'s. A doubling too rare to recur within `l`'s history stays
 as letters on the apex.
 

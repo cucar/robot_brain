@@ -38,8 +38,8 @@ per relation that did not come true and one per argument (D12).
 | the end of the loop | `{stop, taps@0}`: the cue beside the cycle's call, in its pose of two laps; its interneuron `taps·stop` |
 | the exit | `{done, taps·stop@−1}`: `done` after that; its interneuron `taps·stop·done` |
 
-The cycle's call lands on `go·tap`'s call at the second tap of a run, so `taps` stands for the cue too, and
-the exit's call for the whole run.
+At the second tap of a run the cycle's fit reads the first tap through `go·tap`'s call, which stays where it
+stands (D10), so `taps` stands for the taps, and the exit's call for the taps, `stop` and `done`.
 
 # 3. How it was learned
 
@@ -51,9 +51,10 @@ the exit's call for the whole run.
    three taps, which leave the apex, and inherits what the fit did not cover: the first tap's relation to `go`,
    now from the call at `−3` (D10). From the second run the first tap after the cue is a pair, `{tap, go@−1}`,
    at strength 2, taken at the first tap for nothing: its interneuron `go·tap` fires there and stands for the
-   cue and the tap. At the second tap the cycle's fit reads one lap, lands on that call, whose pose starts at
-   `tap`, and covers it whole, 1 for nothing: `taps` fires in a pose of one lap, standing for the cue and two
-   taps. At the third tap it lands on its own call, two laps.
+   cue and the tap. At the second tap the cycle's fit reads one lap, the first tap read through that call
+   (D5), 1 for nothing: `taps` fires in a pose of one lap, standing for the two taps, and `go·tap`'s call
+   stays on the apex, since `taps` does not name it (D10). At the third tap the relation is the call's own
+   function going round, and the call takes the lap: two laps (D53).
 2. **The cue does not join the cycle.** `stop` stands beside one tap in three. Its relation to `tap` at offset
    zero is a candidate of the cycle, and the `tap` counts it: `with` one per run, `without` two, so it never
    pays and never joins (D57, R50). `go` before the taps cannot join either: no relation leads on from a node
@@ -62,17 +63,18 @@ the exit's call for the whole run.
    and records the bare third tap beside it at offset zero. When the call lands on that tap, the machine
    changes the entry in `stop`'s row to `taps` in its pose at offset zero (D10), so `stop` holds the call
    beside it in every run. In the second run that relation is at strength 2, and `{stop, taps@0}` is a
-   function. Its fit lands on `stop` and on the call, whole, and covers the relation and the call's cost,
-   nothing: 1 for nothing, taken. `taps·stop` fires at the next level of the same frame, at that frame, in its pose. The
+   function. Its fit lands on `stop` and on the call, and covers the relation: 1 for nothing, taken.
+   `taps·stop` fires at the next level of the same frame, at that frame, in its pose. The
    cycle's call is covered at age 0, in the frame it fired.
 4. **The exit names the end of the loop.** `done` sees `taps·stop` one back. In the third run that relation is
    at strength 2, and `{done, taps·stop@−1}` is a function, 1 for nothing over the call. `taps·stop·done`
-   stands for the whole of `go, tap, tap, tap, stop, done`.
+   stands for `tap, tap, tap, stop, done`.
 5. **What each voter learns.** In the first run `go` stands uncovered through the first tap, which is bare,
    so it holds `tap` at `+1`; from the second run it is covered at age 1 by `go·tap` and connects once more,
-   to it (D10). `go·tap`'s call is covered at age 1 by `taps` at one lap and connects to it; `taps` at one lap
-   is covered at age 1 by `taps` at two laps and connects to it; each of those expands to a tap at the frame
-   ahead (R28). `taps` at two laps is covered at age 0 by `taps·stop` in every run and writes nothing (D10).
+   to it (D10). `go·tap`'s call stands uncovered through the second tap and connects to `taps` there; `taps`
+   at the second tap stands uncovered through the third, where `taps·stop` stands, and connects to it; each
+   of those expands to a tap at the frame ahead (R28). At the third tap `taps` is covered at age 0 by
+   `taps·stop` in every run and writes nothing there (D10).
    `taps·stop`
    stands uncovered through the fourth frame in the first two runs, where `done` stood bare, and is covered
    there by `taps·stop·done` from the third run on, so it holds `done` at `+1` twice and `taps·stop·done` at
@@ -83,8 +85,8 @@ the exit's call for the whole run.
 | Frame | input | on the apex | infers for the frame ahead | output |
 |---|---|---|---|---|
 | 0 | `go` | `go` | `go·tap` at `+1`, which expands to a tap there (R36, R28), and `tap` at `+1` from the first run | `tap` |
-| 1 | `tap` reported as run | `go·tap`, over the cue and the tap | `taps` at one lap at `+1`, a tap there | `tap` |
-| 2 | `tap` | `taps`, one lap, over the cue and two taps | `taps` at two laps at `+1`, a tap there | `tap` |
+| 1 | `tap` reported as run | `go·tap`, over the cue and the tap | `taps` at `+1`, a tap there | `tap` |
+| 2 | `tap` | `taps`, one lap, over two taps | `taps·stop` at `+1`, a tap there | `tap` |
 | 3 | `tap`, and `stop` shown | `taps·stop`, over `stop` and the cycle's call, the three taps under it | `done` at `+1`, and `taps·stop·done` at `+1`, which expands to `done` there | `done` |
 | 4 | `done` reported as run | `taps·stop·done` | nothing: it has no connection | nothing |
 
@@ -94,9 +96,9 @@ match reads each inferred call back: the call it names at `0` stands, the relati
 is charged, and the inference is proposed (R49). A tap after `stop`, if one ever ran, is paid negatively and
 lands on whatever connected to it (R32), so the voter that proposed it stops proposing it (R47).
 
-**Another length.** Taught five taps, the cycle's call stands from the second tap, each later tap's fit lands
-on the call before it, 1 for nothing, its laps one more, and the call stands uncovered through the next tap, so `taps`
-in a pose of two laps holds `taps` in a pose of three at `+1`, a tap. At the fifth tap `stop` shows beside
+**Another length.** Taught five taps, the cycle's call stands from the second tap, each later tap is a lap of
+it, 1 for nothing, and the call stands uncovered through the next tap, so `taps` holds itself at `+1`, a tap,
+learned once for every length (D25). At the fifth tap `stop` shows beside
 the call in its pose of four laps, and that is another relation than the one above, since a pose is part of a
 call's name (D34): `{stop, taps@0}` over four laps is a second function, with its own interneuron, learned
 over its own runs. So the machine taps while nothing but taps has stood, and runs `done` in the frame after
@@ -107,14 +109,15 @@ on the bare `stop`, which has no connection to `done`, and the world runs it.
 # 5. The stop
 
 **The stop is the cue, in a function with the call.** `stop` is one event among the taps, and the cycle's
-call stands beside it. Neither alone says what comes next: the call is covered in that frame and has never
-learned anything, and `stop` is a base event that stood once per run. What says `done` is their function,
+call stands beside it. Neither alone says what comes next: the call is covered in that frame and has only
+learned taps, and `stop` is a base event that stood once per run. What says `done` is their function,
 which has stood before `done` at every run, and speaks because it covers both (D10, R35).
 
-**The cycle's call never infers a stop, and need not.** Where the loop goes on, the call stands uncovered
-through the next tap and learns a tap. Where it ends, the call is covered at age 0 by the end's function and
-learns nothing. So `taps` holds a tap, or nothing, and never `done`: it cannot end the loop, and the loop is
-not its to end. The frame `stop` shows is the frame the end's function fires, and that function holds `done`.
+**The cycle's call never infers `done`, and need not.** Where the loop goes on, the call stands uncovered
+through the next tap and learns what stood there, itself or the end's function over it, each a tap. In the
+frame `stop` shows, the call is covered at age 0 by the end's function and learns nothing. So `taps` holds a
+tap, and never `done`: it cannot end the loop, and the loop is not its to end. The frame `stop` shows is the
+frame the end's function fires, and that function holds `done`.
 
 **Had the world shown nothing.** A connection is to what stood on the apex (D25), and nothing stands in
 silence: there is no rest value (§3.3). Without `stop`, the third tap is the cycle's call, uncovered, holding a

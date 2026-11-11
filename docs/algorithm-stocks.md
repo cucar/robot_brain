@@ -55,33 +55,33 @@ the action is strengthened and takes the reward in one write (R29, R31).
 |---|---|---|
 | a bar's move | 1 (D4) | A move sees the move before it in its own channel, and the moves of the other instruments at this frame and the one before (D5). Each neighbor is one relation (D34, R21). At strength 2, `{m, m'@−1}` with `m'` one bar back is a function: two nodes, one relation, origin `m` (R50). Its fit covers that one relation for nothing and is taken (R24): the pair's call fires at the later bar, standing for both, and the pair is worth its occasions less one (D57). `{m_A, m_B}` across two instruments at offset 0 is priced the same. A move after itself, `{m, m@−1}`, is a cycle of one node, and a move after another after the first, `{m, m'@−1, m after m'}`, a cycle of two (D15). |
 | the first call | 1 beyond what it landed on (D4) | A call pays from two bars. A pair grows at its past end where the bar before it recurs: that pair is a function at its second occurrence, its relation a candidate that the node it attaches at counts, its row holding the bar before and the bar after (D18, R50), and on the tie it moves (R54), so the flat function `{m, m'@−1, m''@−2}` covers two relations for nothing. A cycle pays from one lap. The call fires once, at the latest bar, in its pose (D53), and the next bar sees it at `−1` (D5). |
-| a link over a call | 1 beyond what the call stands for | At strength 2, `{m, CALL@−1}`, the call named in its pose, is a function whose fit covers the relation to the call and the call's cost, nothing: 1 for nothing. The function that fired the call may fit at the same bar too, its node coming true on the call where the call's pose starts at that node, and cover the same (D54). Where the two measure the same the link is taken first, since its relation reads as it stands on the board (R24); where a flat function covers more for its price, it is taken instead. The link's call stands for this bar and everything the call under it stood for (D53), and expands to it all (R28). |
+| a link over a call | 1 beyond what the call stands for | At strength 2, `{m, CALL@−1}`, the call named in its pose, is a function whose fit covers the relation to the call: 1 for nothing. A move function may fit at the same bar too, its node read through the call (D5), and cover the same relation (D54). Where the two measure the same the link is taken first, since its relation reads as it stands on the board (R24); where a flat function covers more for its price, it is taken instead. The link's call stands for this bar and everything the call under it stood for (D53), and expands to it all (R28). |
 | a longer shape | 1 beyond what it stands for | Each further recurrence of a stretch extends the chain by one bar, the next bar's function naming the interneuron that fired a frame before, and extends the flat function by one bar at its past end, the node there counting it from its row. Where a flat function and the chain both fit, the one that covers more for its price is taken, and on a tie the link (R24). Shapes across instruments form the same way: an interneuron in one channel beside one in another at offset `0`. |
 
 **Where the stretch stops recurring.** A bar that has not stood after the interneuron twice holds the relation
 at strength 1; it is read in the index to find what already fits, and nothing is built on it (R21, R53). A
-cycle or a flat function that fits at that bar and lands on the call before it covers it, 1 for nothing; where none
+cycle or a flat function that fits at that bar, its node read through the call before it, covers its
+relation, 1 for nothing; where none
 does, the bar stands bare with its relation to the call, and the chain starts again from the next relation
 that recurs. The dictionary holds one interneuron per stretch of buckets that recurred, each as long as the
 recurrence, and a stretch seen at one frame and again at another is two activations of one interneuron (D11).
 
 **A function outbid at every bar stays.** Once the move before a bar stands under a call at every bar, the bar
-sees the call and not the move (D5). The function's relations are still read: the count asks for the move
-or any call whose pose starts at it, and the bar saw such a call at every bar (R50). So a cycle's worth stays
+sees the call, and the move through it (D5). The function's relations are still read: the count asks for the
+move, bare or named there by a call, and the bar saw such a call at every bar (R50). So a cycle's worth stays
 positive, it fits at every bar, loses the tie to the link there, and stays in the dictionary with its
 interneuron, fit and never taken, the case the evaluation document names. What is pruned is a link whose
 stretch stopped recurring: nothing stands at its node any more, under a call or bare.
 
 **After a break.** The ring's links name calls, and after a silence no call stands, so the first bars are
 bare. The move functions, which never left, fit from the first bar that reads a relation, 1 for nothing, and
-the links fire again from the bar after, each landing on the call before it. The ring is back within a lap.
+the links fire again from the bar after, each naming the call before it. The ring is back within a lap.
 
-**No variable forms.** Two pairs that differ at a node, `{m, fall₁@−1}` and `{m, fall₂@−1}`, are generalized
-into `{m, C@−1}`, `C` a class, priced as a replacement of the two (R52): the two cost 2 in the dictionary and
-nothing per occurrence; the class 1 in the dictionary and a binding per occurrence, for one relation covered
-(D13). From the second occurrence on the class saves nothing, and it does not form. A parameter tying a move to
-itself would leave no fixed node, and R52 makes nothing of it. Since no function names an action, the
-dictionary describes the market and nothing the machine did.
+**No variable forms.** Two pairs that differ at a node, `{m, fall₁@−1}` and `{m, fall₂@−1}`, have one
+shape, and `{m, C@−1}`, `C` a class, would stand for both (R52). Its call would cover one relation for one
+binding, so it saves nothing at any occurrence, where each pair saves one. It is never taken. A parameter
+tying a move to itself, `P` after `P`, is one relation for one binding and is not taken either. Since no
+function names an action, the dictionary describes the market and nothing the machine did.
 
 # 3. Taking a position
 
@@ -143,31 +143,32 @@ the cycle `fall` after `rise` and `rise` after `fall` (R50, D15). The `rise` cou
 lap 1 holds `fall` before it and `rise` after it, where the function's own relation did not hold, so that
 activation is neither `with` nor `without`, and the `rise` at this bar has not taken what follows it and is not
 read: `with` 0, worth −1, against its strength over the same row less one, 0. It does not join, and starts a
-function of its own, `FR`, nodes `fall` and `rise`, origin the `rise`. Its fit lands `fall` on `RF`'s call,
-whose pose starts at `fall`, and covers it whole (D54): 1 for nothing, taken, and `FR`'s call stands for bars
-5 to 1. At bar 2 `RF` fits
-again, its `rise` landing on `FR`'s call, 1 for nothing. At bar 3 fall-after-fall is at strength 2: the count
+function of its own, `FR`, nodes `fall` and `rise`, origin the `rise`. Its fit reads `fall` through `RF`'s
+call (D5): 1 for nothing, taken, and `FR`'s call stands for bars 6 and 1. `RF`'s call stays on the apex,
+since `FR` does not name it (D10). At bar 2 `RF` fits
+again, its `rise` read through `FR`'s call, 1 for nothing. At bar 3 fall-after-fall is at strength 2: the count
 reads `fall` one back as the move or any call that expands to it there, and the `fall` at bar 3 saw a bare
 `fall` in lap 1 and `RF`'s call now (R50). That is a cycle of one node, `FF`. Its fit reads `fall` after
-`fall`, the node comes true on `RF`'s call, the fit lands on it, and the lap stops there (D54, D10): 1 for
-nothing, taken, and `FF`'s call stands for bars 5 to 3, one lap of its own (D53). At bar 4 `FR` lands on
-`FF`'s call; at bar 5 rise-after-rise is at strength 2 the same way, `RR`, and lands on `FR`'s call; at bar 6
-`RF` lands on `RR`'s call. The closing candidate is read again at every `rise`, and the `rise` at bar 4 of
+`fall`, the node read through `RF`'s call (D54): 1 for
+nothing, taken, and `FF`'s call stands for bars 2 and 3, one lap (D53). At bar 4 `FR` reads its `fall`
+through `FF`'s call; at bar 5 rise-after-rise is at strength 2 the same way, `RR`, read through `FR`'s call;
+at bar 6 `RF` reads its `rise` through `RR`'s call. The closing candidate is read again at every `rise`, and
+the `rise` at bar 4 of
 every lap has a `rise` after it, so the cycle of two never pays against the two pairs and never forms. So from
-bar 6 of lap 1 on, every bar's fit lands on the call before it, 1 for nothing, and the apex holds one call for
-the whole run, for as long as the run goes on. Each bar's call is one neuron in one pose, and bars 1 and 4
+bar 6 of lap 1 on, every bar's fit reads the bar before it through that bar's call, 1 for nothing, and the
+run costs nothing, for as long as it goes on. Each bar's call is one neuron in one pose, and bars 1 and 4
 share one, `FR` from `rise` to `fall`, as bars 2 and 6 share `RF`: the six bars are four situations before any
 chain forms.
 
 **Lap 3 and on: the chain.** A bar's neuron now sees the call one frame back, in its pose (D5), and a move
 after a particular call in a particular pose recurs. The poses of lap 2 recur in lap 3, so at bar 3 of lap 3
 `fall` after `RF` from `fall` to `rise` is at strength 2, and `{fall, RF@−1}`, the call named in that pose, is
-a function. Its fit covers the relation to the call and the call's cost; `FF`'s fit at the same bar lands its
-node on the call and covers the same (D54):
+a function. Its fit covers the relation to the call; `FF`'s fit at the same bar reads its
+node through the call and covers the same relation (D54):
 
 | fit at bar 3, lap 3 | coverage | price |
 |---|---|---|
-| `FF`, its node landing on `RF`'s call | 1 | 0 |
+| `FF`, its node read through `RF`'s call | 1 | 0 |
 | the link, `fall` after `RF` in that pose | 1 | 0 |
 
 They measure the same, and the link is taken first, since its relation reads as it stands on the board (R24).
@@ -176,7 +177,7 @@ everything the previous neuron stood for, so each bar adds one link: a chain. Th
 nothing: the standing call has no failure and no binding, whatever it stands for.
 
 **What it gets wrong while learning.** A link exists once its pattern has been seen twice. When the chain
-reaches a link no bar has learned to follow yet, the next bar's move function lands on the call instead, 1 for
+reaches a link no bar has learned to follow yet, the next bar's move function reads through the call instead, 1 for
 nothing, and a new chain starts from there at the next lap. Chains that start at different bars are different
 neurons, even when they cover the same bars. The move functions fire where the chain breaks, each in its pose,
 and a call's connections are keyed by pose (D25), so `FR` at bar 1 and at bar 4, one neuron in one pose, votes
