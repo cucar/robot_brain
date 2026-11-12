@@ -1370,8 +1370,12 @@ argument.
 > neurons at the count step (§6.1), over their histories (D18, D47).
 >
 > **A candidate** is a board relation the neurons returned with strength 2 or more, this frame or at one
-> before while its activations still stand (D9), that the fit did not land on, that the first election left on
-> the board, and that shares a neuron with an activation the fit landed on or with the call. Its other end is a
+> before while its activations still stand (D9), that the fit did not land on, and that shares a neuron with an
+> activation the fit landed on or with the call. Either the first election left it on the board, or the call
+> that covers it is one this fit names or read a node through (D54). So a relation another function holds is
+> offered where the fit touches that function's call, and whether it moves is decided by its gain here
+> against its contribution there (R54). A relation under a call the fit does not touch is no candidate. Its
+> other end is a
 > neuron the function does not name, which would be a new node, or a node the function has, which would close
 > the cycle where the function has none (D15). An activation that sees a call sees the activations under it
 > too, and returns the relation to the call and the relation to each of them (D5). Where one of those is a
