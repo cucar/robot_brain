@@ -1448,9 +1448,12 @@ argument.
 > nothing is built that is worth nothing (R21).
 >
 > **Which relation it is, and where none is built.** A relation to a call stands for the relations to every
-> activation the call's function names (D5). They are one board relation. Where one of them is at strength 3
-> and no function holds it, the function that starts holds the relation to the call and none of those it
-> stands for, so one pattern has one form. A relation to
+> activation the call's function names (D5). They are one board relation, and the relation to the call is
+> used in their stead. It is the one that is counted, in the rows that hold that call in that pose (D47), and
+> the one that starts a function, at its own strength of 3. That function holds the relation to the call and
+> none of those it stands for, so one pattern has one form, and it is started and kept on the one count
+> (R18). A relation to an activation under a call starts nothing. It may still join a function that has that
+> activation's neuron as a node, as any candidate does. A relation to
 > a call that is the call's own function going round its cycle starts nothing: it is a lap of that call (D53),
 > so a pattern that repeats adds laps and never a function over itself. And no function is built on a
 > relation between two activations that name one and the same activation, since that activation already ties

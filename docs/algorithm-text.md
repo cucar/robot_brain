@@ -59,41 +59,41 @@ A word is not one neuron. What the machine names is the stretch that recurs, a l
 third occurrence, and the longer stretch as its pairs merge.
 
 Take `the`. At the third `the`, `TH` fires at the `h`, and the `e` after it sees the call one back and,
-through it, the letters under it as themselves, `h` at `−1` and `t` at `−2` (D5). Its history holds `h` one
-back in three rows, so `e` after `h` is at strength 3 (D47). It is no candidate of `TH`'s function, since
-it would make `e` later than that function's origin `h` (R50), so it starts a function of its own on the
-relation to the call, `{e, TH@−1}`, origin `e`,
-which stands for `e` after `h` and `e` two after `t` (R50). Its fit lands `e` on the `e` and on `TH`'s call:
+through it, the letters under it as themselves, `h` at `−1` and `t` at `−2` (D5). Its relation to the call
+stands for its relations to those letters and is used in their stead (R50): it is the one that is counted,
+and it has occurred once. `e` after `h` starts nothing, since the `h` stands under a call, and it is no
+candidate of `TH`'s function, since it would make `e` later than that function's origin `h` (R50). At the
+fifth `the` the relation to the call is at strength 3 and starts a function of its own, `{e, TH@−1}`, origin
+`e`, which stands for `e` after `h` and `e` two after `t`. Its fit lands `e` on the `e` and on `TH`'s call:
 one relation for nothing, taken. Its interneuron, call it `HE`, fires at `e`'s position and stands for `e`
-and, through `TH`, for `t h`
-(D53).
+and, through `TH`, for `t h` (D53).
 
 Nothing joins it in that frame: candidates are counted before grouping, when it was not yet a function. At
-the fourth `the` the relation `t` before `h`, the one `TH`'s function holds, is a candidate of `HE`'s
+the sixth `the` the relation `t` before `h`, the one `TH`'s function holds, is a candidate of `HE`'s
 function at its past end: `HE` names `TH`'s call, the relation is under it, and `t` is earlier than the
 origin (R50). The node it attaches at counts it. `h`'s row
 holds `t` at `−1` and `e` at `+1` (D18), so `h` counts how many of its activations hold `e` after it together
 with `t` before it, and how many hold `e` after it without `t`: `with` and `without` (D47, R50). Over the rows
-that have taken what followed them, the `h` of the first three, `with` is 3 and `without` 0, so the
-candidate's worth in the function is `with − without − 1`, 2. Read at the same node over the same rows:
+that have taken what followed them, the `h` of the first five, `with` is 5 and `without` 0, so the
+candidate's worth in the function is `with − without − 1`, 4. Read at the same node over the same rows:
 
-| over those three rows | relations' worths | entries | worth |
+| over those five rows | relations' worths | entries | worth |
 |---|---|---|---|
-| apart: `HE`'s function, `e` after `h` | 2 | 1 | 1 |
-| apart: `TH`'s function, `t` before `h` | 2 | 1 | 1 |
-| joined: one function of both | 2 + 2 | 1 | 3 |
+| apart: `HE`'s function, `e` after `h` | 4 | 1 | 3 |
+| apart: `TH`'s function, `t` before `h` | 4 | 1 | 3 |
+| joined: one function of both | 4 + 4 | 1 | 7 |
 
-Its gain in `HE`'s function is 2, and its contribution where it stands, alone in `TH`'s function, is 1. The
+Its gain in `HE`'s function is 4, and its contribution where it stands, alone in `TH`'s function, is 3. The
 dictionary's worth rises by the entry one function no longer pays, so the relation moves (R54, D13). `TH`'s
 function is empty and
 goes with it (R18), the relation to the call is held from then on as the relation to the `h` it stood for,
 and the function is `{e, h@−1, t@−2}`, three nodes, two relations, origin `e`, with `HE`
 as its interneuron (R54).
 
-A function that changed is fit again before the second election (R50). Its fit at the fourth `the` lands `e` on
+A function that changed is fit again before the second election (R50). Its fit at the sixth `the` lands `e` on
 the `e` and reads `h` through `TH`'s call, which fired before its function left: one relation for nothing, taken
 (R24). `HE` fires once, at `e`'s position, at age 0, in the pose the fit read: from `e` back to `t`, one lap of
-a function with no cycle (D53, D37). From the fifth `the` on nothing fires at the `h`, since `h` after `t` is
+a function with no cycle (D53, D37). From the seventh `the` on nothing fires at the `h`, since `h` after `t` is
 in no function of its own, and the fit at the `e` lands on three bare letters, two relations for nothing. The
 call stands for the three letters and inherits the relation the fit did not cover, `t`'s relation to the letter
 before it, now from the call at `−3` (D10). The row of that earlier letter, which saw `t` at `+1`, keeps the
