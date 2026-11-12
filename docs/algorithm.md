@@ -1225,10 +1225,13 @@ every row's entry for it. Nothing else touches the index.
 > of rows of the neuron's history that hold it, this one among them. An
 > activation with no neighbor has nothing in its part.
 >
-> **The machine reads every relation in its one form** (D34). The neuron at each end returns it from its own
-> side, so a relation between two activations of this level comes back twice, and the machine keeps the larger
-> strength. A relation to an activation of an earlier level or frame comes back once, from the activation that
-> fired now; the earlier activation's row takes it afterward, and from then on both ends count it (D18, R50).
+> **The machine reads every relation in its one form** (D34). Every occurrence of a relation is on two rows,
+> one at each of its ends, so each end counts it, and no end is picked to say how strong it is: the machine
+> adds the two ends' counts and halves them, and that is how often it occurred. A relation between two
+> activations of this level comes back from both in this return. A relation to an activation of an earlier
+> level or frame comes back from the activation that fired now, and the machine asks the earlier neuron for
+> its count at the count step (§6.1). That neuron's row takes this occurrence afterward (D18, R50), and the
+> machine counts it there already: the occurrence is one, on two rows.
 
 A relation held in one row cannot recur yet, so **nothing is ever built on a single occurrence** (D57, R50); it
 is still returned, since a function already in the dictionary may hold it (R53). What the call returns is the
@@ -1393,7 +1396,7 @@ argument.
 > neuron to itself is read in one direction, from an activation toward the one its offset reaches (D34): a row
 > holds it where that neighbor stands, whether or not the same neighbor stands at the opposite offset, so the
 > ends of a run count as its middle does. A relation of a cycle is counted at no one node: every occurrence of
-> it counts, and its count is its strength, the larger of what its two ends return (R21, D57).
+> it counts, and its count is its strength, half of what its two ends count together (R21, D57).
 
 > **A relation forward in time is read once the row has taken what followed** (D18). A relation backward in
 > time from an activation is on its row when the row is written, and is read at once. A relation forward in

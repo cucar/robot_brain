@@ -73,7 +73,7 @@ laps, and the pixels no run reached, bare: lone pixels.
 
 **Strokes and sides, over the lines.** A line's interneuron sees what its pixels saw (D4), and its rows
 hold relations to what stood there: another line at the offset between their positions, a lone pixel, the other
-color's line beside it. Each at strength 2 is a function over the line call, taken where it covers its
+color's line beside it. Each at strength 3 is a function over the line call, taken where it covers its
 relation (R24). Two parallel rows of one length one position apart are a row after a row at `(0, +1)`, a cycle
 over the row interneuron in that pose, and its fit over two rows covers the relation for nothing. A stroke
 three pixels thick is three rows and two laps of that cycle, one call. Two lines that share a pixel hold one
@@ -82,7 +82,8 @@ the pixel already ties them (R50): a row and a column that meet at a corner, or 
 one motif. What joins them is something that shares no pixel with either: a row beside a row, or the block
 that stands between two columns. Each such pair at one offset is a motif of two calls, 1 for nothing, and a
 lone pixel beside a line is a motif of the line and the pixel, the same. Which of these a line ends up under
-is the election's again, by what each covers less its price. Motifs that share a call merge on the tie (R54),
+is the election's again, by what each covers less its price. Motifs that share a call and hold together
+merge, for the entry one function no longer pays (R54, D13),
 and a function grows over the lines as far as its relations hold. The edge between two lines that share a
 pixel costs nothing once a path of covered relations joins them (D55).
 
@@ -133,10 +134,10 @@ built between a row and a column (R50), and the four lines stand as they were.
 
 **Level 3: the image.** The block stands at `(1, 1)`, the rows at `(0, 0)` and `(0, 4)`, and the columns at
 `(0, 0)` and `(4, 0)`, the least position among what each landed on (D37). The block shares no pixel with any
-line and relates to each at its offset. Each pair, the block and one line, was a function at its second
-image, and the four pairs merged on the tie into one function of five calls and four relations (R54), which
-covers 4 for nothing: one call. The four corner edges are implied by it, since each line is joined to the
-next through the block (D55).
+line and relates to each at its offset. Each pair, the block and one line, was a function at its third
+image, and the four pairs merged into one function of five calls and four relations, each move gaining the
+entry a function no longer pays (R54, D13). It covers 4 for nothing: one call. The four corner edges are
+implied by it, since each line is joined to the next through the block (D55).
 
 | after the last level | |
 |---|---|
