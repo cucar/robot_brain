@@ -503,11 +503,14 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > first relation, with or without an interneuron, and has one interneuron once a fit of it has been accepted
 > (R16, D48).
 >
-> **Its origin** is its latest node, fixed in the dictionary (D56): the node later than every other in time,
-> and among several at one frame, the one at the least position in the order the dimensions are declared (D1).
-> The call fires at the position of the latest activation the fit landed on, which is the origin's where the fit
-> reached it (D37, D53), and expansion runs from the node the pose starts at (R28). The origin never moves: a
-> relation that would make another node later than it is no candidate (R50). A fit may enter the function at
+> **Its origin** is its latest node, listed first in the dictionary (D56): the node later than every other in
+> time, and among several at one frame, the one at the least position in the order the dimensions are declared
+> (D1). The call fires at the position of the latest activation the fit landed on, which is the origin's where
+> the fit reached it (D37, D53), and expansion runs from the node the pose starts at (R28). **Nothing joins a
+> function later than its origin.** A function is recognized in the frame its origin fires, and its call
+> stands from then on, so what fires later sees the call, and its relation is a function over the call (R50).
+> The origin is no more than the latest node the function has: where the relation at the origin leaves, the
+> latest of the nodes that remain is the origin (R54). A fit may enter the function at
 > any node (D54): the origin is where the function is listed from, not where recognition begins. A function
 > whose latest node is in its cycle has no fixed origin, since the last lap may stop at any node of it; its
 > call's pose says which node the fit started at and which it ended at (D37).
@@ -1387,7 +1390,8 @@ argument.
 > to the call and the relation to that node's neuron are one board relation, and a
 > function holds that relation as one or the other, never both: where the fit already lands on it, under either
 > name, it is no candidate. It is no candidate where its new node would be the origin, later in time or at a
-> lesser position in the same frame, since the origin is fixed (D15); where the function has a
+> lesser position in the same frame, since nothing joins a function later than its origin (D15); where the
+> function has a
 > cycle and it leads on from a node of the cycle in the direction the cycle advances in; or where the function
 > has a cycle and it would close another.
 >
@@ -1495,7 +1499,9 @@ argument.
 >
 > **A relation leaves only from an end.** A relation leaves its function, for another function, for one of
 > its own or for nothing, only where the function's other relations still hold together without it (D15): at
-> an end of a chain, or in a cycle, which its leaving opens. A relation whose leaving would split the function
+> an end of a chain, or in a cycle, which its leaving opens. Either end of a chain is an end: where the
+> relation at the origin leaves, the origin's node goes with it, and the latest of the nodes that remain is
+> the function's origin from then on (D15). A relation whose leaving would split the function
 > in two is not priced for leaving and does not leave. It stays until what lies beyond it on one side has
 > left, one relation at a time from that end. So relations leave as they join, at the ends, and no function
 > is ever priced in two parts.
