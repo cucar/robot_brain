@@ -8,10 +8,13 @@ use brain_core::machine::Machine;
 use brain_core::types::*;
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
+    let s15_off = std::env::args().any(|a| a == "--s15-off");
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off").collect();
     let frames: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(30);
     let trace_to: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
     let mut m = Machine::new(64, Policy::all_on(), 1);
+    if s15_off { m.sw.s15_uncovered_relations = false; }
     let ch = m.declare_channel("letters", Some(("letter", 26)), None, &[]);
     let dim = m.channels[ch as usize].event.unwrap();
     let letter = |n: u32| (b'a' + n as u8) as char;

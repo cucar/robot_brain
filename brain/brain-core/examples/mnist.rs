@@ -24,7 +24,9 @@ fn images(path: &str) -> Vec<Vec<u8>> {
 fn labels(path: &str) -> Vec<u32> { read(path)[8..].iter().map(|&x| x as u32).collect() }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
+    let s15_off = std::env::args().any(|a| a == "--s15-off");
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off").collect();
     let dir = args.get(1).expect("usage: mnist <data-dir> [train] [test] [h] [size] [teach] [threshold]").clone();
     let num = |i: usize| -> Option<usize> { args.get(i).and_then(|s| if s == "all" { None } else { s.parse().ok() }) };
     let train_imgs = images(&format!("{}/train-images-idx3-ubyte", dir));
@@ -53,6 +55,9 @@ fn main() {
     let f = 28 / size;
 
     let mut m = Machine::new(h, Policy::events_to_actions(), 1);
+
+    if s15_off { m.sw.s15_uncovered_relations = false; }
+    m.trace_retire = true;
     let ax = m.declare_axis("x", 1);
     let ay = m.declare_axis("y", 1);
     let image = m.declare_channel("image", Some(("pixel", 2)), None, &[ax, ay]);
@@ -80,8 +85,8 @@ fn main() {
         v
     };
 
-    // two frames per image, as the JS job has them: the image, then the digit that ran with what it earned, so
-    // that no image sees another (R29)
+    // two frames per image: the image, then the digit that ran with what it earned (R29); the context is reset
+    // after each, so no image sees another
     let run = |m: &mut Machine, px: &[u8]| -> (Option<u32>, f64) {
         let t = Instant::now();
         let w = m.process_frame(&frame_of(px), vec![]);
@@ -104,6 +109,7 @@ fn main() {
     for ep in 0..episodes {
         let (mut e_right, mut e_spoke, mut e_levels, mut e_ms) = (0usize, 0usize, 0usize, 0.0f64);
         let mut said_list = Vec::new();
+        let (mut e_added, mut e_retired) = (0usize, 0usize);
         let mut apex_note = String::new();
         for &i in &order {
             k += 1;
@@ -114,6 +120,8 @@ fn main() {
             m.trace = tracing;
             let (said, t) = run(&mut m, &train_imgs[i]);
             w_added += m.last_stats.added;
+            e_added += m.last_stats.added;
+            e_retired += m.last_stats.retired;
             w_retired += m.last_stats.retired;
             ms += t;
             e_ms += t;
@@ -138,6 +146,8 @@ fn main() {
             if lesson { lessons += 1; }
             let ran = if lesson { label } else { said.unwrap() };
             ms += answer(&mut m, Some(ran), Some(if ran == label { 1.0 } else { -1.0 }));
+            // each image stands alone: nothing of it is on the board when the next is shown
+            m.reset_context();
             if k % 100 == 0 {
                 eprintln!("  image {}/{} | last 100: spoke {} right {} ({:.1}% of spoken) {:.0} ms/image, functions added {} retired {} | neurons {} functions {} | apex/image {:.1} | {:.1} ms/image so far",
                     k, shown, w_spoke, w_right, 100.0 * w_right as f64 / w_spoke.max(1) as f64, (ms - w_ms) / 100.0, w_added, w_retired, m.alive, m.dict.len(), apex as f64 / k as f64, ms / k as f64);
@@ -149,8 +159,8 @@ fn main() {
             }
         }
         if episodes > 1 {
-            println!("  episode {:2}: right {}/{} (spoke {}) | max levels {} | neurons {} functions {} | {:.0} ms/image | digit:said {}{}",
-                ep + 1, e_right, order.len(), e_spoke, e_levels, m.alive, m.dict.len(), e_ms / order.len().max(1) as f64, said_list.join(" "), apex_note);
+            println!("  episode {:2}: added {} retired {} | right {}/{} (spoke {}) | max levels {} | neurons {} functions {} | {:.0} ms/image | digit:said {}{}",
+                ep + 1, e_added, e_retired, e_right, order.len(), e_spoke, e_levels, m.alive, m.dict.len(), e_ms / order.len().max(1) as f64, said_list.join(" "), apex_note);
         }
     }
     println!("  train: {} images | spoke {} | right {} ({:.1}% of all, {:.1}% of spoken) | lessons {} | apex/image {:.1} | neurons {} functions {} | {:.0}s",
@@ -176,6 +186,7 @@ fn main() {
         apex += m.last_stats.apex_acts;
         if let Some(s) = said { spoke += 1; confusion[label as usize][s as usize] += 1; if s == label { right += 1; } }
         answer(&mut m, said, None);
+        m.reset_context();
     }
     println!("  test: {} images | spoke {} | right {} ({:.1}%) | apex/image {:.1} | neurons {} functions {} | {:.0}s",
         test_n, spoke, right, 100.0 * right as f64 / test_n.max(1) as f64, apex as f64 / test_n.max(1) as f64, m.alive, m.dict.len(), t1.elapsed().as_secs_f64());

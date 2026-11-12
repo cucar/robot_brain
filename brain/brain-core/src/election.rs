@@ -18,12 +18,7 @@ impl Machine {
         let mut seen: FxHashSet<(ActRef, ActRef)> = FxHashSet::default();
         let mut c = 0.0;
         for &(a, b) in &fit.edges { if seen.insert(edge(a, b)) { c += 1.0; } }
-        for (k, _) in fit.acts() {
-            let Some(a) = self.act(k) else { continue };
-            let Some(fb) = &a.fired_by else { continue };
-            if a.coverers.iter().any(|x| self.electing.contains(x)) { continue; }
-            c += fb.failed.len() as f64;
-        }
+        // credited the relations it read and nothing of a call (D22)
         c
     }
 
@@ -44,7 +39,7 @@ impl Machine {
     /// interneuron; the function that joined first; the fit from the older activation.
     fn rank(&self, fit: &Fit) -> (bool, i64, u8, u64, u64, ActRef) {
         let f = self.dict.get(fit.func);
-        let via_call = !fit.calls.is_empty();
+        let via_call = !fit.calls.is_empty() || fit.through;
         let shared = -(self.shared_under(fit) as i64);
         match f.and_then(|f| f.inter) {
             Some(n) => (via_call, shared, 0, n as u64, 0, fit.entry.1),
@@ -67,42 +62,70 @@ impl Machine {
         seen.values().filter(|n| **n >= 2).count()
     }
 
-    /// The reuse search (R43, D36): an interneuron that already stands for what this function's would. The
-    /// function's expansion is read from its origin; an interneuron met in it, not at the origin, no further back
-    /// than that interneuron's own length, that far included, whose expansion over exactly that length is the same as the function's. The
-    /// nearest meeting first, the older interneuron on a tie.
+    /// The reuse search (R43, D36): an interneuron that already stands for what this function's would, because the
+    /// function's chain comes round to it. A function is never the interneuron of one of its own nodes, so no
+    /// interneuron whose call is a node of the function is tried; only calls further down the chain, inside the calls
+    /// the function's nodes are. Each such earlier call is compared, over its own length, with the function's
+    /// expansion aligned at the present end (the origin). An interneuron is refused where any call of it, a node of
+    /// the function or one met down its chain, stands on any activation of that window: it is present in what is
+    /// read, not coming round. Where the two are the same, its interneuron is reused. The nearest meeting first,
+    /// the older interneuron on a tie.
     fn reuse(&self, f: &Func) -> Option<NeuronId> {
+        
         let lay = f.layout();
-        let mut out: Vec<(NeuronId, Pos)> = Vec::new();
-        let mut met: Vec<(NeuronId, Pos)> = Vec::new();
+        let add = |a: &Pos, b: &Offset| { let mut p = *a; for d in 0..MAX_DIMS { p[d] += b[d]; } p };
+        // the function's expansion down to base neurons, and the calls met inside its nodes' calls, each at its place
+        let mut out: Vec<(Sym, Pos)> = Vec::new();
+        let mut met: Vec<(Sym, Pos)> = Vec::new();
+        // every call in the function's expansion, its nodes and those down their chains, each at its place
+        let mut calls: Vec<(Sym, Pos)> = Vec::new();
+        let mut own_nodes: Vec<NeuronId> = Vec::new();
         for (i, m) in f.nodes.iter().enumerate() {
-            let mut q = [0i32; MAX_DIMS];
-            for d in 0..MAX_DIMS { q[d] += lay.position[i][d]; }
-            let mn = self.dict.neuron_of(*m);
-            if self.thalamus.get(mn).map_or(false, |x| x.alive && x.kind == Kind::Inter) { met.push((mn, q)); }
-            self.expand_from(*m, q, i64::MIN, false, &mut Vec::new(), &mut out, Some(&mut met));
+            let q = lay.position[i];
+            if *m < SYM_CALL { out.push((*m, q)); continue; }
+            own_nodes.push(self.dict.neuron_of(*m));
+            calls.push((*m, q));
+            for (s, d, _) in self.expansion_of(*m).iter() {
+                let p = add(&q, d);
+                if *s < SYM_CALL { out.push((*s, p)); } else { met.push((*s, p)); calls.push((*s, p)); }
+            }
         }
-        met.retain(|(_, p)| *p != [0; MAX_DIMS]);
-        met.sort_by_key(|(n, p)| (p.iter().map(|x| x.unsigned_abs()).sum::<u32>(), *n));
+        met.retain(|(s, _)| !own_nodes.contains(&self.dict.neuron_of(*s)));
+        met.sort_by_key(|(s, p)| (p.iter().map(|x| x.unsigned_abs()).sum::<u32>(), self.dict.neuron_of(*s)));
         met.dedup();
-        let mut tried: Vec<NeuronId> = Vec::new();
-        for (n, p) in met {
-            if tried.contains(&n) { continue; }
-            tried.push(n);
-            if self.dict.of_inter(n).is_empty() { continue; }
-            let mut own: Vec<(NeuronId, Pos)> = Vec::new();
-            self.expand_from(n, [0; MAX_DIMS], i64::MIN, false, &mut Vec::new(), &mut own, None);
+        out.sort();
+        out.dedup();
+        let mut tried: Vec<(Sym, Pos)> = Vec::new();
+        for (s, at) in met {
+            if tried.contains(&(s, at)) { continue; }
+            tried.push((s, at));
+            let n = self.dict.neuron_of(s);
+            if self.dict.of_inter(n).is_empty() || !self.thalamus.get(n).map_or(false, |x| x.alive) { continue; }
+            // the earlier call's own expansion, down to base neurons, from its position
+            let mut own: Vec<(Sym, Pos)> = self.expansion_of(s).iter().filter(|(x, _, _)| *x < SYM_CALL).map(|(x, d, _)| (*x, *d)).collect();
             if own.is_empty() { continue; }
-            // its length in each dimension: the extent its expansion spans back from its origin
+            // its length in each dimension, and the function's expansion over that length, aligned at the present end
             let (mut lo, mut hi) = ([0i32; MAX_DIMS], [0i32; MAX_DIMS]);
             for (_, q) in &own { for d in 0..MAX_DIMS { lo[d] = lo[d].min(q[d]); hi[d] = hi[d].max(q[d]); } }
-            if !(0..MAX_DIMS).all(|d| p[d].abs() <= hi[d] - lo[d] + 1) { continue; }
             let inside = |q: &Pos| (0..MAX_DIMS).all(|d| q[d] >= lo[d] && q[d] <= hi[d]);
-            let mut a: Vec<(NeuronId, Pos)> = out.iter().filter(|(_, q)| inside(q)).copied().collect();
-            let mut b = own;
+            let mut a: Vec<(Sym, Pos)> = out.iter().filter(|(_, q)| inside(q)).copied().collect();
+            own.sort();
+            own.dedup();
             a.sort();
-            b.sort();
-            if a == b { return Some(n); }
+            // whether a call of this interneuron stands on any activation of the window; narrowed (switch 10), only
+            // a call standing wholly inside it
+            let window: Vec<Pos> = a.iter().map(|x| x.1).collect();
+            let narrow = true;
+            let present = calls.iter().filter(|(c, _)| self.dict.neuron_of(*c) == n).any(|(c, cp)| {
+                let pts: Vec<Pos> = self.expansion_of(*c).iter().filter(|(x, _, _)| *x < SYM_CALL).map(|(_, d, _)| add(cp, d)).collect();
+                if narrow { !pts.is_empty() && pts.iter().all(|p| window.contains(p)) } else { pts.iter().any(|p| window.contains(p)) }
+            });
+            if present {
+                if self.trace { eprintln!("[reuse? f{}] {} meets {}: a call of #{} stands in the window", self.frame_no, self.dict.describe(f), self.dict.sym_text(s), n); }
+                continue;
+            }
+            if self.trace { eprintln!("[reuse? f{}] {} meets {} | its own {:?} | the function's over that length {:?}", self.frame_no, self.dict.describe(f), self.dict.sym_text(s), own, a); }
+            if a == own { return Some(n); }
         }
         None
     }
@@ -180,7 +203,11 @@ impl Machine {
                 }).collect();
                 for g in older {
                     if self.trace { if let Some(gf) = self.dict.get(g) { eprintln!("[gives way f{}] {} for {}", fno, self.dict.describe(gf), self.dict.describe(&f)); } }
-                    if let Some(gone) = self.dict.remove(g) { self.forget_expansions(g); self.retire(gone); }
+                    if let Some(gone) = self.dict.remove(g) {
+                        if self.trace_retire { eprintln!("[retire f{}] {} | gave way on reuse", self.frame_no, self.dict.describe(&gone)); }
+                        self.forget_expansions(g);
+                        self.retire(gone);
+                    }
                 }
                 self.dict.set_inter(f.id, n);
                 self.stats_reused += 1;
@@ -249,10 +276,46 @@ impl Machine {
         for &(a, b) in &fit.edges {
             if self.covered_rel.insert(edge(a, b)) { self.covered_edges.push(edge(a, b)); }
         }
+        // a relation read through a call and the relation to that call are one board relation: covered under
+        // either form, it is covered under both (switch 11, R50, D5)
+        {
+            let mut more: Vec<(ActRef, ActRef)> = Vec::new();
+            for &(a, b) in &fit.edges {
+                for (x, y) in [(a, b), (b, a)] {
+                    let Some(xa) = self.act(x) else { continue };
+                    // read through a call beside x: the relation to that call is covered too
+                    for br in &xa.rels {
+                        let Some(c) = self.act(br.other) else { continue };
+                        if c.covers.is_empty() || br.other == y { continue; }
+                        if self.under(c).contains(&y) { more.push(edge(x, br.other)); }
+                    }
+                    // the relation to a call landed on as a node: every relation it stands for is covered too
+                    if let Some(ya) = self.act(y) { if !ya.covers.is_empty() { for u in self.under(ya) { more.push(edge(x, u)); } } }
+                }
+            }
+            {
+                let mut t: Vec<ActRef> = fit.thru.clone();
+                t.extend(fit.calls.iter().map(|x| x.0));
+                t.extend(fit.landed.iter().map(|x| x.0).filter(|r| self.act(*r).map_or(false, |a| !a.covers.is_empty())));
+                t.sort();
+                t.dedup();
+                self.call_thru.insert(me, t);
+                self.call_fit.insert(me, fit.clone());
+            }
+            { let mut all: Vec<(ActRef, ActRef)> = fit.edges.iter().map(|&(a, b)| edge(a, b)).collect(); all.extend(more.iter().copied()); all.sort(); all.dedup(); self.call_edges.insert(me, all); }
+            for e in more { if self.covered_rel.insert(e) { self.covered_edges.push(e); } }
+        }
         for r in &covers {
             if let Some(a) = self.act_mut(*r) {
                 if a.covered_at.is_none() { a.covered_at = Some((fno - r.frame) as u32); }
                 if !a.coverers.contains(&me) { a.coverers.push(me); }
+            }
+        }
+        // switch 11: what the call covered, each at its offset from it, kept for as long as rows may name it (R28)
+        {
+            if let Some(ca) = self.act(me) {
+                let rec: Vec<(Sym, Offset)> = self.under(ca).into_iter().filter_map(|u| self.act(u).map(|ua| (ua.sym, offset_between(ca, ua)))).collect();
+                self.covered_by.insert(me, rec);
             }
         }
         // every row that saw what it covers, outside what it stands for, holds the call in its pose at its offset
@@ -266,14 +329,18 @@ impl Machine {
                     if v == me || under.contains(&v) { continue; }
                     let Some(va) = self.act(v) else { continue };
                     let off = offset_between(va, self.act(me).unwrap());
-                    writes.push((vn, v, *r, Nb { act: me, sym, off, base: *r }));
+                    writes.push((vn, v, *r, Nb::seen(me, sym, off, *r)));
                 }
             }
             let mut viewers: Vec<(NeuronId, ActRef)> = Vec::new();
             for (vn, v, old, nb) in writes {
-                if self.thalamus[vn].replace_seen(v, old, nb) && !viewers.contains(&(vn, v)) { viewers.push((vn, v)); }
+                // switch 16: the row keeps what it held and takes the call beside it
+                let took = { let _ = old; self.thalamus[vn].add_beside(v, nb) };
+                if took && !viewers.contains(&(vn, v)) { viewers.push((vn, v)); }
             }
             if let Some(a) = self.act_mut(me) { a.seen_by = viewers; }
+            // every row of what the call stands for keeps the edges it saved: those to what it also stands for (R50)
+            
         }
         // where the report built the strong call of a function an inference named weakly, the weak one goes (D40)
         if strong {
@@ -285,6 +352,9 @@ impl Machine {
             }
         }
         if self.trace { eprintln!("[accept f{} l{}] {} at {:?} as {} covers {} failed {:?}", fno, level, self.dict.describe(&f), origin.pos, self.dict.sym_text(sym), covers.len(), fit.failed); }
+        // with functions that never change, a fit that stepped onto its own earlier call counts that step as one
+        // more row for the relation it stepped by, in the row of the activation it stepped from (switch 8)
+        
         minted
     }
 }

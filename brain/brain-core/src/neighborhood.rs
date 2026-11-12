@@ -82,14 +82,22 @@ impl Machine {
                     let cr = ActRef { frame: f.no, index: i as u32 };
                     if cr == me || under.contains(&cr) { continue; }
                     let mut there = Vec::new();
+                    // switch 16: a covered activation is a neighbor as itself, with its call beside it
+                    if !c.on_apex() && !c.gone && self.stands(c, self.frame_no) && !(c.opened_at == self.frame_no && c.level > a.level) { there.push(cr); }
                     self.standing_at(cr, a.level, &mut there, 0);
+                    // and every call there is seen through: every activation it stands for, at any depth, each as
+                    // itself at its own offset (switch 16, D4, D5)
+                    {
+                        let calls: Vec<ActRef> = there.iter().copied().filter(|r| self.act(*r).map_or(false, |x| !x.covers.is_empty() && x.on_apex())).collect();
+                        for c2 in calls { if let Some(ca) = self.act(c2) { let mut u: Vec<ActRef> = self.under(ca).into_iter().collect(); u.sort(); there.extend(u); } }
+                    }
                     for r in there {
                         if r == me || under.contains(&r) || !seen.insert(r) { continue; }
                         let Some(x) = self.act(r) else { continue };
                         if !self.cfg.policy.past[a.kind as usize][x.kind as usize] { continue; }
                         // only the activation itself is excluded: two at one position are neighbors at offset zero
                         let off = offset_between(a, x);
-                        out.push(Nb { act: r, sym: x.sym, off, base: r });
+                        out.push(Nb::seen(r, x.sym, off, r));
                     }
                 }
             }

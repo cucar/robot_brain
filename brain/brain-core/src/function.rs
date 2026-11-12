@@ -286,6 +286,16 @@ impl Dictionary {
         self.sym_index.insert((n, pose), s);
         s
     }
+    /// The symbol of an interneuron in a pose where one is allotted already.
+    pub fn find_sym(&self, n: NeuronId, pose: Pose) -> Option<Sym> { self.sym_index.get(&(n, pose)).copied() }
+    /// A call's symbol in its pose less its laps (D25): the node it started at and the node it stands at.
+    pub fn sym_no_laps(&mut self, s: Sym) -> Sym {
+        match self.pose_of(s) { Some(p) if p.laps > 0 => { let n = self.neuron_of(s); self.sym_of(n, Pose { laps: 0, ..p }) } _ => s }
+    }
+    /// The same, reading only symbols already allotted.
+    pub fn sym_no_laps_read(&self, s: Sym) -> Sym {
+        match self.pose_of(s) { Some(p) if p.laps > 0 => self.find_sym(self.neuron_of(s), Pose { laps: 0, ..p }).unwrap_or(s), _ => s }
+    }
     /// Every symbol of a neuron, and its poses are forgotten: a neuron allocated again names its poses afresh.
     pub fn drop_syms(&mut self, n: NeuronId) -> Vec<Sym> {
         let mut v = vec![n];
@@ -300,7 +310,6 @@ impl Dictionary {
             Some(p) => format!("#{}<{}..{}x{}>", self.neuron_of(s), format!("#{}", p.from), format!("#{}", p.to), p.laps),
         }
     }
-    fn sym_text_short(&self, s: Sym) -> String { if s < SYM_CALL { format!("#{}", s) } else { format!("#{}'", self.neuron_of(s)) } }
 
     /// Functions with the same relations and origin (D36).
     pub fn find_key(&self, key: &(Sym, Vec<Rel>)) -> Option<FuncId> {
@@ -370,6 +379,29 @@ impl Dictionary {
         self.reindex(id, &before, &after);
         if empty { return (cut, self.remove(id)); }
         (cut, None)
+    }
+
+    /// A function's nodes, relations and where each is counted, replaced in place (switch 19): its relations
+    /// indexed afresh and its nodes reindexed.
+    pub fn replace_body(&mut self, id: FuncId, g: &Func) {
+        let Some(f) = self.funcs.get_mut(&id) else { return };
+        let before = f.nodes.clone();
+        let old = f.rels.clone();
+        f.nodes = g.nodes.clone();
+        f.rels = g.rels.clone();
+        f.at = g.at.clone();
+        let after = f.nodes.clone();
+        for r in &old { if self.by_rel.get(r) == Some(&id) { self.by_rel.remove(r); } }
+        for r in &g.rels { self.by_rel.insert(*r, id); }
+        self.reindex(id, &before, &after);
+    }
+
+    /// A function's origin set to one of its nodes (switch 21), the others in their order.
+    pub fn set_origin(&mut self, id: FuncId, o: Sym) {
+        let Some(f) = self.funcs.get_mut(&id) else { return };
+        let Some(i) = f.nodes.iter().position(|x| *x == o) else { return };
+        let n = f.nodes.remove(i);
+        f.nodes.insert(0, n);
     }
 
     /// Take a function out of the dictionary (R18, R38); returns it.

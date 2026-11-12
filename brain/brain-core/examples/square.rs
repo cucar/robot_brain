@@ -1,6 +1,6 @@
 //! A single shape shown over and over: a 5x5 black image with a white 3x3 square in the middle, at (1..3, 1..3),
 //! each pixel firing black or white every frame, as in the MNIST example. Two frames per showing: the image, then
-//! the digit 0 with a reward of +1. Reports, per showing, the levels, what stands on the apex and how much of it
+//! the digit 0 with a reward of +1, then the context is reset. Reports, per showing, the levels, what stands on the apex and how much of it
 //! stood the time before, and the functions added; for the showings asked, every call each level made; at the
 //! end, the dictionary.
 //! With `hollow` as the fifth argument the middle is silent: only the black border reports, nothing at (1..3, 1..3).
@@ -55,6 +55,8 @@ fn main() {
         }
         last = ap;
         m.process_frame(&[Input { dim: dig, bucket: 0, pos: [0; MAX_DIMS] }], vec![Reward { reward: 1.0, channels: vec![digit], frames: 1 }]);
+        // each showing stands alone: nothing of it is on the board when the next is shown
+        m.reset_context();
     }
     let mut d: Vec<String> = m.dict.funcs.values().map(|f| m.dict.describe(f)).collect();
     d.sort();

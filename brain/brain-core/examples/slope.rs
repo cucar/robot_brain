@@ -1,7 +1,7 @@
 //! A straight line at an angle, shown over and over: a white image with a black line drawn across it, every pixel
 //! firing black or white every frame, as in the MNIST example. At 45° or less the line has one pixel per column,
 //! at y = round(x · tan angle); above 45°, one pixel per row, at x = round(y / tan angle). Two frames per showing:
-//! the image, then the digit 0 with a reward of +1. Reports, per showing, the levels and what stands on the apex;
+//! the image, then the digit 0 with a reward of +1, then the context is reset. Reports, per showing, the levels and what stands on the apex;
 //! for the last showing, every call each level made.
 //! usage: cargo run --release --example slope -- [angle=45] [showings=20] [size=9]
 use brain_core::machine::Machine;
@@ -51,6 +51,8 @@ fn main() {
         }
         last = ap;
         m.process_frame(&[Input { dim: dig, bucket: 0, pos: [0; MAX_DIMS] }], vec![Reward { reward: 1.0, channels: vec![digit], frames: 1 }]);
+        // each showing stands alone: nothing of it is on the board when the next is shown
+        m.reset_context();
     }
 }
 

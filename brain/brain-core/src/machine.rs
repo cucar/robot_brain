@@ -55,6 +55,18 @@ pub struct Config {
     pub columns: usize,
 }
 
+/// The one choice the build leaves open (switch 15): whether a relation stays on the board, a candidate and a relation
+/// that may start a function, while no call covers the relation itself, even where one of its ends now stands under a
+/// call (R50, D5). On by default.
+#[derive(Clone, Copy, Debug)]
+pub struct Switches {
+    pub s15_uncovered_relations: bool,
+}
+
+impl Default for Switches {
+    fn default() -> Self { Switches { s15_uncovered_relations: true } }
+}
+
 pub struct Machine {
     pub cfg: Config,
     pub act_dims: Vec<ActDim>,
@@ -88,9 +100,50 @@ pub struct Machine {
     /// Per interneuron, the farthest it has seen in each dimension, over its activations (D4).
     pub(crate) reach_of: FxHashMap<NeuronId, Pos>,
     pub(crate) stats_retired: usize,
+    /// Switch 21: each time a relation not at an end would have left were it allowed, by the test it met: its
+    /// strength below the threshold, its worth alone above its contribution, a higher gain in another function.
+    pub middle_strength: u64,
+    pub middle_worth: u64,
+    pub middle_join: u64,
+    /// Switch 21: each time an end relation's leaving took the function's origin with it.
+    pub origin_moves: u64,
+    /// Of those, the times two nodes tied for the latest; and whether the leaves at an origin and the relations that
+    /// stay in the middle are printed without the full trace (off by default; prints only, changes nothing).
+    pub origin_ties: u64,
+    pub trace_origin: bool,
+    pub(crate) middle_seen: FxHashSet<(Frame, FuncId, Rel, u8)>,
+    /// For the count only: relations that moved from one function into another, those only a fit of the first
+    /// election offered (switch 17), and moves of a relation that had moved before; candidates no longer read.
+    pub moves_total: u64,
+    pub moves_first: u64,
+    pub moves_again: u64,
+    pub move_count: FxHashMap<Rel, u32>,
+    pub reread_skips: u64,
+    /// For the count only: changes to a function whose interneuron already held a connection to an action.
+    pub changed_after_action: u64,
+    pub changed_after_action_funcs: FxHashSet<FuncId>,
+    /// A relation's two end counts, remembered for one grouping step, while no row changes (a speed-up only).
+    pub(crate) halved_memo: std::cell::RefCell<Option<FxHashMap<Rel, (u32, u32)>>>,
+    /// A relation's with and without at a node, given the set's relations there, remembered for one grouping step
+    /// while no row changes (a speed-up only).
+    pub(crate) answer_memo: std::cell::RefCell<Option<FxHashMap<(Sym, Sym, Offset, Vec<(Sym, Offset)>), (u32, u32)>>>,
+    /// Whether two activations stand over a shared one, remembered for one grouping step while nothing on the board
+    /// changes (a speed-up only).
+    pub(crate) share_memo: std::cell::RefCell<Option<FxHashMap<(ActRef, ActRef), bool>>>,
     pub last_stats: FrameStats,
     pub last_winners: Vec<Winner>,
     pub trace: bool,
+    /// Whether a relation standing alone or in a function of one relation joins on a tie (R54), where switch 4 is on;
+    /// with switch 4 off a tie joins, as in the build before it.
+    pub tie_join: bool,
+    /// print a line for every join, on a tie or by gain, and for every relation that joined and later left
+    pub trace_joins: bool,
+    /// relations that have joined a function, to tell a relation that joined and later left (diagnostic)
+    pub(crate) joined_ever: rustc_hash::FxHashSet<crate::function::Rel>,
+    /// The changes since the committed build, each on or off on its own, for measuring them (a diagnostic).
+    pub sw: Switches,
+    /// Print every function that leaves the dictionary, with why, a diagnostic.
+    pub trace_retire: bool,
     /// Print each level's counts as it finishes, a diagnostic.
     pub trace_levels: bool,
     /// A diagnostic: run no level above this one in a frame.
@@ -100,18 +153,28 @@ pub struct Machine {
     /// The coverage set per relation (D24): every board relation an accepted call covers, over the frames on the
     /// board; nothing lands on one again (D28).
     pub(crate) covered_rel: FxHashSet<(ActRef, ActRef)>,
+    /// switch 11: every call that fired, and what it covered, each at its offset from the call (R28): a call reads as
+    /// this whether or not its interneuron still has a function
+    pub(crate) covered_by: FxHashMap<ActRef, Vec<(Sym, Offset)>>,
+    /// switch 17: the board relations each call's fit covered
+    pub(crate) call_edges: FxHashMap<ActRef, Vec<(ActRef, ActRef)>>,
+    /// switch 17: per accepted call, the calls its fit named or read a node through
+    pub(crate) call_thru: FxHashMap<ActRef, Vec<ActRef>>,
+    /// switch 17: this frame's accepted fits, by their calls, so grouping reads what they landed on
+    pub(crate) call_fit: FxHashMap<ActRef, crate::recognize::Fit>,
     /// The calls the election running now has taken (D28): an activation they landed on may be landed on again
     /// in this election, each call covering relations of its own (D8, D10).
     pub(crate) electing: FxHashSet<ActRef>,
     /// Per call in its pose, every node its expansion puts back, at any depth, each at its offset from the call's
     /// position (R28, R50); read from the dictionary and dropped whenever the dictionary changes.
-    pub(crate) expansions: std::cell::RefCell<FxHashMap<Sym, std::rc::Rc<Vec<(Sym, Offset)>>>>,
+    pub(crate) expansions: std::cell::RefCell<FxHashMap<Sym, std::rc::Rc<Vec<(Sym, Offset, Vec<NeuronId>)>>>>,
     /// Per expansion kept, the functions it was read through: a change to one drops the expansions that used it.
     pub(crate) expansion_deps: std::cell::RefCell<FxHashMap<Sym, Vec<crate::function::FuncId>>>,
     /// Within one grouping, the histories stand still: per relation, the end it is read from and its strength,
     /// worked out once and dropped whenever a function changes.
-    pub(crate) held_memo: std::cell::RefCell<FxHashMap<crate::function::Rel, Option<(Sym, Sym, Offset)>>>,
-    pub(crate) strength_memo: std::cell::RefCell<FxHashMap<crate::function::Rel, u32>>,
+    pub(crate) held_memo: std::cell::RefCell<FxHashMap<(crate::function::Rel, Option<NeuronId>), Option<(Sym, Sym, Offset)>>>,
+    pub(crate) strength_memo: std::cell::RefCell<FxHashMap<(crate::function::Rel, Option<NeuronId>), u32>>,
+    pub(crate) returned_memo: std::cell::RefCell<FxHashMap<(crate::function::Rel, Option<NeuronId>), u32>>,
     /// A test: the machine recognizes and predicts but changes nothing of itself. No rows enter a history, no
     /// function is added, moved or pruned, no interneuron is allocated, no connection or reward is written,
     /// nothing is decommissioned.
@@ -155,18 +218,45 @@ impl Machine {
             last_fits: 0,
             reach_of: FxHashMap::default(),
             stats_retired: 0,
+            middle_strength: 0,
+            middle_worth: 0,
+            middle_join: 0,
+            origin_moves: 0,
+            origin_ties: 0,
+            trace_origin: false,
+            middle_seen: FxHashSet::default(),
+            moves_total: 0,
+            moves_first: 0,
+            moves_again: 0,
+            move_count: FxHashMap::default(),
+            reread_skips: 0,
+            changed_after_action: 0,
+            changed_after_action_funcs: FxHashSet::default(),
+            halved_memo: std::cell::RefCell::new(None),
+            answer_memo: std::cell::RefCell::new(None),
+            share_memo: std::cell::RefCell::new(None),
             last_stats: FrameStats::default(),
             last_winners: Vec::new(),
+            tie_join: false,
+            trace_joins: true,
+            joined_ever: Default::default(),
+            sw: Switches::default(),
+            trace_retire: false,
             trace: false,
             trace_levels: false,
             stop_after_level: None,
             covered_edges: Vec::new(),
             covered_rel: FxHashSet::default(),
+            covered_by: FxHashMap::default(),
+            call_edges: FxHashMap::default(),
+            call_thru: FxHashMap::default(),
+            call_fit: FxHashMap::default(),
             electing: FxHashSet::default(),
             expansions: std::cell::RefCell::new(FxHashMap::default()),
             expansion_deps: std::cell::RefCell::new(FxHashMap::default()),
             held_memo: std::cell::RefCell::new(FxHashMap::default()),
             strength_memo: std::cell::RefCell::new(FxHashMap::default()),
+            returned_memo: std::cell::RefCell::new(FxHashMap::default()),
             frozen: false,
             recognize_first: true,
         }
@@ -232,6 +322,7 @@ impl Machine {
         let start = std::time::Instant::now();
         self.frame_no += 1;
         let fno = self.frame_no;
+        self.middle_seen.clear();
         let mut stats = FrameStats { frame: fno, ..Default::default() };
 
         // the frame's base activations: strong where the world reported, weak where only an inference named them (D40)
@@ -271,6 +362,7 @@ impl Machine {
             let refs: Vec<ActRef> = self.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter().enumerate()
                 .filter(|(_, a)| a.opened_at == fno && a.level == level && !a.gone).map(|(i, _)| ActRef { frame: fno, index: i as u32 }).collect::<Vec<_>>()).collect();
             if refs.is_empty() { break; }
+            
             stats.levels += 1;
             let lt = std::time::Instant::now();
             let added_before = self.stats_added;
@@ -291,6 +383,7 @@ impl Machine {
         stats.added = self.stats_added;
         stats.reused = self.stats_reused;
         stats.retired = self.stats_retired;
+        
 
         // connect and infer (§7), then decommission what is due (R38)
         self.connect_all();
@@ -314,6 +407,9 @@ impl Machine {
         let keep_from = fno - self.max_reach_t.max(self.span_s) as i64 - 1;
         while self.frames.front().map_or(false, |f| f.no < keep_from) { self.frames.pop_front(); }
         self.covered_rel.retain(|(a, b)| a.frame >= keep_from && b.frame >= keep_from);
+        self.call_edges.retain(|c, _| c.frame >= keep_from);
+        self.call_thru.retain(|c, _| c.frame >= keep_from);
+        self.call_fit.clear();
         stats.elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
         self.last_stats = stats;
         self.last_winners = winners.clone();
@@ -381,11 +477,25 @@ impl Machine {
         if !self.frozen && self.recognize_first {
             let fired: FxHashSet<Sym> = refs.iter().filter_map(|r| self.act(*r)).map(|a| a.sym).collect();
             self.last_fits = fits.len();
+            // switch 17: grouping reads the fits this level's first election takes, and no other
+            self.call_fit.clear();
             let (mut accepted, mut minted) = self.elect(level, fits);
-            let left: Vec<Fresh> = fresh.iter().filter(|e| self.act(e.near).map_or(false, |a| a.on_apex()) && self.act(e.far).map_or(false, |a| a.on_apex())).copied().collect();
+            let first_taken: Vec<ActRef> = self.call_fit.keys().copied().collect();
+            // one count (switch 9): the level's rows are read as the first election left them, for starting and
+            // retiring between the two elections; the frame's end judges them again
+            
+            let left: Vec<Fresh> = if self.sw.s15_uncovered_relations {
+                // what the first election left on the board: every relation no call covers, its ends standing (switch 15)
+                fresh.iter().filter(|e| !self.covered_rel.contains(&crate::recognize::edge(e.near, e.far))
+                    && self.act(e.near).map_or(false, |a| !a.gone && self.stands(a, self.frame_no)) && self.act(e.far).map_or(false, |a| !a.gone && self.stands(a, self.frame_no))).copied().collect()
+            } else {
+                fresh.iter().filter(|e| self.act(e.near).map_or(false, |a| a.on_apex()) && self.act(e.far).map_or(false, |a| a.on_apex())).copied().collect()
+            };
             let rest: Vec<_> = found.iter().flat_map(|id| self.fits_of(*id)).collect();
             let board = self.board_rels();
             let changed = self.group(&rest, &left, &board, &fired);
+            let _ = first_taken;
+            self.call_fit.clear();
             self.span_s = self.board_span();
             let again: Vec<_> = changed.iter().filter(|id| self.dict.get(**id).is_some()).flat_map(|id| self.fits_of(*id)).collect();
             if self.trace { for f in &again { eprintln!("[fit2 f{} l{}] f{} entry {:?} at node {} landed {} calls {} edges {} failed {:?} laps {}", self.frame_no, level, f.func, f.entry.1, f.entry.0, f.landed.len(), f.calls.len(), f.edges.len(), f.failed, f.laps); } }
@@ -430,6 +540,13 @@ impl Machine {
             v[h] += 1;
         }
         v
+    }
+
+    /// Switch 21's count: the relations not at an end that would have left, by test, and the origins that moved.
+    pub fn middle_summary(&self) -> String {
+        let edges: usize = self.dict.funcs.values().map(|f| f.rels.len()).sum();
+        format!("dictionary: {} functions, {} edges | not at an end, would have left: {} (strength below the threshold {}, worth alone above its contribution {}, to join another function {}) | relation at the origin left {} (ties for the latest node {})",
+            self.dict.len(), edges, self.middle_strength + self.middle_worth + self.middle_join, self.middle_strength, self.middle_worth, self.middle_join, self.origin_moves, self.origin_ties)
     }
 
     pub fn describe_neuron(&self, id: NeuronId) -> String {

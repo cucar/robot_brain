@@ -24,6 +24,14 @@ pub struct Nb {
     pub sym: Sym,
     pub off: Offset,
     pub base: ActRef,
+    /// what the row first saw there, the neuron in its pose and its offset, kept through every rewrite (D10)
+    pub orig: Sym,
+    pub orig_off: Offset,
+}
+
+impl Nb {
+    /// A neighbor as the row first sees it.
+    pub fn seen(act: ActRef, sym: Sym, off: Offset, base: ActRef) -> Nb { Nb { act, sym, off, base, orig: sym, orig_off: off } }
 }
 
 /// One row of the history (D18): an activation, the pose it fired in, and the neighborhood it observed, with
@@ -34,6 +42,13 @@ pub struct Row {
     pub act: ActRef,
     pub own: Sym,
     pub nbs: Vec<Nb>,
+    /// the edges a call standing for both ends saved, each as the row first saw it (R50): set once, never cleared
+    pub saved: Vec<(Sym, Offset)>,
+    /// with functions that never change (switch 8): a relation counted for this row because a fit of its function
+    /// stepped from this row's activation onto its own earlier call there; it ages out with the row
+    pub extra: Vec<RelKey>,
+    /// one count (switch 9): relations this row holds that do not count, judged once its frame's elections were over
+    pub discount: Vec<RelKey>,
 }
 
 /// What the machine hands a neuron for one activation of the level (R20).
@@ -69,7 +84,7 @@ pub struct Neuron {
 }
 
 fn keys_of(row: &Row) -> Vec<RelKey> {
-    let mut k: Vec<RelKey> = row.nbs.iter().map(|nb| (row.own, nb.sym, nb.off)).collect();
+    let mut k: Vec<RelKey> = row.nbs.iter().map(|nb| (row.own, nb.sym, nb.off)).filter(|k| !row.discount.contains(k)).chain(row.extra.iter().copied()).collect();
     k.sort_unstable();
     k.dedup();
     k
@@ -107,7 +122,7 @@ impl Neuron {
         }
         let mut admitted: Vec<(ActRef, Sym, Vec<Nb>)> = Vec::new();
         for inp in inputs.into_iter().take(incoming) {
-            let row = Row { id: self.next_row, act: inp.act, own: inp.own, nbs: inp.nbs };
+            let row = Row { id: self.next_row, act: inp.act, own: inp.own, nbs: inp.nbs, saved: Vec::new(), extra: Vec::new(), discount: Vec::new() };
             self.next_row += 1;
             self.index_add(&keys_of(&row));
             admitted.push((row.act, row.own, row.nbs.clone()));
@@ -123,18 +138,76 @@ impl Neuron {
 
     /// A call landed on an activation this row saw (D10): the row holds the call in its pose at its offset where
     /// it held the activation, one relation per call, and the index follows. Returns whether the row held it.
-    pub fn replace_seen(&mut self, viewer: ActRef, old: ActRef, new: Nb) -> bool {
+    pub fn replace_seen(&mut self, viewer: ActRef, old: ActRef, new: Nb, apart: bool) -> bool {
         let Some(pos) = self.history.iter().rposition(|r| r.act == viewer) else { return false };
         let row = &self.history[pos];
-        let Some(base) = row.nbs.iter().find(|x| x.act == old || x.base == old).map(|x| x.base) else { return false };
+        let Some(first) = row.nbs.iter().find(|x| x.act == old || x.base == old).copied() else { return false };
         let before = keys_of(row);
         let row = &mut self.history[pos];
-        row.nbs.retain(|x| x.act != old);
-        if !row.nbs.iter().any(|x| x.act == new.act) { row.nbs.push(Nb { base, ..new }); }
+        if apart {
+            // every neighbor that stood at what the call covered now holds the call, each keeping what it first saw
+            let mut moved = false;
+            for x in row.nbs.iter_mut() {
+                if x.act == old { x.act = new.act; x.sym = new.sym; x.off = new.off; moved = true; }
+            }
+            if !moved { row.nbs.push(Nb { act: new.act, sym: new.sym, off: new.off, base: first.base, orig: first.orig, orig_off: first.orig_off }); }
+        } else {
+            row.nbs.retain(|x| x.act != old);
+            if !row.nbs.iter().any(|x| x.act == new.act) { row.nbs.push(Nb { base: first.base, ..new }); }
+        }
         let after = keys_of(&self.history[pos]);
         let gone: Vec<RelKey> = before.iter().filter(|k| !after.contains(k)).copied().collect();
         let came: Vec<RelKey> = after.iter().filter(|k| !before.contains(k)).copied().collect();
         self.index_sub(&gone);
+        self.index_add(&came);
+        true
+    }
+
+    /// A call standing for this row's activation was accepted (R50): every neighbor of the row that the call also
+    /// stands for, at any depth, is an edge it saved, and the row keeps that, what it first saw and where, for good.
+    pub fn mark_saved(&mut self, viewer: ActRef, under: &rustc_hash::FxHashSet<ActRef>) {
+        let Some(pos) = self.history.iter().rposition(|r| r.act == viewer) else { return };
+        let row = &mut self.history[pos];
+        let marks: Vec<(Sym, Offset)> = row.nbs.iter().filter(|x| under.contains(&x.base)).map(|x| (x.orig, x.orig_off)).collect();
+        for m in marks { if !row.saved.contains(&m) { row.saved.push(m); } }
+    }
+
+    /// A fit stepped from this row's activation onto its own function's earlier call (switch 8): the row counts once
+    /// more for that function's relation, and the index with it.
+    pub fn add_extra(&mut self, viewer: ActRef, key: RelKey) {
+        let Some(pos) = self.history.iter().rposition(|r| r.act == viewer) else { return };
+        let before = keys_of(&self.history[pos]);
+        if self.history[pos].extra.contains(&key) { return; }
+        self.history[pos].extra.push(key);
+        let after = keys_of(&self.history[pos]);
+        let came: Vec<RelKey> = after.iter().filter(|k| !before.contains(k)).copied().collect();
+        self.index_add(&came);
+    }
+
+    /// One count (switch 9): relations this row holds that do not count; the index drops them, and they stay
+    /// dropped for as long as the row lives.
+    pub fn discount(&mut self, viewer: ActRef, keys: &[RelKey]) {
+        let Some(pos) = self.history.iter().rposition(|r| r.act == viewer) else { return };
+        let before = keys_of(&self.history[pos]);
+        for k in keys { if !self.history[pos].discount.contains(k) { self.history[pos].discount.push(*k); } }
+        let after = keys_of(&self.history[pos]);
+        let gone: Vec<RelKey> = before.iter().filter(|k| !after.contains(k)).copied().collect();
+        self.index_sub(&gone);
+    }
+
+    /// The row's relations, as (its activation, the neighbor's activation, the key).
+    pub fn row_nbs(&self, viewer: ActRef) -> Vec<(ActRef, RelKey)> {
+        self.history.iter().rev().find(|r| r.act == viewer).map(|r| r.nbs.iter().map(|nb| (nb.act, (r.own, nb.sym, nb.off))).collect()).unwrap_or_default()
+    }
+
+    /// A call landed on an activation this row holds (switch 16, D10): the row keeps it and takes the call beside it.
+    pub fn add_beside(&mut self, viewer: ActRef, call: Nb) -> bool {
+        let Some(pos) = self.history.iter().rposition(|r| r.act == viewer) else { return false };
+        if self.history[pos].nbs.iter().any(|x| x.act == call.act) { return true; }
+        let before = keys_of(&self.history[pos]);
+        self.history[pos].nbs.push(call);
+        let after = keys_of(&self.history[pos]);
+        let came: Vec<RelKey> = after.iter().filter(|k| !before.contains(k)).copied().collect();
         self.index_add(&came);
         true
     }
@@ -155,7 +228,10 @@ impl Neuron {
     /// that names it.
     pub fn forget(&mut self, dead: &[Sym]) {
         self.index.retain(|k, _| !dead.contains(&k.0) && !dead.contains(&k.1));
-        for row in self.history.iter_mut() { row.nbs.retain(|nb| !dead.contains(&nb.sym)); }
+        for row in self.history.iter_mut() {
+            row.nbs.retain(|nb| !dead.contains(&nb.sym));
+            row.saved.retain(|(s, _)| !dead.contains(s));
+        }
         self.connections.retain(|(o, t, _), _| !dead.contains(o) && !dead.contains(t));
     }
 }

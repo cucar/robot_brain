@@ -10,12 +10,15 @@ use brain_core::types::*;
 const PATTERN: [f64; 6] = [1.0, -2.0, -3.0, 2.0, 3.0, -1.0];
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
+    let s15_off = std::env::args().any(|a| a == "--s15-off");
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off").collect();
     let laps: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(150);
     let h: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(256);
     let trace_laps: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
     let n = PATTERN.len();
     let mut m = Machine::new(h, Policy::events_to_actions(), 1);
+    if s15_off { m.sw.s15_uncovered_relations = false; }
     let ch = m.declare_channel("price", Some(("move", 2)), Some(("position", 2)), &[]);
     let (ev, ac) = (m.channels[ch as usize].event.unwrap(), m.channels[ch as usize].action.unwrap());
     let total = laps * n;

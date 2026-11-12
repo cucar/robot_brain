@@ -4,12 +4,15 @@ use brain_core::machine::Machine;
 use brain_core::types::*;
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
+    let s15_off = std::env::args().any(|a| a == "--s15-off");
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off").collect();
     let text = args.get(1).cloned().unwrap_or_else(|| "th ch sh wh th ch sh wh th ch sh wh th ch sh wh ".into());
     let r: i32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(1);
     let h: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(64);
     let dump = args.get(4).cloned().unwrap_or_else(|| "h".into());
     let mut m = Machine::new(h, Policy::all_on(), r);
+    if s15_off { m.sw.s15_uncovered_relations = false; }
     let ch = m.declare_channel("text", Some(("letter", 256)), None, &[]);
     let dim = m.channels[ch as usize].event.unwrap();
     let mut right = 0;

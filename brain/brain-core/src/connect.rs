@@ -60,7 +60,25 @@ impl Machine {
                 for (br, bs, _, bk, baxes, bpos, _) in &apex {
                     if !self.cfg.policy.past[a.kind as usize][*bk as usize] { continue; }
                     let Some(o) = self.conn_offset(a, *baxes, bpos, age) else { continue };
-                    nbs.push(Nb { act: *br, sym: *bs, off: o, base: *br });
+                    nbs.push(Nb::seen(*br, *bs, o, *br));
+                    // switch 16: with each call on the apex, what it covers, each as itself at its own offset
+                    {
+                        if let Some(ca) = self.act(*br) {
+                            if !ca.covers.is_empty() {
+                                let mut u: Vec<ActRef> = self.under(ca).into_iter().collect();
+                                u.sort();
+                                for ur in u {
+                                    if ur == me { continue; }
+                                    let Some(ua) = self.act(ur) else { continue };
+                                    if !self.cfg.policy.past[a.kind as usize][ua.kind as usize] { continue; }
+                                    // each at its own offset from the row's activation, in time as in space
+                                    let o2 = offset_between(a, ua);
+                                    if o2.iter().all(|v| *v == 0) { continue; }
+                                    if !nbs.iter().any(|x: &Nb| x.act == ur) { nbs.push(Nb::seen(ur, ua.sym, o2, ur)); }
+                                }
+                            }
+                        }
+                    }
                 }
                 if !nbs.is_empty() { followed.push((a.neuron, me, nbs)); }
                 let covered_before = a.covered_at.map_or(false, |c| c < age);
@@ -101,8 +119,18 @@ impl Machine {
         }
         for (n, me, nbs) in followed {
             if !self.thalamus[n].add_followed(me, &nbs) { continue; }
+            // one count (switch 9): what followed counts only where the earlier activation still stands
+            
             for nb in &nbs { if let Some(b) = self.act_mut(nb.act) { b.seen_by.push((n, me)); } }
         }
+        // a call's connections are keyed by its pose less its laps, and a call a connection names is named so (D25)
+        let (writes, shares) = {
+            let mut w2 = Vec::with_capacity(writes.len());
+            for (h, o, t, off, s) in writes { let (o, t) = (self.dict.sym_no_laps(o), self.dict.sym_no_laps(t)); w2.push((h, o, t, off, s)); }
+            let mut s2 = Vec::with_capacity(shares.len());
+            for (h, o, t, off, s) in shares { let (o, t) = (self.dict.sym_no_laps(o), self.dict.sym_no_laps(t)); s2.push((h, o, t, off, s)); }
+            (w2, s2)
+        };
         for (holder, own, target, off, share) in writes {
             let c = self.thalamus[holder].connections.entry((own, target, off)).or_default();
             c.strength += 1.0;
@@ -160,7 +188,8 @@ impl Machine {
             for (i, a) in f.acts.iter().enumerate() {
                 if a.opened_at != fno || a.gone || a.neuron == NeuronId::MAX { continue; }
                 let n = &self.thalamus[a.neuron];
-                let infs = n.connections.iter().filter(|((own, _, _), _)| *own == a.sym).map(|((_, t, o), c)| Inference { target: *t, offset: *o, strength: c.strength, estimate: c.estimate(), struck: false }).collect();
+                let mine = { self.dict.sym_no_laps_read(a.sym) };
+                let infs = n.connections.iter().filter(|((own, _, _), _)| *own == mine).map(|((_, t, o), c)| Inference { target: *t, offset: *o, strength: c.strength, estimate: c.estimate(), struck: false }).collect();
                 reads.push((f.no, i, infs));
             }
         }
