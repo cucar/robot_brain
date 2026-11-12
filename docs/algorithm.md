@@ -624,7 +624,8 @@ free, no interneuron is granted (R16, R24).
 >
 > | Thing | Field | What it holds | Costs |
 > |---|---|---|---|
-> | a function | relations | its relations, each a neuron relation as the neurons return it: two neurons, each in a pose, and an offset (D34), and which of its two ends it attached to the function at, where its worth is read (D57); together they name its nodes, one per neuron | one per relation; nothing per node or attachment |
+> | a function | relations | its relations, each a neuron relation as the neurons return it: two neurons, each in a pose, and an offset (D34), and which of its two ends it attached to the function at, where its worth is read, none for a relation of a cycle (D57); together they name its nodes, one per neuron | one per relation; nothing per node or attachment |
+> | | entry | that the function is in the dictionary | one |
 > | | origin | which of its nodes is the origin, its latest (D15); none where the latest node is in a cycle | nothing: the node list begins with it |
 > | | open nodes | which of its nodes are variables, each a class by id or a parameter (D38) | nothing |
 > | | interneuron | the neuron allocated for it, or none (D53) | nothing: the function is reached through it, not stated by it |
@@ -636,7 +637,7 @@ free, no interneuron is granted (R16, R24).
 > offset with the other end open or not, to the functions holding it, for finding (R53); and by what an
 > interneuron stands for, its expansion to base symbols, for reuse (R43) and for generalizing (R52).
 >
-> So a function of `m` relations costs `m`, whatever its nodes, and a class and a parameter cost nothing.
+> So a function of `m` relations costs `m + 1`, whatever its nodes, and a class and a parameter cost nothing.
 > Nothing here is the implementation's: these are the fields, and the costs are read over them.
 
 > **D36 — Interneuron index.** The dictionary (D56) reached three ways:
@@ -817,17 +818,19 @@ one position and the same shape at another cost the same, and nothing in the cos
 > being one (D55, D34): how many it takes to state a piece of the graph, over the fields the dictionary holds
 > (D56). Nothing is stored for it; the
 > cost is how the machine compares choices. Every edge costs the same, `1`, and a name costs nothing: a node
-> is in the graph through its edges, and a pose is a name (D8). Three things cost: a relation standing on the
-> apex; a failure, a relation of the function that did not come true where its call stands; and a binding, the
-> edge from a bound activation to the call it is an argument of. A call is a node like any other: it is in the
-> graph through its edges and costs nothing of its own, whatever it covers (D53).
+> is in the graph through its edges, and a pose is a name (D8). Three things cost on the apex: a relation
+> standing there; a failure, a relation of the function that did not come true where its call stands; and a
+> binding, the edge from a bound activation to the call it is an argument of. A call is a node like any other:
+> it is in the graph through its edges and costs nothing of its own, whatever it covers (D53). In the
+> dictionary a function costs its relations and one edge more, for its entry: the edge the dictionary holds it
+> by (D56). So one function of two relations costs less than two functions of one.
 >
 > | What | Edges |
 > |---|---|
 > | a bare activation on the apex | nothing of its own |
 > | a relation on the apex | `1` |
 > | a call on the apex | one per relation that did not come true, one per argument; nothing for itself (D12) |
-> | a function in the dictionary, of `m` relations | `m` (D56) |
+> | a function in the dictionary, of `m` relations | `m + 1`: its relations, and one for its entry (D56) |
 > | a class or a parameter, in the dictionary | nothing |
 
 The precision `P` and the neuron capacity `N` are the hardware's (§3), not prices. Neither enters a cost. They
@@ -862,16 +865,16 @@ occurs is what the worth measures (D57).
 > node of the latest activation it lands on, the node of the earliest, and the laps it read (D37). Without an
 > activation at the present that some node admits there is no fit.
 >
-> **A cycle is read round, lap after lap.** The relation that closes the cycle (D15) is matched again from the
-> node it reached, and the cycle's relations are matched again after it, one lap further back. The fit goes
-> round while that relation lands, and ends at the lap where it does not. The relation that closes the cycle
-> is never a failure: every fit of a cycle ends where it stops landing, and a lap read once is the cycle run
-> once (D12). So a node of the cycle may land on several activations, one per lap; how many is the call's laps
+> **A cycle is read round, lap after lap.** From the node the fit entered at, the cycle's relations are
+> matched one after another, each from the node the one before reached, round the cycle and round again
+> (D15). The fit goes round while they land, and ends at the first that does not. That relation is not a
+> failure, whichever of the cycle's relations it is: every fit of a cycle ends where the cycle stops landing.
+> So a cycle's call may stand on part of a lap, and its pose says the node it started at and the node it ended
+> at (D12, D37). A node of the cycle may land on several activations, one per lap; how many is the call's laps
 > (D53). Where the activation it reaches stands under an earlier call of the same function, the relation is
 > that call's own function going round, and the call takes the lap: it is the same call, its pose that much
 > longer, and no new call is made (D53). Nothing is read past
-> the cycle. A relation of the cycle's body came true when it held anywhere in the fit, and did not
-> when it held nowhere.
+> the cycle.
 >
 > **Coming true.** Each relation of a function comes true or does not. It comes true where the board holds a
 > relation of its dimension and offset whose near end is the end already landed and whose far end is what the
@@ -918,8 +921,8 @@ A neuron the function does not name is in neither: it costs what it cost whether
 > |---|---|
 > | with | the activations of that neuron at which the function's other relations at it held, and this relation held with them |
 > | without | the activations at which the function's other relations at it held, and this relation did not |
-> | worth of a relation | `with − without − 1`: one relation saved at each occasion it held with the function, one failure at each it did not, and one relation in the dictionary (D13). The relation that closes a cycle has no `without`: where it does not land the lap ends, and that is never a failure (D54) |
-> | worth of a function | the sum of its relations' worths, less one binding for each variable at each occasion its node held with the function (D13). A call costs nothing of its own, and what it fails is in its relations' `without` |
+> | worth of a relation | `with − without − 1`: one relation saved at each occasion it held with the function, one failure at each it did not, and one relation in the dictionary (D13). A relation of a cycle is counted at every occurrence, its strength less one, with no `without`: the cycle's call covers it wherever it holds, on part of a lap as on a whole one, and where the next relation does not land the lap ends, which is never a failure (D54) |
+> | worth of a function | the sum of its relations' worths, less one for its entry in the dictionary, less one binding for each variable at each occasion its node held with the function (D13). A call costs nothing of its own, and what it fails is in its relations' `without` |
 >
 > **No neuron counts the function.** A neuron's rows hold the relations at its own activations and nothing
 > beyond (D18), so an end of a relation sees of the function only the relations the function has at that
@@ -928,18 +931,19 @@ A neuron the function does not name is in neither: it costs what it cost whether
 > its relations, each from the neuron that holds it, and no neuron and no reading sees the whole.
 >
 > **A call costs nothing, so every relation saves one at each occasion.** A function of one relation is worth
-> its occasions less one: its call covers one relation for nothing and is taken from its second occasion (R24),
-> and the function stays until its relation's strength slides below 2 (R18). Nothing is built on one
-> occurrence (R21).
+> its occasions less two, one for its relation and one for its entry. It is worth nothing at two occasions, so
+> it starts at its third (R50). Its call covers one relation for nothing wherever it is taken (R24), and the
+> function stays until its relation's strength slides below 3 (R18). Nothing is built that is worth nothing.
 >
 > **A relation's contribution to a function** is the function's worth with it less its worth without it, every
 > other relation priced with it and without it, since each is conditioned on the others. Alone, in a function
-> of its own, its contribution is that function's worth, its strength less one. A relation's own worth in a
+> of its own, its contribution is that function's worth, its strength less two. A relation's own worth in a
 > function and its contribution
 > differ: a relation can be worth something beside another while the two together are worth less than that
 > other alone. **Every move is priced by the dictionary's worth**, the sum of its functions' worths, before and
-> after, over every function the move touches: a move is made where that total rises, and on a tie where it
-> leaves fewer functions (R54). So no sequence of moves on the same histories comes back to where it started.
+> after, over every function the move touches: a move is made where that total rises and nowhere else, since
+> the machine does nothing that does not help (R54). So no sequence of moves on the same histories comes back
+> to where it started.
 > The neurons' histories are the whole record, over the last `H` activations of each (D18), so a relation that
 > stops recurring sees its `with` and its strength slide out, its contribution fall below zero everywhere, and
 > leaves (R18). Worth measures what a
@@ -1002,8 +1006,8 @@ is stated here and cited from there.
 > more activations than they have: every occasion one of them held, and every occasion its relations held
 > with a neuron at a variable's node that none of them holds there (D47). And it is one entry in the
 > dictionary where they are several. Where its worth is higher than their worths together, it joins the
-> dictionary and they leave it. On a tie it joins too, since that leaves fewer functions (R54). Where its
-> worth is lower, it is not made, and they stay.
+> dictionary and they leave it. Its one entry against their several is in that comparison (D13). Where its
+> worth is not higher, it is not made, and they stay (R54).
 >
 > So a general function that saves nothing at an activation is never taken: one relation for one binding, or
 > two relations for two. A class fits only its members (D41), so a function over a class has no occasion the
@@ -1022,7 +1026,7 @@ is stated here and cited from there.
 > none (D15): they are paired from any node, every way the cycle allows, and the pairing that lands every
 > relation is taken.
 
-Generalizing needs two functions to start from, each built on something that came round twice. After that, a
+Generalizing needs two functions to start from, each built on something that recurred. After that, a
 new thing fits the general function directly: any neuron for a parameter, and a member for a class.
 
 ## 3.12 The objective
@@ -1270,7 +1274,7 @@ frame reported, each after it over what the level before accepted, until a level
 | find       | Read every returned relation in the index, as it is and with either end open, and fit every function it reaches on the board wherever its relations match, one fit per position (R53, D31). |
 | elect      | Take the fits best first, the largest coverage less price each round, stopping when the board is covered (R24). The dictionary as it stands covers what it knows before anything in it changes. |
 | count      | Hand each neuron every function it stands in, fit at this level or not, with the candidates of the ones that fit, and call `count` on it: it returns with and without for each relation and each candidate (R50, D47). |
-| group      | Over those counts, move each relation where the dictionary's worth rises most, to a function it is a candidate of, one that closes a cycle before one that adds a node, the nearest on a tie, to its own function or to none, and start a function for each recurring relation no function holds (R50, R54, R18). |
+| group      | Over those counts, move each relation where the dictionary's worth rises most, to a function it is a candidate of, one that closes a cycle before one that adds a node, the nearest on a tie, to its own function or to none, and start a function for each relation no function holds that is worth one (R50, R54, R18). |
 | elect      | Fit every function that changed or formed in group on what the first election left, and elect again over those fits the same way (R24). |
 | allocate   | Give each accepted function with no interneuron one, reused where a stretch comes round (R43), allocated otherwise where a neuron is free (R16). It fires at the next level. |
 
@@ -1388,7 +1392,8 @@ argument.
 > activations behind it, as a returned relation is (R21). A relation of a
 > neuron to itself is read in one direction, from an activation toward the one its offset reaches (D34): a row
 > holds it where that neighbor stands, whether or not the same neighbor stands at the opposite offset, so the
-> ends of a run count as its middle does.
+> ends of a run count as its middle does. A relation of a cycle is counted at no one node: every occurrence of
+> it counts, and its count is its strength, the larger of what its two ends return (R21, D57).
 
 > **A relation forward in time is read once the row has taken what followed** (D18). A relation backward in
 > time from an activation is on its row when the row is written, and is read at once. A relation forward in
@@ -1412,19 +1417,21 @@ argument.
 > **Distance and worth.** A candidate's distance to a function is `1 − with / (with + without)`: zero where it
 > stood at every occasion the function did, one where it never did. Its worth in the function is
 > `with − without − 1`: one relation saved at each occasion it held with the function, a failure at each it did
-> not, and its one relation in the dictionary, with no `without` for the relation that closes a cycle, since a
-> lap's end is not a failure (D57, D54). A candidate joins the function where its gain is highest, the
-> function's worth with it less without it, where that is at least its worth alone or in a function of one
-> relation, and higher than its contribution in a function of more (R54); among the candidates of one function
+> not, and its one relation in the dictionary. A candidate that closes a cycle, and every relation of the
+> cycle from then on, is counted at every occurrence, its strength less one: the cycle's call covers it
+> wherever it holds, and a lap's end is not a failure (D57, D54). A candidate joins the function where its
+> gain is highest, the function's worth with it less without it, where that is higher than its worth alone
+> and higher than its contribution in the function it is in (R54); among the candidates of one function
 > that pay, one that leads back to a node the function has, closing its cycle, joins before one that would add
 > a node (D15); and where two functions tie, the one it is nearest to (D57, R54). A relation of a function
-> leaves it for one of its own where its worth alone is higher than its contribution, and for nothing once the
-> neurons return it with strength below 2 (R54, R18): that asks whether it recurs at all, so it is read over
+> leaves it for one of its own where its worth alone is higher than its contribution, and for nothing once it
+> is worth nothing: the neurons return it with strength below 2, or below 3 where it is its function's only
+> relation and the entry is its to pay (R54, R18). That asks whether it recurs at all, so it is read over
 > every row that holds it (D47), where a worth is read over the rows that have taken what followed. A relation
-> the neurons returned with strength 2 or more that no function
-> holds starts a function of its own, two nodes and an offset, worth its strength less one (D57), fit wherever
-> it fits and taken where it covers its relation (R24). A relation held once is left where it is: nothing is
-> built on one occurrence (R21).
+> the neurons returned with strength 3 or more that no function
+> holds starts a function of its own, two nodes and an offset, worth its strength less two (D57), fit wherever
+> it fits and taken where it covers its relation (R24). A relation held less often is left where it is:
+> nothing is built that is worth nothing (R21).
 >
 > **Which relation it is, and where none is built.** A relation to a call stands for the relations to every
 > activation the call's function names (D5). They are one board relation, and a function that starts on it
@@ -1435,9 +1442,9 @@ argument.
 > them (D10): `th` and `he` over one `h` never relate, and `the` is `e` after `th`.
 >
 > **Relations join only through a node, and a function grows toward its past.** A candidate is attached at the
-> node it shares, so every function stays connected (D15). Where both its ends are nodes of the function, it is
-> attached at the end whose activation returned it: a node read through a call is never the end a relation
-> attaches at (R50). Nothing joins a function at a later frame than its
+> node it shares, so every function stays connected (D15). Where both its ends are nodes of the function it
+> closes the cycle, and it is attached at no one node: a relation of a cycle is counted at every occurrence
+> (D57). Nothing joins a function at a later frame than its
 > origin: an activation after the call sees the call, standing at its position (D5), and the relation it brings,
 > from itself back to the call, is a function at the level above, over the call (R26). Two relations that never
 > touch are never one function: where they recur together, the level above relates their two calls.
@@ -1450,20 +1457,19 @@ argument.
 > moves, and each is the same decision, whether the dictionary's worth rises (D57), read from the neurons the
 > functions stand in (R50). A relation's **gain** in a function is that function's worth with it less without
 > it; its **contribution** where it stands is the same for the function it is in, and alone its strength less
-> one, every number read at the node it attaches or would attach at, over the rows that have taken what
-> followed (R50):
+> two, its relation and its entry, every number read at the node it attaches or would attach at, over the rows
+> that have taken what followed, and a relation of a cycle at every occurrence (R50):
 >
 > | Move | When |
 > |---|---|
-> | a relation joins | its gain in the function is at least its contribution where it stands, alone or in a function of one relation, or higher than its contribution in a function of more; and higher than its gain in any other function it is a candidate of, the nearest on a tie (R50) |
+> | a relation joins | its gain in the function is higher than its contribution where it stands, alone or in a function; and higher than its gain in any other function it is a candidate of, the nearest on a tie (R50) |
 > | a relation leaves for a function of its own | its worth alone is higher than its contribution to its function, and higher than its gain in any function it is a candidate of |
-> | a relation leaves for nothing | the neurons return it with strength below 2, over every row that holds it (R18) |
-> | two functions merge | a relation of one is a candidate of the other and joins it, and the rest follow one at a time, each where its gain is higher, and the last on a tie |
+> | a relation leaves for nothing | the neurons return it with strength below 2, or below 3 where it is its function's only relation, over every row that holds it (R18) |
+> | two functions merge | a relation of one is a candidate of the other and joins it, and the rest follow one at a time, each where its gain is higher; the last gains the entry its function no longer pays |
 
-> **A tie joins.** Two relations save the same edges in one function as in two, so the edges never prefer one
-> function over two. The join is preferred for what they do not price: one interneuron where there were two,
-> and a cycle whose laps are a number in one pose (D53). So a move is made where the dictionary's worth rises,
-> and on a tie where it leaves fewer functions.
+> **Nothing moves on a tie.** The machine does nothing that does not help: a move is made where the
+> dictionary's worth rises and nowhere else. Two relations that save the same edges in one function as in two
+> join all the same, for the entry: one function pays one where two pay two (D13).
 >
 > A relation that leaves its function of one relation leaves that function empty, and the function goes with
 > it (R18). A function keeps its interneuron through every move: what the interneuron stands for moves with its
@@ -1475,8 +1481,9 @@ argument.
 
 > **R18 — Prune.** A relation leaves its function where its contribution there is lower than its gain
 > elsewhere, in a function of its own or in another (R54), and leaves for nothing once the neurons return it
-> with strength below 2, over every row that holds it (D47, D57), read at every level a neuron standing in the
-> function fires at, fit or not (R50). A relation that leaves for
+> with strength below 2, or below 3 where it is its function's only relation and worth nothing there, over
+> every row that holds it (D47, D57), read at every level a neuron standing in the function fires at, fit or
+> not (R50). A relation that leaves for
 > nothing stands bare wherever it holds. A function leaves the dictionary when its last relation does.
 > **Relations leave one at a time**, the one that gains most by leaving first, and the function's other
 > relations are priced again before the next leaves, since what fails beyond a relation that left is priced
@@ -1599,8 +1606,8 @@ one fit**, which is what stops an activation being paid for twice.
 > function, the one reached from the older activation.
 >
 > **The bound is structural.** A fit is taken only while it covers more than it costs. A pair whose relation
-> came true covers one for nothing, so a pair is taken where it stands bare, and nothing recurs twice without a
-> call. Each round takes one fit, so the rounds are never more than the fits.
+> came true covers one for nothing, so a pair in the dictionary is taken where it stands bare. Each round
+> takes one fit, so the rounds are never more than the fits.
 >
 > **A fit that never reached the top held nothing.** There is nothing to hand back and nothing to settle: an
 > activation it landed on is either covered by a fit that did pay or stands bare.
