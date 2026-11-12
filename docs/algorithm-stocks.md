@@ -154,9 +154,9 @@ as bar 3 did, rise-after-rise at strength 2. At bar 6 `RF` fits on bars 5 and 6,
 (D5): 1 for nothing, and `RF`'s call stays on the apex, since `FR` does not name it (D10). At bar 2 `RF`
 fits, its `rise` read through `FR`'s call, and rise-after-fall, the relation `FR`'s function holds, is a
 candidate of `RF`'s function: it shares the `rise` at bar 1 with the fit and leads back to `fall`, a node the
-function has, so it would close the cycle `fall` after `rise` and `rise` after `fall` (R50, D15). A relation
-of a cycle is counted at every occurrence (D57). Fall-after-rise has occurred five times and rise-after-fall
-four:
+function has, so it would close the cycle `fall` after `rise` and `rise` after `fall` (R50, D15). With it the
+function is a cycle and nothing else, so its relations are counted at every occurrence (D57). Fall-after-rise
+has occurred five times and rise-after-fall four:
 
 | at bar 2 of lap 3 | saved | relations in the dictionary | entries | worth |
 |---|---|---|---|---|

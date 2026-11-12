@@ -929,7 +929,7 @@ A neuron the function does not name is in neither: it costs what it cost whether
 > |---|---|
 > | with | the activations of that neuron at which the function's other relations at it held, and this relation held with them |
 > | without | the activations at which the function's other relations at it held, and this relation did not |
-> | worth of a relation | `with − without − 1`: one relation saved at each occasion it held with the function, one failure at each it did not, and one relation in the dictionary (D13). A relation of a cycle is counted at every occurrence, its strength less one, with no `without`: the cycle's call covers it wherever it holds, on part of a lap as on a whole one, and where the next relation does not land the lap ends, which is never a failure (D54) |
+> | worth of a relation | `with − without − 1`: one relation saved at each occasion it held with the function, one failure at each it did not, and one relation in the dictionary (D13). **A relation counts in a function only where that function lands.** In a function that is a cycle and nothing else, every relation of it on the cycle, that is every occurrence: each is counted at every occurrence, its strength less one, with no `without`, since the cycle's call covers it wherever it holds, on part of a lap as on a whole one, and where the next relation does not land the lap ends, which is never a failure (D54). A relation of a cycle in a function that has other relations is read at its ends as any relation is, since the function lands only where those hold |
 > | worth of a function | the sum of its relations' worths, less one for its entry in the dictionary, less one binding for each variable at each occasion its node held with the function (D13). A call costs nothing of its own, and what it fails is in its relations' `without` |
 >
 > **No neuron counts the function.** A neuron's rows hold the relations at its own activations and nothing
@@ -1419,8 +1419,15 @@ argument.
 > activations behind it, as a returned relation is (R21). A relation of a
 > neuron to itself is read in one direction, from an activation toward the one its offset reaches (D34): a row
 > holds it where that neighbor stands, whether or not the same neighbor stands at the opposite offset, so the
-> ends of a run count as its middle does. A relation of a cycle is counted at no one node: every occurrence of
-> it counts, and its count is its strength, half of what its two ends count together (R21, D57).
+> ends of a run count as its middle does.
+>
+> **A relation counts in a function only where that function lands** (D57). A function that is a cycle and
+> nothing else, every relation of it on the cycle, lands on every occurrence of its relations. So a relation
+> of it is counted at no one node: every occurrence of it counts, and its count is its strength, half of what
+> its two ends count together (R21). A function that has other relations lands only where those hold. So a
+> relation of its cycle is read at each of its two ends as any relation is, with the function's other
+> relations at that node, and the two readings are added and halved. Where both its ends are one node there is
+> one reading. A candidate is read by what the function would be with it.
 
 > **A relation forward in time is read once the row has taken what followed** (D18). A relation backward in
 > time from an activation is on its row when the row is written, and is read at once. A relation forward in
@@ -1439,9 +1446,11 @@ argument.
 > **Distance and worth.** A candidate's distance to a function is `1 − with / (with + without)`: zero where it
 > stood at every occasion the function did, one where it never did. Its worth in the function is
 > `with − without − 1`: one relation saved at each occasion it held with the function, a failure at each it did
-> not, and its one relation in the dictionary. A candidate that closes a cycle, and every relation of the
-> cycle from then on, is counted at every occurrence, its strength less one: the cycle's call covers it
-> wherever it holds, and a lap's end is not a failure (D57, D54). A candidate joins the function where its
+> not, and its one relation in the dictionary. Where a candidate closes a cycle and the function is then a
+> cycle and nothing else, it and every relation of the cycle from then on are counted at every occurrence,
+> their strength less one: the cycle's call covers them wherever they hold, and a lap's end is not a failure
+> (D57, D54). Where the function has other relations, the candidate is read at its ends with those relations,
+> since the function lands nowhere else. A candidate joins the function where its
 > gain is highest, the function's worth with it less without it, where that is higher than its worth alone
 > and higher than its contribution in the function it is in (R54); among the candidates of one function
 > that pay, one that leads back to a node the function has, closing its cycle, joins before one that would add
@@ -1469,8 +1478,9 @@ argument.
 >
 > **Relations join only through a node, and a function grows toward its past.** A candidate is attached at the
 > node it shares, so every function stays connected (D15). Where both its ends are nodes of the function it
-> closes the cycle, and it is attached at no one node: a relation of a cycle is counted at every occurrence
-> (D57). Nothing joins a function at a later frame than its
+> closes the cycle, and it is attached at no one node: it is counted at every occurrence where the function
+> is a cycle and nothing else, and at its two ends where the function has other relations (D57).
+> Nothing joins a function at a later frame than its
 > origin: an activation after the call sees the call, standing at its position (D5), and the relation it brings,
 > from itself back to the call, is a function at the level above, over the call (R26). Two relations that never
 > touch are never one function: where they recur together, the level above relates their two calls.
@@ -1484,7 +1494,8 @@ argument.
 > functions stand in (R50). A relation's **gain** in a function is that function's worth with it less without
 > it; its **contribution** where it stands is the same for the function it is in, and alone its strength less
 > two, its relation and its entry, every number read at the node it attaches or would attach at, over the rows
-> that have taken what followed, and a relation of a cycle at every occurrence (R50):
+> that have taken what followed, and a relation of a function that is a cycle and nothing else at every
+> occurrence (R50):
 >
 > | Move | When |
 > |---|---|
