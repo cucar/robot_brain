@@ -79,29 +79,42 @@ export class MNISTPixelChannelsEncoder {
 	}
 
 	/**
-	 * Declare a (2r+1)×(2r+1) neighborhood for each pixel channel — where r is `neighborhoodRadius`.
+	 * Declare per-level neighborhoods for each pixel channel — the LEVEL-BASED RADIUS.
+	 * A level-ℓ neuron at pixel (x, y) uses the (2r+1)×(2r+1) window with r = neighborhoodRadius + ℓ:
+	 * L0 sees the base radius (default 1 → 8 neighbors), L1 sees radius 2 (24), L2 radius 3 (48), …
+	 * Receptive fields therefore widen with hierarchy depth instead of at the base, so each level's
+	 * matching stays local relative to its vocabulary while coverage grows toward the whole image.
+	 * Neighborhoods stop growing once the radius covers the grid — deeper levels reuse the last (full) set.
 	 * Converts each linear pixel index to (x, y) and lists in-bounds neighbors as channel names.
 	 * Edge/corner pixels naturally get fewer neighbors.
 	 */
 	registerPixelNeighborhoods(brain) {
-		const r = this.neighborhoodRadius;
+		// Largest useful radius: covers the whole grid from any pixel (Chebyshev distance).
+		const maxRadius = this.imageSize - 1;
 		for (let p = 0; p < this.pixels; p++) {
 			const x = p % this.imageSize;
 			const y = Math.floor(p / this.imageSize);
-			const neighbors = [];
-			for (let dy = -r; dy <= r; dy++) {
-				for (let dx = -r; dx <= r; dx++) {
-					if (dx === 0 && dy === 0) continue;
-					const nx = x + dx;
-					const ny = y + dy;
-					if (nx < 0 || nx >= this.imageSize) continue;
-					if (ny < 0 || ny >= this.imageSize) continue;
-					neighbors.push(`px_${ny * this.imageSize + nx}`);
+			const levels = [];
+			for (let r = this.neighborhoodRadius; r <= maxRadius; r++) {
+				const neighbors = [];
+				for (let dy = -r; dy <= r; dy++) {
+					for (let dx = -r; dx <= r; dx++) {
+						if (dx === 0 && dy === 0) continue;
+						const nx = x + dx;
+						const ny = y + dy;
+						if (nx < 0 || nx >= this.imageSize) continue;
+						if (ny < 0 || ny >= this.imageSize) continue;
+						neighbors.push(`px_${ny * this.imageSize + nx}`);
+					}
 				}
+				levels.push(neighbors);
 			}
 			// MNIST neighborhoods are spatial (pixel co-activation), so declare them on the spatial
 			// side only; the temporal side stays all-pairs (irrelevant at context length 1).
-			brain.setSpatialNeighbors(`px_${p}`, neighbors);
+			brain.setSpatialNeighborLevels(`px_${p}`, levels);
+			// Retinotopic position of this pixel channel — the brain needs 2D coordinates (not just
+			// adjacency) to place units by compass direction for the above-base neighbor rule.
+			brain.setChannelPosition(`px_${p}`, x, y);
 		}
 	}
 
