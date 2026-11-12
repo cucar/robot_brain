@@ -136,50 +136,60 @@ later. `fall` at bar 2 records `rise` one back, and `fall` at bar 6 records the 
 fall-after-rise has strength 2. A function of one relation is worth nothing at two occasions, one for its
 relation and one for its entry, so nothing starts (D57, D13). The six bars stand bare.
 
-**Lap 2: the cycle of two.** At bar 1 rise-after-fall has strength 2, from bar 4 of lap 1 and this bar. At
-bar 2 fall-after-rise has strength 3 and starts a function (R50): nodes `rise` and `fall`, one relation,
-origin the `fall`. Its fit covers that relation for nothing and is taken: its interneuron, call it `RF`, fires
-at bar 2 and stands for bars 1 and 2. In the same frame rise-after-fall is a candidate: it shares the `rise`
-at bar 1 with the fit and leads back to `fall`, a node the function has, so it would close the cycle `fall`
-after `rise` and `rise` after `fall` (R50, D15). A relation of a cycle is counted at every occurrence (D57):
+**Lap 2: two pairs.** At bar 1 rise-after-fall has strength 2, from bar 4 of lap 1 and this bar. At bar 2
+fall-after-rise has strength 3, and grouping starts a function for it (R50): nodes `rise` and `fall`, one
+relation, origin the `fall`. Fit before the second election, it covers that relation for nothing and is taken
+(R24): its interneuron, call it `RF`, fires at bar 2 and stands for bars 1 and 2. Nothing joins it in this
+frame: candidates are counted before grouping, when it was not yet a function.
 
-| at bar 2 of lap 2 | saved | relations in the dictionary | entries | worth |
+At bar 3 fall-after-fall has strength 2 and starts nothing. It is a candidate of `RF`'s function, where it
+would close a cycle of one node, and it does not pay there: a `fall` has a `rise` before it or a `fall`, never
+both, so the two relations never hold in one row (D57). Bar 3 stands bare, with its relation to the call. At
+bar 4 rise-after-fall has strength 3, from bar 4 of lap 1 and bars 1 and 4 of this lap. Neither of its ends
+here stands under `RF`'s call, so it is no candidate of that function, and it starts one of its own, `FR`:
+nodes `fall` and `rise`, origin the `rise`, 1 for nothing, taken, standing for bars 3 and 4. Bar 5 stands bare
+as bar 3 did, rise-after-rise at strength 2. At bar 6 `RF` fits on bars 5 and 6, 1 for nothing.
+
+**Lap 3: the cycle of two, and three functions.** At bar 1 `FR` fits, its `fall` read through `RF`'s call
+(D5): 1 for nothing, and `RF`'s call stays on the apex, since `FR` does not name it (D10). At bar 2 `RF`
+fits, its `rise` read through `FR`'s call, and rise-after-fall, the relation `FR`'s function holds, is a
+candidate of `RF`'s function: it shares the `rise` at bar 1 with the fit and leads back to `fall`, a node the
+function has, so it would close the cycle `fall` after `rise` and `rise` after `fall` (R50, D15). A relation
+of a cycle is counted at every occurrence (D57). Fall-after-rise has occurred five times and rise-after-fall
+four:
+
+| at bar 2 of lap 3 | saved | relations in the dictionary | entries | worth |
 |---|---|---|---|---|
-| apart: the function of fall-after-rise, and rise-after-fall in none | 3 | 1 | 1 | 1 |
-| joined: one function of both | 5 | 2 | 1 | 2 |
+| apart: `RF`'s function, fall-after-rise | 5 | 1 | 1 | 3 |
+| apart: `FR`'s function, rise-after-fall | 4 | 1 | 1 | 2 |
+| joined: one function of both | 9 | 2 | 1 | 6 |
 
-Its gain is 1 and alone it is worth 0, so it joins (R54). Fit again, the function reads rise-after-fall from
-the `rise` at bar 1, which stands under the call just taken, onto the `fall` at bar 6 of lap 1. That is the
-call's own function going round, so the call takes the lap and stands for bars 6, 1 and 2 (D53).
+Its gain in `RF`'s function is 3 and its contribution in `FR`'s is 2, so it moves (R54). `FR`'s function is
+empty and goes with it (R18), and the function is the cycle of two, with `RF` as its interneuron.
 
-At bar 3 fall-after-fall has strength 2 and no function. The cycle enters at the `fall`, and fall-after-rise
-does not land, since a `fall` stands before it: nothing is covered and nothing is taken. Bar 3 stands bare,
-with its relation to the call. At bar 4 the cycle enters at the `rise`: rise-after-fall lands on the `fall`
-at bar 3, and fall-after-rise does not land beyond it, where the lap ends without a failure (D54). That is 1
-for nothing, taken: a second call of `RF`, on part of a lap, standing for bars 3 and 4. Bar 5 stands bare as
-bar 3 did, rise-after-rise at strength 2. At bar 6 the cycle enters at the `fall`, lands on the `rise` at
-bar 5 and ends there: a third call, bars 5 and 6.
+At bar 3 fall-after-fall has strength 3. `RF`'s function has its cycle now, so the relation is no candidate of
+it (R50), and it starts a function of its own: a cycle of one node, `FF`. Its fit reads `fall` after `fall`,
+the node read through `RF`'s call (D54): 1 for nothing, taken, and `FF`'s call stands for bars 2 and 3, one
+lap (D53). At bar 4 the cycle of two enters at the `rise`: rise-after-fall lands on the `fall` at bar 3, read
+through `FF`'s call, and fall-after-rise does not land beyond it, where the lap ends without a failure (D54).
+That is 1 for nothing, taken: a call of `RF` on part of a lap, standing for bars 3 and 4. At bar 5
+rise-after-rise is at strength 3 the same way, `RR`, read through `RF`'s call. At bar 6 `RF` enters at the
+`fall`, lands on the `rise` at bar 5 through `RR`'s call and ends there: bars 5 and 6.
 
-**Lap 3: three functions, and every bar covered.** At bars 1 and 2 the relation is the function going round
-from the call that stands at bar 6, so that call takes each as a lap and stands for bars 5, 6, 1 and 2 (D53).
-At bar 3 fall-after-fall has strength 3 and starts a function: a cycle of one node, `FF`. It is no candidate
-of `RF`'s function, which has its cycle (R50). Its fit reads `fall` after `fall`, the node read through
-`RF`'s call (D54): 1 for nothing, taken, and `FF`'s call stands for bars 2 and 3, one lap (D53). `RF`'s call
-stays on the apex, since `FF` does not name it (D10). At bar 4 `RF` reads its `fall` through `FF`'s call, 1
-for nothing. At bar 5 rise-after-rise is at strength 3 the same way, `RR`, read through `RF`'s call. At bar 6
-`RF` reads its `rise` through `RR`'s call, and at bars 1 and 2 of the next lap that call takes the laps. So
-from bar 3 of lap 3 on, every bar's fit reads the bar before it, 1 for nothing, and the run costs nothing,
-for as long as it goes on. The dictionary holds three functions: the cycle of two and the two cycles of one
-node. Each bar's call is one neuron in one pose, and bars 2 and 6 share one but for its laps, `RF` from
-`fall` back to `rise`: the six bars are five situations before any chain forms.
+**Lap 4: every bar covered.** At bars 1 and 2 the relation is the function going round from the call that
+stands at bar 6, so that call takes each as a lap and stands for bars 5, 6, 1 and 2 (D53). Bars 3 to 6 go as
+in lap 3. So from bar 3 of lap 3 on, every bar's fit reads the bar before it, 1 for nothing, and the run
+costs nothing, for as long as it goes on. The dictionary holds three functions: the cycle of two and the two
+cycles of one node. Each bar's call is one neuron in one pose, and bars 2 and 6 share one but for its laps,
+`RF` from `fall` back to `rise`: the six bars are five situations before any chain forms.
 
-**Lap 4 and on: the chain.** A bar's neuron now sees the call one frame back, in its pose (D5), and a move
-after a particular call in a particular pose recurs. The poses of lap 3 recur in every lap after, so at bar 3
-of lap 5 `fall` after `RF` in its pose at bar 2 is at strength 3, and `{fall, RF@−1}`, the call named in that
+**Lap 5 and on: the chain.** A bar's neuron now sees the call one frame back, in its pose (D5), and a move
+after a particular call in a particular pose recurs. The poses of lap 4 recur in every lap after, so at bar 3
+of lap 6 `fall` after `RF` in its pose at bar 2 is at strength 3, and `{fall, RF@−1}`, the call named in that
 pose, is a function. Its fit covers the relation to the call; `FF`'s fit at the same bar reads its
 node through the call and covers the same relation (D54):
 
-| fit at bar 3, lap 5 | coverage | price |
+| fit at bar 3, lap 6 | coverage | price |
 |---|---|---|
 | `FF`, its node read through `RF`'s call | 1 | 0 |
 | the link, `fall` after `RF` in that pose | 1 | 0 |
