@@ -73,7 +73,10 @@ One stretch is four frames of cues: `go` at frames 0, 1 and 2, and `stop` at fra
      1 and the others at age 0, and they write nothing more.
    - `gos`: its call at the second `go` stands uncovered through the next frame, where a tap ran, and so does
      its call at the third `go` in the second and third stretches. Its connections are keyed by its pose less
-     its laps (D25), so `gos` holds `tap` at `+1`, learned once for every length.
+     its laps (D25), so `gos` holds `tap` at `+1`, learned once for every length. The call stands for three
+     cues, so it stays open two frames (D9): in the second and third stretches, where nothing covers it, it
+     also takes the `done` that ran two frames after the third `go`, and `gos` holds `done` at `+2`. From the
+     fourth stretch `gos·stop` covers the call at age 1 and it writes nothing more.
    - `stop`: in the first three stretches it stands uncovered through the next frame, where `done` ran, so it
      holds `done` at `+1`. From the fourth stretch it is covered at age 0 and writes nothing more.
    - `gos·stop`: from the fourth stretch it stands uncovered through the next frame, where `done` ran, and
@@ -112,8 +115,9 @@ Shown `go` for five frames, the machine taps five times. The first `go` stands b
 second `go` on the cycle's call stands, each later `go` a lap of it, and its connection to `tap` is keyed by
 its pose less its laps, so it holds for every length (D25). At the `stop` the function of §2 does not fit: it
 names the cycle's call in its pose of two laps, and a pose is part of a call's name (D34). So `stop` stands
-bare, and it holds `done` at `+1` from the first three stretches. A function over the call at that length
-forms over its own stretches, as the one above did.
+bare, and it holds `done` at `+1` from the first three stretches. The cycle's call stands uncovered beside
+it at age 1, and holds `done` at `+2`, which names the same frame. Both say `done`, and it runs. A function
+over the call at that length forms over its own stretches, as the one above did.
 
 # 7. What this machine does not do
 

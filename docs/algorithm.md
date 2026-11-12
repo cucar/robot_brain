@@ -1493,6 +1493,13 @@ argument.
 > dictionary's worth rises and nowhere else. Two relations that save the same edges in one function as in two
 > join all the same, for the entry: one function pays one where two pay two (D13).
 >
+> **A relation leaves only from an end.** A relation leaves its function, for another function, for one of
+> its own or for nothing, only where the function's other relations still hold together without it (D15): at
+> an end of a chain, or in a cycle, which its leaving opens. A relation whose leaving would split the function
+> in two is not priced for leaving and does not leave. It stays until what lies beyond it on one side has
+> left, one relation at a time from that end. So relations leave as they join, at the ends, and no function
+> is ever priced in two parts.
+>
 > A relation that leaves its function of one relation leaves that function empty, and the function goes with
 > it (R18). A function keeps its interneuron through every move: what the interneuron stands for moves with its
 > function. A call that fired under an earlier form of the function expands to what it covered, not through
@@ -1508,11 +1515,9 @@ argument.
 > not (R50). A relation that leaves for
 > nothing stands bare wherever it holds. A function leaves the dictionary when its last relation does.
 > **Relations leave one at a time**, the one that gains most by leaving first, and the function's other
-> relations are priced again before the next leaves, since what fails beyond a relation that left is priced
-> anew. **A function stays connected** (D15): a
-> relation whose leaving breaks every path from the origin to a node takes with it each relation that reached
-> the function only through that path, and each of those goes where its gain is highest (R54), to the
-> function the leaving relation started, which they share a node with, to another, or to one of their own. A
+> relations are priced again before the next leaves. **A function stays connected** (D15): a relation leaves
+> only from an end, where the function's other relations still hold together without it, and one whose
+> leaving would split the function stays until what lies beyond it on one side has left (R54). A
 > class no function has any longer goes with its last function. A function's interneuron is decommissioned when due (R38).
 
 ## 6.2 Election
