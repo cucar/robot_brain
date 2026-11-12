@@ -1370,11 +1370,15 @@ argument.
 > neurons at the count step (§6.1), over their histories (D18, D47).
 >
 > **A candidate** is a board relation the neurons returned with strength 2 or more, this frame or at one
-> before while its activations still stand (D9), that the fit did not land on, and that shares a neuron with an
-> activation the fit landed on or with the call. Either the first election left it on the board, or the call
-> that covers it is one this fit names or read a node through (D54). So a relation another function holds is
-> offered where the fit touches that function's call, and whether it moves is decided by its gain here
-> against its contribution there (R54). A relation under a call the fit does not touch is no candidate. Its
+> before while its activations still stand (D9), that the fit did not land on, and that the fit touches in
+> one of two ways. The first election left it on the board, and it shares a neuron with an activation the fit
+> landed on or with the call. Or a call covers it, and the fit touches that call: the fit read a node through
+> the call, and the relation shares that node's activation, or the fit landed on the call as a node, and the
+> relation shares the activation the call stands at (D54). So a relation another function holds is offered
+> where the fit touches the call that covers it, and whether it moves is decided by its gain here against
+> its contribution there (R54). Where a relation under a call the function names joins, the function's
+> relation to that call is held from then on as the relation to the activation the call stands at, the node
+> the two share. A relation under a call the fit does not touch is no candidate. Its
 > other end is a
 > neuron the function does not name, which would be a new node, or a node the function has, which would close
 > the cycle where the function has none (D15). An activation that sees a call sees the activations under it
@@ -2296,7 +2300,7 @@ is to be rewalked under this document, with its graph and its costs written out.
 | Copy | [algorithm-copy.md](algorithm-copy.md) | Shown a digit and asked, the machine says it, by a parameter tying the digit shown to the digit said. |
 | Equal | [algorithm-equal.md](algorithm-equal.md) | Shown four digits in one frame and asked, the machine says the third where the first two are the same and the fourth where they differ. |
 | Hit | [algorithm-hit.md](algorithm-hit.md) | The machine hits whatever comes at it, wherever the two of them are, since a function is written in offsets and nothing else. |
-| Loop | [algorithm-loop.md](algorithm-loop.md) | Shown a cue, the machine taps until the world shows a second cue, then runs one more action: the taps a cycle, the second cue a function over its call, with no counter. |
+| Loop | [algorithm-loop.md](algorithm-loop.md) | The world shows `go` or `stop` in every frame, and the machine taps in the frame after every `go` and runs nothing after a `stop`: the tap a function with the `go` before it, the loop the world's, with no counter. |
 | MNIST | [algorithm-mnist.md](algorithm-mnist.md) | An image channel with two spatial dimensions and two base neurons, black and white, every pixel firing one of them; runs of one color become lines, lines become strokes and corners, and so on up; a digit action taught by demonstration and resolved by a vote. |
 | Stocks | [algorithm-stocks.md](algorithm-stocks.md) | A price channel per instrument with own and disown as its actions, a world that runs the right action wherever the machine has none, and a reward scoped to the channel and the frame. |
 | Text | [algorithm-text.md](algorithm-text.md) | A stream of letters: triples at the base, a pair never paying, and stretches of any length, each letter's function naming the interneuron a frame before. |
