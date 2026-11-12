@@ -370,9 +370,11 @@ connection read.
 >   activations at one position are neighbors at offset zero: base neurons of different channels, and
 >   calls standing at one position (D53, D10).
 > - `b` stands on the apex, or a call that stands on the apex within `a`'s reach names it, at any depth (D24,
->   D4). A covered activation stays visible through its call. Where a call landed on `b`, the call is a
->   neighbor there, in its pose, and the relation to it stands for the relations to every activation its
->   function names (R50). A call inherits every relation of the activations it landed on that its fit did not
+>   D4). A covered activation stays visible through its call: it is a neighbor as itself, at its own offset.
+>   Where a call landed on `b`, the call is a neighbor beside it, in its pose, at the call's position, and
+>   the relation to the call stands for the relations to every activation its function names (R50). So a
+>   neighborhood holds a covered activation and its call side by side (D7). A call inherits every relation
+>   of the activations it landed on that its fit did not
 >   cover, and where several calls landed on `b`, each is a neighbor there (D53, D54, D10).
 > - Where `a` is a call, `b` is nothing its fit landed on, nor anything under what it landed on, at any depth:
 >   a call never sees what it stands for (D24, R28).
@@ -413,7 +415,8 @@ what was done together.
 
 > **D7 — Neighborhood.** The set of neighbors (D26) one activation observes is its **neighborhood**. In a text
 > stream, with time its one dimension, the neighborhood of `s` in `p a r i s` is `i` at −1, and `p a r` are out
-> of reach until a call standing at `i` names them (D5). In an image stream, with time, `x` and `y`, a
+> of reach until a call standing at `i` names them (D5): then `s` sees them through it, each as itself at its
+> own offset, and the call beside them. In an image stream, with time, `x` and `y`, a
 > neighborhood holds the eight pixels around the
 > activation and the nine at those positions and its own in the frame before.
 >
@@ -705,17 +708,19 @@ groups, fits and keeps (§6).
 > the frame it is covered in. It takes it out of the cost: the relations of it the fit landed on are covered,
 > paid through the call, and every other relation of it the call inherits, standing for it, at the
 > offset from the call's position (D12, D5). Those are the call's neighbors from then on, however far away they
-> stand (D4). Every relation to the covered activation, in the row of each neuron outside the call that saw it
-> as on the board, the machine changes to the call in its pose at that offset, in the pass that tells the
-> covered activation who covered it: a row written at a lower level of the frame holds the call there from then
-> on, and counts it (D18, R50). An activation the call stands for keeps what it saw of the call's other parts:
-> those relations are the function's own, read from the rows that saw them (D57), and a part rewritten to its
-> whole would read itself among the nodes the call expands to (D5, R50). Where several calls land on one
+> stand (D4). Every row that saw the covered activation as on the board, in the history of each neuron outside
+> the call, keeps it and takes the call beside it, in its pose at the offset to the call's position, in the
+> pass that tells the covered activation who covered it: a row written at a lower level of the frame holds
+> both from then on, and counts both (D18, D47). Nothing in a history is ever changed to a call. An activation
+> that fires later sees the two the same way, the covered activation through the call and the call beside it
+> (D5). The rows of the activations the call stands for take nothing: what they saw of the call's other parts
+> are the function's own relations, read from the rows that saw them (D57). Where several calls land on one
 > activation, each covers relations of
 > its own and inherits the rest; an inherited relation is paid once, between positions, however many calls
 > hold it; the calls hold one edge between them, at their two poses; and a row that saw the activation holds
-> one relation per call, each to that call's neuron in its pose at the offset, and one where two of them are
-> the same neuron in the same pose at the same offset (D34, D28). It is not heard: resolution reads its
+> one relation per call beside the one to it, each to that call's neuron in its pose at its offset, and one
+> where two of them are the same neuron in the same pose at the same offset (D34, D28). It is not heard:
+> resolution reads its
 > coverer's standing inferences, not its own (R46). And it stops connecting: from the frame after it is
 > covered it writes nothing about what follows, though its row still takes what followed, since the history
 > is what happened and not what was heard (D18). Every call that landed on it expands to it (R28); nothing
@@ -1077,7 +1082,7 @@ it is used.
 | activate          | At its level: record the frame's activations, and return the relations from each with their strengths.             | §5, R20    |
 | count             | At its level, after find: given the functions it stands in and their candidates, return with and without for each relation and each candidate, over its history. | R50, D47   |
 | forget neuron     | The machine removes a decommissioned neuron from every row and relation of the history that names it.              | R38        |
-| connect           | After the frame's last level, reaching every open activation at age 1 and beyond: it delivers what stood on the apex this frame and any reward; the activation's row takes what stood as what followed it, its connections strengthen while it is uncovered, and the call collects nothing. | §7.1, D18 |
+| connect           | After the frame's last level, reaching every open activation at age 1 and beyond: it delivers what stood on the apex this frame, calls with what they cover, and any reward; the activation's row takes what stood as what followed it, its connections strengthen while it is uncovered, and the call collects nothing. | §7.1, D18 |
 | infer             | After the frame's last level, reaching every activation at age 0: it delivers nothing and collects what the activation infers. | §7.2 |
 
 In `activate` a neuron records and returns, in the frame it fires. In `count` it counts over its history. In
@@ -1095,11 +1100,14 @@ one winner per dimension.
 
 > **D18 — History.** A neuron's record of its own activations: the last `H` of them, oldest first, each holding
 > the pose it fired in (D8), the neighborhood it observed in the frame it fired (D7), each neighbor in its pose
-> at its offset (D6, D26), and what followed it within its reach, each at its offset too. **A row is written
+> at its offset (D6, D26), and what followed it within its reach, each at its offset too. A neighbor seen
+> through a call is held as itself, at its own offset, with the call beside it (D5). **A row is written
 > when the activation fires and takes what followed as it comes**: at every frame of the activation's window
 > the connect call hands the neuron what
-> stood on the apex (§7.1), and the row takes it at the activation's age, whether the activation is covered or
-> not (D10). So in the history the frame around an activation is whole on both sides in time, as it is in
+> stood on the apex and, through the calls there, what they cover (§7.1, D5), and the row takes it at the
+> activation's age, whether the activation is covered or not (D10). **Nothing a row holds is ever replaced.**
+> Where a call lands on an activation the row holds, the row keeps that activation and takes the call beside
+> it (D10). So in the history the frame around an activation is whole on both sides in time, as it is in
 > space, and the relation between two activations is held by both of them, each from its own side (D34). It is
 > the evidence every strength is counted over, and it holds nothing else: the neuron's connections are not in
 > the history and `H` does not bound them (R31).
@@ -1121,10 +1129,12 @@ What is general across neighbors, a position where different neurons stand, is n
 no neuron records it. The machine makes it (R52).
 
 > **D47 — Relation index.** What a neuron counts over its history (D18): every relation from its own activation
-> that its rows hold, each with its **strength**, the number of rows that hold it. A row that holds a call
-> holds the nodes the call's expansion puts at their offsets (R28), so it holds a relation to each of them:
-> strength counts the rows that hold a relation through a call with those that hold it bare. It is updated
-> when a row is admitted, when a row takes what followed (D18) and when a row is evicted, and at no other time.
+> that its rows hold, each with its **strength**, the number of rows that hold it. A row holds every neighbor
+> as itself, a covered neuron at its own offset and its call beside it (D18). So a relation to a neuron is
+> counted in the rows that hold that neuron at that offset, whether it stood bare or under a call, whichever
+> call it was and in whatever pose, and nothing is read through a call at the count. It is updated
+> when a row is admitted, when a row takes what followed or a call that landed (D18, D10), and when a row is
+> evicted, and at no other time.
 > Handed a set
 > of relations it is an end of and one more, it returns how many rows hold the set with the one more and how many
 > hold the set without it, over the rows that have taken what followed (R50).
@@ -1318,8 +1328,9 @@ argument.
 
 > **R53 — Finding.** For each relation `(a, b, δ)` a neuron returned, the machine reads the index (D36) three
 > ways: as it is; with `b` open, `(a, ?, δ)`; and with `a` open, `(?, b, δ)`. The reading as it is gives the
-> functions that hold that relation, and a relation to a call is read as the nodes the call's expansion puts
-> at that offset, as the count reads it (R50). An open reading gives the functions that hold a relation with
+> functions that hold that relation. A covered neighbor comes back as itself, with the relation to its call
+> beside it (D5, R21), so a function that holds either is found. An open reading gives the functions that
+> hold a relation with
 > that neuron at that end and that offset and a variable at the other end, a class or a parameter (D38), and
 > no function whose node there is fixed: a fixed node is found as it is or not at all. Where the open end
 > holds a class the observed neuron is a member of, or a parameter, the dictionary function is fit by the
@@ -1362,9 +1373,10 @@ argument.
 > before while its activations still stand (D9), that the fit did not land on, that the first election left on
 > the board, and that shares a neuron with an activation the fit landed on or with the call. Its other end is a
 > neuron the function does not name, which would be a new node, or a node the function has, which would close
-> the cycle where the function has none (D15). A relation to a call, at an offset where the call's expansion
-> puts a node of this function, is read as a relation to that node, as the count reads it: it is attached
-> there. The relation to the call and the relation to that node's neuron are one board relation, and a
+> the cycle where the function has none (D15). An activation that sees a call sees the activations under it
+> too, and returns the relation to the call and the relation to each of them (D5). Where one of those is a
+> node of this function, the candidate is the relation to that node, and it is attached there. The relation
+> to the call and the relation to that node's neuron are one board relation, and a
 > function holds that relation as one or the other, never both: where the fit already lands on it, under either
 > name, it is no candidate. It is no candidate where its new node would be the origin, later in time or at a
 > lesser position in the same frame, since the origin is fixed (D15); where the function has a
@@ -1384,7 +1396,7 @@ argument.
 > time (D18), so a candidate at either end of a function is counted by the node it attaches at: for a
 > candidate at the past end, the node sees the function's relation after it and the candidate before it in
 > one row. **A relation is counted at the node it attached to the function at**, which the function keeps with
-> it (D56), at whatever offset that node's rows hold it (D10): that is the node the function already had
+> it (D56), at the offset that node's rows hold it (D18): that is the node the function already had
 > relations at when it joined, so the reading is conditioned on them, and it does not move as the histories
 > slide. A function's first relation attached at no node: it is read at its end with the more activations
 > behind it until a second relation joins, and from then on at the node that relation joined at. A relation
@@ -1404,18 +1416,13 @@ argument.
 > (§7.1), so it is read from two frames after the row's own. Until then it has neither held nor failed there,
 > and the row is neither `with` nor `without` for it and counts nothing toward its strength alone.
 >
-> **A relation to a node is counted through the calls that stand for it.** A row that saw an activation a
-> call covered holds the call, at the offset to the call's position (D10), and the call's expansion from
-> there puts the covered node back at the offset the row saw it at (R28). So the count reads a call as every
-> node its expansion puts at the row's offset: the node at the call's own position, where its pose starts
-> (D54), and every other node it covered, each at its own offset from the call. The machine holds the
-> dictionary and knows every call and its expansion; it hands the relation as a set, the node's neuron at the
-> offset and each interneuron in each pose at each offset from which its expansion puts that node there, and
-> the neuron counts a row as holding the relation when it holds any of them. The neuron knows nothing of calls
-> or their poses; the mapping is the machine's. Without it a relation that keeps landing on a call would read
-> as never holding, since where a call stands the call is the neighbor there, not the node under it (D5), and
-> a row rewritten to a call would read its node at the call's position, where another node of the call may
-> have stood.
+> **A relation to a covered neuron is counted as itself.** A row holds every neighbor as it was seen: a
+> covered neuron at its own offset, and its call beside it (D18, D5). A row that saw a neuron before a call
+> landed on it keeps the neuron and takes the call beside it (D10). So a relation to a neuron is in the same
+> rows whether the neuron stood bare or under a call, whichever call it was, in whatever pose, and whether
+> or not that call's function is still in the dictionary. The count reads those rows and nothing else: it
+> never expands a call, and the neuron needs to know nothing of calls or their poses. A relation to a call
+> is counted the same way, in the rows that hold that call in that pose at that offset (D34).
 >
 > **Distance and worth.** A candidate's distance to a function is `1 − with / (with + without)`: zero where it
 > stood at every occasion the function did, one where it never did. Its worth in the function is
@@ -1437,8 +1444,9 @@ argument.
 > nothing is built that is worth nothing (R21).
 >
 > **Which relation it is, and where none is built.** A relation to a call stands for the relations to every
-> activation the call's function names (D5). They are one board relation, and a function that starts on it
-> holds the relation to the call and none of those it stands for, so one pattern has one form. A relation to
+> activation the call's function names (D5). They are one board relation. Where one of them is at strength 3
+> and no function holds it, the function that starts holds the relation to the call and none of those it
+> stands for, so one pattern has one form. A relation to
 > a call that is the call's own function going round its cycle starts nothing: it is a lap of that call (D53),
 > so a pattern that repeats adds laps and never a function over itself. And no function is built on a
 > relation between two activations that name one and the same activation, since that activation already ties

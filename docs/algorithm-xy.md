@@ -34,8 +34,8 @@ strength 3, is worth 1, and grouping starts a function for it: two nodes, `x` an
 its interneuron, `XY`, fires at the `y` at 6, at age 0, in the pose from `y` back to `x` (D53). Nothing joins
 it in this frame: candidates are counted before grouping, when it was not yet a function.
 
-**The cycle closes at the next frame.** At frame 7 `x` fires and sees the call one back, which the count
-reads as the `y` under it (R50). `(x, y, −1)` is returned at strength 3, and it shares `x` with the function,
+**The cycle closes at the next frame.** At frame 7 `x` fires and sees the call one back and the `y` under
+it, as itself (D5). `(x, y, −1)` is returned at strength 3, and it shares `x` with the function,
 so it is a candidate; its other end, `y`, is a node the function has, so it would close the cycle (R50, D15).
 A relation of a cycle is counted at every occurrence, since the cycle's call covers it wherever it holds, on
 part of a lap as on a whole one (D57, D54). At frame 7 each of the two relations has occurred three times:

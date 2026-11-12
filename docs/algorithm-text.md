@@ -58,10 +58,11 @@ that recurs, and nothing general.
 A word is not one neuron. What the machine names is the stretch that recurs, a letter at a time: a pair at its
 third occurrence, and the longer stretch as its pairs merge.
 
-Take `the`. At the third `the`, `TH` fires at the `h`, and the `e` after it sees the call one back (D5): the
-count reads the call as the letters its expansion puts there, `h` at `−1` and `t` at `−2` (R50), so `e` after
-`h` is at strength 3. It is no candidate of `TH`'s function, since it would make `e` later than that function's
-origin `h` (R50), so it starts a function of its own on the relation to the call, `{e, TH@−1}`, origin `e`,
+Take `the`. At the third `the`, `TH` fires at the `h`, and the `e` after it sees the call one back and,
+through it, the letters under it as themselves, `h` at `−1` and `t` at `−2` (D5). Its history holds `h` one
+back in three rows, so `e` after `h` is at strength 3 (D47). It is no candidate of `TH`'s function, since
+it would make `e` later than that function's origin `h` (R50), so it starts a function of its own on the
+relation to the call, `{e, TH@−1}`, origin `e`,
 which stands for `e` after `h` and `e` two after `t` (R50). Its fit lands `e` on the `e` and on `TH`'s call:
 one relation for nothing, taken. Its interneuron, call it `HE`, fires at `e`'s position and stands for `e`
 and, through `TH`, for `t h`
@@ -95,8 +96,8 @@ the `e` and reads `h` through `TH`'s call, which fired before its function left:
 a function with no cycle (D53, D37). From the fifth `the` on nothing fires at the `h`, since `h` after `t` is
 in no function of its own, and the fit at the `e` lands on three bare letters, two relations for nothing. The
 call stands for the three letters and inherits the relation the fit did not cover, `t`'s relation to the letter
-before it, now from the call at `−3` (D10). In the row of that earlier letter, which saw `t` at `+1`, the
-machine changes the entry to `HE` in that pose at `+3`. Each of the three letters connects once more, to `HE`,
+before it, now from the call at `−3` (D10). The row of that earlier letter, which saw `t` at `+1`, keeps the
+`t` and takes `HE` beside it, in that pose at `+3`. Each of the three letters connects once more, to `HE`,
 and is silent; `e`, covered at age 0, writes nothing else (D10). All three leave the apex (D49).
 
 | `the`, priced as | relations |
@@ -111,8 +112,8 @@ one interneuron for every `the` in the stream (D11).
 
 **The stretch grows at its past end.** `HE` sees one beyond what it landed on (D4), the letter before `t`.
 Where that recurs, its relation to `t` is a candidate at `HE`'s function's past end from its second
-occurrence, which `t` counts: its row holds the letter before it and, since the call replaced
-`h` and `e` there, `HE` after it. After a space that stood before both, `with` is 2 and `without` 0: the
+occurrence, which `t` counts: its row holds the letter before it and the `h` after it, the function's
+relation at `t`, with `HE` beside them. After a space that stood before both, `with` is 2 and `without` 0: the
 relation gains 1 in the function and is worth 0 alone, so it joins, and `{e, h@−1, t@−2, space@−3}`
 is the function at the second ` the`, four nodes, three relations, covering 3 for nothing. So a stretch grows
 one letter per recurrence toward its past, flat, in one function, and nothing has to stand on the board for it

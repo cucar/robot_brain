@@ -63,8 +63,8 @@ stands (D10), so `taps` stands for the taps, and the exit's call for the taps, `
    pays and never joins (D57, R50). `go` before the taps cannot join either: no relation leads on from a node
    of a cycle in the direction the cycle advances in (D15). So the cycle is the taps and nothing else.
 3. **The end of the loop is a function over the call.** `stop` fires in the frame `taps` does, at level 0,
-   and records the bare third tap beside it at offset zero. When the call lands on that tap, the machine
-   changes the entry in `stop`'s row to `taps` in its pose at offset zero (D10), so `stop` holds the call
+   and records the bare third tap beside it at offset zero. When the call lands on that tap, `stop`'s row
+   keeps the tap and takes `taps` beside it, in its pose at offset zero (D10), so `stop` holds the call
    beside it in every run from the second. In the fourth run that relation is at strength 3, and
    `{stop, taps@0}` is a function. Its fit lands on `stop` and on the call, and covers the relation: 1 for nothing, taken.
    `taps·stop` fires at the next level of the same frame, at that frame, in its pose. The
