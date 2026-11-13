@@ -411,7 +411,7 @@ what was done together.
 > nonzero spatial offset, and in time a neuron stands beside its own earlier activation. Offset zero in every
 > component is where the activation itself sits, and an activation is not its own neighbor there. Above the base
 > two calls that landed on one activation are each other's neighbors, at the offset between their positions,
-> and no function is built on the relation between them (R50).
+> and the relation between them is a relation like any other (D34).
 
 > **D7 — Neighborhood.** The set of neighbors (D26) one activation observes is its **neighborhood**. In a text
 > stream, with time its one dimension, the neighborhood of `s` in `p a r i s` is `i` at −1, and `p a r` are out
@@ -1472,9 +1472,9 @@ argument.
 > (R18). A relation to an activation under a call starts nothing. It may still join a function that has that
 > activation's neuron as a node, as any candidate does. A relation to
 > a call that is the call's own function going round its cycle starts nothing: it is a lap of that call (D53),
-> so a pattern that repeats adds laps and never a function over itself. And no function is built on a
-> relation between two activations that name one and the same activation, since that activation already ties
-> them (D10): `th` and `he` over one `h` never relate, and `the` is `e` after `th`.
+> so a pattern that repeats adds laps and never a function over itself. Two calls that landed on one
+> activation relate like any two neighbors (D26): the relation between them starts a function at strength 3,
+> as any relation does.
 >
 > **Relations join only through a node, and a function grows toward its past.** A candidate is attached at the
 > node it shares, so every function stays connected (D15). Where both its ends are nodes of the function it

@@ -77,9 +77,9 @@ color's line beside it. Each at strength 3 is a function over the line call, tak
 relation (R24). Two parallel rows of one length one position apart are a row after a row at `(0, +1)`, a cycle
 over the row interneuron in that pose, and its fit over two rows covers the relation for nothing. A stroke
 three pixels thick is three rows and two laps of that cycle, one call. Two lines that share a pixel hold one
-edge between them, at the offset between their positions (D10), and no function is built on that edge, since
-the pixel already ties them (R50): a row and a column that meet at a corner, or cross, are two calls and never
-one motif. What joins them is something that shares no pixel with either: a row beside a row, or the block
+edge between them, at the offset between their positions (D10), and that edge is a relation like any other
+(D26, R50): a row and a column that meet at a corner, or cross, are a motif of two calls where the relation
+recurs. So are two calls that share no pixel: a row beside a row, or the block
 that stands between two columns. Each such pair at one offset is a motif of two calls, 1 for nothing, and a
 lone pixel beside a line is a motif of the line and the pixel, the same. Which of these a line ends up under
 is the election's again, by what each covers less its price. Motifs that share a call and hold together
