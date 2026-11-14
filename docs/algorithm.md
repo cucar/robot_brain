@@ -743,10 +743,7 @@ groups, fits and keeps (§6).
 > is what happened and not what was heard (D18). Every call that landed on it expands to it (R28); nothing
 > lands on a relation a call covers (D28).
 >
-> **A call a relation was read through is not inhibited.** Where a function's relation to a neuron comes true
-> through a call that names that neuron (D54), the function covers that relation and names the neuron, not
-> the call. The call keeps its cost, stays on the apex, is heard and connects, as before. A call is inhibited
-> where a function names the call itself, as any activation is.
+> **A call is inhibited where a function names it**, as any activation is.
 >
 > **The last connection.** In the frame it is covered, the activation connects once more, to the neuron that
 > covered it, the function's interneuron, and to each where two cover it. The connection is at the offset
@@ -903,7 +900,7 @@ occurs is what the worth measures (D57).
 >
 > | Relation, at its far node | Comes true where the far end is |
 > |---|---|
-> | a fixed node | its neuron, standing bare or named at that position by a call's function, at any depth (D5): the fit is credited that relation and nothing of the call (D22) |
+> | a fixed node | its neuron, standing on the board at that position (D5, D24) |
 > | a class | a member; it takes members only (D41) |
 > | a parameter | any neuron where the node is first reached, reading from the node the fit entered at, and the value already bound where it is reached again (D44) |
 >
@@ -923,7 +920,7 @@ occurs is what the worth measures (D57).
 > A relation that did not come true is in neither: whatever stands there costs as bare either way. What a
 > relation is worth is always what it cost (D13).
 >
-> **A call's cost stays with the call.** A fit that reads a relation through a call, or names the call, is
+> **A call's cost stays with the call.** A fit that names a call is
 > credited the relations it read and nothing more: the call's failures and bindings are paid where it stands
 > (D12). What a call covers went with it: a relation it covers is there for no other fit to
 > land on, and what it inherited stands, from the call, for a later fit to read (D24). So
@@ -1119,7 +1116,7 @@ one winner per dimension.
 > activation as itself, or the call that stood for a covered one (D5). **A row is written
 > when the activation fires and takes what followed as it comes**: at every frame of the activation's window
 > the connect call hands the neuron what
-> stood on the apex and, through the calls there, what they cover (§7.1, D5), and the row takes it at the
+> stood on the apex (§7.1, D5), and the row takes it at the
 > activation's age, whether the activation is covered or not (D10). **Nothing a row holds is ever replaced.**
 > Where a call lands on an activation the row holds, the row keeps that activation and takes the call beside
 > it (D10). So in the history the frame around an activation is whole on both sides in time, as it is in
@@ -1608,8 +1605,8 @@ machine works out itself (R22).
 > paid with the call. It is on the apex, bare, when neither holds.
 >
 > **Credit is what blocks later payment, and coverage is what hides.** A relation a call covers is paid for
-> through that call, and no later fit is credited it. A later fit reads the activation's other relations
-> through the call, and is credited those alone (D5, R23). A bound activation is
+> through that call, and no later fit is credited it. A later fit lands on the activation's other relations
+> while it stands on the board, and on its call's once it is covered, and is credited those alone (D5, R23). A bound activation is
 > still on the apex and is a neighbor to every later function. A later fit that lands on it covers the relations of its own
 > that no call has covered, and nothing else (D10). So every relation is paid for once. The coverage set spans one
 > frame more than the longest reach in time among the neurons the machine holds, no function reaches further
@@ -1627,15 +1624,14 @@ machine works out itself (R22).
 > relations at their cost, a bound node's binding, and the relations a call covers at that call's cost,
 > together. So no relation is paid for twice. Within the electing frame an activation is covered once, by the
 > first accepted fit that lands on it (R24), and never moves. Other fits of that election may still land on
-> it, each covering relations of its own (D28). When the election is over the activation is under its calls:
-> from the next level on, and in every later frame, its calls stand at its position, and a fit
-> there reads it through them (D5, D54). The second election of a level fits what the first left, so
+> it, each covering relations of its own (D28). When the election is over its calls stand beside it. It
+> stays on the board until every relation of its own is covered, and from then on only its calls stand there
+> (D24, D5). The second election of a level fits what the first left, so
 > a relation the first covered is not there for it.
 >
-> **A later frame reads the past through its calls.** An activation a call at an earlier frame covers is
-> returned through that call (D5), and a fit at `f` lands on the relations to it that no call has covered. The
-> call read through keeps its cost and its position on the apex, and is inhibited only where the new function
-> names it (D10). Where the relation read is the call's own function going round its cycle, the call takes
+> **A later frame reads the past as it stands on the board.** An activation of an earlier frame that is not
+> covered is returned as itself, and a fit at `f` lands on the relations to it that no call has covered. A
+> covered one is not returned, and its call is (D5, D24). Where the relation read is the call's own function going round its cycle, the call takes
 > the lap and no new call is made (D53). What that interneuron learned stands.
 
 **The cost over one frame is the calls made plus the relations no call covered**: the price of every
@@ -1654,15 +1650,14 @@ one fit**, which is what stops an activation being paid for twice.
 > everything find fit at this level, over the dictionary as it stands (R53); the second time they are the fits
 > of the functions grouping changed or formed, on what the first election left (R50, R52). Either time, less
 > any whose function would need a neuron when none is free (R16), and what they cover is the **free set**:
-> every activation on the board that some fit lands on and no accepted call covers, with its relations, read
-> bare or through a call (D54).
+> every activation on the board that some fit lands on and no accepted call covers, with its relations
+> (D54).
 >
 > Each fit stands on the board before the first round (D31), and `price` is R22's. Then D28 runs: the largest
 > `coverage` less `price` first, each while `coverage > price` against the board as it then stands, and it
 > stops when nothing on the board is left that a fit could cover for less than it costs.
 >
-> **Two fits that measure the same are told apart in this order**: a fit whose relations land on the board
-> relations as they read before one that reads a node through a call (D54); then the fit whose
+> **Two fits that measure the same are told apart in this order**: the fit whose
 > calls stand for more of the same base activations, since an activation that stood under two calls then stands
 > under one (D10); a function with an interneuron before one without; between two with interneurons, the older
 > interneuron; between two without, the function that joined the dictionary first; and between two fits of one
