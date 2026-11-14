@@ -280,8 +280,8 @@ that fires through it (D8), and expansion ends on base symbols read back through
 > elapsed since the frame of its position, `0` through `reach_t`; a new activation is the one at age 0, base and
 > interneuron alike.
 >
-> **Covered at** is the age at which an accepted call first landed on the activation as a fixed node, none
-> until one does. That comes late (R27), and nothing undoes it: later calls may land on the activation too,
+> **Covered at** is the age at which the last of the activation's own relations was covered (D24), none
+> until then. It is never 0: the relation to what follows is one of them, and what follows has not fired. That comes late (R27), and nothing undoes it: later calls may land on the activation too,
 > and a later function may name the call that covered it (D10), but it never returns to the apex. So this
 > one number says for every
 > frame of the window whether the activation stood on the apex there: it did at every age before it, and at
@@ -337,12 +337,12 @@ connection read.
 
 > **D4 — Reach.** How far an activation sees, in each activation dimension (D1), and in all of them at once. A
 > base activation sees one position: the positions within one of it in every dimension of space, in this frame and
-> the frame before. Where a call stands at one of those positions, the activation sees through it: every
-> activation the call's function names, at any depth, each at its own offset, however far away it stands (D5).
-> That is how an activation comes to see further than one position: through what has been learned, and
-> nothing declares it. Each of an interneuron's activations sees one position beyond the farthest of
+> the frame before. It sees what stands on the board there (D24): an activation that is not covered, as itself, and where the
+> activation there is covered, the call that stands for it. It sees nothing through a call. An activation
+> comes to know of more than one position through the calls it meets: a call stands for a stretch, and the
+> relation to the call is the relation to the stretch. Each of an interneuron's activations sees one position beyond the farthest of
 > everything it stands for, at any depth (D53, R28), in each dimension and on each side: it sees what every
-> activation it stands for saw, through the calls beside them as they did, and no further. The call's own
+> activation it stands for saw, and no further. The call's own
 > position says nothing about how far it sees. In time its position is the latest activation it
 > landed on, so it sees back to the earliest frame of anything it stands for, and one frame more. Where what
 > it stands for comes back to an interneuron already expanded, it stops there (D36), and so does its reach. How
@@ -368,14 +368,11 @@ connection read.
 > - `b` is within `a`'s reach in every activation dimension they share (D4), and is not `a` itself. Two
 >   activations at one position are neighbors at offset zero: base neurons of different channels, and
 >   calls standing at one position (D53, D10).
-> - `b` stands on the apex, or a call that stands on the apex within `a`'s reach names it, at any depth (D24,
->   D4). A covered activation stays visible through its call: it is a neighbor as itself, at its own offset.
->   Where a call landed on `b`, the call is a neighbor beside it, in its pose, at the call's position, and
->   the relation to the call and the relations to the activations its function names are one board relation,
->   read two ways (R50, D55). So a
->   neighborhood holds a covered activation and its call side by side (D7). A call inherits every relation
->   of the activations it landed on that its fit did not
->   cover, and where several calls landed on `b`, each is a neighbor there (D53, D54, D10).
+> - `b` stands on the board: it is not covered (D24). An activation a call has landed on is a neighbor as
+>   itself for as long as one of its own relations is uncovered. The relation to what follows it is one of
+>   them, so the activation just before `a` in time is always a neighbor as itself. A covered activation is no
+>   neighbor: each call that stands for it is, in its pose, at the call's position (D55, R50). A call inherits
+>   every relation of the activations it landed on that its fit did not cover (D53, D54, D10).
 > - Where `a` is a call, `b` is nothing its fit landed on, nor anything under what it landed on, at any depth:
 >   a call never sees what it stands for (D24, R28).
 > - The neighborhood policy allows `b`'s kind beside `a`'s (D50).
@@ -415,8 +412,7 @@ what was done together.
 
 > **D7 — Neighborhood.** The set of neighbors (D26) one activation observes is its **neighborhood**. In a text
 > stream, with time its one dimension, the neighborhood of `s` in `p a r i s` is `i` at −1, and `p a r` are out
-> of reach until a call standing at `i` names them (D5): then `s` sees them through it, each as itself at its
-> own offset, and the call beside them. In an image stream, with time, `x` and `y`, a
+> of reach (D5). In an image stream, with time, `x` and `y`, a
 > neighborhood holds the eight pixels around the
 > activation and the nine at those positions and its own in the frame before.
 >
@@ -482,8 +478,8 @@ what was done together.
 >
 > **A call is one node.** On the board a call stands for the piece it covers: one node, in its pose,
 > with every edge that reached the piece from outside now reaching it. The piece's nodes and the edges among
-> them are not in the board's graph; expansion puts them back (R28), and an activation beside the call reads
-> them through it (D5).
+> them are not in the board's graph; expansion puts them back (R28). A node of the piece that still has an uncovered
+> relation of its own stays in the graph until that relation is covered (D24).
 >
 > ```
 >               2 edges
@@ -715,7 +711,8 @@ groups, fits and keeps (§6).
 > takes it out of every role at once, with every relation of it (D10, D24).
 >
 > **An expected input never reaches the apex.** An activation a function in the dictionary names at its latest
-> node is covered at age 0 by that function's call, recognized in the frame it fires. Where the function holds a
+> node has its relations covered by that function's call, recognized in the frame it fires, and is covered once what
+> follows it has fired (D24). Where the function holds a
 > cycle, the next lap is the same call, its pose that much longer (D53);
 > where a function at the level above names the call, its call covers it (D10). So where a function keeps coming true
 > the apex holds one call, the latest, and what arrives is covered as it arrives.
@@ -725,15 +722,14 @@ groups, fits and keeps (§6).
 > run.
 
 > **D10 — Inhibition.** A call that lands on an activation as a fixed node does three things to it, all from
-> the frame it is covered in. It takes it out of the cost: the relations of it the fit landed on are covered,
+> the frame it is covered in, which is the frame the last of its own relations is covered and never the frame
+> it fired in (D24). It takes it out of the cost: the relations of it the fit landed on are covered,
 > paid through the call, and every other relation of it the call inherits, standing for it, at the
-> offset from the call's position (D12, D5). Those are the call's neighbors from then on, however far away they
-> stand (D4). Every row that saw the covered activation as on the board, in the history of each neuron outside
+> offset from the call's position (D12, D5). Those are the call's neighbors from then on. Every row that saw the covered activation as on the board, in the history of each neuron outside
 > the call, keeps it and takes the call beside it, in its pose at the offset to the call's position, in the
 > pass that tells the covered activation who covered it: a row written at a lower level of the frame holds
 > both from then on, and counts both (D18, D47). Nothing in a history is ever changed to a call. An activation
-> that fires later sees the two the same way, the covered activation through the call and the call beside it
-> (D5). The rows of the activations the call stands for take nothing: what they saw of the call's other parts
+> that fires later sees the call and not the covered activation (D5). The rows of the activations the call stands for take nothing: what they saw of the call's other parts
 > are the function's own relations, read from the rows that saw them (D57). Where several calls land on one
 > activation, each covers relations of
 > its own and inherits the rest; an inherited relation is paid once, between positions, however many calls
@@ -756,7 +752,7 @@ groups, fits and keeps (§6).
 > covered it, the function's interneuron, and to each where two cover it. The connection is at the offset
 > from the activation to its coverer (D6), in time and in every other activation dimension, as every
 > connection is (D25), and it takes that frame's
-> reward (R31). Then the activation is silent. An activation covered at age 0 writes nothing but that. Where a
+> reward (R31). Then the activation is silent. Where a
 > later function names its coverer (D53), the
 > coverer connects once more the same way, to that function's call, and the activation under it stays silent. Without
 > this connection the activation could
@@ -765,15 +761,14 @@ groups, fits and keeps (§6).
 > followed it learns that one neuron, the interneuron, and from then on infers it; the interneuron learns what
 > follows.
 >
-> **The present is covered at age 0.** A call recognized at the present covers the activation at its position in
-> the frame it fires (D54). That activation never stands on the apex: it writes nothing but its last
-> connection, to the call. Only a recognized call covers. What an inference named covers nothing (R40).
+> **The present is never covered.** A call recognized at the present covers relations of the activation at its
+> position (D54), and the relation to what follows it is still to come (D24). So the latest activation stands on
+> the apex in the frame it fires, beside the call that landed on it: it is heard, and what fires next reads it
+> as itself. Only a recognized call covers. What an inference named covers nothing (R40).
 >
 > **What stands before coverage stands.** A neuron is covered only after it has fired (R27). Coverage acquired at
 > a later age revokes nothing before it: the connections the activation strengthened while uncovered stand, and
-> a reward for one of those frames still reaches them (R33). An activation covered already at age 0 writes
-> nothing but its last connection, to its coverer and again to a call that takes it (R23): a connection is to
-> what comes after (D25), and by then it is inhibited.
+> a reward for one of those frames still reaches them (R33).
 >
 > **One exception, on being heard alone.** Every activation infers at its age 0, covered or not, and the
 > machine keeps what it inferred (R45). A covered activation's inferences are heard only where its coverer has
@@ -1120,8 +1115,8 @@ one winner per dimension.
 
 > **D18 — History.** A neuron's record of its own activations: the last `H` of them, oldest first, each holding
 > the pose it fired in (D8), the neighborhood it observed in the frame it fired (D7), each neighbor in its pose
-> at its offset (D6, D26), and what followed it within its reach, each at its offset too. A neighbor seen
-> through a call is held as itself, at its own offset, with the call beside it (D5). **A row is written
+> at its offset (D6, D26), and what followed it within its reach, each at its offset too. A neighbor is held as what stood on the board: an
+> activation as itself, or the call that stood for a covered one (D5). **A row is written
 > when the activation fires and takes what followed as it comes**: at every frame of the activation's window
 > the connect call hands the neuron what
 > stood on the apex and, through the calls there, what they cover (§7.1, D5), and the row takes it at the
@@ -1217,7 +1212,7 @@ Nine cases are worked by hand on these definitions, listed in Part VI.
 > | refresh index   | Add the relations of the admitted rows, and take away those of the evicted ones (D47).               |
 > | return          | The relations of every activation handed in, each with its strength, in one return, divided by activation (R21). |
 
-The call runs before the machine fits and groups (R53, R50). An activation that will be covered at age 0
+The call runs before the machine fits and groups (R53, R50). An activation a call will land on
 (D10) is handed in like any other: its neuron records it and returns its relations, and what the machine does
 with them is the machine's.
 
@@ -1401,12 +1396,9 @@ argument.
 > the two share. A relation under a call the fit does not touch is no candidate. Its
 > other end is a
 > neuron the function does not name, which would be a new node, or a node the function has, which would close
-> the cycle where the function has none (D15). An activation that sees a call sees the activations under it
-> too, and returns the relation to the call and the relation to each of them (D5). Where one of those is a
-> node of this function, the candidate is the relation to that node, and it is attached there. The relation
-> to the call and the relation to that node's neuron are one board relation, and a
-> function holds that relation as one or the other, never both: where the fit already lands on it, under either
-> name, it is no candidate. It is no candidate where its new node would be the origin, later in time or at a
+> the cycle where the function has none (D15). An activation returns the relation to what stands on the board:
+> to an activation as itself, or to the call that stands for a covered one, never both (D5). Where the fit
+> already lands on it, it is no candidate. It is no candidate where its new node would be the origin, later in time or at a
 > lesser position in the same frame, since nothing joins a function later than its origin (D15); where the
 > function has a
 > cycle and it leads on from a node of the cycle in the direction the cycle advances in; or where the function
@@ -1482,14 +1474,12 @@ argument.
 > one is that a call covers that relation, never that a call has landed on one of its ends. A relation held less often is left where it is:
 > nothing is built that is worth nothing (R21).
 >
-> **Which relation it is, and where none is built.** A relation to a call and the relations to the
-> activations the call's function names are one board relation, read two ways: as the relation to the call, or
-> as the relation to an activation under it (D5, D55). It costs one however it is read, and a call that covers
-> it under one reading covers it under the other. Each reading is counted in the rows that hold it (D47), and
-> starts a function at its own strength of 3 where no call covers the relation. A function holds the relation
-> under one reading and never both, so one pattern has one form, and it is started and kept on the one count
-> (R18). A relation to an activation under a call may also join a function that has that activation's neuron as
-> a node, as any candidate does. A relation to
+> **Which relation it is, and where none is built.** A relation has one reading. Where its far end
+> stands on the board, it is the relation to that activation as itself, whatever calls have landed on it.
+> Where its far end is covered, it is the relation to the call that stands for it, in that call's pose (D24,
+> D5). It is counted in the rows that hold it (D47) and starts a function at its own strength of 3 where no
+> call covers it. So one pattern has one form, and nothing is built on a call while the activation under it can
+> still be read (R18). A relation to
 > a call that is the call's own function going round its cycle starts nothing: it is a lap of that call (D53),
 > so a pattern that repeats adds laps and never a function over itself. Two calls that landed on one
 > activation relate like any two neighbors (D26): the relation between them starts a function at strength 3,
@@ -1607,9 +1597,14 @@ machine works out itself (R22).
 > | per relation | the accepted call whose fit landed on it, if any |
 > | per node | the accepted calls whose fits landed on it, which stand for it, if any (D8); the call it is bound to as an argument, if any |
 >
-> **Covered and bound are read off it.** An activation is **covered** when a call has landed on it as a fixed
-> node: it has left the apex, and the call stands at its position with the relations of it the fit did not cover
-> (D10, D5). It is **bound** when a call binds it as an argument: it stays on the apex, and its binding is
+> **Covered and bound are read off it.** An activation is **covered** when every relation
+> of its own is covered: every relation to a neighbor within its reach, in space and in time, what follows it
+> included (D4, D5). A relation to what follows does not exist until what follows has fired. So an activation
+> is not covered before its reach forward in time has passed (D9). Until then it stands on the board, whatever
+> calls have landed on it, and a neighbor reads it as itself. Once covered it has left the apex and the graph
+> (D55): nothing sees it, and an edge that would reach it reaches the call that stands for it, which holds the
+> relations of it that its fit did not cover (D10, D5). A call is covered the same way, one level up: when every
+> relation of its own is covered. It is **bound** when a call binds it as an argument: it stays on the apex, and its binding is
 > paid with the call. It is on the apex, bare, when neither holds.
 >
 > **Credit is what blocks later payment, and coverage is what hides.** A relation a call covers is paid for
@@ -1736,11 +1731,10 @@ interneuron until it fires (D5). An interneuron's activation records the functio
 have several (R43), its pose, which of that function's relations did not come true, and what its fit landed on
 and bound, credited or not, which is what it expands to (R28). Every activation no accepted fit covers stands as itself.
 
-> **R27 — The apex is a frontier.** It is every active neuron **no accepted function has landed on as a
-> fixed node** (D49), base neurons and interneurons alike, so a base neuron no function found worth naming
+> **R27 — The apex is a frontier.** It is every active neuron **that is not covered** (D49, D24), base neurons and interneurons alike, so a base neuron no function found worth naming
 > stands in it beside an interneuron many functions deep. This is the frontier the cost is read over (D12), **the one every
 > neuron sees as its neighborhood** (D5), **the one that learns what ran** (D25), and **the one that votes**
-> (§8.4): the uncovered set does all four, and a call landing on a neuron silences it in every one of them at
+> (§8.4): the uncovered set does all four, and covering a neuron silences it in every one of them at
 > once, its one last connection aside (D10). A reward for a frame
 > already priced reaches its connection regardless (R33). Everything underneath the current frontier is
 > recovered by expanding it.
@@ -1748,10 +1742,10 @@ and bound, credited or not, which is what it expands to (R28). Every activation 
 > **Named, not covered.** A neuron a declined fit named, with nothing else covering it, is still on the
 > frontier, and stands in the cost as itself.
 >
-> **Coverage is acquired late.** An activation that fires at `g` is on the apex until some accepted fit lands
-> on it as a fixed node, and a fit can land on it for as long as it stands on the board (D9), so an activation
-> may speak for a few frames and then fall silent. It is covered whole, by the first fit that lands on it, and a
-> later function may name the call that covered it (D10); it does not return to the apex.
+> **Coverage is acquired late.** An activation that fires at `g` is on the apex until every relation
+> of its own is covered (D24), and a fit can land on it for as long as it stands on the board (D9), so an
+> activation speaks for at least the frame it fires in and may then fall silent. A later function may name the
+> call that covered it (D10); it does not return to the apex.
 
 The frontier cuts across the hierarchy:
 
