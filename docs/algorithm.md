@@ -1382,9 +1382,9 @@ argument.
 > **A candidate** is a board relation the neurons returned with strength 2 or more, this frame or at one
 > before while its activations still stand (D9), that the fit did not land on, and that the fit touches in
 > one of two ways. The first election left it on the board, and it shares a neuron with an activation the fit
-> landed on or with the call. Or a call covers it, and the fit touches that call: the fit read a node through
-> the call, and the relation shares that node's activation, or the fit landed on the call as a node, and the
-> relation shares the activation the call stands at (D54). So a relation another function holds is offered
+> landed on or with the call. Or a call covers it, and the fit touches that call: the fit landed on an
+> activation that call also landed on, and the relation shares that activation, or the fit landed on the call
+> as a node, and the relation shares the activation the call stands at (D54). So a relation another function holds is offered
 > where the fit touches the call that covers it, and whether it moves is decided by its gain here against
 > its contribution there (R54). Where a relation under a call the function names joins, the function's
 > relation to that call is held from then on as the relation to the activation the call stands at, the node
