@@ -478,25 +478,30 @@ what was done together.
 > edge need nothing between them. The cost of a piece is its edges, one each: a node, base or call, is in the
 > graph through its edges and costs nothing of its own (D13).
 >
-> **A call is one node.** On the board a call stands for the piece it covers: one node, in its pose,
-> with every edge that reached the piece from outside now reaching it. The piece's nodes and the edges among
-> them are not in the board's graph; expansion puts them back (R28). A node of the piece that still has an uncovered
-> relation of its own stays in the graph until that relation is covered (D24).
+> **A call covers relations, and a node stays until every relation of its own is covered.** On the board a
+> call covers the relations its fit landed on, and they cost nothing more. A node the fit landed on stays in
+> the graph while one relation of its own is uncovered. An edge to it ends at the node itself, never at the
+> call (D24). Expansion puts the covered relations back (R28).
 >
 > ```
->               2 edges
->
->                ( bc )
->              ↗   ↑    ↘
->            /  dictionary \
->          /       ↑         ↘
->   ( a ) ──→ ( b ) ──→ ( c ) ──→ ( d )
->
->               3 edges
+>                  ( bc )               the call bc covers b–c
+>                  /    \
+>   ( a ) ──── ( b ) ·· ( c ) ──── ( d )
 > ```
 >
-> Without the call the board is `a–b`, `b–c` and `c–d`: three edges. The dictionary holds `b–c` as a function.
-> With its call `bc` on the board, the edge from `a` reaches `bc` and the edge from `bc` reaches `d`: two edges.
+> | | edges on the board | count |
+> |---|---|---|
+> | without the call | `a–b`, `b–c`, `c–d` | 3 |
+> | with the call `bc` | `a–b`, `c–d` | 2 |
+>
+> The dictionary holds `b–c` as a function, and its call pays for that relation. `b` is still on the board:
+> its relation to `a` is not covered. So the edge from `a` ends at `b`, and `a` has no relation to the call.
+> `c` and `d` stand the same way.
+>
+> Anything meets the call `bc` through another call. Where `a–b` recurs and becomes a function, its call
+> covers `a–b`. That relation and `b–c` have `b` in common, so the two calls are neighbors, one level up
+> (D26). Once `a–b` and `c–d` are covered too, every relation of `b` and of `c` is covered. Then `b` and `c`
+> are covered, and they leave the board (D24).
 >
 > **An edge implied by others costs nothing.** A path of edges fixes the offset between its two end nodes,
 > component by component, so an edge between them says nothing new (D34), and only one of them is paid.
