@@ -59,8 +59,8 @@ covers the run's relations, one fewer than its pixels, for nothing, so a run of 
 where nothing longer covers it, and the longest run through a pixel covers the most and is taken first (D28,
 R24). A call covers relations, not pixels: a row covers a pixel's relations along `x` and a column its
 relations along `y`, so a pixel may be in both, and where two lines cross both are whole (D10). The two calls
-then hold one edge between them, and the second taken pays it: a run of two crossing a taken line covers one
-for that edge, and is not taken, while a run of three is (D28). Two runs of the same length along one
+are then neighbors, and the relation between them is on the board at the level above (D26); neither fit pays
+for it (R22). Two runs of the same length along one
 direction through a pixel share its relations and tie, and the older line function takes it.
 
 **What a line is on the board.** A line's call is one activation of the line's interneuron, at the run's first
