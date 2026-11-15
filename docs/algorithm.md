@@ -979,7 +979,9 @@ A neuron the function does not name is in neither: it costs what it cost whether
 > function and its contribution
 > differ: a relation can be worth something beside another while the two together are worth less than that
 > other alone. **Every move is priced by the dictionary's worth**, the sum of its functions' worths, before and
-> after, over every function the move touches: a move is made where that total rises and nowhere else, since
+> after, over every function the move touches. A move that takes a function's last relation touches that
+> function and its subtree, every function that leaves the dictionary with its interneuron (R38). A move is
+> made where that total rises and nowhere else, since
 > the machine does nothing that does not help (R54). So no sequence of moves on the same histories comes back
 > to where it started.
 > The neurons' histories are the whole record, over the last `H` activations of each (D18), so a relation that
@@ -1516,7 +1518,9 @@ argument.
 > moves, and each is the same decision, whether the dictionary's worth rises (D57), read from the neurons the
 > functions stand in (R50). A relation's **gain** in a function is that function's worth with it less without
 > it; its **contribution** where it stands is the same for the function it is in, and alone its strength less
-> two, its relation and its entry, every number read at the node it attaches or would attach at, over the rows
+> two, its relation and its entry. Where the relation is its function's last, its contribution there is that
+> function's worth and the worth of every function in its subtree, since all of them leave with it (R38).
+> Every number is read at the node it attaches or would attach at, over the rows
 > that have taken what followed, and a relation of a function that is a cycle and nothing else at every
 > occurrence (R50):
 >
@@ -1525,7 +1529,7 @@ argument.
 > | a relation joins | its gain in the function is higher than its contribution where it stands, alone or in a function; and higher than its gain in any other function it is a candidate of, the nearest on a tie (R50) |
 > | a relation leaves for a function of its own | its worth alone is higher than its contribution to its function, and higher than its gain in any function it is a candidate of |
 > | a relation leaves for nothing | the neurons return it with strength below 2, or below 3 where it is its function's only relation, over every row that holds it (R18) |
-> | two functions merge | a relation of one is a candidate of the other and joins it, and the rest follow one at a time, each where its gain is higher; the last gains the entry its function no longer pays |
+> | two functions merge | a relation of one is a candidate of the other and joins it, and the rest follow one at a time, each where its gain is higher; the last gains the entry its function no longer pays, and is weighed against the worth of every function that leaves with it (R38) |
 
 > **Nothing moves on a tie.** The machine does nothing that does not help: a move is made where the
 > dictionary's worth rises and nowhere else. Two relations that save the same edges in one function as in two
