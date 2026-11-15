@@ -49,56 +49,77 @@ impl Machine {
         for c in &b.coverers { self.standing_at(*c, level, out, depth + 1); }
     }
 
-    /// What one activation observes (D5, D7): what stands in its frame or the one before within one position of
-    /// it, in every activation dimension the two share, other than itself, on the board (D9); for a call, what
-    /// stands that way beside each activation it stands for at the base, and nothing it stands for (D4, D5). Where
-    /// calls have landed on an activation, each call is the neighbor there, in its pose (D5, D10). The policy
-    /// admits each (D50). Each at its exact offset from the observer (D6).
+    /// The activations at the ends of the relations a call covers, over every record it grew from, each as the
+    /// call it stands as now (D26, D53).
+    pub(crate) fn covered_ends(&self, c: ActRef) -> FxHashSet<ActRef> {
+        let mut recs = vec![c];
+        for old in self.grown.keys() { if self.latest(*old) == c { recs.push(*old); } }
+        let mut out: FxHashSet<ActRef> = FxHashSet::default();
+        for r in recs { if let Some(es) = self.call_edges.get(&r) { for &(x, y) in es { out.insert(self.latest(x)); out.insert(self.latest(y)); } } }
+        out
+    }
+
+    /// What one activation observes (D5, D7, D26). A base activation: what stands on the board within one position of
+    /// it, in this frame and the one before, in every activation dimension the two share: an activation that is not
+    /// covered as itself, and at a covered position each call that landed on the activation there (D4); nothing
+    /// through a call. A call: the calls that landed on an activation it landed on, and what the relations it took
+    /// from the activations it covered end at (D26, D10); nothing it stands for. The policy admits each (D50). Each
+    /// at its exact offset from the observer (D6).
     pub(crate) fn neighborhood(&self, me: ActRef) -> Vec<Nb> {
         let Some(a) = self.act(me) else { return vec![] };
         let mut out: Vec<Nb> = Vec::new();
         if !a.on_apex() { return out; }
+        let fno = self.frame_no;
         let under = self.under(a);
-        // the activations at the base it stands for, or itself
-        let bases: Vec<ActRef> = if a.covers.is_empty() { vec![me] } else {
-            let mut v: Vec<ActRef> = under.iter().copied().filter(|r| self.act(*r).map_or(false, |x| x.covers.is_empty())).collect();
-            v.sort();
-            v
-        };
+        let fired = |x: &Act| !x.gone && self.stands(x, fno) && !(x.opened_at == fno && x.level > a.level);
         let mut seen: FxHashSet<ActRef> = FxHashSet::default();
-        for br in bases {
-            let Some(b) = self.act(br) else { continue };
+        let push = |r: ActRef, out: &mut Vec<Nb>, seen: &mut FxHashSet<ActRef>| {
+            if r == me || under.contains(&r) || !seen.insert(r) { return; }
+            let Some(x) = self.act(r) else { return };
+            if !self.cfg.policy.past[a.kind as usize][x.kind as usize] { return; }
+            out.push(Nb::seen(r, x.sym, offset_between(a, x), r));
+        };
+        if a.covers.is_empty() {
             for f in self.frames.iter() {
-                if f.no > b.pos[0] as i64 || (b.pos[0] as i64 - f.no) > b.reach[0] as i64 { continue; }
+                if f.no > a.pos[0] as i64 || (a.pos[0] as i64 - f.no) > a.reach[0] as i64 { continue; }
                 for (i, c) in f.acts.iter().enumerate() {
                     if c.neuron == NeuronId::MAX || !c.covers.is_empty() { continue; }
-                    let shared = b.axes & c.axes;
+                    let shared = a.axes & c.axes;
                     let mut within = true;
                     for d in 1..MAX_DIMS {
                         if shared & (1 << d) == 0 { continue; }
-                        if (c.pos[d] - b.pos[d]).abs() > b.reach[d] { within = false; break; }
+                        if (c.pos[d] - a.pos[d]).abs() > a.reach[d] { within = false; break; }
                     }
                     if !within { continue; }
                     let cr = ActRef { frame: f.no, index: i as u32 };
-                    if cr == me || under.contains(&cr) { continue; }
+                    if cr == me { continue; }
                     let mut there = Vec::new();
-                    // switch 16: a covered activation is a neighbor as itself, with its call beside it
-                    if !c.on_apex() && !c.gone && self.stands(c, self.frame_no) && !(c.opened_at == self.frame_no && c.level > a.level) { there.push(cr); }
-                    self.standing_at(cr, a.level, &mut there, 0);
-                    // and every call there is seen through: every activation it stands for, at any depth, each as
-                    // itself at its own offset (switch 16, D4, D5)
-                    {
-                        let calls: Vec<ActRef> = there.iter().copied().filter(|r| self.act(*r).map_or(false, |x| !x.covers.is_empty() && x.on_apex())).collect();
-                        for c2 in calls { if let Some(ca) = self.act(c2) { let mut u: Vec<ActRef> = self.under(ca).into_iter().collect(); u.sort(); there.extend(u); } }
-                    }
-                    for r in there {
-                        if r == me || under.contains(&r) || !seen.insert(r) { continue; }
-                        let Some(x) = self.act(r) else { continue };
-                        if !self.cfg.policy.past[a.kind as usize][x.kind as usize] { continue; }
-                        // only the activation itself is excluded: two at one position are neighbors at offset zero
-                        let off = offset_between(a, x);
-                        out.push(Nb::seen(r, x.sym, off, r));
-                    }
+                    if c.covered_at.is_none() { if fired(c) { there.push(cr); } } else { self.standing_at(cr, a.level, &mut there, 0); }
+                    for r in there { push(r, &mut out, &mut seen); }
+                }
+            }
+        } else {
+            // the calls that landed on an activation it landed on; a call that grew by laps is one call (D26, D53)
+            let mine: FxHashSet<ActRef> = a.covers.iter().map(|c| self.latest(*c)).collect();
+            for f in self.frames.iter() {
+                for (i, x) in f.acts.iter().enumerate() {
+                    if x.covers.is_empty() || x.covered_at.is_some() || !fired(x) { continue; }
+                    let xr = ActRef { frame: f.no, index: i as u32 };
+                    if xr == me || under.contains(&xr) { continue; }
+                    let theirs: Vec<ActRef> = x.covers.iter().map(|c| self.latest(*c)).collect();
+                    // a call standing over this one, before or after it grew, is no neighbor of it
+                    if theirs.contains(&me) || mine.contains(&xr) || self.under(x).contains(&me) { continue; }
+                    if !theirs.iter().any(|c| mine.contains(c)) { continue; }
+                    push(xr, &mut out, &mut seen);
+                }
+            }
+            // what the relations it took end at: an activation as itself, or at a covered one the calls on it (D10)
+            if let Some(ends) = self.taken.get(&me) {
+                for &e in ends {
+                    let Some(x) = self.act(e) else { continue };
+                    let mut there = Vec::new();
+                    if x.covered_at.is_none() { if fired(x) { there.push(e); } } else { self.standing_at(e, a.level, &mut there, 0); }
+                    for r in there { push(r, &mut out, &mut seen); }
                 }
             }
         }

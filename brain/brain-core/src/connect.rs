@@ -61,32 +61,18 @@ impl Machine {
                     if !self.cfg.policy.past[a.kind as usize][*bk as usize] { continue; }
                     let Some(o) = self.conn_offset(a, *baxes, bpos, age) else { continue };
                     nbs.push(Nb::seen(*br, *bs, o, *br));
-                    // switch 16: with each call on the apex, what it covers, each as itself at its own offset
-                    {
-                        if let Some(ca) = self.act(*br) {
-                            if !ca.covers.is_empty() {
-                                let mut u: Vec<ActRef> = self.under(ca).into_iter().collect();
-                                u.sort();
-                                for ur in u {
-                                    if ur == me { continue; }
-                                    let Some(ua) = self.act(ur) else { continue };
-                                    if !self.cfg.policy.past[a.kind as usize][ua.kind as usize] { continue; }
-                                    // each at its own offset from the row's activation, in time as in space
-                                    let o2 = offset_between(a, ua);
-                                    if o2.iter().all(|v| *v == 0) { continue; }
-                                    if !nbs.iter().any(|x: &Nb| x.act == ur) { nbs.push(Nb::seen(ur, ua.sym, o2, ur)); }
-                                }
-                            }
-                        }
-                    }
                 }
                 if !nbs.is_empty() { followed.push((a.neuron, me, nbs)); }
                 let covered_before = a.covered_at.map_or(false, |c| c < age);
                 if covered_before { continue; }
-                if a.covered_at == Some(age) {
+                // a call that took a lap this frame is the same call, its pose that much longer (D53): as it stood before
+                // the lap it connects to what follows it like any activation, under the key of the pose it had then (D25)
+                let took_lap = a.covered_at == Some(age) && self.grown.contains_key(&me);
+                if a.covered_at == Some(age) && !took_lap {
                     // the last connection, to each call that covered it (D10)
                     for c in a.coverers.iter().filter_map(|c| self.act(*c)) {
-                        if c.pos[0] as i64 != fno { continue; }
+                        // a call that grew by a lap is the same call: it connects to nothing of itself (D53)
+                        if c.pos[0] as i64 != fno || c.neuron == a.neuron { continue; }
                         if c.strong && c.pos != a.pos && self.cfg.policy.future[a.kind as usize][c.kind as usize] {
                             if let Some(o) = self.conn_offset(a, c.axes, &c.pos, age) { writes.push((a.neuron, a.sym, c.sym, o, self.share_now(&rewards, c.neuron))); }
                         }

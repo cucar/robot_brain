@@ -1,7 +1,7 @@
 //! Selection (§8, R45–R49): the standing inferences, what they expand to at the frame ahead, the match, the
 //! electorate and resolution.
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use crate::machine::*;
 use crate::types::*;
@@ -39,26 +39,59 @@ impl Machine {
         let fno = self.frame_no;
         let ahead = fno + 1;
         self.match_all();
-        // the electorate (R46, R48): uncovered open activations, and covered ones whose coverer has nothing
+        // the electorate (R46, R48): an open activation is heard unless it is inhibited, a relation of its own covered by
+        // a call (D24) that has an inference for the frame ahead; where every call that inhibits it has none, it is heard,
+        // and so on down to the base. A call that took a lap is the same call (D53): what covered a relation of the
+        // record it grew from still does, and the record it grew from is not heard apart from it
         let mut voters: Vec<(ActRef, Vec<(NeuronId, Pos, f64, f64)>)> = Vec::new();
-        let mut stack: Vec<ActRef> = Vec::new();
-        for f in self.frames.iter() {
-            for (i, a) in f.acts.iter().enumerate() {
-                if !self.is_open(a, fno) || a.covered_at.is_some() || a.neuron == NeuronId::MAX { continue; }
-                stack.push(ActRef { frame: f.no, index: i as u32 });
-            }
-        }
-        let mut seen: FxHashSet<ActRef> = FxHashSet::default();
         let mut memo: FxHashMap<(NeuronId, Pos), Vec<(NeuronId, Pos)>> = FxHashMap::default();
-        while let Some(r) = stack.pop() {
-            if !seen.insert(r) { continue; }
-            let p = self.inferred_ahead(r, ahead, &mut memo);
-            if !p.is_empty() { voters.push((r, p)); continue; }
-            if let Some(a) = self.act(r) {
-                for c in &a.covers {
-                    if let Some(ca) = self.act(*c) { if self.is_open(ca, fno) { stack.push(*c); } }
+        let mut inhib: FxHashMap<ActRef, Vec<ActRef>> = FxHashMap::default();
+        for (c, es) in &self.call_edges {
+            let cl = self.latest(*c);
+            if self.act(cl).map_or(true, |x| x.gone) { continue; }
+            for &(x, y) in es {
+                for e in [x, y] {
+                    let e = self.latest(e);
+                    if e == cl { continue; }
+                    let v = inhib.entry(e).or_default();
+                    if !v.contains(&cl) { v.push(cl); }
                 }
             }
+        }
+        let mut cands: Vec<ActRef> = Vec::new();
+        for f in self.frames.iter() {
+            for (i, a) in f.acts.iter().enumerate() {
+                let r = ActRef { frame: f.no, index: i as u32 };
+                if !self.is_open(a, fno) || a.neuron == NeuronId::MAX || self.grown.contains_key(&r) { continue; }
+                cands.push(r);
+            }
+        }
+        // the calls over an activation: every call that covers a relation of its own, and every call over one of
+        // those, at any height (D24); it is silent in a neuron dimension where any of them has an inference for the
+        // frame ahead in that dimension, and heard in a neuron dimension where none has (R46, R48, D1)
+        let mut dims_of: FxHashMap<ActRef, Vec<DimId>> = FxHashMap::default();
+        for r in cands {
+            let p = self.inferred_ahead(r, ahead, &mut memo);
+            if p.is_empty() { continue; }
+            let mut ov: Vec<ActRef> = Vec::new();
+            let mut stack: Vec<ActRef> = inhib.get(&r).cloned().unwrap_or_default();
+            while let Some(c) = stack.pop() {
+                if c == r || ov.contains(&c) || ov.len() > 4096 { continue; }
+                ov.push(c);
+                if let Some(up) = inhib.get(&c) { stack.extend(up.iter().copied()); }
+            }
+            let mut silenced: Vec<(DimId, ActRef)> = Vec::new();
+            for &c in &ov {
+                if !dims_of.contains_key(&c) {
+                    let mut v: Vec<DimId> = self.inferred_ahead(c, ahead, &mut memo).iter().filter_map(|(n, _, _, _)| self.thalamus[*n].dim).collect();
+                    v.sort();
+                    v.dedup();
+                    dims_of.insert(c, v);
+                }
+                for d in &dims_of[&c] { if !silenced.iter().any(|x| x.0 == *d) { silenced.push((*d, c)); } }
+            }
+            let kept: Vec<(NeuronId, Pos, f64, f64)> = p.into_iter().filter(|(n, _, _, _)| self.thalamus[*n].dim.map_or(true, |d| !silenced.iter().any(|x| x.0 == d))).collect();
+            if !kept.is_empty() { voters.push((r, kept)); }
         }
         self.last_stats.voters = voters.len();
         self.last_stats.voters_above_base = voters.iter().filter(|(r, _)| self.act(*r).map_or(false, |a| a.height > 0)).count();

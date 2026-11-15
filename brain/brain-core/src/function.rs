@@ -272,10 +272,10 @@ impl Dictionary {
     pub fn neuron_of(&self, s: Sym) -> NeuronId { if s < SYM_CALL { s } else { self.syms.get((s - SYM_CALL) as usize).map_or(NeuronId::MAX, |x| x.0) } }
     /// The pose a call's symbol names; none for a base neuron.
     pub fn pose_of(&self, s: Sym) -> Option<Pose> { if s < SYM_CALL { None } else { self.syms.get((s - SYM_CALL) as usize).map(|x| x.1) } }
-    /// The node a call's pose starts at (D54): a fit lands that node on the call.
-    pub fn start_of(&self, s: Sym) -> Option<NeuronId> { self.pose_of(s).map(|p| p.from) }
-    /// Whether a call's pose starts at a node (D54): the pose's start neuron is the node's neuron.
-    pub fn starts_at(&self, call: Sym, node: Sym) -> bool { self.start_of(call).map_or(false, |n| n == self.neuron_of(node)) }
+    /// The node a call's pose starts at (D54), a neuron in its pose: a fit lands that node on the call.
+    pub fn start_of(&self, s: Sym) -> Option<Sym> { self.pose_of(s).map(|p| p.from) }
+    /// Whether a call's pose starts at a node (D54): the node is the pose's start, neuron and pose.
+    pub fn starts_at(&self, call: Sym, node: Sym) -> bool { self.start_of(call).map_or(false, |n| n == node) }
     /// The node of a function that stands for a neuron: one node per neuron (D15).
     pub fn node_by_neuron(&self, f: &Func, n: NeuronId) -> Option<usize> { f.nodes.iter().position(|s| self.neuron_of(*s) == n) }
     /// The symbol of an interneuron in a pose, allotted the first time it is named.
@@ -307,7 +307,7 @@ impl Dictionary {
     pub fn sym_text(&self, s: Sym) -> String {
         match self.pose_of(s) {
             None => format!("#{}", s),
-            Some(p) => format!("#{}<{}..{}x{}>", self.neuron_of(s), format!("#{}", p.from), format!("#{}", p.to), p.laps),
+            Some(p) => format!("#{}<{}..{}x{}>", self.neuron_of(s), self.sym_text(p.from), self.sym_text(p.to), p.laps),
         }
     }
 

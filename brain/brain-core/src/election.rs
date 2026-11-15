@@ -26,11 +26,17 @@ impl Machine {
     /// (experiment); and one edge to each call this election has taken that stands for an activation it lands on
     /// (D10).
     fn price(&self, fit: &Fit) -> f64 {
-        let mut taken: FxHashSet<ActRef> = FxHashSet::default();
-        for (l, _) in &fit.landed {
-            if let Some(a) = self.act(*l) { for c in &a.coverers { if self.electing.contains(c) { taken.insert(*c); } } }
+        // its failures and its bindings, and nothing for a relation that comes into being only when its own
+        // interneuron fires (D22, R24); this build has no variables, so no bindings
+        let mut p = fit.failed.len() as f64;
+        if self.sw.cross_charge {
+            let mut taken: FxHashSet<ActRef> = FxHashSet::default();
+            for (l, _) in &fit.landed {
+                if let Some(a) = self.act(*l) { for c in &a.coverers { if self.electing.contains(c) { taken.insert(*c); } } }
+            }
+            p += taken.len() as f64;
         }
-        fit.failed.len() as f64 + taken.len() as f64
+        p
     }
 
     /// The tie-break of two fits that measure the same (R24): a fit whose relations land on the board relations as
@@ -39,7 +45,8 @@ impl Machine {
     /// interneuron; the function that joined first; the fit from the older activation.
     fn rank(&self, fit: &Fit) -> (bool, i64, u8, u64, u64, ActRef) {
         let f = self.dict.get(fit.func);
-        let via_call = !fit.calls.is_empty() || fit.through;
+        // a bare reading is no longer preferred to one through a call: nothing is read through a call (R24)
+        let via_call = false;
         let shared = -(self.shared_under(fit) as i64);
         match f.and_then(|f| f.inter) {
             Some(n) => (via_call, shared, 0, n as u64, 0, fit.entry.1),
@@ -138,10 +145,16 @@ impl Machine {
         let (mut accepted, mut minted) = (0, 0);
         loop {
             let mut best: Option<(usize, f64)> = None;
+            // each fit's tie order read once per round, not at every comparison (speed only)
+            let mut ranks: Vec<Option<(bool, i64, u8, u64, u64, ActRef)>> = vec![None; fits.len()];
             for (i, fit) in fits.iter().enumerate() {
                 let net = self.coverage(fit) - self.price(fit);
                 if !(net > 0.0) { continue; }
-                let better = match best { None => true, Some((j, bn)) => net > bn || (net == bn && self.rank(fit) < self.rank(&fits[j])) };
+                let better = match best { None => true, Some((j, bn)) => net > bn || (net == bn && {
+                    if ranks[i].is_none() { ranks[i] = Some(self.rank(fit)); }
+                    if ranks[j].is_none() { ranks[j] = Some(self.rank(&fits[j])); }
+                    ranks[i] < ranks[j]
+                }) };
                 if better { best = Some((i, net)); }
             }
             let Some((i, _)) = best else { break };
@@ -190,12 +203,12 @@ impl Machine {
             Some(n) => {
                 // an interneuron never holds two functions whose nodes are the same neurons: the older gives way,
                 // its relations leaving with it (R43, R54, R18)
-                let mut mine: Vec<NeuronId> = f.nodes.iter().map(|m| self.dict.neuron_of(*m)).collect();
+                let mut mine: Vec<Sym> = f.nodes.clone();
                 mine.sort_unstable();
                 mine.dedup();
                 let older: Vec<crate::function::FuncId> = self.dict.of_inter(n).iter().copied().filter(|g| {
                     self.dict.get(*g).map_or(false, |g| {
-                        let mut v: Vec<NeuronId> = g.nodes.iter().map(|m| self.dict.neuron_of(*m)).collect();
+                        let mut v: Vec<Sym> = g.nodes.clone();
                         v.sort_unstable();
                         v.dedup();
                         v == mine
@@ -234,13 +247,13 @@ impl Machine {
                 if !order.contains(&node) { continue; }
                 let own = self.act(r).and_then(|a| if a.kind == Kind::Inter && a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { self.dict.pose_of(a.sym) } else { None });
                 len += match own {
-                    Some(p) => match (self.dict.node_by_neuron(&f, p.from), self.dict.node_by_neuron(&f, p.to)) { (Some(a), Some(b)) => f.stretch(a, b, p.laps), _ => 1 },
+                    Some(p) => match (f.node_of(p.from), f.node_of(p.to)) { (Some(a), Some(b)) => f.stretch(a, b, p.laps), _ => 1 },
                     None => 1,
                 };
             }
             let len = len.max(1);
             let c = order.len();
-            Pose { from: self.dict.neuron_of(f.nodes[latest.1]), to: self.dict.neuron_of(f.nodes[order[(len - 1) % c]]), laps: ((len - 1) / c) as u32 }
+            Pose { from: f.nodes[latest.1], to: f.nodes[order[(len - 1) % c]], laps: ((len - 1) / c) as u32 }
         } else {
             let mut laps = fit.laps;
             for (c, _) in &fit.calls {
@@ -248,7 +261,7 @@ impl Machine {
                     if a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { laps += self.dict.pose_of(a.sym).map_or(0, |p| p.laps); }
                 }
             }
-            Pose { from: self.dict.neuron_of(f.nodes[latest.1]), to: self.dict.neuron_of(f.nodes[earliest.1]), laps }
+            Pose { from: f.nodes[latest.1], to: f.nodes[earliest.1], laps }
         };
         let sym = self.dict.sym_of(neuron, pose);
         let covers: Vec<ActRef> = all.iter().map(|x| x.0).collect();
@@ -279,20 +292,6 @@ impl Machine {
         // a relation read through a call and the relation to that call are one board relation: covered under
         // either form, it is covered under both (switch 11, R50, D5)
         {
-            let mut more: Vec<(ActRef, ActRef)> = Vec::new();
-            for &(a, b) in &fit.edges {
-                for (x, y) in [(a, b), (b, a)] {
-                    let Some(xa) = self.act(x) else { continue };
-                    // read through a call beside x: the relation to that call is covered too
-                    for br in &xa.rels {
-                        let Some(c) = self.act(br.other) else { continue };
-                        if c.covers.is_empty() || br.other == y { continue; }
-                        if self.under(c).contains(&y) { more.push(edge(x, br.other)); }
-                    }
-                    // the relation to a call landed on as a node: every relation it stands for is covered too
-                    if let Some(ya) = self.act(y) { if !ya.covers.is_empty() { for u in self.under(ya) { more.push(edge(x, u)); } } }
-                }
-            }
             {
                 let mut t: Vec<ActRef> = fit.thru.clone();
                 t.extend(fit.calls.iter().map(|x| x.0));
@@ -302,14 +301,21 @@ impl Machine {
                 self.call_thru.insert(me, t);
                 self.call_fit.insert(me, fit.clone());
             }
-            { let mut all: Vec<(ActRef, ActRef)> = fit.edges.iter().map(|&(a, b)| edge(a, b)).collect(); all.extend(more.iter().copied()); all.sort(); all.dedup(); self.call_edges.insert(me, all); }
-            for e in more { if self.covered_rel.insert(e) { self.covered_edges.push(e); } }
+            { let mut all: Vec<(ActRef, ActRef)> = fit.edges.iter().map(|&(a, b)| edge(a, b)).collect(); all.sort(); all.dedup(); self.call_edges.insert(me, all); }
         }
         for r in &covers {
             if let Some(a) = self.act_mut(*r) {
-                if a.covered_at.is_none() { a.covered_at = Some((fno - r.frame) as u32); }
+                // it stands for the activation; the activation is covered once every relation of its own is (D24)
                 if !a.coverers.contains(&me) { a.coverers.push(me); }
             }
+        }
+        // the call of the lap before took this lap: it is the same call, its pose that much longer (D53); the record
+        // it grew from is out of the graph from now, and the grown record stands in its stead
+        for &(c, _) in &fit.calls {
+            let own = self.act(c).and_then(|ca| ca.fired_by.as_ref()).map_or(false, |fb| fb.func == f.id);
+            if !own { continue; }
+            self.grown.insert(c, me);
+            if let Some(ca) = self.act_mut(c) { if ca.covered_at.is_none() { ca.covered_at = Some((fno - ca.pos[0] as i64).max(0) as u32); } }
         }
         // switch 11: what the call covered, each at its offset from it, kept for as long as rows may name it (R28)
         {
@@ -318,30 +324,7 @@ impl Machine {
                 self.covered_by.insert(me, rec);
             }
         }
-        // every row that saw what it covers, outside what it stands for, holds the call in its pose at its offset
-        // there (D10)
-        if !self.frozen {
-            let under = { let a = self.act(me).unwrap(); self.under(a) };
-            let mut writes: Vec<(NeuronId, ActRef, ActRef, Nb)> = Vec::new();
-            for r in &covers {
-                let Some(x) = self.act(*r) else { continue };
-                for &(vn, v) in &x.seen_by {
-                    if v == me || under.contains(&v) { continue; }
-                    let Some(va) = self.act(v) else { continue };
-                    let off = offset_between(va, self.act(me).unwrap());
-                    writes.push((vn, v, *r, Nb::seen(me, sym, off, *r)));
-                }
-            }
-            let mut viewers: Vec<(NeuronId, ActRef)> = Vec::new();
-            for (vn, v, old, nb) in writes {
-                // switch 16: the row keeps what it held and takes the call beside it
-                let took = { let _ = old; self.thalamus[vn].add_beside(v, nb) };
-                if took && !viewers.contains(&(vn, v)) { viewers.push((vn, v)); }
-            }
-            if let Some(a) = self.act_mut(me) { a.seen_by = viewers; }
-            // every row of what the call stands for keeps the edges it saved: those to what it also stands for (R50)
-            
-        }
+        // the rows that saw what it lands on take the call when that is covered, not before (D10, D24)
         // where the report built the strong call of a function an inference named weakly, the weak one goes (D40)
         if strong {
             let pos = origin.pos;

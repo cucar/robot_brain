@@ -23,7 +23,7 @@ impl Machine {
         let n = self.dict.neuron_of(s);
         let Some(p) = self.dict.pose_of(s) else { return self.func_of(n) };
         let fs: Vec<&Func> = self.dict.of_inter(n).iter().filter_map(|id| self.dict.get(*id)).collect();
-        let has = |f: &Func, m: NeuronId| self.dict.node_by_neuron(f, m).is_some();
+        let has = |f: &Func, m: Sym| f.node_of(m).is_some();
         fs.iter().copied().find(|f| has(f, p.from) && has(f, p.to))
             .or_else(|| fs.iter().copied().find(|f| has(f, p.from)))
             .or_else(|| self.func_of(n))
@@ -82,7 +82,7 @@ impl Machine {
         if path.contains(&n) || path.len() > 256 { return; }
         if !path.is_empty() { if let Some(v) = all.as_deref_mut() { v.push((n, at)); } }
         let Some(f) = self.func_for(s).cloned() else { return };
-        let root = self.dict.start_of(s).and_then(|x| self.dict.node_by_neuron(&f, x)).unwrap_or(0);
+        let root = self.dict.start_of(s).and_then(|x| f.node_of(x)).unwrap_or(0);
         path.push(n);
         for (m, q) in self.expands_to(&f, root, at, board) {
             self.expand_from(m, q, from, board, path, out, all.as_deref_mut());
@@ -94,7 +94,7 @@ impl Machine {
     /// happened (R49, R28).
     pub(crate) fn nodes_at(&self, s: Sym, at: Pos) -> Vec<(Sym, Pos)> {
         let Some(f) = self.func_for(s) else { return vec![] };
-        let root = self.dict.start_of(s).and_then(|x| self.dict.node_by_neuron(f, x)).unwrap_or(0);
+        let root = self.dict.start_of(s).and_then(|x| f.node_of(x)).unwrap_or(0);
         self.expands_to(f, root, at, true)
     }
 }

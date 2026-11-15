@@ -62,7 +62,8 @@ impl Machine {
         if w.gone || !self.stands(w, self.frame_no) { return false; }
         // with functions that never change, only what stands uncovered on the apex (switch 8)
         
-        w.on_apex() || (!w.coverers.is_empty() && w.coverers.iter().all(|c| self.electing.contains(c)))
+        // a fit does not read a covered activation (D24)
+        w.covered_at.is_none()
     }
 
     /// From a landed activation, the board relation at `delta` whose far end is `want`, or an earlier call of the
@@ -97,30 +98,19 @@ impl Machine {
             if used.contains(o) || self.covered_rel.contains(&edge(from, *o)) { continue; }
             let Some(w) = self.act(*o) else { continue };
             if w.sym != want || !self.landable(w) { continue; }
-            return Some((*o, false, *o, None));
-        }
-        // through a call beside it: every call standing on the apex that the activation sees, read as what its
-        // function names, at any depth, each at its own position (D5)
-        let mut calls: Vec<ActRef> = a.rels.iter().map(|br| br.other).filter(|r| self.act(*r).map_or(false, |c| !c.covers.is_empty())).collect();
-        calls.sort();
-        calls.dedup();
-        let mut best: Option<(ActRef, bool, ActRef, Option<ActRef>)> = None;
-        for c in calls {
-            let Some(ca) = self.act(c) else { continue };
-            if !ca.on_apex() || !self.stands(ca, fno) { continue; }
-            let mut under: Vec<ActRef> = self.under(ca).into_iter().collect();
-            under.sort();
-            for u in under {
-                if u == from || used.contains(&u) || self.covered_rel.contains(&edge(from, u)) { continue; }
-                let Some(w) = self.act(u) else { continue };
-                if w.pos != target || w.sym != want || w.gone || !self.stands(w, fno) { continue; }
-                // read through a call of its own function going round: the call takes the lap (D53)
-                let own = ca.fired_by.as_ref().map_or(false, |fb| fb.func == func);
-                let cand = if own { (c, true, u, Some(c)) } else { (u, false, u, Some(c)) };
-                if best.map_or(true, |b| (cand.2, cand.0) < (b.2, b.0)) { best = Some(cand); }
+            // where the call of the lap before stands on that activation, its pose starting there, it takes the lap
+            // (D53); nothing is read through a call (D5)
+            let mut lap: Option<ActRef> = None;
+            for &c in &w.coverers {
+                if used.contains(&c) { continue; }
+                let Some(ca) = self.act(c) else { continue };
+                if ca.gone || ca.covered_at.is_some() || !self.stands(ca, fno) || ca.pos != w.pos { continue; }
+                if ca.fired_by.as_ref().map_or(true, |fb| fb.func != func) || self.dict.start_of(ca.sym) != Some(want) { continue; }
+                if lap.map_or(true, |l| c > l) { lap = Some(c); }
             }
+            return Some(match lap { Some(c) => (c, true, *o, None), None => (*o, false, *o, None) });
         }
-        best
+        None
     }
 
     /// Fit a function entered at node `root` on an activation (D31, D54): read out from there relation by
@@ -312,14 +302,14 @@ impl Machine {
         if path.contains(&n) || path.len() > 64 { return; }
         let Some(f) = self.func_for(s).cloned() else { return };
         deps.push(f.id);
-        let root = self.dict.node_by_neuron(&f, pose.from).unwrap_or(0);
+        let root = f.node_of(pose.from).unwrap_or(0);
         let lay = f.layout_from(root);
         let mut nodes: Vec<(Sym, Offset)> = f.nodes.iter().enumerate().map(|(i, m)| (*m, lay.position[i])).collect();
         if let Some(l) = f.lap() {
             // the cycle read back from the node the pose starts at, lap after lap, to the node it ends at (D53)
             let order = f.back_order(root);
             if !order.is_empty() {
-                let to = self.dict.node_by_neuron(&f, pose.to).unwrap_or(order[order.len() - 1]);
+                let to = f.node_of(pose.to).unwrap_or(order[order.len() - 1]);
                 let total = f.stretch(root, to, pose.laps);
                 let c = order.len();
                 nodes.retain(|(m, _)| !order.iter().any(|v| f.nodes[*v] == *m));
@@ -513,7 +503,7 @@ impl Machine {
                     let Some(b) = self.act(br.other) else { continue };
                     if (!s15 && !b.on_apex()) || b.gone || !self.stands(b, fno) { continue; }
                     // a relation a call covers is off the board (switch 15)
-                    if s15 && self.covered_rel.contains(&edge(near, br.other)) { continue; }
+                    if s15 && (self.covered_rel.contains(&edge(near, br.other)) || self.lifted.contains(&edge(near, br.other))) { continue; }
                     if !br.strength < 2 { continue; }
                     let k = edge(near, br.other);
                     if out.get(&k).map_or(false, |x| x.strength >= br.strength) { continue; }
@@ -576,7 +566,7 @@ impl Machine {
                 let Some(fb) = &a.fired_by else { continue };
                 let Some(f) = self.dict.get(fb.func) else { continue };
                 let Some(n) = self.dict.start_of(a.sym) else { continue };
-                let Some(node) = self.dict.node_by_neuron(f, n) else { continue };
+                let Some(node) = f.node_of(n) else { continue };
                 let start = f.nodes[node];
                 let lay = f.layout();
                 let mut opos = a.pos;
@@ -611,11 +601,14 @@ impl Machine {
                 let mut opos = entry.pos;
                 for d in 0..MAX_DIMS { opos[d] -= lay.position[fit.entry.0][d]; }
                 let mut offers: Vec<(ActRef, ActRef, Sym, Option<(Sym, Sym)>)> = Vec::new();
-                // read through the call: the relations under it that share the node's activation
-                for &c in &fit.thru {
-                    let Some(ca) = self.act(c) else { continue };
-                    let under = self.under(ca);
-                    for &(l, node) in &fit.landed { if under.contains(&l) { offers.push((c, l, f.nodes[node], None)); } }
+                // a call that also landed on an activation the fit landed on: its relations that share that
+                // activation (R50)
+                for &(l, node) in &fit.landed {
+                    let Some(la) = self.act(l) else { continue };
+                    for &c in &la.coverers {
+                        if self.act(c).and_then(|ca| ca.fired_by.as_ref()).map_or(true, |fb| fb.func == fit.func) { continue; }
+                        offers.push((c, l, f.nodes[node], None));
+                    }
                 }
                 // landed on the call as a node: the relations under it that share the activation it stands at
                 for &(c, node) in &fit.landed {
@@ -623,7 +616,7 @@ impl Machine {
                     let Some(ca) = self.act(c) else { continue };
                     if ca.covers.is_empty() { continue; }
                     let Some(p) = self.dict.pose_of(ca.sym) else { continue };
-                    let at: Vec<ActRef> = ca.covers.iter().copied().filter(|r| self.act(*r).map_or(false, |x| x.neuron == p.from && x.pos == ca.pos)).collect();
+                    let at: Vec<ActRef> = ca.covers.iter().copied().filter(|r| self.act(*r).map_or(false, |x| x.sym == p.from && x.pos == ca.pos)).collect();
                     if at.len() != 1 { if self.trace { eprintln!("[offer choice f{}] {} as a node of f{}: {} activations it stands at", fno, self.dict.sym_text(ca.sym), f.id, at.len()); } continue; }
                     let Some(sa) = self.act(at[0]) else { continue };
                     let cs = f.nodes[node];
@@ -646,9 +639,9 @@ impl Machine {
         for (e, only) in offered.iter() {
             let e = *e;
             if !through && e.strength < 2 { continue; }
-            // no function is built on a relation between two activations under one same activation (switch 11, R50);
-            // switch 23: only where one stands over the other
-            if self.share_under(e.near, e.far) { continue; }
+            // two calls that landed on one activation relate like any two neighbors (D26, R50); a relation between
+            // an activation and one it stands over is no relation
+            if self.stands_over(e.near, e.far) { continue; }
             for (act, other) in [(e.near, e.far), (e.far, e.near)] {
                 let Some(list) = at_act.get(&act) else { continue };
                 for &(fid, as_node, opos) in list {
@@ -671,7 +664,7 @@ impl Machine {
             }
         }
         for &(e, fid, shared, as_node, rw, opos, first) in &offered19 {
-            if self.share_under(e.near, e.far) { continue; }
+            if self.stands_over(e.near, e.far) { continue; }
             let other = if e.near == shared { e.far } else { e.near };
             let Some(f0) = self.dict.get(fid) else { continue };
             if taken.get(&fid).map_or(false, |t| t.contains(&edge(shared, other))) { continue; }
@@ -786,12 +779,20 @@ impl Machine {
                 })
             } else { None };
             if self.trace { if let Some(h) = here20 { eprintln!("   [at node f{}] {} alone at {}: {:.0} (its count {:.1})", fno, self.rel_text(&rel), self.dict.sym_text(attach), h, self.halved(&rel)); } }
-            let here = match holder {
+            let own = match holder {
                 _ if here20.is_some() => here20.unwrap(),
                 _ if lone => self.halved(&rel) - 2.0,
                 Some(g) => self.contribution_ab(g, &rel),
                 None => self.halved(&rel) - 2.0,
             };
+            // a function's last relation is weighed against everything that leaves with it: the function and its
+            // subtree, every function that leaves the dictionary with its interneuron, and so on up (D57, R54, R38)
+            let sub: Vec<(FuncId, f64)> = match holder { Some(g) if lone => self.subtree_of(g), _ => Vec::new() };
+            let here = own + sub.iter().map(|x| x.1).sum::<f64>();
+            if self.trace_cover && !sub.is_empty() {
+                let parts: Vec<String> = sub.iter().map(|(id, v)| format!("f{} {:.1}", id, v)).collect();
+                eprintln!("[last-move f{}] {} to f{} | gain {:.1} | its function f{:?} worth {:.1} | subtree {} | total {:.1} | {}", fno, self.rel_text(&rel), fid, w, holder.map(|g| g.id), own, parts.join(", "), here, if w > here { "MOVES" } else { "stays" });
+            }
             if self.trace { eprintln!("[cand f{}] {} best f{} gain {:.0} | where it stands f{:?} {:.0}", fno, self.rel_text(&rel), fid, w, self.dict.holder(&rel), here); }
             if !(w > here) { continue; }
             if self.trace { eprintln!("[join f{}] {} into {} gain {:.0} over {:.0}", fno, self.rel_text(&rel), self.dict.describe(self.dict.get(fid).unwrap()), w, here); }
@@ -897,56 +898,18 @@ impl Machine {
         }
         // a recurring relation no function holds starts one (R50)
         for e in fresh {
-            // switch 16: a relation to an activation under a call and the relation to that call are one board
-            // relation; where either is at strength 3 and no function holds it, the function starts on the call
-            {
-                let covered = |r: ActRef| self.act(r).map_or(false, |a| !a.on_apex());
-                let (nc, fc) = (covered(e.near), covered(e.far));
-                // switch 18: a relation to an activation under a call starts nothing, whatever its count
-                if nc || fc {
-                    if self.trace && self.dict.holder(&e.rel).is_none() && self.halved(&e.rel) >= 3.0 { eprintln!("[no start f{}] {} | an end stands under a call ({:.1})", fno, self.rel_text(&e.rel), self.halved(&e.rel)); }
-                    continue;
-                }
-                if nc || fc {
-                    // both ends under one same activation: nothing is built on it (R50); under different calls, a choice
-                    if nc && fc {
-                        if !self.share_under(e.near, e.far) && self.trace { eprintln!("[start choice f{}] {} | both ends stand under different calls", fno, self.rel_text(&e.rel)); }
-                        continue;
-                    }
-                    let (x, u) = if fc { (e.near, e.far) } else { (e.far, e.near) };
-                    let mut calls = Vec::new();
-                    self.apex_over(u, &mut calls, 0);
-                    calls.sort();
-                    calls.dedup();
-                    if calls.len() != 1 { if self.trace { eprintln!("[start choice f{}] {} | {} calls stand over the covered end", fno, self.rel_text(&e.rel), calls.len()); } continue; }
-                    let c = calls[0];
-                    let (Some(xa), Some(ca)) = (self.act(x), self.act(c)) else { continue };
-                    let rc = canon(xa.sym, ca.sym, offset_between(xa, ca));
-                    if self.dict.holder(&e.rel).is_some() || self.dict.holder(&rc).is_some() || joined.contains(&rc) { continue; }
-                    let (h_u, h_c) = (self.halved(&e.rel), self.halved(&rc));
-                    if h_u < 3.0 && h_c < 3.0 { continue; }
-                    let ec = Fresh { near: x, far: c, off: offset_between(xa, ca), strength: 0, rel: rc };
-                    if self.is_lap_rel(&ec) || self.share_under(x, c) {
-                        if self.trace { eprintln!("[no start f{}] {} for {} | {}", fno, self.rel_text(&rc), self.rel_text(&e.rel), if self.is_lap_rel(&ec) { "a lap of the call" } else { "both under one activation" }); }
-                        continue;
-                    }
-                    let id = self.dict.start(rc);
-                    self.stats_added += 1;
-                    if self.trace { eprintln!("[new f{}] {} | on {} at {:.1} (the call's own {:.1})", fno, self.dict.describe(self.dict.get(id).unwrap()), self.rel_text(&e.rel), h_u, h_c); }
-                    changed.push(id);
-                    continue;
-                }
-            }
+            // a relation no call covers starts a function at strength 3, whether or not a call has landed on one of
+            // its ends: it is counted as itself (R50, R18)
             let _st = { self.start_strength(&e.rel, e.strength).max(self.strength_through(e)) };
             let st = { if self.halved(&e.rel) >= 3.0 { 3 } else { 0 } };
             let need = { 3 };
             if joined.contains(&e.rel) || self.dict.holder(&e.rel).is_some() || st < need { continue; }
-            // a lap of a call starts nothing, nor a relation between two activations under one same one (switch 11, R50)
-            // switch 22: a relation between two activations over a shared activation starts like any other; one between an
-            // activation and one it stands over still starts nothing
-            let refused = { self.share_under(e.near, e.far) };
+            // a lap of a call starts nothing (R50, D53); two calls that landed on one activation relate like any two
+            // neighbors and start a function as any relation does (D26, R50); one between an activation and one it
+            // stands over starts nothing
+            let refused = { self.stands_over(e.near, e.far) };
             if self.is_lap_rel(e) || refused {
-                if self.trace { eprintln!("[no start f{}] {} | {}", fno, self.rel_text(&e.rel), if self.is_lap_rel(e) { "a lap of the call" } else { "both under one activation" }); }
+                if self.trace { eprintln!("[no start f{}] {} | {}", fno, self.rel_text(&e.rel), if self.is_lap_rel(e) { "a lap of the call" } else { "one stands over the other" }); }
                 continue;
             }
             
@@ -997,6 +960,12 @@ impl Machine {
         v
     }
 
+    /// Whether one activation stands over the other (D5): one is under the other's call.
+    pub(crate) fn stands_over(&self, a: ActRef, b: ActRef) -> bool {
+        let (Some(x), Some(y)) = (self.act(a), self.act(b)) else { return false };
+        self.under(x).contains(&b) || self.under(y).contains(&a)
+    }
+
     fn share_under_read(&self, a: ActRef, b: ActRef) -> bool {
         let (Some(x), Some(y)) = (self.act(a), self.act(b)) else { return false };
         let mut ua = self.under(x);
@@ -1017,8 +986,8 @@ impl Machine {
             let Some(f) = self.func(fb.func) else { continue };
             if !f.has_cycle() { continue; }
             let Some(p) = self.dict.pose_of(ca.sym) else { continue };
-            let Some(at) = self.dict.node_by_neuron(f, p.from) else { continue };
-            if self.dict.node_by_neuron(f, oa.neuron).is_none() { continue; }
+            let Some(at) = f.node_of(p.from) else { continue };
+            if f.node_of(oa.sym).is_none() { continue; }
             if f.holds(&canon(oa.sym, f.nodes[at], offset_between(oa, ca))) { return true; }
         }
         false
@@ -1059,6 +1028,28 @@ impl Machine {
         let (cb, nb) = count(b, a, &neg);
         // this frame's occurrence, written so far only at its later end, counts at the earlier end too
         (ca + nb, cb + na)
+    }
+
+    /// The functions that leave the dictionary with a function's interneuron, and so on up (R38): where the
+    /// function is its interneuron's only one, every function that names that interneuron, and those that name the
+    /// interneurons left with no function by that; each with its worth, its relations' worth less its entry (D57).
+    pub(crate) fn subtree_of(&self, g: &Func) -> Vec<(FuncId, f64)> {
+        let mut gone: FxHashSet<FuncId> = FxHashSet::default();
+        gone.insert(g.id);
+        let mut queue: Vec<NeuronId> = Vec::new();
+        if let Some(n) = g.inter { if self.dict.of_inter(n).iter().all(|x| gone.contains(x)) { queue.push(n); } }
+        let mut seen_n: FxHashSet<NeuronId> = FxHashSet::default();
+        let mut out = Vec::new();
+        while let Some(n) = queue.pop() {
+            if !seen_n.insert(n) { continue; }
+            for id in self.dict.naming(n) {
+                if !gone.insert(id) { continue; }
+                let Some(f) = self.dict.get(id) else { continue };
+                out.push((id, self.worth_ab(f.origin(), &f.rels, &f.at, f.inter) - 1.0));
+                if let Some(m) = f.inter { if self.dict.of_inter(m).iter().all(|x| gone.contains(x)) { queue.push(m); } }
+            }
+        }
+        out
     }
 
     /// The relations that go round a function's cycle, a relation of a neuron to itself included (group B).

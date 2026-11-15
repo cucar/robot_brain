@@ -61,10 +61,13 @@ pub struct Config {
 #[derive(Clone, Copy, Debug)]
 pub struct Switches {
     pub s15_uncovered_relations: bool,
+    /// The committed build's crossing charge: a fit pays one for each call taken earlier in the same election that
+    /// landed on an activation it lands on.
+    pub cross_charge: bool,
 }
 
 impl Default for Switches {
-    fn default() -> Self { Switches { s15_uncovered_relations: true } }
+    fn default() -> Self { Switches { s15_uncovered_relations: true, cross_charge: false } }
 }
 
 pub struct Machine {
@@ -111,6 +114,23 @@ pub struct Machine {
     /// stay in the middle are printed without the full trace (off by default; prints only, changes nothing).
     pub origin_ties: u64,
     pub trace_origin: bool,
+    /// Trace each activation as it is covered (D24).
+    pub trace_cover: bool,
+    /// Relations of covered activations that no call covered, now ending at their calls (D24, D10)
+    pub(crate) lifted: FxHashSet<(ActRef, ActRef)>,
+    /// What each call took that way: the activations or calls its taken relations end at (D10, D26)
+    pub(crate) taken: FxHashMap<ActRef, Vec<ActRef>>,
+    /// How many relations went up to a call, how many of them between two calls, and activations covered at age 0
+    pub up_count: usize,
+    pub up_pair_count: usize,
+    pub cover_age0: usize,
+    /// The first frame of the run (D24), and every activation covered by one relation: the frame, and the activation
+    pub first_frame: Option<Frame>,
+    pub one_side: Vec<(Frame, ActRef)>,
+    /// What each cover check of the frame covered: the level it ran after (−1 after the last), base activations, calls.
+    pub cover_log: Vec<(i64, usize, usize)>,
+    /// A call that took a lap (D53): the record it grew from, to the record it stands as now.
+    pub grown: FxHashMap<ActRef, ActRef>,
     pub(crate) middle_seen: FxHashSet<(Frame, FuncId, Rel, u8)>,
     /// For the count only: relations that moved from one function into another, those only a fit of the first
     /// election offered (switch 17), and moves of a relation that had moved before; candidates no longer read.
@@ -224,6 +244,16 @@ impl Machine {
             origin_moves: 0,
             origin_ties: 0,
             trace_origin: false,
+            trace_cover: false,
+            grown: FxHashMap::default(),
+            cover_log: Vec::new(),
+            lifted: FxHashSet::default(),
+            taken: FxHashMap::default(),
+            up_count: 0,
+            up_pair_count: 0,
+            cover_age0: 0,
+            first_frame: None,
+            one_side: Vec::new(),
             middle_seen: FxHashSet::default(),
             moves_total: 0,
             moves_first: 0,
@@ -354,9 +384,11 @@ impl Machine {
         // the levels (§6, R26): activate, find, count, group, elect, allocate
         self.span_s = self.board_span();
         self.covered_edges.clear();
+        self.cover_log.clear();
         self.stats_added = 0;
         self.stats_reused = 0;
         self.stats_retired = 0;
+        if self.first_frame.is_none() { self.first_frame = Some(fno); }
         let mut level: u32 = 0;
         loop {
             let refs: Vec<ActRef> = self.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter().enumerate()
@@ -367,6 +399,7 @@ impl Machine {
             let lt = std::time::Instant::now();
             let added_before = self.stats_added;
             let (bids, accepted, minted) = self.run_level(level, &refs);
+            if !self.frozen { let (b, c) = self.cover_pass(); self.cover_log.push((level as i64, b, c)); }
             stats.per_level.push((refs.len(), bids, self.last_fits, accepted, self.stats_added - added_before, lt.elapsed().as_secs_f64() * 1000.0));
             if self.trace_levels {
                 let (acts, rels, fits, acc, added, ms) = stats.per_level[stats.per_level.len() - 1];
@@ -380,6 +413,8 @@ impl Machine {
             // nothing caps the depth (R26); a frame this deep means a fault
             if level > 1024 { break; }
         }
+        // and once more after the frame's last level (D24)
+        if !self.frozen { let (b, c) = self.cover_pass(); self.cover_log.push((-1, b, c)); }
         stats.added = self.stats_added;
         stats.reused = self.stats_reused;
         stats.retired = self.stats_retired;
@@ -408,6 +443,9 @@ impl Machine {
         while self.frames.front().map_or(false, |f| f.no < keep_from) { self.frames.pop_front(); }
         self.covered_rel.retain(|(a, b)| a.frame >= keep_from && b.frame >= keep_from);
         self.call_edges.retain(|c, _| c.frame >= keep_from);
+        self.grown.retain(|c, _| c.frame >= keep_from);
+        self.lifted.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
+        self.taken.retain(|c, _| c.frame >= keep_from);
         self.call_thru.retain(|c, _| c.frame >= keep_from);
         self.call_fit.clear();
         stats.elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
@@ -422,6 +460,124 @@ impl Machine {
     }
 
     /// A bare activation of `n` at `pos` (D8): a base activation sees one position in every dimension (D4).
+    /// Covering (D24, D10, R27): an activation is covered when every relation of its own is covered, the relation
+    /// to what follows it included, so not before its reach forward in time has passed; only where a call has
+    /// landed on it, so that a call stands for it. From then it is out of the graph; the rows that saw it keep
+    /// it as they saw it and take nothing for its calls (D10, D18).
+    pub(crate) fn cover_pass(&mut self) -> (usize, usize) {
+        let fno = self.frame_no;
+        // each activation's covered relations, by their offset from it
+        let mut offs: FxHashMap<ActRef, Vec<Offset>> = FxHashMap::default();
+        for f in self.frames.iter() {
+            for (i, a) in f.acts.iter().enumerate() {
+                if a.gone { continue; }
+                let me = ActRef { frame: f.no, index: i as u32 };
+                for br in &a.rels {
+                    if self.act(br.other).map_or(true, |o| o.gone) { continue; }
+                    if self.covered_rel.contains(&edge(me, br.other)) {
+                        offs.entry(me).or_default().push(br.off);
+                        let mut n = br.off; for x in n.iter_mut() { *x = -*x; }
+                        offs.entry(br.other).or_default().push(n);
+                    }
+                }
+            }
+        }
+        // covered: two covered relations of its own, one on each side of it in one dimension; where the layout has
+        // no point on one side, the one on the other side is enough (D24)
+        let mut newly: Vec<(ActRef, u32)> = Vec::new();
+        let mut one: Vec<(Frame, ActRef)> = Vec::new();
+        for f in self.frames.iter() {
+            for (i, a) in f.acts.iter().enumerate() {
+                if a.gone || a.covered_at.is_some() || a.coverers.is_empty() || a.neuron == NeuronId::MAX { continue; }
+                let me = ActRef { frame: f.no, index: i as u32 };
+                let Some(o) = offs.get(&me) else { continue };
+                let mut ok = false;
+                for d in 0..MAX_DIMS {
+                    if d > 0 && a.axes & (1 << d) == 0 { continue; }
+                    let (hn, hp) = (o.iter().any(|x| x[d] < 0), o.iter().any(|x| x[d] > 0));
+                    if !(hn || hp) { continue; }
+                    if (hn || !self.layout_side(me, d, -1)) && (hp || !self.layout_side(me, d, 1)) { ok = true; if !(hn && hp) { one.push((fno, me)); } break; }
+                }
+                if ok { newly.push((me, (fno - a.pos[0] as i64).max(0) as u32)); }
+            }
+        }
+        self.one_side.extend(one);
+        let counts = (newly.iter().filter(|(r, _)| self.act(*r).map_or(false, |a| a.covers.is_empty())).count(),
+            newly.iter().filter(|(r, _)| self.act(*r).map_or(false, |a| !a.covers.is_empty())).count());
+        for (me, age) in newly {
+            if self.trace_cover { eprintln!("[covered f{}] {} at frame {} age {}", fno, self.act(me).map_or("?".into(), |a| self.dict.sym_text(a.sym)), me.frame, age); }
+            if age == 0 { self.cover_age0 += 1; }
+            // a row holds what stood on the board when it was written: it takes nothing for the call (D10, D18)
+            if let Some(a) = self.act_mut(me) { a.covered_at = Some(age); }
+            self.lift_relations(me);
+        }
+        counts
+    }
+
+    /// A relation of a covered activation that no call covers ends, from then on, at each call that landed on it,
+    /// at the offset from that call's position; where its other end is covered too, it is the relation between the
+    /// calls on the two, one edge however many such relations run between them (D24, D10, D26).
+    fn lift_relations(&mut self, me: ActRef) {
+        let Some(a) = self.act(me).cloned() else { return };
+        let mut rels: Vec<(ActRef, u32)> = a.rels.iter().map(|br| (br.other, br.strength)).collect();
+        for f in self.frames.iter() { for (j, b) in f.acts.iter().enumerate() { if b.gone { continue; } for br in &b.rels { if br.other == me { rels.push((ActRef { frame: f.no, index: j as u32 }, br.strength)); } } } }
+        let coverers: Vec<ActRef> = a.coverers.iter().map(|c| self.latest(*c)).collect();
+        for (o, s) in rels {
+            let e = edge(me, o);
+            if self.covered_rel.contains(&e) || self.lifted.contains(&e) { continue; }
+            let Some(oa) = self.act(o).cloned() else { continue };
+            if oa.gone || coverers.contains(&o) { continue; }
+            self.lifted.insert(e);
+            self.up_count += 1;
+            // where the other end is covered, the relation runs between the calls on the two
+            let others: Vec<ActRef> = if oa.covered_at.is_some() { oa.coverers.iter().map(|c| self.latest(*c)).collect() } else { vec![o] };
+            if oa.covered_at.is_some() { self.up_pair_count += 1; }
+            for &c in &coverers {
+                for &x in &others {
+                    if x == c { continue; }
+                    let (Some(ca), Some(xa)) = (self.act(c).cloned(), self.act(x).cloned()) else { continue };
+                    let v = self.taken.entry(c).or_default();
+                    if !v.contains(&x) { v.push(x); }
+                    let off = offset_between(&xa, &ca);
+                    if let Some(xm) = self.act_mut(x) { if !xm.rels.iter().any(|br| br.other == c) { xm.rels.push(BoardRel { other: c, off, strength: s }); } }
+                    if self.trace_cover { eprintln!("[up f{}] {} at frame {} -> {} now ends at {} | {}", self.frame_no, self.dict.sym_text(a.sym), me.frame, self.dict.sym_text(oa.sym), self.dict.sym_text(ca.sym), if oa.covered_at.is_some() { "between two calls" } else { "to the call" }); }
+                }
+            }
+        }
+    }
+
+    /// Whether the layout has a point on one side of an activation in a dimension, within its reach, among what it
+    /// may see: in time, nothing ends after it (D24, D3, D9).
+    pub(crate) fn layout_side(&self, me: ActRef, d: usize, sign: i32) -> bool {
+        let Some(a) = self.act(me) else { return false };
+        if d == 0 && sign > 0 { return true; }
+        // in time, a position where something has fired is a point of the layout for good: the layout ends before an
+        // activation only at the real start of the run, where nothing has fired before it (D24, D3)
+        if d == 0 { return self.first_frame.map_or(false, |f0| (a.lo[0] as i64) > f0); }
+        let under = self.under(a);
+        for f in self.frames.iter() {
+            let dt = f.no - a.pos[0] as i64;
+            if dt > 0 || -dt > a.reach[0] as i64 { continue; }
+            for (i, x) in f.acts.iter().enumerate() {
+                let xr = ActRef { frame: f.no, index: i as u32 };
+                if xr == me || x.gone || under.contains(&xr) || x.neuron == NeuronId::MAX { continue; }
+                if !self.cfg.policy.past[a.kind as usize][x.kind as usize] { continue; }
+                let off = offset_between(a, x);
+                let mut within = true;
+                for k in 1..MAX_DIMS { if (a.axes & x.axes) & (1 << k) != 0 && off[k].abs() > a.reach[k] { within = false; } }
+                if within && off[d].signum() == sign { return true; }
+            }
+        }
+        false
+    }
+
+    /// The record a call stands as now, after every lap it took (D53).
+    pub(crate) fn latest(&self, mut r: ActRef) -> ActRef {
+        let mut n = 0;
+        while let Some(x) = self.grown.get(&r) { r = *x; n += 1; if n > 4096 { break; } }
+        r
+    }
+
     pub(crate) fn new_act(&self, n: NeuronId, pos: Pos, strong: bool) -> Act {
         let nn = &self.thalamus[n];
         let mut reach = [0; MAX_DIMS];
@@ -486,7 +642,7 @@ impl Machine {
             
             let left: Vec<Fresh> = if self.sw.s15_uncovered_relations {
                 // what the first election left on the board: every relation no call covers, its ends standing (switch 15)
-                fresh.iter().filter(|e| !self.covered_rel.contains(&crate::recognize::edge(e.near, e.far))
+                fresh.iter().filter(|e| !self.covered_rel.contains(&crate::recognize::edge(e.near, e.far)) && !self.lifted.contains(&crate::recognize::edge(e.near, e.far))
                     && self.act(e.near).map_or(false, |a| !a.gone && self.stands(a, self.frame_no)) && self.act(e.far).map_or(false, |a| !a.gone && self.stands(a, self.frame_no))).copied().collect()
             } else {
                 fresh.iter().filter(|e| self.act(e.near).map_or(false, |a| a.on_apex()) && self.act(e.far).map_or(false, |a| a.on_apex())).copied().collect()
