@@ -731,7 +731,7 @@ groups, fits and keeps (§6).
 > where the wave runs forward, each activation of it reading its own connections ahead. And it is the apex, the
 > top of the hierarchy as it stands. The four are one set: an activation that is covered leaves every
 > role at once (D10, D24). One role ends sooner. An activation a call has landed on is inhibited: it still
-> stands on the apex, and it does not vote while that call speaks (D24).
+> stands on the apex, and it does not vote while a call over it speaks (D24).
 >
 > **An expected input never reaches the apex.** An activation a function in the dictionary names at its latest
 > node has its relations covered by that function's call, recognized in the frame it fires, and is covered once what
@@ -781,8 +781,8 @@ groups, fits and keeps (§6).
 > **The latest of a sequence is not covered.** A call recognized at the present covers relations of the
 > activation at its position (D54). Where that activation's only neighbors are in time, one of its two sides
 > is what follows it, still to come (D24). So it stands on the apex in the frame it fires, beside the call
-> that landed on it, and what fires next reads it as itself. It is inhibited all the same: the call speaks,
-> and it does not (D24). An activation with neighbors on both
+> that landed on it, and what fires next reads it as itself. It is inhibited all the same: while the call speaks,
+> it does not (D24). An activation with neighbors on both
 > sides of it in its own frame, as a pixel has, may be covered in the frame it fires. Only a recognized call covers. What an inference named covers nothing (R40).
 >
 > **What stands before coverage stands.** A neuron is covered only after it has fired (R27). Coverage acquired at
@@ -790,8 +790,8 @@ groups, fits and keeps (§6).
 > a reward for one of those frames still reaches them (R33).
 >
 > **One exception, on being heard alone.** Every activation infers at its age 0, inhibited or not, and the
-> machine keeps what it inferred (R45). An inhibited activation's inferences are heard only where the call over
-> it has nothing for the frame ahead (R48), as a newly allocated interneuron has nothing until something has run under
+> machine keeps what it inferred (R45). An inhibited activation's inferences are heard in a neuron
+> dimension only where no call over it has anything for the frame ahead in that dimension (D24, R48), as a newly allocated interneuron has nothing until something has run under
 > it. A covered activation still writes nothing and connects to nothing, heard or not; only its coverer learns
 > what ran.
 > That is the whole of inhibition in the design.
@@ -1632,9 +1632,11 @@ machine works out itself (R22).
 > (D10, D5).
 >
 > An activation is **inhibited** when one relation of its own is covered. That is sooner than it is covered,
-> and may be in the frame it fires. An inhibited activation is not heard: the call that covers the relation
-> speaks in its stead. Where that call has nothing for the frame ahead, the activation is heard, and so on
-> down to the base (D10, R48).
+> and may be in the frame it fires. The calls over it are every call that covers a relation of its own, and
+> every call over one of those, at any height. An inhibited activation is not heard in a neuron dimension
+> while any call over it has an inference for the frame ahead in that dimension. Where none has, it is heard
+> there (D10, R48). The dimension meant is a neuron dimension, what is inferred, an action or an event (D1).
+> It is not an activation dimension such as time, `x` or `y`.
 >
 > A call is covered and inhibited the same way, one level up. An activation is **bound** when a call binds it
 > as an argument: it stays on the apex, its binding is paid with the call, and that call does not inhibit it
@@ -2257,8 +2259,9 @@ happened (R32).
 > been judged and found wanting.
 
 > **R46 — Electorate.** At frame `f` the voters on the frame ahead, `f + 1` (R35), are the open activations the
-> machine holds at `f` (D9), less every inhibited activation (D24), plus every inhibited
-> activation whose call has nothing for `f + 1`, and so on down to the base (R48). What
+> machine holds at `f` (D9), less every inhibited activation (D24). An inhibited activation
+> is a voter in each neuron dimension in which no call over it, at any height, has an inference for `f + 1`
+> (R48). What
 > each voter proposes is what its standing inferences name at `f + 1` (R45): a base action by the inference at
 > the offset one ahead of its age (R29), a base symbol a function reaches by a farther one, and nothing where
 > none of them lands there. A
@@ -2305,9 +2308,10 @@ happened (R32).
 > in which silence is an action in its own right and costs nothing. The walk is the same under either (R37); the
 > policy decides only what runs once the walk has nothing left to wire in a dimension.
 
-> **R48 — Speaking falls through the call.** An inhibited neuron supplies nothing while the call over it speaks
-> (D24, D10). Where the call has no inference for the frame ahead, what it inhibits speaks for it, and what they
-> inhibit in theirs, down to the base; nothing is output where nothing down to the base has anything. A newly
+> **R48 — Speaking falls through the call.** An inhibited neuron supplies nothing in a neuron dimension
+> while any call over it, at any height, speaks in that dimension (D24, D10). Where no call over it has an
+> inference for the frame ahead in that dimension, it speaks there. So where a call has nothing, what it
+> inhibits speaks for it, and what they inhibit in theirs, down to the base; nothing is output where nothing down to the base has anything. A newly
 > allocated interneuron therefore starts with the voices of what it landed on, the neuron at its start among them, with
 > the standing inferences each made at its age 0: they say what usually followed them, it learns what ran under it
 > (R35), and from then on it speaks for itself. At the base a neuron with nothing outputs nothing, and the walk
