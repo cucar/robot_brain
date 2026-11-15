@@ -1520,6 +1520,8 @@ argument.
 > it; its **contribution** where it stands is the same for the function it is in, and alone its strength less
 > two, its relation and its entry. Where the relation is its function's last, its contribution there is that
 > function's worth and the worth of every function in its subtree, since all of them leave with it (R38).
+> The subtree is read from the dictionary as it stands, the function the relation would join included.
+> Nothing the move would change is read.
 > Every number is read at the node it attaches or would attach at, over the rows
 > that have taken what followed, and a relation of a function that is a cycle and nothing else at every
 > occurrence (R50):
