@@ -1006,15 +1006,18 @@ is stated here and cited from there.
 
 > **D28 — Greedy cover.** The operation that covers a board with **fits**, each landing on relations, and pays
 > each relation to exactly one fit; an activation may be landed on by several fits, each covering relations
-> of its own, within the one election that covers it (D8, D10). It repeats:
+> of its own, until it is covered (D24, D10). It repeats:
 >
 > 1. **Measure** every fit not yet taken against the board as the taken fits have left it. A fit lands on no
->    relation a taken fit covers, so one read through such a relation is read again over what stands, and a
+>    relation a taken fit covers and on no activation the taken fits have covered, so one read through either
+>    is read again over what stands, and a
 >    cycle's laps past it are a fit of their own. Its coverage is what it would take off the board: the
 >    relations it lands on (D54). Its price is its call's cost there
 >    (D22): its failures and bindings, and nothing else (R22).
 > 2. **Take** the one whose `coverage` exceeds its `price` by the most, if any does, and **stop** otherwise. It
->    covers what it was measured on.
+>    covers what it was measured on. An activation that is covered once it is taken is off the board from the
+>    next round (D24): no fit lands on it, and each relation of its own that no call covers ends at the calls
+>    that landed on it (D5).
 >    An activation at one of its variables stays on the apex, bound, and the relations the function does not
 >    fix at it stay in the set, so a later round may cover them (D10). The round repeats from 1.
 >
@@ -1622,7 +1625,9 @@ machine works out itself (R22).
 >
 > **Covered, inhibited and bound are read off it.** An activation is **covered** when two relations
 > of its own are covered, one on each side of it in one dimension: the offsets of the two have opposite signs
-> in that dimension (D6). One call may cover both, or two calls one each. Where the layout has no point on one
+> in that dimension (D6). One call may cover both, or two calls one each. It is covered from the round of
+> the election that covers the second of the two, and not from the election's end (D28). Where the layout has
+> no point on one
 > side of it in a dimension, the one covered relation on its other side is enough (D3). The first activation
 > of a run is such a case in time: nothing is before it. The latest activation is not: the layout does not
 > end after it, and what follows has not fired, so in time it has one side until then (D9). Until it is
@@ -1660,11 +1665,12 @@ machine works out itself (R22).
 
 > **R23 — This frame's fits against the board as it stands.** Only what costs is in play: a bare node's
 > relations at their cost, a bound node's binding, and the relations a call covers at that call's cost,
-> together. So no relation is paid for twice. Within the electing frame an activation is covered once, by the
-> first accepted fit that lands on it (R24), and never moves. Other fits of that election may still land on
-> it, each covering relations of its own (D28). When the election is over its calls stand beside it. It
-> stays on the board until it is covered, and from then on only its calls stand there (D24, D5). The second election of a level fits what the first left, so
-> a relation the first covered is not there for it.
+> together. So no relation is paid for twice. Covering takes effect inside the election, as each fit is accepted
+> (D28). An activation an accepted fit has landed on stays on the board while it is not covered, and another
+> fit of that election may land on it and cover a relation of its own. Once the accepted fits cover it, it is
+> off the board: no later fit of that election lands on it, each relation of its own that no call covers ends
+> at the calls that landed on it, and only those calls stand there (D24, D5). The second election of a level
+> fits what the first left, so a relation the first covered is not there for it, nor an activation it covered.
 >
 > **A later frame reads the past as it stands on the board.** An activation of an earlier frame that is not
 > covered is returned as itself, and a fit at `f` lands on the relations to it that no call has covered. A
