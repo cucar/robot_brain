@@ -452,8 +452,8 @@ what was done together.
 > of the two strengths, since each neuron's history is a window that can only miss occasions (D18, R21).
 >
 > **Relations compose.** Given the offset from `a` to `b` and from `b` to `c`, the offset from `a` to `c`
-> follows, component by component, so a relation implied by composing others along a path says nothing new and
-> is never held (D15).
+> follows, component by component. The relation from `a` to `c` is still a relation of its own, and counts as
+> one (D55).
 
 > **D11 — Identity.** A neuron's identity is its type alone, a base symbol or an interneuron's id (D2), so
 > nothing about where it occurred is part of it. **The same shape at two positions is two activations of one
@@ -503,9 +503,9 @@ what was done together.
 > (D26). Once `a–b` and `c–d` are covered too, every relation of `b` and of `c` is covered. Then `b` and `c`
 > are covered, and they leave the board (D24).
 >
-> **An edge implied by others costs nothing.** A path of edges fixes the offset between its two end nodes,
-> component by component, so an edge between them says nothing new (D34), and only one of them is paid.
-> `a–b`, `b–c` and `c–a` are two facts, not three.
+> **Every edge costs one.** An edge between two nodes is paid whether or not a path of other edges already
+> fixes the offset between them: no neuron sees a path, only its own neighbors (D4). `a–b`, `b–c` and `c–a`
+> are three edges.
 
 **Everything in the design is this one object.** What a neuron returns is the edges at one node, with how often
 each has held (R21). A function is a graph over neurons that recurs (D15). The dictionary is those graphs, held
