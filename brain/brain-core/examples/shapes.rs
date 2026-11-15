@@ -54,7 +54,7 @@ fn sname(m: &Machine, s: u32) -> String {
         Some(p) => {
             let n = m.dict.neuron_of(s);
             let fs: Vec<String> = m.dict.of_inter(n).iter().map(|f| format!("f{}", f)).collect();
-            let end = |x: u32| if m.thalamus[x].kind == Kind::Inter { format!("call #{}", x) } else { sname(m, x) };
+            let end = |x: u32| if m.dict.pose_of(x).is_some() || m.thalamus[m.dict.neuron_of(x)].kind == Kind::Inter { m.dict.sym_text(x) } else { sname(m, x) };
             format!("the call #{} of {} (from {} to {}, {} laps)", n, if fs.is_empty() { "no function now".into() } else { fs.join(",") }, end(p.from), end(p.to), p.laps)
         }
     }
