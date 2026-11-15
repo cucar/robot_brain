@@ -162,10 +162,19 @@ impl Machine {
             let newly: FxHashSet<(ActRef, ActRef)> = fit.edges.iter().map(|&(a, b)| edge(a, b)).collect();
             minted += self.accept(&fit, level);
             accepted += 1;
-            // read again what read through a relation the taken fit covers, or entered where it can no longer stand
+            // covering takes effect as the fit is taken (D28, D24, R23): what it landed on and the taken fits now
+            // cover is off the board from the next round
+            let covered: FxHashSet<ActRef> = if self.frozen { FxHashSet::default() } else {
+                let mut cands: Vec<ActRef> = fit.acts().map(|x| x.0).collect();
+                for &(a, b) in &fit.edges { cands.push(a); cands.push(b); }
+                self.cover_in_election(&cands).into_iter().collect()
+            };
+            // read again what read through a relation the taken fit covers, or through an activation now covered, or
+            // entered where it can no longer stand
             let mut next = Vec::with_capacity(fits.len());
             for g in fits {
-                let stale = g.edges.iter().any(|&(a, b)| newly.contains(&edge(a, b)));
+                let stale = g.edges.iter().any(|&(a, b)| newly.contains(&edge(a, b)))
+                    || (!covered.is_empty() && (g.acts().any(|(r, _)| covered.contains(&r)) || g.edges.iter().any(|(a, b)| covered.contains(a) || covered.contains(b)) || g.thru.iter().any(|r| covered.contains(r))));
                 if !stale { next.push(g); continue; }
                 let Some(f) = self.dict.get(g.func) else { continue };
                 if !self.act(g.entry.1).map_or(false, |a| self.landable(a)) { continue; }
@@ -287,7 +296,11 @@ impl Machine {
         fr.acts.push(act);
         self.electing.insert(me);
         for &(a, b) in &fit.edges {
-            if self.covered_rel.insert(edge(a, b)) { self.covered_edges.push(edge(a, b)); }
+            if self.covered_rel.insert(edge(a, b)) {
+                self.covered_edges.push(edge(a, b));
+                self.cov_inc.entry(a).or_default().push(b);
+                self.cov_inc.entry(b).or_default().push(a);
+            }
         }
         // a relation read through a call and the relation to that call are one board relation: covered under
         // either form, it is covered under both (switch 11, R50, D5)
