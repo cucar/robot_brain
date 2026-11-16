@@ -245,7 +245,8 @@ that fires through it (D8), and expansion ends on base symbols read back through
 >
 > **Above the base, several neurons can fire at one position.** Several accepted fits may land on one activation
 > (D28), so several interneurons may stand at one position (D53), and one function fitting at several positions is
-> one interneuron that fires at each (D15).
+> one interneuron that fires at each (D15). The relation between two activations at one position is an
+> association (D34).
 >
 > **An activation has a position and a pose.** A base activation stands where the input laid it, in the one pose a
 > base neuron has. A call is one activation of the interneuron, at the position of the latest activation the fit
@@ -281,8 +282,9 @@ that fires through it (D8), and expansion ends on base symbols read back through
 > interneuron alike.
 >
 > **Covered at** is the age at which the activation was covered (D24), none until then. Where its only
-> neighbors are in time it is never 0: one of its two sides is what follows, and what follows has not fired.
-> Where it has neighbors on both sides of it in its own frame, as a pixel has, it may be 0. Covering comes
+> neighbors are in time it is never 0: it waits for what follows, and what follows has not fired.
+> Where it has neighbors in its own frame it may be 0: by two covered relations in space, as a pixel has, or
+> by one covered association, as an activation beside another channel's has (D24). Covering comes
 > after the activation has fired (R27), and nothing undoes it: later calls may land on the activation too,
 > and a later function may name the call that covered it (D10), but it never returns to the apex. So this
 > one number says for every
@@ -368,9 +370,9 @@ connection read.
 > - `b` is in the same frame as `a` or in an earlier one.
 > - `b` is within `a`'s reach in every activation dimension they share (D4), and is not `a` itself. Two
 >   activations at one position are neighbors at offset zero: base neurons of different channels, and
->   calls standing at one position (D53, D10).
+>   calls standing at one position (D53, D10). That relation is an association (D34).
 > - `b` stands on the board: it is not covered (D24). An activation a call has landed on is a neighbor as
->   itself until it is covered. Where its only neighbors are in time, one of its two sides is what follows
+>   itself until it is covered. Where its only neighbors are in time, it waits for what follows
 >   it, so the activation just before `a` in time is a neighbor as itself. A covered activation is no
 >   neighbor: each call that landed on it is, at its own position. Two calls are neighbors where they landed
 >   on one activation, or where a relation no call covers runs from a covered activation under one to a
@@ -440,6 +442,13 @@ what was done together.
 > in the one direction its offset gives: the row that holds the same neighbor at the opposite offset is the
 > other end's reading of the same relation, not a second one (D47, R50).
 >
+> **By its offset a relation is in time, in space, or an association.** It is in time where its two ends are
+> in different frames. It is in space where its two ends are in one frame at different positions. It is an
+> **association** where every component of its offset is zero: its two ends stand at one position in one
+> frame, as base neurons of different channels do, and calls standing at one position (D5). An association
+> has no direction and no distance. It says only that the two were there together. The three are the same
+> object and cost the same (D13). They differ in how many of them, covered, cover an activation (D24).
+>
 > **A call's pose is part of its name.** A relation to an interneuron names it in the pose its activation fired
 > in (D8, D53): which node the fit ran from and to, each by its neuron, and how many laps. A base neuron has
 > one pose, so at the base a relation is two neurons and an offset. Two calls of one interneuron in different
@@ -484,7 +493,7 @@ what was done together.
 >
 > **A call covers relations, and a node stays until it is covered.** On the board a
 > call covers the relations its fit landed on, and they cost nothing more. A node the fit landed on stays in
-> the graph until two relations of its own are covered, one on each side of it (D24). An edge to it ends at the node itself, never at the
+> the graph until it is covered (D24). An edge to it ends at the node itself, never at the
 > call (D24). Expansion puts the covered relations back (R28).
 >
 > ```
@@ -504,7 +513,7 @@ what was done together.
 >
 > Anything meets the call `bc` through another call. Where `a–b` recurs and becomes a function, its call
 > covers `a–b`. That relation and `b–c` have `b` in common, so the two calls are neighbors, one level up
-> (D26). Once `a–b` and `c–d` are covered too, `b` and `c` each have a covered relation on each side.
+> (D26). Once `a–b` and `c–d` are covered too, `b` and `c` each have both their relations covered.
 > Then `b` and `c` are covered, and they leave the board (D24).
 >
 > **A relation of a covered node that no call covers ends at the call.**
@@ -779,11 +788,12 @@ groups, fits and keeps (§6).
 > follows.
 >
 > **The latest of a sequence is not covered.** A call recognized at the present covers relations of the
-> activation at its position (D54). Where that activation's only neighbors are in time, one of its two sides
-> is what follows it, still to come (D24). So it stands on the apex in the frame it fires, beside the call
+> activation at its position (D54). Where that activation's only neighbors are in time, it waits for
+> what follows it, still to come (D24). So it stands on the apex in the frame it fires, beside the call
 > that landed on it, and what fires next reads it as itself. It is inhibited all the same: while the call speaks,
-> it does not (D24). An activation with neighbors on both
-> sides of it in its own frame, as a pixel has, may be covered in the frame it fires. Only a recognized call covers. What an inference named covers nothing (R40).
+> it does not (D24). An activation with neighbors in its own frame may be covered in the frame it fires: by two
+> relations in space, as a pixel has, or by one association, as an activation beside another channel's has.
+> What fires next then reads the call, and not the activation (D5). Only a recognized call covers. What an inference named covers nothing (R40).
 >
 > **What stands before coverage stands.** A neuron is covered only after it has fired (R27). Coverage acquired at
 > a later age revokes nothing before it: the connections the activation strengthened while uncovered stand, and
@@ -1623,14 +1633,29 @@ machine works out itself (R22).
 > | per relation | the accepted call whose fit landed on it, if any |
 > | per node | the accepted calls whose fits landed on it, which stand for it, if any (D8); the call it is bound to as an argument, if any |
 >
-> **Covered, inhibited and bound are read off it.** An activation is **covered** when two relations
-> of its own are covered, one on each side of it in one dimension: the offsets of the two have opposite signs
-> in that dimension (D6). One call may cover both, or two calls one each. It is covered from the round of
-> the election that covers the second of the two, and not from the election's end (D28). Where the layout has
-> no point on one
-> side of it in a dimension, the one covered relation on its other side is enough (D3). The first activation
-> of a run is such a case in time: nothing is before it. The latest activation is not: the layout does not
-> end after it, and what follows has not fired, so in time it has one side until then (D9). Until it is
+> **Covered, inhibited and bound are read off it.** An activation is **covered** when the covered relations
+> of its own, of one kind, reach that kind's count (D34):
+>
+> | kind | count |
+> |---|---|
+> | in time | one relation to an earlier frame and one to a later frame, each to any channel |
+> | in space | any two |
+> | association | one |
+>
+> The counts are separate: one covered relation in space and one in time do not cover it. One call may cover
+> both relations of a count, or two calls one each. It is covered from the round of the election in which a
+> count is reached, and not from the election's end (D28).
+>
+> **At one position every activation is an end.** Nothing there stands between two others, so one covered
+> association is enough. A call over an association covers both its ends, in the frame they fire. Where three
+> or more stand at one position, that call covers two of them, and the associations of the others to those
+> two end at the call, as any relation of a covered activation does. One level up there is one fewer at the
+> position, and a call there covers again.
+>
+> Where the layout has no point on one side of it in a dimension, one covered relation on its other side is
+> enough, in time and in space (D3). The first activation of a run is such a case in time: nothing is before
+> it. The latest activation is not: the layout does not end after it, and what follows has not fired, so in
+> time it waits for what follows (D9). Until it is
 > covered it stands on the board, whatever calls have landed on it, and a neighbor reads it as itself. Once
 > covered it has left the apex and the graph (D55). A relation of its own that no call covers is not lost:
 > from then on it ends at each call that landed on the activation, at the offset from that call's position
@@ -1643,7 +1668,8 @@ machine works out itself (R22).
 > there (D10, R48). The dimension meant is a neuron dimension, what is inferred, an action or an event (D1).
 > It is not an activation dimension such as time, `x` or `y`.
 >
-> A call is covered and inhibited the same way, one level up. An activation is **bound** when a call binds it
+> A call is covered and inhibited the same way, one level up, by an association between two calls as by one
+> between two base activations. An activation is **bound** when a call binds it
 > as an argument: it stays on the apex, its binding is paid with the call, and that call does not inhibit it
 > (D10). It is on the apex, bare, when none of these holds.
 >
