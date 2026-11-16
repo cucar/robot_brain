@@ -463,46 +463,22 @@ impl Machine {
         self.dict.funcs.values().map(|f| f.reach(1)[0]).max().unwrap_or(1).max(1)
     }
 
-    /// A bare activation of `n` at `pos` (D8): a base activation sees one position in every dimension (D4).
-    /// Covering (D24, D10, R27): an activation is covered when every relation of its own is covered, the relation
-    /// to what follows it included, so not before its reach forward in time has passed; only where a call has
-    /// landed on it, so that a call stands for it. From then it is out of the graph; the rows that saw it keep
+    /// The cover check after a level (D24): each activation a call has landed on whose covered relations of one kind
+    /// reach that kind's count (`cover_count`) is covered. From then it is out of the graph; the rows that saw it keep
     /// it as they saw it and take nothing for its calls (D10, D18).
     pub(crate) fn cover_pass(&mut self) -> (usize, usize) {
         let fno = self.frame_no;
-        // each activation's covered relations, by their offset from it
-        let mut offs: FxHashMap<ActRef, Vec<Offset>> = FxHashMap::default();
-        for f in self.frames.iter() {
-            for (i, a) in f.acts.iter().enumerate() {
-                if a.gone { continue; }
-                let me = ActRef { frame: f.no, index: i as u32 };
-                for br in &a.rels {
-                    if self.act(br.other).map_or(true, |o| o.gone) { continue; }
-                    if self.covered_rel.contains(&edge(me, br.other)) {
-                        offs.entry(me).or_default().push(br.off);
-                        let mut n = br.off; for x in n.iter_mut() { *x = -*x; }
-                        offs.entry(br.other).or_default().push(n);
-                    }
-                }
-            }
-        }
-        // covered: two covered relations of its own, one on each side of it in one dimension; where the layout has
-        // no point on one side, the one on the other side is enough (D24)
+        // covered: its covered relations of one kind reach that kind's count (D24)
         let mut newly: Vec<(ActRef, u32)> = Vec::new();
         let mut one: Vec<(Frame, ActRef)> = Vec::new();
         for f in self.frames.iter() {
             for (i, a) in f.acts.iter().enumerate() {
                 if a.gone || a.covered_at.is_some() || a.coverers.is_empty() || a.neuron == NeuronId::MAX { continue; }
                 let me = ActRef { frame: f.no, index: i as u32 };
-                let Some(o) = offs.get(&me) else { continue };
-                let mut ok = false;
-                for d in 0..MAX_DIMS {
-                    if d > 0 && a.axes & (1 << d) == 0 { continue; }
-                    let (hn, hp) = (o.iter().any(|x| x[d] < 0), o.iter().any(|x| x[d] > 0));
-                    if !(hn || hp) { continue; }
-                    if (hn || !self.layout_side(me, d, -1)) && (hp || !self.layout_side(me, d, 1)) { ok = true; if !(hn && hp) { one.push((fno, me)); } break; }
+                if let Some(edge_only) = self.cover_count(me) {
+                    if edge_only { one.push((fno, me)); }
+                    newly.push((me, (fno - a.pos[0] as i64).max(0) as u32));
                 }
-                if ok { newly.push((me, (fno - a.pos[0] as i64).max(0) as u32)); }
             }
         }
         self.one_side.extend(one);
@@ -518,9 +494,8 @@ impl Machine {
         counts
     }
 
-    /// Covering inside the election (D28, D24, R23): of the activations a fit just taken landed on, each that the
-    /// taken fits now cover, two covered relations of its own on opposite sides in one dimension, or the one where
-    /// the layout has no point on the other side, is covered from this round: off the board for the rounds after,
+    /// Covering inside the election (D28, D24, R23): of the activations a fit just taken landed on, each whose covered
+    /// relations of one kind now reach that kind's count (`cover_count`) is covered from this round: off the board for the rounds after,
     /// each relation of its own that no call covers ending at the calls that landed on it. Returns what it covered.
     pub(crate) fn cover_in_election(&mut self, cands: &[ActRef]) -> Vec<ActRef> {
         let fno = self.frame_no;
@@ -530,25 +505,8 @@ impl Machine {
             if !seen.insert(me) { continue; }
             let Some(a) = self.act(me) else { continue };
             if a.gone || a.covered_at.is_some() || a.coverers.is_empty() || a.neuron == NeuronId::MAX { continue; }
-            let Some(others) = self.cov_inc.get(&me) else { continue };
-            // each covered relation of its own, at its offset from it, as the board relations have it
-            let mut o: Vec<Offset> = Vec::new();
-            for &x in others {
-                let Some(xa) = self.act(x) else { continue };
-                if xa.gone { continue; }
-                if let Some(br) = a.rels.iter().find(|br| br.other == x) { o.push(br.off); }
-                if let Some(br) = xa.rels.iter().find(|br| br.other == me) { let mut n = br.off; for v in n.iter_mut() { *v = -*v; } o.push(n); }
-            }
-            let mut ok = false;
-            let mut one = false;
-            for d in 0..MAX_DIMS {
-                if d > 0 && a.axes & (1 << d) == 0 { continue; }
-                let (hn, hp) = (o.iter().any(|x| x[d] < 0), o.iter().any(|x| x[d] > 0));
-                if !(hn || hp) { continue; }
-                if (hn || !self.layout_side(me, d, -1)) && (hp || !self.layout_side(me, d, 1)) { ok = true; one = !(hn && hp); break; }
-            }
-            if ok {
-                let age = (fno - a.pos[0] as i64).max(0) as u32;
+            let age = (fno - a.pos[0] as i64).max(0) as u32;
+            if let Some(one) = self.cover_count(me) {
                 if one { self.one_side.push((fno, me)); }
                 newly.push((me, age));
             }
@@ -562,6 +520,43 @@ impl Machine {
             out.push(me);
         }
         out
+    }
+
+    /// The covered relations of an activation, one per other end, at their offsets as the board relations have them.
+    fn covered_offs(&self, me: ActRef) -> Vec<(ActRef, Offset)> {
+        let mut out: Vec<(ActRef, Offset)> = Vec::new();
+        let Some(a) = self.act(me) else { return out };
+        let Some(others) = self.cov_inc.get(&me) else { return out };
+        for &x in others {
+            if out.iter().any(|(o, _)| *o == x) { continue; }
+            let Some(xa) = self.act(x) else { continue };
+            if xa.gone { continue; }
+            if let Some(br) = a.rels.iter().find(|br| br.other == x) { out.push((x, br.off)); continue; }
+            if let Some(br) = xa.rels.iter().find(|br| br.other == me) { let mut n = br.off; for v in n.iter_mut() { *v = -*v; } out.push((x, n)); }
+        }
+        out
+    }
+
+    /// Covering is one principle with three counts (D24, D34): an activation is covered when its covered relations
+    /// of one kind reach that kind's count. An association, a relation between two activations at one position in one
+    /// frame: one. In time, a relation to another frame: one to an earlier frame and one to a later, each to any
+    /// channel, the run's first frame excepted. In space, a relation to another position in the frame: any two, or one
+    /// where the layout has no point on the other side of it in that dimension. The counts are separate. Returns
+    /// whether it was covered only by the one relation at the edge of the layout.
+    pub(crate) fn cover_count(&self, me: ActRef) -> Option<bool> {
+        let a = self.act(me)?;
+        let rels = self.covered_offs(me);
+        if rels.iter().any(|(_, o)| o.iter().all(|v| *v == 0)) { return Some(false); }
+        let time: Vec<Offset> = rels.iter().filter(|(_, o)| o[0] != 0).map(|x| x.1).collect();
+        let space: Vec<Offset> = rels.iter().filter(|(_, o)| o[0] == 0 && (1..MAX_DIMS).any(|d| a.axes & (1 << d) != 0 && o[d] != 0)).map(|x| x.1).collect();
+        let (hn, hp) = (time.iter().any(|x| x[0] < 0), time.iter().any(|x| x[0] > 0));
+        let t = if (hn || hp) && (hn || !self.layout_side(me, 0, -1)) && (hp || !self.layout_side(me, 0, 1)) { Some(!(hn && hp)) } else { None };
+        let sp = if space.len() >= 2 { Some(false) } else if space.len() == 1 {
+            let o = space[0];
+            let at_edge = (1..MAX_DIMS).any(|d| a.axes & (1 << d) != 0 && o[d] != 0 && !self.layout_side(me, d, -o[d].signum()));
+            if at_edge { Some(true) } else { None }
+        } else { None };
+        match (t, sp) { (Some(x), Some(y)) => Some(x && y), (Some(x), None) => Some(x), (None, Some(y)) => Some(y), _ => None }
     }
 
     /// A relation of a covered activation that no call covers ends, from then on, at each call that landed on it,
