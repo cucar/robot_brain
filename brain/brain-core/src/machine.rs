@@ -120,6 +120,9 @@ pub struct Machine {
     pub(crate) lifted: FxHashSet<(ActRef, ActRef)>,
     /// The covered relations at each activation: the other end of each, kept as each fit is accepted (D24, D28)
     pub(crate) cov_inc: FxHashMap<ActRef, Vec<ActRef>>,
+    /// Each relation that went up, and the edges it went up to (D55, D24): covered by a call in any of those forms, it
+    /// is covered, and does not go up again
+    pub(crate) lift_forms: FxHashMap<(ActRef, ActRef), Vec<(ActRef, ActRef)>>,
     /// What each call took that way: the activations or calls its taken relations end at (D10, D26)
     pub(crate) taken: FxHashMap<ActRef, Vec<ActRef>>,
     /// How many relations went up to a call, how many of them between two calls, and activations covered at age 0
@@ -251,6 +254,7 @@ impl Machine {
             cover_log: Vec::new(),
             lifted: FxHashSet::default(),
             cov_inc: FxHashMap::default(),
+            lift_forms: FxHashMap::default(),
             taken: FxHashMap::default(),
             up_count: 0,
             up_pair_count: 0,
@@ -449,6 +453,7 @@ impl Machine {
         self.grown.retain(|c, _| c.frame >= keep_from);
         self.lifted.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
         self.cov_inc.retain(|a, v| { v.retain(|b| b.frame >= keep_from); a.frame >= keep_from });
+        self.lift_forms.retain(|e, v| { v.retain(|x| x.0.frame >= keep_from && x.1.frame >= keep_from); e.0.frame >= keep_from && e.1.frame >= keep_from });
         self.taken.retain(|c, _| c.frame >= keep_from);
         self.call_thru.retain(|c, _| c.frame >= keep_from);
         self.call_fit.clear();
@@ -569,7 +574,8 @@ impl Machine {
         let coverers: Vec<ActRef> = a.coverers.iter().map(|c| self.latest(*c)).collect();
         for (o, s) in rels {
             let e = edge(me, o);
-            if self.covered_rel.contains(&e) { continue; }
+            // covered by a call in the form it stands in, or in any form it went up to (D55, D24)
+            if self.covered_in_any_form(e, 0) { continue; }
             let Some(oa) = self.act(o).cloned() else { continue };
             if oa.gone || coverers.contains(&o) { continue; }
             // went up already when its other end was covered: now that both ends are, it runs between the calls on
@@ -587,12 +593,20 @@ impl Machine {
                     let v = self.taken.entry(c).or_default();
                     if !v.contains(&x) { v.push(x); }
                     let off = offset_between(&xa, &ca);
+                    { let v = self.lift_forms.entry(e).or_default(); let f = edge(x, c); if !v.contains(&f) { v.push(f); } }
                     let held = self.act(c).map_or(false, |cm| cm.rels.iter().any(|br| br.other == x));
                     if let Some(xm) = self.act_mut(x) { if !held && !xm.rels.iter().any(|br| br.other == c) { xm.rels.push(BoardRel { other: c, off, strength: s }); } }
                     if self.trace_cover { eprintln!("[up f{}] {} at frame {} -> {} now ends at {} | {}", self.frame_no, self.dict.sym_text(a.sym), me.frame, self.dict.sym_text(oa.sym), self.dict.sym_text(ca.sym), if oa.covered_at.is_some() { "between two calls" } else { "to the call" }); }
                 }
             }
         }
+    }
+
+    /// Whether a call covers a relation in the form it stands in or in any form it has gone up to (D55, D24).
+    fn covered_in_any_form(&self, e: (ActRef, ActRef), depth: usize) -> bool {
+        if self.covered_rel.contains(&e) { return true; }
+        if depth > 64 { return false; }
+        self.lift_forms.get(&e).map_or(false, |v| v.iter().any(|f| self.covered_in_any_form(*f, depth + 1)))
     }
 
     /// Whether the layout has a point on one side of an activation in a dimension, within its reach, among what it
