@@ -230,6 +230,11 @@ impl Machine {
         let mut keys: FxHashSet<Vec<ActRef>> = FxHashSet::default();
         let Some(fr) = self.frames.iter().find(|fr| fr.no == fno) else { return out };
         for (root, node) in f.nodes.iter().enumerate() {
+            // a function is fit only in a frame where none of its nodes is still to come (D54, D15, D31): read from the
+            // node entered at, a node later than the present is no fit, offered or charged. A function in time is so
+            // entered at its latest node, one inside the frame at any node, and a cycle at any node, since its fit ends
+            // where it stops landing
+            if !f.has_cycle() && f.layout_from(root).position.iter().any(|p| p[0] > 0) { continue; }
             for (i, a) in fr.acts.iter().enumerate() {
                 // the node admits its own neuron in its pose, or a call whose pose starts at it (D54)
                 let admits = a.sym == *node;

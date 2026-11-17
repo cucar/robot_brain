@@ -90,9 +90,21 @@ impl Machine {
                 }
                 for d in &dims_of[&c] { if !silenced.iter().any(|x| x.0 == *d) { silenced.push((*d, c)); } }
             }
+            if self.trace_vote {
+                let dn = |d: DimId| format!("{}.{}", self.channels[self.dims[d as usize].channel as usize].name, self.dims[d as usize].name);
+                let who = |x: ActRef| { let Some(a) = self.act(x) else { return "?".to_string() }; format!("{}@{} L{} {}", self.dict.sym_text(a.sym), x.frame, a.level, a.fired_by.as_ref().map_or("base".to_string(), |fb| format!("call of f{}", fb.func))) };
+                let infs = |v: &Vec<(NeuronId, Pos, f64, f64)>| v.iter().filter(|(n, _, _, _)| self.thalamus[*n].dim.map_or(false, |d| self.dims[d as usize].kind == Kind::Action)).map(|(n, _, st, e)| format!("{}={} s={:.0} e={:+.4}", dn(self.thalamus[*n].dim.unwrap()), self.thalamus[*n].bucket, st, e)).collect::<Vec<_>>().join(", ");
+                let act_dims: Vec<DimId> = p.iter().filter_map(|(n, _, _, _)| self.thalamus[*n].dim).filter(|d| self.dims[*d as usize].kind == Kind::Action).collect();
+                if !act_dims.is_empty() {
+                    let heard: Vec<String> = { let mut v: Vec<DimId> = act_dims.iter().copied().filter(|d| !silenced.iter().any(|x| x.0 == *d)).collect(); v.sort(); v.dedup(); v.into_iter().map(|d| dn(d)).collect() };
+                    let sil: Vec<String> = { let mut v: Vec<(DimId, ActRef)> = silenced.iter().copied().filter(|(d, _)| act_dims.contains(d)).collect(); v.sort(); v.into_iter().map(|(d, c)| { let ci = self.inferred_ahead(c, ahead, &mut FxHashMap::default()); let ci: Vec<_> = ci.into_iter().filter(|(n, _, _, _)| self.thalamus[*n].dim == Some(d)).collect(); format!("{} by {} [its inference: {}]", dn(d), who(c), infs(&ci)) }).collect() };
+                    eprintln!("[hear f{}] {} | infers: {} | heard for: [{}] | silenced: [{}]", fno, who(r), infs(&p), heard.join(", "), sil.join("; "));
+                }
+            }
             let kept: Vec<(NeuronId, Pos, f64, f64)> = p.into_iter().filter(|(n, _, _, _)| self.thalamus[*n].dim.map_or(true, |d| !silenced.iter().any(|x| x.0 == d))).collect();
             if !kept.is_empty() { voters.push((r, kept)); }
         }
+        self.last_heard = voters.iter().map(|(r, _)| *r).collect();
         self.last_stats.voters = voters.len();
         self.last_stats.voters_above_base = voters.iter().filter(|(r, _)| self.act(*r).map_or(false, |a| a.height > 0)).count();
         if self.trace {
@@ -120,6 +132,13 @@ impl Machine {
                 let c = table.entry((d, *p)).or_default().entry(nn.bucket).or_insert(Cand { share: 0.0, weighted: 0.0 });
                 c.share += share;
                 c.weighted += share * e;
+            }
+        }
+        if self.trace_vote {
+            for ((d, _), cands) in &table {
+                if self.dims[*d as usize].kind != Kind::Action { continue; }
+                let mut v: Vec<String> = cands.iter().map(|(b, c)| format!("bucket {} share {:.4} estimate {:+.6}", b, c.share, c.weighted / c.share)).collect(); v.sort();
+                eprintln!("[resolve f{}] {}.{} | {}", fno, self.channels[self.dims[*d as usize].channel as usize].name, self.dims[*d as usize].name, v.join(" | "));
             }
         }
         let mut winners = Vec::new();

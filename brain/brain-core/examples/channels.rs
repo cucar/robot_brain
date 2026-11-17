@@ -141,6 +141,8 @@ fn main() {
     let dictf = args.iter().any(|a| a == "--dictf");
     let assoc = args.iter().any(|a| a == "--assoc");
     let kinds = args.iter().any(|a| a == "--kinds");
+    let heard = args.iter().any(|a| a == "--heard");
+    let trace_frames: Vec<i64> = args.iter().find(|a| a.starts_with("--trace-frames=")).map(|a| a[15..].split(',').map(|x| x.parse().unwrap()).collect()).unwrap_or_default();
     let names: std::collections::BTreeMap<DimId, String> = chans.iter().zip(series.iter()).flat_map(|(c, s)| [(c.1, s.0.clone())].into_iter().chain(c.2.map(|a| (a, s.0.clone())))).collect();
     if log { m.trace = true; m.trace_retire = true; m.trace_cover = true; }
     for k in 0..total {
@@ -159,6 +161,7 @@ fn main() {
             }
         }
         if log { eprintln!("=== frame {}", m.frame_no + 1); }
+        if !trace_frames.is_empty() { let n = m.frame_no + 1; let on = trace_frames.contains(&n); m.trace_vote = on; if on { eprintln!("=== frame {}", n); } }
         if let Some(tf) = trace_frame { let on = m.frame_no + 1 == tf; m.trace = on; m.trace_cover = on; if on { eprintln!("=== frame {}", tf); } }
         let w = m.process_frame(&inputs, rewards);
         let fno = m.frame_no;
@@ -184,6 +187,11 @@ fn main() {
             let mut ids: Vec<u32> = m.dict.funcs.keys().map(|x| *x as u32).collect();
             ids.sort();
             for id in ids { let f = m.dict.get(id as _).unwrap(); println!("DICTF {} | f{} | {}", fno, id, f.rels.iter().map(|r| format!("{} → {} at t{}", sym_words(&m, &names, four, r.a), sym_words(&m, &names, four, r.b), r.off[0])).collect::<Vec<_>>().join("; ")); }
+        }
+        if heard {
+            // what was heard in this frame's selection: each voter, its level and the function it is a call of
+            let parts: Vec<String> = m.last_heard.iter().map(|r| { let a = m.act(*r); format!("{}@{} L{} {}", a.map_or("?".to_string(), |a| m.dict.sym_text(a.sym).split('<').next().unwrap_or("").to_string()), r.frame, a.map_or(0, |a| a.level), a.and_then(|a| a.fired_by.as_ref()).map_or("base".to_string(), |fb| format!("f{}", fb.func))) }).collect();
+            println!("HEARD {} | {}", fno, parts.join("; "));
         }
         if kinds {
             // the kind each bar of the frame before was taken by (its first covered relation): inside, time, or none

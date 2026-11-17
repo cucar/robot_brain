@@ -116,6 +116,9 @@ pub struct Machine {
     pub trace_origin: bool,
     /// Trace each activation as it is covered (D24).
     pub trace_cover: bool,
+    /// The activations heard in the last selection, and whether to print the voting of a frame
+    pub last_heard: Vec<ActRef>,
+    pub trace_vote: bool,
     /// Relations of covered activations that no call covered, now ending at their calls (D24, D10)
     pub(crate) lifted: FxHashSet<(ActRef, ActRef)>,
     /// The covered relations at each activation: the other end of each, kept as each fit is accepted (D24, D28)
@@ -255,6 +258,7 @@ impl Machine {
             origin_ties: 0,
             trace_origin: false,
             trace_cover: false,
+            last_heard: Vec::new(), trace_vote: false,
             grown: FxHashMap::default(),
             cover_log: Vec::new(),
             lifted: FxHashSet::default(),
@@ -865,3 +869,4 @@ impl Machine {
         out
     }
 }
+
