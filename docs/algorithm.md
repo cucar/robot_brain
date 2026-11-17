@@ -591,8 +591,7 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > letter. `a` after `P` and `P` after `a` is `P a P a …` for as long as it holds, `P` a parameter (D44). What
 > comes after a cycle sees its call, and the relation to the call is a function at the level above. A cycle
 > is recognized wherever its relations hold, in the frame the latest of them fires, since nothing else has to
-> hold with it (D54). A relation that a path of the function's other relations already implies is never held
-> (D34). How a function is read against the board is the fit's (D54).
+> hold with it (D54). How a function is read against the board is the fit's (D54).
 >
 > **A function is not a neighborhood.** A neighborhood is what one activation saw where it fired, saved once and
 > evicted `H` activations later; a function is what the machine holds. A neighborhood is a fact, a function a
@@ -1953,8 +1952,7 @@ a node already in it closes the cycle, and the function is then that cycle and n
 round: `x` to `y` at 1 and `y` to `x` at 1 is `x y x y …` for as long as it runs (D15). A fit at either letter reads back
 round the cycle while the relation that closes it lands; where the call of the lap before stands there, that
 call takes the lap (D54); nothing is read past the cycle, and the call's
-pose says how far it went (D53). A relation a path of the function's
-relations already implies is never held (D34), so a cycle is never a fact paid for twice. What comes after
+pose says how far it went (D53). What comes after
 the pattern is no part of the cycle's function: it sees the call, and a function at the level above holds
 its relation to the call (R50).
 
