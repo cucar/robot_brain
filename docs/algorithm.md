@@ -455,7 +455,7 @@ what was done together.
 > design: what a neuron returns is a relation, what a function holds is a relation, and they are the same
 > object. Two nodes that differ in several dimensions are in one relation, with a component in each. In a
 > neuron's relation index, one end is the neuron's own activation and the other a neighbor. In a function, both
-> ends are its nodes, and a relation from a neuron to itself joins one node to itself. It is one relation, read
+> ends are its nodes, and a relation from a pose to itself joins one node to itself. It is one relation, read
 > in the one direction its offset gives: the row that holds the same neighbor at the opposite offset is the
 > other end's reading of the same relation, not a second one (D47, R50).
 >
@@ -611,7 +611,8 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > recur together, the level above relates their calls.
 >
 > **A cycle is a function of its own.** The moment a node comes again, the relation that reached it closes the
-> cycle. A relation of a neuron to itself closes one alone. A cycle advances by one offset, the one its
+> cycle. A relation of a pose to itself closes one alone. A relation between one neuron in two phases
+> does not: it joins two nodes (D8). A cycle advances by one offset, the one its
 > relations compose to round a lap, in whatever direction that runs, time included. A function that is a cycle
 > holds the relations of the cycle and no other. No relation joins it, and a relation closes a cycle only
 > where every relation of the function is then on the cycle (R50). So a function is a cycle and nothing else,
@@ -1285,7 +1286,7 @@ on the apex in the frames after it, event and action alike.
 >
 > | Component | Description                                                                              |
 > |-----------|------------------------------------------------------------------------------------------|
-> | key       | the holder's phase less its laps, and `(neuron, offset)`, the neuron in its phase, the offset strictly positive in time |
+> | key       | the holder's phase less its laps, and `(neuron, offset)`, the neuron in its phase less its laps, the offset strictly positive in time |
 > | strength  | the number of exposures: the times an activation saw that neuron on the apex at that offset |
 > | earnings  | the total reward those exposures received                                                |
 > | estimate  | earnings / strength, read whenever the connection is read                                |
@@ -1508,8 +1509,9 @@ argument.
 > **Three more things are no candidate** (D15, D34). A relation of the other kind than the function's
 > relations is none: a function holds relations in time or relations inside the frame, never both. No relation
 > is a candidate of a function that is a cycle. A relation that would close a cycle is a candidate only where
-> every relation of the function would then be on the cycle. And a relation of a neuron to itself is a
-> candidate of no function, since it is a cycle alone: it starts a function of its own.
+> every relation of the function would then be on the cycle. And a relation of a pose to itself is a
+> candidate of no function, since it is a cycle alone: it starts a function of its own. A relation between one
+> neuron in two phases is between two nodes, and it is a candidate like any other (D8).
 >
 > **What the neurons count.** The machine hands each neuron every function it stands in, which the index
 > gives by neuron (D36), fit at this level or not, with the candidates of the ones that fit. A
@@ -1533,7 +1535,7 @@ argument.
 > without it are read at the same nodes, so a function of one relation is read, in both, at the node the
 > candidate would attach at; a relation no function is a candidate of is read at its end with the more
 > activations behind it, as a returned relation is (R21). A relation of a
-> neuron to itself is read in one direction, from an activation toward the one its offset reaches (D34): a row
+> pose to itself is read in one direction, from an activation toward the one its offset reaches (D34): a row
 > holds it where that neighbor stands, whether or not the same neighbor stands at the opposite offset, so the
 > ends of a run count as its middle does.
 >
@@ -1573,7 +1575,7 @@ argument.
 > every row that holds it (D47), where a worth is read over the rows that have taken what followed. A relation
 > the neurons returned with strength 3 or more that no function
 > holds and no call covers starts a function of its own, two nodes and an offset, worth its strength less two
-> (D57), fit wherever it fits and taken where it covers its relation (R24). A relation of a neuron to itself
+> (D57), fit wherever it fits and taken where it covers its relation (R24). A relation of a pose to itself
 > starts one the same way: one node and an offset, a cycle from its first relation (D15). What stops a relation from starting
 > one is that a call covers that relation, never that a call has landed on one of its ends. A relation held less often is left where it is:
 > nothing is built that is worth nothing (R21).
