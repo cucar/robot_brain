@@ -201,6 +201,7 @@ fn train(m: &mut Machine, e: &Env, i: &Img, n: usize, label: &str) -> usize {
         let trace = k == n || std::env::args().nth(3).map_or(false, |a| a == "trace-all");
         if trace { eprintln!("=== {} showing {}", label, k); }
         m.trace = trace;
+        m.trace_cover = trace;
         let w = m.process_frame(&inputs(e, i), vec![]);
         m.trace = false;
         let said = w.iter().find(|w| w.dim == e.dig).map(|w| w.bucket);
@@ -221,10 +222,11 @@ fn train(m: &mut Machine, e: &Env, i: &Img, n: usize, label: &str) -> usize {
 fn main() {
     // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
     let s15_off = std::env::args().any(|a| a == "--s15-off");
-    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off").collect();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && a != "--landed" && a != "--cycles").collect();
     let mode = args.get(1).cloned().unwrap_or("square".into());
     let n: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(30);
     let mut m = Machine::new(2048, Policy::events_to_actions(), 1);
+    m.print_cycles = std::env::args().any(|a| a == "--cycles");
     if s15_off { m.sw.s15_uncovered_relations = false; }
     let ax = m.declare_axis("x", 1);
     let ay = m.declare_axis("y", 1);
@@ -310,4 +312,9 @@ fn main() {
         }
     }
     println!("{}", m.middle_summary());
+    if std::env::args().any(|a| a == "--landed") {
+        // the calls that had landed on each pixel when it was covered, in the first frame
+        let v: Vec<usize> = m.cover_landed.iter().filter(|x| x.0 == 1).map(|x| x.1).collect();
+        println!("landed in frame 1: {} pixels covered | calls landed before covered: mean {:.2}, most {}", v.len(), v.iter().sum::<usize>() as f64 / v.len().max(1) as f64, v.iter().max().copied().unwrap_or(0));
+    }
 }

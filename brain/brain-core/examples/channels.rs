@@ -41,7 +41,7 @@ fn sym_words(m: &Machine, names: &std::collections::BTreeMap<DimId, String>, fou
     if m.dict.pose_of(s).is_some() { return format!("call(f{})", call_func(m, s).map_or(-1, |g| g as i64)); }
     let n = &m.thalamus[s];
     let nm = n.dim.and_then(|d| names.get(&d)).cloned().unwrap_or_default();
-    match n.kind { Kind::Event => if four && nm == "C" { format!("C={}{}{}", if n.bucket & 4 != 0 { "↑" } else { "↓" }, if n.bucket & 2 != 0 { "↑" } else { "↓" }, if n.bucket & 1 != 0 { "↑" } else { "↓" }) } else if four { format!("{}={}", nm, ["a", "b", "c", "d"][n.bucket as usize]) } else { format!("{}{}", nm, if n.bucket == 1 { "↑" } else { "↓" }) }, _ => format!("{}:{}", nm, if n.bucket == 1 { "own" } else { "out" }) }
+    match n.kind { Kind::Event => if four && nm == "D" { format!("D={}{}{}{}", if n.bucket & 8 != 0 { "↑" } else { "↓" }, if n.bucket & 4 != 0 { "↑" } else { "↓" }, if n.bucket & 2 != 0 { "↑" } else { "↓" }, if n.bucket & 1 != 0 { "↑" } else { "↓" }) } else if four && nm == "C" { format!("C={}{}{}", if n.bucket & 4 != 0 { "↑" } else { "↓" }, if n.bucket & 2 != 0 { "↑" } else { "↓" }, if n.bucket & 1 != 0 { "↑" } else { "↓" }) } else if four { format!("{}={}", nm, ["a", "b", "c", "d"][n.bucket as usize]) } else { format!("{}{}", nm, if n.bucket == 1 { "↑" } else { "↓" }) }, _ => format!("{}:{}", nm, if n.bucket == 1 { "own" } else { "out" }) }
 }
 
 /// An activation in words: what it is, its level and the frame it stands at.
@@ -93,6 +93,24 @@ fn main() {
             series.push(("B".into(), vec![2.0, 1.0, -1.0, 3.0, -2.0], true));
             (5usize, 72usize)
         }
+        // four stocks at one position: KGC, GLD and SPY on the 12-bar lap, and Q, made up, moving one percent a bar
+        "three4" => {
+            for s in ["KGC", "GLD", "SPY"] {
+                let p = opens(&dir, s);
+                series.push((s.to_string(), (0..12).map(|i| (p[(i + 1) % 12] - p[i]) / p[i] * 100.0).collect(), true));
+            }
+            series.push(("Q".into(), "UDDUUDUDDUDD".chars().map(|c| if c == 'U' { 1.0 } else { -1.0 }).collect(), true));
+            (12usize, 10usize)
+        }
+        // its control: one channel whose event has one value per combination of the four moves, graded on KGC's
+        "three4c" => {
+            let mut pcts: Vec<Vec<f64>> = Vec::new();
+            for s in ["KGC", "GLD", "SPY"] { let p = opens(&dir, s); pcts.push((0..12).map(|i| (p[(i + 1) % 12] - p[i]) / p[i] * 100.0).collect()); }
+            let q: Vec<bool> = "UDDUUDUDDUDD".chars().map(|c| c == 'U').collect();
+            combos8 = (0..12).map(|i| (pcts[0][i] > 0.0) as u32 * 8 + (pcts[1][i] > 0.0) as u32 * 4 + (pcts[2][i] > 0.0) as u32 * 2 + q[i] as u32).collect();
+            series.push(("D".into(), pcts[0].clone(), true));
+            (12usize, 10usize)
+        }
         "three1" => {
             // one value per combination of the three moves: KGC up 4, GLD up 2, SPY up 1
             let mut pcts: Vec<Vec<f64>> = Vec::new();
@@ -110,11 +128,12 @@ fn main() {
     };
     let cycles: usize = args.get(2).filter(|a| !a.starts_with("--")).and_then(|s| s.parse().ok()).unwrap_or(default_cycles);
     let mut m = Machine::new(256, Policy::events_to_actions(), 1);
+    m.print_cycles = std::env::args().any(|a| a == "--cycles");
     if args.iter().any(|a| a == "--levels") { m.trace_levels = true; }
     let trace_frame: Option<i64> = args.iter().find(|a| a.starts_with("--trace-frame=")).map(|a| a[14..].parse().unwrap());
     let mut chans: Vec<(ChannelId, DimId, Option<DimId>)> = Vec::new();
     for (name, _, act) in &series {
-        let ch = m.declare_channel(name, Some(("move", if mode == "four" { 4 } else if mode == "three1" { 8 } else { 2 })), if *act { Some(("position", 2)) } else { None }, &[]);
+        let ch = m.declare_channel(name, Some(("move", if mode == "four" { 4 } else if mode == "three1" { 8 } else if mode == "three4c" { 16 } else { 2 })), if *act { Some(("position", 2)) } else { None }, &[]);
         chans.push((ch, m.channels[ch as usize].event.unwrap(), m.channels[ch as usize].action));
     }
     println!("{}: {} cycles of {} bars", mode, cycles, cycle);
@@ -137,11 +156,13 @@ fn main() {
     // the calls to follow frame by frame: --watch=9,11
     let watch: Vec<u32> = args.iter().find(|a| a.starts_with("--watch=")).map_or(vec![], |a| a[8..].split(',').map(|x| x.parse().unwrap()).collect());
     let (mut last_change_c, mut last_dict_c) = (0i64, String::new());
-    let four = mode == "four" || mode == "three1";
+    let four = mode == "four" || mode == "three1" || mode == "three4c";
     let dictf = args.iter().any(|a| a == "--dictf");
     let assoc = args.iter().any(|a| a == "--assoc");
     let kinds = args.iter().any(|a| a == "--kinds");
     let heard = args.iter().any(|a| a == "--heard");
+    let bars = args.iter().any(|a| a == "--bars");
+    let all4 = args.iter().any(|a| a == "--all4");
     let trace_frames: Vec<i64> = args.iter().find(|a| a.starts_with("--trace-frames=")).map(|a| a[15..].split(',').map(|x| x.parse().unwrap()).collect()).unwrap_or_default();
     let names: std::collections::BTreeMap<DimId, String> = chans.iter().zip(series.iter()).flat_map(|(c, s)| [(c.1, s.0.clone())].into_iter().chain(c.2.map(|a| (a, s.0.clone())))).collect();
     if log { m.trace = true; m.trace_retire = true; m.trace_cover = true; }
@@ -151,7 +172,7 @@ fn main() {
         for (i, (_, pct, _)) in series.iter().enumerate() {
             let p = pct[k % pct.len()];
             let up: u32 = if p > 0.0 { 1 } else { 0 };
-            let ev = if mode == "four" { [0u32, 1, 2, 3, 0, 2][k % 6] } else if mode == "three1" { combos8[k % 12] } else { up };
+            let ev = if mode == "four" { [0u32, 1, 2, 3, 0, 2][k % 6] } else if mode == "three1" || mode == "three4c" { combos8[k % 12] } else { up };
             inputs.push(Input { dim: chans[i].1, bucket: ev, pos: [0; MAX_DIMS] });
             if let Some(ac) = chans[i].2 {
                 // what the machine said for this bar runs; a lesson (the move itself) where it said nothing
@@ -187,6 +208,26 @@ fn main() {
             let mut ids: Vec<u32> = m.dict.funcs.keys().map(|x| *x as u32).collect();
             ids.sort();
             for id in ids { let f = m.dict.get(id as _).unwrap(); println!("DICTF {} | f{} | {}", fno, id, f.rels.iter().map(|r| format!("{} → {} at t{}", sym_words(&m, &names, four, r.a), sym_words(&m, &names, four, r.b), r.off[0])).collect::<Vec<_>>().join("; ")); }
+        }
+        if bars {
+            // each bar of the frame before: the kind its first covered relation decided, whether it is covered and at
+            // what age, and the calls over it with their level and function
+            if let Some(pf) = m.frames.iter().find(|f| f.no == fno - 1) {
+                let parts: Vec<String> = pf.acts.iter().enumerate().filter(|(_, a)| a.kind == Kind::Event).map(|(i, a)| {
+                    let r = brain_core::machine::ActRef { frame: pf.no, index: i as u32 };
+                    let by: Vec<String> = a.coverers.iter().filter_map(|c| m.act(*c).map(|ca| format!("L{} f{}@{}", ca.level, ca.fired_by.as_ref().map_or(0, |fb| fb.func), c.frame))).collect();
+                    format!("{}={} cov:{} by:[{}]", act_words(&m, &names, four, r), match m.kind_decided(r) { Some(true) => "inside", Some(false) => "time", None => "none" }, a.covered_at.map_or("-".to_string(), |x| x.to_string()), by.join(" "))
+                }).collect();
+                println!("BARS {} | {}", pf.no, parts.join(", "));
+            }
+        }
+        if all4 {
+            // the calls standing in this frame over every bar of this frame
+            if let Some(fr) = m.frames.iter().find(|f| f.no == fno) {
+                let nb = fr.acts.iter().filter(|a| a.kind == Kind::Event).count();
+                let parts: Vec<String> = fr.acts.iter().filter(|a| !a.covers.is_empty() && !a.gone).filter(|a| under(&m, a).iter().filter(|x| x.1 == fno).count() == nb).map(|a| format!("L{} f{}", a.level, a.fired_by.as_ref().map_or(0, |fb| fb.func))).collect();
+                println!("ALL4 {} | {}", fno, parts.join("; "));
+            }
         }
         if heard {
             // what was heard in this frame's selection: each voter, its level and the function it is a call of

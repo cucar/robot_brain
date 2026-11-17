@@ -118,6 +118,24 @@ pub struct Machine {
     pub trace_cover: bool,
     /// The activations heard in the last selection, and whether to print the voting of a frame
     pub last_heard: Vec<ActRef>,
+    /// The relations covered by the calls taken so far at one level of one frame, across both elections of the
+    /// level, each with the call and its function, as adjacency, and the sets they join (D24); the frame and level
+    /// they are for
+    pub(crate) joined: FxHashMap<ActRef, Vec<(ActRef, ActRef, FuncId)>>,
+    pub(crate) jparent: FxHashMap<ActRef, ActRef>,
+    pub(crate) joined_at: Option<(Frame, u32)>,
+    /// The relations refused because they would close a deadlock (D24, D55): refused for as long as their two
+    /// activations exist
+    pub(crate) refused: FxHashSet<(ActRef, ActRef)>,
+    /// For each edge a relation became at a call, the relations it stands for; and the edges that stood on the board
+    /// before any relation became them (D26, D24)
+    pub(crate) form_src: FxHashMap<(ActRef, ActRef), Vec<(ActRef, ActRef)>>,
+    pub(crate) form_pre: FxHashSet<(ActRef, ActRef)>,
+    /// Each base activation covered: its frame and how many calls had landed on it then
+    pub cover_landed: Vec<(Frame, usize)>,
+    /// The frames in which each function that is a cycle had a call, printed at the end where `print_cycles`
+    pub cycle_calls: FxHashMap<FuncId, (String, Vec<Frame>)>,
+    pub print_cycles: bool,
     pub trace_vote: bool,
     /// Relations of covered activations that no call covered, now ending at their calls (D24, D10)
     pub(crate) lifted: FxHashSet<(ActRef, ActRef)>,
@@ -126,9 +144,6 @@ pub struct Machine {
     /// Each relation that went up, and the edges it went up to (D55, D24): covered by a call in any of those forms, it
     /// is covered, and does not go up again
     pub(crate) lift_forms: FxHashMap<(ActRef, ActRef), Vec<(ActRef, ActRef)>>,
-    /// The relations given among three neighbors (D24, D55): each counts as covered for both its ends, no fit is
-    /// credited it, and it goes up to no call
-    pub(crate) given: FxHashSet<(ActRef, ActRef)>,
     /// The kind each activation's first covered relation decided (D24): true inside the frame, false in time
     pub(crate) kind_of: FxHashMap<ActRef, bool>,
     /// What each call took that way: the activations or calls its taken relations end at (D10, D26)
@@ -259,12 +274,14 @@ impl Machine {
             trace_origin: false,
             trace_cover: false,
             last_heard: Vec::new(), trace_vote: false,
+            joined: FxHashMap::default(), jparent: FxHashMap::default(), joined_at: None, refused: FxHashSet::default(), form_src: FxHashMap::default(), form_pre: FxHashSet::default(),
+            cover_landed: Vec::new(),
+            cycle_calls: FxHashMap::default(), print_cycles: false,
             grown: FxHashMap::default(),
             cover_log: Vec::new(),
             lifted: FxHashSet::default(),
             cov_inc: FxHashMap::default(),
             lift_forms: FxHashMap::default(),
-            given: FxHashSet::default(),
             kind_of: FxHashMap::default(),
             taken: FxHashMap::default(),
             up_count: 0,
@@ -464,10 +481,13 @@ impl Machine {
         self.grown.retain(|c, _| c.frame >= keep_from);
         self.lifted.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
         self.cov_inc.retain(|a, v| { v.retain(|b| b.frame >= keep_from); a.frame >= keep_from });
-        self.given.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
         self.kind_of.retain(|a, _| a.frame >= keep_from);
         self.lift_forms.retain(|e, v| { v.retain(|x| x.0.frame >= keep_from && x.1.frame >= keep_from); e.0.frame >= keep_from && e.1.frame >= keep_from });
         self.taken.retain(|c, _| c.frame >= keep_from);
+        // a refused relation stays refused for as long as its two activations exist (D24)
+        self.refused.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
+        self.form_src.retain(|e, v| { v.retain(|x| x.0.frame >= keep_from && x.1.frame >= keep_from); e.0.frame >= keep_from && e.1.frame >= keep_from });
+        self.form_pre.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
         self.call_thru.retain(|c, _| c.frame >= keep_from);
         self.call_fit.clear();
         stats.elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
@@ -504,6 +524,7 @@ impl Machine {
             newly.iter().filter(|(r, _)| self.act(*r).map_or(false, |a| !a.covers.is_empty())).count());
         for (me, age) in newly {
             if self.trace_cover { eprintln!("[covered f{}] {} at frame {} age {}", fno, self.act(me).map_or("?".into(), |a| self.dict.sym_text(a.sym)), me.frame, age); }
+            if let Some(a) = self.act(me) { if a.covers.is_empty() && a.kind == Kind::Event { self.cover_landed.push((me.frame, a.coverers.len())); } }
             if age == 0 { self.cover_age0 += 1; }
             // a row holds what stood on the board when it was written: it takes nothing for the call (D10, D18)
             if let Some(a) = self.act_mut(me) { a.covered_at = Some(age); }
@@ -532,6 +553,7 @@ impl Machine {
         let mut out = Vec::new();
         for (me, age) in newly {
             if self.trace_cover { eprintln!("[covered in the election f{}] {} at frame {} age {}", fno, self.act(me).map_or("?".into(), |a| self.dict.sym_text(a.sym)), me.frame, age); }
+            if let Some(a) = self.act(me) { if a.covers.is_empty() && a.kind == Kind::Event { self.cover_landed.push((me.frame, a.coverers.len())); } }
             if age == 0 { self.cover_age0 += 1; }
             if let Some(a) = self.act_mut(me) { a.covered_at = Some(age); }
             self.lift_relations(me);
@@ -568,12 +590,17 @@ impl Machine {
         if inside.len() == 1 {
             // its relations inside its frame, either direction, each other end once
             let mut others: FxHashSet<ActRef> = FxHashSet::default();
-            for br in &a.rels { if br.off[0] == 0 && !self.blocked(me, br.other) { others.insert(br.other); } }
+            // a refused relation is not counted among what it has (D24)
+            let refused = |x: ActRef| self.refused.contains(&edge(me, x));
+            for br in &a.rels { if br.off[0] == 0 && !self.blocked(me, br.other) && !refused(br.other) { others.insert(br.other); } }
             for f in self.frames.iter() { for (j, b) in f.acts.iter().enumerate() { if b.gone { continue; }
                 let x = ActRef { frame: f.no, index: j as u32 };
-                for br in &b.rels { if br.other == me && br.off[0] == 0 && !self.blocked(me, x) { others.insert(x); } } } }
+                for br in &b.rels { if br.other == me && br.off[0] == 0 && !self.blocked(me, x) && !refused(x) { others.insert(x); } } } }
             others.retain(|x| self.act(*x).map_or(false, |xa| !xa.gone));
-            if others.len() <= 1 { return Some(true); }
+            if others.len() <= 1 {
+                if self.trace_cover { eprintln!("[one-relation f{}] {}@{} covered by its one relation inside the frame", self.frame_no, self.act(me).map_or("?".into(), |x| self.dict.sym_text(x.sym)), me.frame); }
+                return Some(true);
+            }
         }
         let time: Vec<Offset> = rels.iter().filter(|(_, o)| o[0] != 0).map(|x| x.1).collect();
         let (hn, hp) = (time.iter().any(|x| x[0] < 0), time.iter().any(|x| x[0] > 0));
@@ -593,8 +620,8 @@ impl Machine {
             let e = edge(me, o);
             // covered by a call in the form it stands in, or in any form it went up to (D55, D24)
             if self.covered_in_any_form(e, 0) { continue; }
-            // a relation given among three neighbors ends at no call (D24)
-            if self.given.contains(&e) { continue; }
+            // a refused relation ends at no call, at any level (D24)
+            if self.refused.contains(&e) { continue; }
             let Some(oa) = self.act(o).cloned() else { continue };
             if oa.gone || coverers.contains(&o) { continue; }
             // went up already when its other end was covered: now that both ends are, it runs between the calls on
@@ -610,10 +637,18 @@ impl Machine {
                     if x == c { continue; }
                     let (Some(ca), Some(xa)) = (self.act(c).cloned(), self.act(x).cloned()) else { continue };
                     let v = self.taken.entry(c).or_default();
-                    if !v.contains(&x) { v.push(x); }
+                    let in_taken = v.contains(&x);
+                    if !in_taken { v.push(x); }
                     let off = offset_between(&xa, &ca);
                     { let v = self.lift_forms.entry(e).or_default(); let f = edge(x, c); if !v.contains(&f) { v.push(f); } }
                     let held = self.act(c).map_or(false, |cm| cm.rels.iter().any(|br| br.other == x));
+                    // what the edge stands for, and whether it stood on the board before (D24)
+                    {
+                        let f = edge(x, c);
+                        let first = !self.form_src.contains_key(&f);
+                        if first && (in_taken || held || xa.rels.iter().any(|br| br.other == c)) { self.form_pre.insert(f); }
+                        let v = self.form_src.entry(f).or_default(); if !v.contains(&e) { v.push(e); }
+                    }
                     if let Some(xm) = self.act_mut(x) { if !held && !xm.rels.iter().any(|br| br.other == c) { xm.rels.push(BoardRel { other: c, off, strength: s }); } }
                     if self.trace_cover { eprintln!("[up f{}] {} at frame {} -> {} now ends at {} | {}", self.frame_no, self.dict.sym_text(a.sym), me.frame, self.dict.sym_text(oa.sym), self.dict.sym_text(ca.sym), if oa.covered_at.is_some() { "between two calls" } else { "to the call" }); }
                 }
@@ -804,7 +839,7 @@ impl Machine {
     }
 }
 
-// ───── the two kinds, the kind decided, and the given relation (D34, D24, D55) ─────
+// ───── the two kinds and the kind decided (D34, D24) ─────
 impl Machine {
     /// Whether a relation between two activations is inside the frame: its two ends in one frame (D34).
     pub(crate) fn rel_inside(&self, a: ActRef, b: ActRef) -> Option<bool> { Some(self.act(a)?.pos[0] == self.act(b)?.pos[0]) }
@@ -836,37 +871,108 @@ impl Machine {
             }
         }
     }
+}
 
-    /// Whether two activations hold a relation, in either direction.
-    pub(crate) fn has_rel(&self, a: ActRef, b: ActRef) -> bool {
-        self.act(a).map_or(false, |x| x.rels.iter().any(|br| br.other == b)) || self.act(b).map_or(false, |x| x.rels.iter().any(|br| br.other == a))
-    }
 
-    /// The relations given by the edges a taken fit covered (D24, D55): for each, at either end z, every other relation
-    /// of z a call covers (a side) whose far end is a neighbor of this edge's far end gives the relation between the
-    /// two far ends. A given relation decides no kind. Returns the ends of each given relation.
-    pub(crate) fn give_relations(&mut self, edges: &[(ActRef, ActRef)]) -> Vec<ActRef> {
-        let mut out = Vec::new();
-        for &(p, q) in edges {
-            // only a relation a call covers is a side (a blocked one never is)
-            if !self.covered_rel.contains(&edge(p, q)) { continue; }
-            for (z, x) in [(p, q), (q, p)] {
-                let partners: Vec<ActRef> = self.cov_inc.get(&z).cloned().unwrap_or_default();
-                for y in partners {
-                    if y == x || !self.covered_rel.contains(&edge(z, y)) { continue; }
-                    let e = edge(x, y);
-                    if self.covered_rel.contains(&e) || self.given.contains(&e) || !self.has_rel(x, y) || self.blocked(x, y) { continue; }
-                    if self.act(x).map_or(true, |a| a.gone) || self.act(y).map_or(true, |a| a.gone) { continue; }
-                    self.given.insert(e);
-                    self.cov_inc.entry(x).or_default().push(y);
-                    self.cov_inc.entry(y).or_default().push(x);
-                    if self.trace_cover { eprintln!("[given f{}] {}@{} — {}@{} | the two sides at {}@{}", self.frame_no, self.act(x).map_or("?".into(), |a| self.dict.sym_text(a.sym)), x.frame, self.act(y).map_or("?".into(), |a| self.dict.sym_text(a.sym)), y.frame, self.act(z).map_or("?".into(), |a| self.dict.sym_text(a.sym)), z.frame); }
-                    out.push(x);
-                    out.push(y);
-                }
+// ───── a deadlock broken where it would close: joined, refused, eliminated (D24, D55) ─────
+impl Machine {
+    /// The root of an activation's set of activations joined in this election.
+    pub(crate) fn jfind(&self, mut x: ActRef) -> ActRef { while let Some(p) = self.jparent.get(&x) { if *p == x { break; } x = *p; } x }
+
+
+
+    /// The calls on the shortest chain of relations covered in this election from `a` to `b`, if they are joined.
+    pub(crate) fn joined_chain(&self, a: ActRef, b: ActRef) -> Option<Vec<ActRef>> {
+        if a == b || self.jfind(a) != self.jfind(b) { return None; }
+        let mut prev: FxHashMap<ActRef, (ActRef, ActRef)> = FxHashMap::default();
+        let mut q = std::collections::VecDeque::new();
+        q.push_back(a);
+        prev.insert(a, (a, a));
+        while let Some(x) = q.pop_front() {
+            if x == b { break; }
+            for &(y, call, _) in self.joined.get(&x).map(|v| v.as_slice()).unwrap_or(&[]) {
+                if prev.contains_key(&y) { continue; }
+                prev.insert(y, (x, call));
+                q.push_back(y);
             }
         }
-        out
+        if !prev.contains_key(&b) { return None; }
+        let mut calls: Vec<ActRef> = Vec::new();
+        let mut x = b;
+        while x != a { let (p, c) = prev[&x]; if !calls.contains(&c) { calls.push(c); } x = p; }
+        Some(calls)
+    }
+
+    /// A refused relation that had already ended at a call: that edge leaves the board, and every edge it became
+    /// above. An edge that also stands for a relation that is not refused, or stood on the board before, stays (D24).
+    fn remove_forms(&mut self, e: (ActRef, ActRef), depth: usize) {
+        if depth > 64 { return; }
+        let forms = self.lift_forms.get(&e).cloned().unwrap_or_default();
+        for f in forms {
+            if self.refused.contains(&f) { continue; }
+            let shared = self.form_pre.contains(&f) || self.form_src.get(&f).map_or(false, |v| v.iter().any(|s| *s != e && !self.refused.contains(s)));
+            if shared { continue; }
+            self.refused.insert(f);
+            let (x, c) = f;
+            if let Some(xm) = self.act_mut(x) { xm.rels.retain(|br| br.other != c); }
+            if let Some(cm) = self.act_mut(c) { cm.rels.retain(|br| br.other != x); }
+            if let Some(v) = self.taken.get_mut(&c) { v.retain(|y| *y != x); }
+            if let Some(v) = self.taken.get_mut(&x) { v.retain(|y| *y != c); }
+            if self.trace_cover { eprintln!("[form removed f{}] {:?}–{:?}", self.frame_no, x, c); }
+            self.remove_forms(f, depth + 1);
+        }
+    }
+
+    /// At the start of a round of the election: every relation on the board whose two ends the calls taken so far at
+    /// this level of this frame join is refused, inside the frame or in time, whether or not a fit offers it or a
+    /// function holds it (D24, D55). Returns the ends of the relations refused now.
+    pub(crate) fn mark_refused(&mut self, fits: &[crate::recognize::Fit], level: u32) -> Vec<ActRef> {
+        let fno = self.frame_no;
+        let mut ends = Vec::new();
+        let mut cands: Vec<(ActRef, ActRef)> = Vec::new();
+        let keys: Vec<ActRef> = self.joined.keys().copied().collect();
+        for x in &keys {
+            let Some(xa) = self.act(*x) else { continue };
+            if xa.gone { continue; }
+            for br in &xa.rels { if self.joined.contains_key(&br.other) { cands.push((*x, br.other)); } }
+        }
+        for fit in fits { cands.extend(fit.edges.iter().copied()); }
+        let mut seen: FxHashSet<(ActRef, ActRef)> = FxHashSet::default();
+        for (a, b) in cands {
+            let e = edge(a, b);
+            if !seen.insert(e) { continue; }
+            if self.refused.contains(&e) || self.blocked(a, b) || self.covered_rel.contains(&e) { continue; }
+            let Some(chain) = self.joined_chain(a, b) else { continue };
+            self.refused.insert(e);
+            // where it had already ended at a call, that edge leaves the board, with every edge above it
+            if self.lifted.contains(&e) { self.remove_forms(e, 0); }
+            ends.push(a);
+            ends.push(b);
+            if self.trace_cover {
+                let n = chain.len();
+                let held = match (self.act(a), self.act(b)) { (Some(x), Some(y)) => self.dict.holder(&canon(x.sym, y.sym, offset_between(x, y))).is_some(), _ => false };
+                let show = |x: &ActRef| format!("{}@{}", self.act(*x).map_or("?".into(), |q| self.dict.sym_text(q.sym)), x.frame);
+                let offered: Vec<String> = fits.iter().filter(|f| f.edges.iter().any(|&(p, q)| edge(p, q) == e)).map(|f| format!("f{}", f.func)).collect();
+                eprintln!("[refused f{} l{}] {}–{} | a deadlock of {} calls: {} | offered by [{}] | {}", fno, level, show(&a), show(&b), n + 1,
+                    chain.iter().map(|c| format!("{} (call of f{})", show(c), self.act(*c).and_then(|x| x.fired_by.as_ref()).map_or(0, |fb| fb.func))).collect::<Vec<_>>().join(", "),
+                    offered.join(" "), if held { "held by a function" } else { "held by no function" });
+            }
+        }
+        ends
     }
 }
 
+impl Drop for Machine {
+    fn drop(&mut self) {
+        if self.print_cycles {
+            let mut v: Vec<(&FuncId, &(String, Vec<Frame>))> = self.cycle_calls.iter().collect();
+            v.sort_by(|a, b| a.0.cmp(b.0));
+            for (id, (d, frames)) in v {
+                let mut runs: Vec<String> = Vec::new();
+                let mut i = 0;
+                while i < frames.len() { let mut j = i; while j + 1 < frames.len() && frames[j + 1] == frames[j] + 1 { j += 1; } runs.push(if j > i { format!("{}-{}", frames[i], frames[j]) } else { frames[i].to_string() }); i = j + 1; }
+                eprintln!("[cycle-calls] f{} | {} | {} frames: {}", id, d, frames.len(), runs.join(","));
+            }
+        }
+    }
+}

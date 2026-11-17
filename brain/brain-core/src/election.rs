@@ -14,11 +14,11 @@ impl Machine {
     /// What a fit would take off the board (R22, D28): each board relation its true relations land on, and the
     /// cost of each call it lands on, as a node or through its pose (D22): its failures, a call itself costing
     /// nothing (experiment); unless a call this election has taken already landed on it and took its cost off. A
-    /// relation given or blocked is credited to no fit (D24).
+    /// relation refused or blocked is credited to no fit (D24).
     fn coverage(&self, fit: &Fit) -> f64 {
         let mut seen: FxHashSet<(ActRef, ActRef)> = FxHashSet::default();
         let mut c = 0.0;
-        for &(a, b) in &fit.edges { if !self.given.contains(&edge(a, b)) && !self.blocked(a, b) && seen.insert(edge(a, b)) { c += 1.0; } }
+        for &(a, b) in &fit.edges { if !self.blocked(a, b) && !self.refused.contains(&edge(a, b)) && seen.insert(edge(a, b)) { c += 1.0; } }
         // credited the relations it read and nothing of a call (D22)
         c
     }
@@ -148,8 +148,35 @@ impl Machine {
     /// Returns how many were accepted and allocated.
     pub(crate) fn elect(&mut self, level: u32, mut fits: Vec<Fit>) -> (usize, usize) {
         self.electing.clear();
+        // what joins two activations is what the calls taken at this level of this frame cover, across both elections
+        // of the level (D24, R24); a refused relation stays refused for as long as its two activations exist
+        if self.joined_at != Some((self.frame_no, level)) {
+            self.joined_at = Some((self.frame_no, level));
+            self.joined.clear();
+            self.jparent.clear();
+        }
         let (mut accepted, mut minted) = (0, 0);
         loop {
+            // a relation whose two ends the calls taken so far join would close a deadlock: it is refused (D24, D55)
+            {
+                let ends = self.mark_refused(&fits, level);
+                // an end left with one covered relation inside its frame and no other that counts is covered by it (D24)
+                if !ends.is_empty() && !self.frozen {
+                    let covered: FxHashSet<ActRef> = self.cover_in_election(&ends).into_iter().collect();
+                    if !covered.is_empty() {
+                        let mut next = Vec::with_capacity(fits.len());
+                        for g in fits {
+                            let stale = g.acts().any(|(r, _)| covered.contains(&r)) || g.edges.iter().any(|(a, b)| covered.contains(a) || covered.contains(b)) || g.thru.iter().any(|r| covered.contains(r));
+                            if !stale { next.push(g); continue; }
+                            let Some(f) = self.dict.get(g.func) else { continue };
+                            if !self.act(g.entry.1).map_or(false, |a| self.landable(a)) { continue; }
+                            let again = self.fit(f, g.entry.0, g.entry.1);
+                            if !again.edges.is_empty() { next.push(again); }
+                        }
+                        fits = next;
+                    }
+                }
+            }
             let mut best: Option<(usize, f64)> = None;
             // each fit's tie order read once per round, not at every comparison (speed only)
             let mut ranks: Vec<Option<(bool, i64, u8, u64, u64, ActRef)>> = vec![None; fits.len()];
@@ -165,6 +192,13 @@ impl Machine {
                 }) };
                 if better { best = Some((i, net)); }
             }
+            if self.trace_cover {
+                let show = |x: &ActRef| format!("{}@{}", self.act(*x).map_or("?".into(), |b| self.dict.sym_text(b.sym).split('<').next().unwrap_or("").to_string()), x.frame);
+                for (k, fit) in fits.iter().enumerate() {
+                    eprintln!("[round f{} l{} r{}] f{} {} entry {} | coverage {} price {} net {} {}| edges: {}", self.frame_no, level, accepted, fit.func, if self.fit_inside(fit) { "inside" } else { "in time" }, show(&fit.entry.1), self.coverage(fit), self.price(fit), self.coverage(fit) - self.price(fit),
+                        if best.map_or(false, |b| b.0 == k) { "TAKEN " } else { "" }, fit.edges.iter().map(|&(a, b)| format!("{}–{}{}", show(&a), show(&b), if self.refused.contains(&edge(a, b)) { " (refused)" } else if self.blocked(a, b) { " (blocked)" } else { "" })).collect::<Vec<_>>().join(", "));
+                }
+            }
             let Some((i, _)) = best else { break };
             let fit = fits.swap_remove(i);
             let newly: FxHashSet<(ActRef, ActRef)> = fit.edges.iter().map(|&(a, b)| edge(a, b)).collect();
@@ -175,9 +209,6 @@ impl Machine {
             let covered: FxHashSet<ActRef> = if self.frozen { FxHashSet::default() } else {
                 let mut cands: Vec<ActRef> = fit.acts().map(|x| x.0).collect();
                 for &(a, b) in &fit.edges { cands.push(a); cands.push(b); }
-                // the third relation among three neighbors is given, and counts toward covering its ends (D24, D55)
-                let g = self.give_relations(&fit.edges);
-                cands.extend(g);
                 self.cover_in_election(&cands).into_iter().collect()
             };
             // read again what read through a relation the taken fit covers, or through an activation now covered, or
@@ -312,9 +343,22 @@ impl Machine {
             eprintln!("[edges f{} l{}] f{} landed {} edges: {}", fno, level, f.id, fit.edges.len(),
                 fit.edges.iter().map(|&(a, b)| format!("{}–{}{}", show(&a), show(&b), if self.blocked(a, b) { " (blocked)" } else { "" })).collect::<Vec<_>>().join(", "));
         }
+        // the frames each function that is a cycle has a call in
+        if self.print_cycles && f.has_cycle() {
+            let d = self.dict.describe(&f);
+            let e = self.cycle_calls.entry(f.id).or_insert((d, Vec::new()));
+            if e.1.last() != Some(&fno) { e.1.push(fno); }
+        }
         for &(a, b) in &fit.edges {
             // a blocked relation is never covered; a covered one decides the kind of each end that has none (D24)
             if self.blocked(a, b) { continue; }
+            // a refused relation is never covered (D24)
+            if self.refused.contains(&edge(a, b)) { continue; }
+            // the relation joins its two ends at this level of this frame (D24)
+            self.joined.entry(a).or_default().push((b, me, f.id));
+            self.joined.entry(b).or_default().push((a, me, f.id));
+            let (ra, rb) = (self.jfind(a), self.jfind(b));
+            if ra != rb { self.jparent.insert(ra, rb); }
             self.decide_kind(a, b);
             if self.covered_rel.insert(edge(a, b)) {
                 self.covered_edges.push(edge(a, b));

@@ -26,7 +26,7 @@ fn labels(path: &str) -> Vec<u32> { read(path)[8..].iter().map(|&x| x as u32).co
 fn main() {
     // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
     let s15_off = std::env::args().any(|a| a == "--s15-off");
-    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off").collect();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && a != "--landed" && a != "--cycles").collect();
     let dir = args.get(1).expect("usage: mnist <data-dir> [train] [test] [h] [size] [teach] [threshold]").clone();
     let num = |i: usize| -> Option<usize> { args.get(i).and_then(|s| if s == "all" { None } else { s.parse().ok() }) };
     let train_imgs = images(&format!("{}/train-images-idx3-ubyte", dir));
@@ -55,6 +55,7 @@ fn main() {
     let f = 28 / size;
 
     let mut m = Machine::new(h, Policy::events_to_actions(), 1);
+    m.print_cycles = std::env::args().any(|a| a == "--cycles");
 
     if s15_off { m.sw.s15_uncovered_relations = false; }
     m.trace_retire = true;
