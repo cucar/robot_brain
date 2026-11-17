@@ -67,6 +67,8 @@ fn main() {
     // each channel: its name, the percent move of each bar of its cycle, and whether it has an action
     let mut series: Vec<(String, Vec<f64>, bool)> = Vec::new();
     let mut combos8: Vec<u32> = Vec::new();
+    // seq mode: each stock's prices, for the trader
+    let mut prices: Vec<Vec<f64>> = Vec::new();
     let (cycle, default_cycles) = match mode.as_str() {
         "two" | "three" => {
             let syms: &[&str] = if mode == "two" { &["KGC", "GLD"] } else { &["KGC", "GLD", "SPY"] };
@@ -119,6 +121,25 @@ fn main() {
             series.push(("C".into(), pcts[0].clone(), true));
             (12usize, 10usize)
         }
+        // the stock sequence memorization of the main branch's demos: KGC, GOLD and SPY over their whole daily
+        // history as the CSVs hold it, one lap the whole sequence, one episode a lap
+        "seq" => {
+            let bars: Option<usize> = args.iter().find(|a| a.starts_with("--bars=")).map(|a| a[7..].parse().unwrap());
+            // the stocks (KGC, GOLD and SPY unless given), and only the last so many rows of each where asked
+            let syms: Vec<String> = args.iter().find(|a| a.starts_with("--symbols=")).map_or(vec!["KGC".into(), "GOLD".into(), "SPY".into()], |a| a[10..].split(',').map(|x| x.to_string()).collect());
+            let last: Option<usize> = args.iter().find(|a| a.starts_with("--last=")).map(|a| a[7..].parse().unwrap());
+            for s in &syms {
+                let s = s.as_str();
+                let txt = std::fs::read_to_string(format!("{}/{}.csv", dir, s)).unwrap();
+                let p: Vec<f64> = txt.lines().filter(|l| !l.trim().is_empty()).map(|l| l.split(',').next().unwrap().parse().unwrap()).collect();
+                let p: Vec<f64> = match last { Some(l) if l < p.len() => p[p.len() - l..].to_vec(), _ => p };
+                let n = bars.map_or(p.len(), |b| b.min(p.len()));
+                series.push((s.to_string(), (0..n - 1).map(|i| (p[i + 1] - p[i]) / p[i] * 100.0).collect(), true));
+                prices.push(p[..n].to_vec());
+            }
+            let n = series[0].1.len();
+            (n, 5usize)
+        }
         "four" => {
             // a = UU, b = DU, c = DD, d = UD; the reward is A's move
             series.push(("S".into(), vec![1.0, -2.0, -3.0, 2.0, 3.0, -1.0], true));
@@ -166,7 +187,16 @@ fn main() {
     let trace_frames: Vec<i64> = args.iter().find(|a| a.starts_with("--trace-frames=")).map(|a| a[15..].split(',').map(|x| x.parse().unwrap()).collect()).unwrap_or_default();
     let names: std::collections::BTreeMap<DimId, String> = chans.iter().zip(series.iter()).flat_map(|(c, s)| [(c.1, s.0.clone())].into_iter().chain(c.2.map(|a| (a, s.0.clone())))).collect();
     if log { m.trace = true; m.trace_retire = true; m.trace_cover = true; }
+    // the main branch's trader (apps/stocks/trader.js) in seq mode: $15,000 a episode, each stock own (action 1) or
+    // out, at most one position, the own with the highest estimate (then the higher price, then the symbol), every
+    // dollar in it in whole shares, no transaction cost; profit is cash and holdings less the start
+    let nch = series.len();
+    let (mut cash, mut shares, mut trades) = (15000.0f64, vec![0i64; nch], 0usize);
+    let mut ep_profit: Vec<(f64, usize)> = Vec::new();
+    let mut est = vec![0.0f64; nch];
+    let mut last_act: Vec<Option<u32>> = vec![None; nch];
     for k in 0..total {
+        if k % cycle == 0 { cash = 15000.0; shares = vec![0; nch]; trades = 0; }
         let mut inputs = Vec::new();
         let mut rewards = Vec::new();
         for (i, (_, pct, _)) in series.iter().enumerate() {
@@ -189,8 +219,33 @@ fn main() {
         for (i, (_, pct, _)) in series.iter().enumerate() {
             let Some(ac) = chans[i].2 else { continue };
             pending[i] = w.iter().find(|x| x.dim == ac).map(|x| x.bucket);
+            est[i] = w.iter().find(|x| x.dim == ac).map_or(0.0, |x| x.estimate);
             let next_up = if pct[(k + 1) % pct.len()] > 0.0 { 1 } else { 0 };
             if let Some(g) = pending[i] { grid[i][k / cycle][k % cycle] = if g == next_up { 'R' } else { 'W' }; }
+        }
+        // the trader, at the price this frame's bar ended at: a stock keeps its last action where the machine says
+        // nothing new; where none has an action yet, nothing trades
+        if !prices.is_empty() {
+            for i in 0..nch { if pending[i].is_some() { last_act[i] = pending[i]; } }
+            if last_act.iter().any(|a| a.is_some()) {
+                let at = (k % cycle) + 1;
+                let price = |i: usize| prices[i][at];
+                let total_value = cash + (0..nch).map(|i| shares[i] as f64 * price(i)).sum::<f64>();
+                let mut own: Vec<usize> = (0..nch).filter(|&i| last_act[i] == Some(1) && price(i) > 0.0).collect();
+                own.sort_by(|&a, &b| est[b].exp().partial_cmp(&est[a].exp()).unwrap().then(price(b).partial_cmp(&price(a)).unwrap()).then(series[a].0.cmp(&series[b].0)));
+                own.truncate(1);
+                for i in 0..nch {
+                    if own.contains(&i) || shares[i] == 0 { continue; }
+                    cash += shares[i] as f64 * price(i);
+                    shares[i] = 0;
+                    trades += 1;
+                }
+                if let Some(&c) = own.first() {
+                    let target = (total_value / price(c)).floor() as i64;
+                    let diff = target - shares[c];
+                    if diff != 0 { cash -= diff as f64 * price(c); shares[c] = target; trades += 1; }
+                }
+            }
         }
         // recognition: the dictionary's last change, and this frame's combination calls (a level-1 call over two of
         // this frame's bars)
@@ -201,7 +256,11 @@ fn main() {
         let _ = (&mut last_change_c, &mut last_dict_c);
         if k % cycle == cycle - 1 {
             let top = m.frames.iter().filter(|f| f.no > fno - cycle as i64).flat_map(|f| f.acts.iter()).map(|a| a.level).max().unwrap_or(0);
-            println!("CYCLE {} | functions {} | highest call level in the cycle {} | the dictionary last changed at frame {}", k / cycle + 1, m.dict.len(), top, last_change);
+            let accs: Vec<String> = series.iter().enumerate().filter(|(_, x)| x.2).map(|(i, x)| { let row = &grid[i][k / cycle]; let (r, w) = row.iter().fold((0, 0), |(r, w), c| (r + (*c == 'R') as usize, w + (*c == 'W') as usize)); format!("{} {:.2}%", x.0, 100.0 * r as f64 / (r + w).max(1) as f64) }).collect();
+            let profit = if prices.is_empty() { 0.0 } else { cash + (0..nch).map(|i| shares[i] as f64 * prices[i][(k % cycle) + 1]).sum::<f64>() - 15000.0 };
+            if !prices.is_empty() { ep_profit.push((profit, trades)); }
+            println!("CYCLE {} | neurons {} | functions {} | highest call level in the cycle {} | the dictionary last changed at frame {} | right {}{}", k / cycle + 1, m.alive, m.dict.len(), top, last_change, accs.join(", "),
+                if prices.is_empty() { String::new() } else { format!(" | net profit ${:.2}, ROI {:.2}% ({} trades)", profit, profit / 15000.0 * 100.0, trades) });
         }
         let fr = m.frames.back().unwrap();
         if dictf && !log {
@@ -337,7 +396,11 @@ fn main() {
         let (r, w) = grid[i].iter().flatten().fold((0, 0), |(r, w), c| (r + (*c == 'R') as usize, w + (*c == 'W') as usize));
         let from = (0..cycles).rev().take_while(|c| grid[i][*c].iter().all(|x| *x == 'R')).last();
         println!("inference {}: right {} of {} | every bar right from cycle {}", name, r, r + w, from.map_or("never".into(), |c| (c + 1).to_string()));
-        for (c, row) in grid[i].iter().enumerate() { println!("  {} cycle {:2}: {}", name, c + 1, row.iter().collect::<String>()); }
+        if cycle > 60 {
+            for (c, row) in grid[i].iter().enumerate() { let (r, w) = row.iter().fold((0, 0), |(r, w), x| (r + (*x == 'R') as usize, w + (*x == 'W') as usize)); println!("  {} lap {:2}: right {} of {} ({:.2}%)", name, c + 1, r, r + w, 100.0 * r as f64 / (r + w).max(1) as f64); }
+        } else {
+            for (c, row) in grid[i].iter().enumerate() { println!("  {} cycle {:2}: {}", name, c + 1, row.iter().collect::<String>()); }
+        }
     }
     println!("recognition: {} functions | the dictionary last changed at frame {}", m.dict.len(), last_change);
     println!("  combination calls per frame, per cycle: {}", combos.iter().enumerate().map(|(c, v)| format!("{}:{}", c + 1, v.iter().map(|x| x.to_string()).collect::<String>())).collect::<Vec<_>>().join(" "));
