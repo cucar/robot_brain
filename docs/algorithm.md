@@ -13,8 +13,8 @@ one at an offset from the other in time and space together, is an edge. The grap
 of space, and it is the only record the machine keeps of what happened: it holds offsets, never coordinates. A
 neuron sees the edges around each of its own activations and reports them with how often each has held. The
 machine groups the edges into **functions**, graphs over neurons that keep recurring, names each with an
-interneuron, and from then on the name stands where the graph recurs. A function is recognized from any node of
-it, in the frame its latest node fires, and its call is one activation of the interneuron in a **pose**: which
+interneuron, and from then on the name stands where the graph recurs. A function is recognized whole, in the
+frame its latest node fires, and its call is one activation of the interneuron in a **pose**: which
 node the fit ran from and to, and how many laps. The call stands for what it covers
 and inherits every relation of it; what always followed it is a function at the level above, over its call.
 Where a function is general it leaves a **variable**, a node whose neuron changes from one occurrence to the
@@ -25,8 +25,8 @@ them in turn, and the dictionary is a hierarchy of named graphs.
 position in space and time; a line may call another procedure at a position; a variable is bound where it is
 first read and tested where it is read again; a cycle is a goto to a line already read, run while its test
 holds. There is no return value: a procedure's effect is what it expands to, and what follows
-it is held outside it, as connections from its call. Recognition parses the text backward from whichever line it
-meets, and expansion interprets it forward.
+it is held outside it, as connections from its call. Recognition parses the text backward once its last line
+has run, and expansion interprets it forward.
 
 What no function covers is the **apex**: the machine's state at a frame, the situation it is in, and the set
 that infers the frame to come. Every neuron records what followed its activations along with their rewards.
@@ -55,7 +55,7 @@ graph. Functions may name base symbols or the interneurons of other functions. T
 mechanism of compression.
 
 **A function is what has happened, and a connection is what followed.** A function is recognized in the frame
-its latest node fires, once every node of it has fired, from whichever node the fit enters at (D54). A relation
+its latest node fires, once every node of it has fired, and in no frame before (D54). A relation
 joins a function where it pays over the occasions the neurons remember (R50). A function's latest node never
 moves, so it gains nodes toward its past only, and what followed it is a function at the level above, over its
 call. What followed any activation, its function's later nodes
@@ -566,8 +566,9 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > function later than its origin.** A function is recognized in the frame its origin fires, and its call
 > stands from then on, so what fires later sees the call, and its relation is a function over the call (R50).
 > The origin is no more than the latest node the function has: where the relation at the origin leaves, the
-> latest of the nodes that remain is the origin (R54). A fit may enter the function at
-> any node (D54): the origin is where the function is listed from, not where recognition begins. A function
+> latest of the nodes that remain is the origin (R54). A fit enters the function at a node that stands in the
+> present frame, and only where no node of the function is still to come (D54). In a function in time that
+> node is the origin. A function
 > that is a cycle has no fixed origin, since the last lap may stop at any node of it; its
 > call's pose says which node the fit started at and which it ended at (D37).
 >
@@ -598,7 +599,7 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > position; its variables are assignments, a class a variable of a declared type and a parameter one of any type,
 > each bound where the fit first reads it and tested where it reads it again (D41, D44); its cycle is a goto to a
 > line already read, run while the relation that closes it lands (D54); and its origin is the last line, which the
-> parse reaches from whichever line it meets first. It returns nothing: what it does is what its expansion reads
+> parse starts from once it has run. It returns nothing: what it does is what its expansion reads
 > (R28), and what comes after it is not in it but in the connections from its call (D25). The language holds
 > straight-line code, or one loop and nothing else, and one assignment per variable before its reads. A loop
 > with code after it, two loops, a branch, or a variable assigned twice have no single function: the machine
@@ -927,9 +928,15 @@ occurs is what the worth measures (D57).
 > functions may land on the same board relation. A function may fit at several positions in one frame, each fit
 > one activation of its interneuron, and each fit is priced as it falls (D22).
 >
-> **A fit is read at the present, over what has happened.** It enters at any node of the function, on an
+> **A fit is read at the present, over what has happened.** It enters at a node of the function, on an
 > activation at the frame being recognized that the node admits, its own neuron in its pose,
-> and reads the function's relations from there (D31); every node is at or before the present, so every
+> and reads the function's relations from there (D31). **A function is fit only in a frame where none of its
+> nodes is still to come.** Read from the node entered at, where a node of the function would stand later than
+> the present, there is no fit: nothing is offered, and nothing is charged. So a function in time is fit in
+> the frame its latest node fires, entered at that node (D15). A function inside the frame is entered at any
+> of its nodes, since all of them stand in the present frame. A cycle is entered at any node too: its fit ends
+> where the cycle stops landing, so none of its nodes is still to come. Every node is then at or before the
+> present, so every
 > relation of the function is true or failed when the function is fit, and nothing is pending. Its pose is the
 > node of the latest activation it lands on, the node of the earliest, and the laps it read (D37). Without an
 > activation at the present that some node admits there is no fit.
@@ -1413,7 +1420,8 @@ argument.
 > reading tells the machine the function may fit, and the fit begins on an activation at the present frame
 > that can stand at that node, or nowhere. Matched relation by relation out from there, those of its relations
 > that land on a board relation are true, those that do not are its failures (D22). A function is fit once
-> per activation at the present it can enter at, and a fit reached from two of its relations is one fit. A relation no
+> per activation at the present it can enter at, which is only where none of its nodes is still to come
+> (D54), and a fit reached from two of its relations is one fit. A relation no
 > reading reaches is left for grouping (R50). Everything find fits goes to the election once every relation
 > of the level has been read (R24).
 
@@ -1424,7 +1432,8 @@ argument.
 > **A function is fit whole.** The machine takes it or leaves it, its variables with it: it cannot hold where
 > they do not.
 >
-> **The fitting rule.** A fit is anchored at the node it enters at. The machine lands that node on an activation
+> **The fitting rule.** A fit is anchored at the node it enters at, and it is made only where no node of the
+> function is still to come (D54). The machine lands that node on an activation
 > at the present frame the node admits, its own neuron in its pose,
 > or one admitted at it where the node is a variable (D54), and extends the match relation by
 > relation from there: each next relation of the function that shares a node with
