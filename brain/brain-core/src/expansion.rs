@@ -15,8 +15,8 @@ use crate::types::*;
 impl Machine {
     /// The function an interneuron is read through when nothing fired it there: the one that fired it last, or
     /// any of its functions (R28).
-    /// The function a call in its pose expands through (D8, D36, R28): of its interneuron's functions, the one with
-    /// a node of each of the two neurons its pose names, since an interneuron never holds two functions over the
+    /// The function a call in its phase expands through (D8, D36, R28): of its interneuron's functions, the one with
+    /// a node of each of the two nodes its phase names, since an interneuron never holds two functions over the
     /// same neurons (R43); else one with a node of its start neuron; else any of its functions.
     pub(crate) fn func_for(&self, s: Sym) -> Option<&Func> {
         let n = self.dict.neuron_of(s);
@@ -59,8 +59,8 @@ impl Machine {
         out
     }
 
-    /// Expand a neuron in a pose standing at `at` to base symbols at their positions (R28), from the node its pose
-    /// starts at, or its origin where it names no pose, reading nothing before frame `from`; every interneuron the
+    /// Expand a pose standing at `at` to base symbols at their positions (R28), from the node its phase
+    /// starts at, or its origin where it has no phase, reading nothing before frame `from`; every interneuron the
     /// descent passes through below the root goes to `all` where asked. With `board`, cycles are read round
     /// against what has happened; without, as the index reads them.
     pub fn expand_from(&self, s: Sym, at: Pos, from: Frame, board: bool, path: &mut Vec<NeuronId>, out: &mut Vec<(NeuronId, Pos)>, mut all: Option<&mut Vec<(NeuronId, Pos)>>) {

@@ -65,8 +65,8 @@ impl Machine {
                 if !nbs.is_empty() { followed.push((a.neuron, me, nbs)); }
                 let covered_before = a.covered_at.map_or(false, |c| c < age);
                 if covered_before { continue; }
-                // a call that took a lap this frame is the same call, its pose that much longer (D53): as it stood before
-                // the lap it connects to what follows it like any activation, under the key of the pose it had then (D25)
+                // a call that took a lap this frame is the same call, its phase that much longer (D53): as it stood before
+                // the lap it connects to what follows it like any activation, under the key of the phase it had then (D25)
                 let took_lap = a.covered_at == Some(age) && self.grown.contains_key(&me);
                 if a.covered_at == Some(age) && !took_lap {
                     // the last connection, to each call that covered it (D10)
@@ -109,7 +109,7 @@ impl Machine {
             
             for nb in &nbs { if let Some(b) = self.act_mut(nb.act) { b.seen_by.push((n, me)); } }
         }
-        // a call's connections are keyed by its pose less its laps, and a call a connection names is named so (D25)
+        // a call's connections are keyed by its phase less its laps, and a call a connection names is named the same way (D25)
         let (writes, shares) = {
             let mut w2 = Vec::with_capacity(writes.len());
             for (h, o, t, off, s) in writes { let (o, t) = (self.dict.sym_no_laps(o), self.dict.sym_no_laps(t)); w2.push((h, o, t, off, s)); }

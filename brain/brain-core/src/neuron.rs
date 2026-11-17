@@ -12,11 +12,11 @@ use crate::types::*;
 pub use crate::activation::ActRef;
 pub use crate::connection::*;
 
-/// A relation as one neuron records it from its own activation (D47, D34): its own pose, the neighbor in its
-/// pose, and the offset.
+/// A relation as one neuron records it from its own activation (D47, D34): its own pose, the neighbor's pose, and
+/// the offset.
 pub type RelKey = (Sym, Sym, Offset);
 
-/// One neighbor of a row (D26): the activation that stands there, the neuron in its pose, its exact offset from the
+/// One neighbor of a row (D26): the activation that stands there, its pose, its exact offset from the
 /// row's activation (D6), and the activation the row first saw there, which a call landing on it replaced (D10).
 #[derive(Clone, Copy, Debug)]
 pub struct Nb {
@@ -24,7 +24,7 @@ pub struct Nb {
     pub sym: Sym,
     pub off: Offset,
     pub base: ActRef,
-    /// what the row first saw there, the neuron in its pose and its offset, kept through every rewrite (D10)
+    /// what the row first saw there, its pose and its offset, kept through every rewrite (D10)
     pub orig: Sym,
     pub orig_off: Offset,
 }
@@ -34,7 +34,7 @@ impl Nb {
     pub fn seen(act: ActRef, sym: Sym, off: Offset, base: ActRef) -> Nb { Nb { act, sym, off, base, orig: sym, orig_off: off } }
 }
 
-/// One row of the history (D18): an activation, the pose it fired in, and the neighborhood it observed, with
+/// One row of the history (D18): an activation, its pose, and the neighborhood it observed, with
 /// what followed it as it comes.
 #[derive(Clone, Debug)]
 pub struct Row {
@@ -78,7 +78,7 @@ pub struct Neuron {
     pub h: usize,
     /// The relation index (D47): every relation its rows hold, with its strength.
     pub index: FxHashMap<RelKey, u32>,
-    /// Per pose of its own, per neuron in its pose and offset, one connection (D25).
+    /// Per phase of its own less its laps, per pose and offset, one connection (D25).
     pub connections: FxHashMap<(Sym, Sym, Offset), Conn>,
     next_row: u64,
 }
@@ -136,7 +136,7 @@ impl Neuron {
         inputs.into_iter().map(|inp| ActReturn { act: inp.act, rels: inp.nbs.iter().map(|nb| (*nb, self.strength(&(inp.own, nb.sym, nb.off)) + 1)).collect() }).collect()
     }
 
-    /// A call landed on an activation this row saw (D10): the row holds the call in its pose at its offset where
+    /// A call landed on an activation this row saw (D10): the row holds the call's pose at its offset where
     /// it held the activation, one relation per call, and the index follows. Returns whether the row held it.
     pub fn replace_seen(&mut self, viewer: ActRef, old: ActRef, new: Nb, apart: bool) -> bool {
         let Some(pos) = self.history.iter().rposition(|r| r.act == viewer) else { return false };
@@ -224,7 +224,7 @@ impl Neuron {
         true
     }
 
-    /// `forget neuron` (§4.1): remove a decommissioned neuron, in every pose it had, from every row and relation
+    /// `forget neuron` (§4.1): remove a decommissioned neuron, in every phase it had, from every row and relation
     /// that names it.
     pub fn forget(&mut self, dead: &[Sym]) {
         self.index.retain(|k, _| !dead.contains(&k.0) && !dead.contains(&k.1));

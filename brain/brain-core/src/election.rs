@@ -1,6 +1,6 @@
 //! The election (§6.2, R22, R24, D28, D24) and allocation (§6.3, R16): every fit of this level, taken by the largest
 //! coverage less price, each while its coverage exceeds its price; each accepted fit fires its function's
-//! interneuron at the next level, in the pose it read, at the position of the latest activation it landed on.
+//! interneuron at the next level, in the phase it read, at the position of the latest activation it landed on.
 
 use rustc_hash::FxHashSet;
 
@@ -12,7 +12,7 @@ use crate::types::*;
 
 impl Machine {
     /// What a fit would take off the board (R22, D28): each board relation its true relations land on, and the
-    /// cost of each call it lands on, as a node or through its pose (D22): its failures, a call itself costing
+    /// cost of each call it lands on, as a node or through its phase (D22): its failures, a call itself costing
     /// nothing (experiment); unless a call this election has taken already landed on it and took its cost off. A
     /// relation refused or blocked is credited to no fit (D24).
     fn coverage(&self, fit: &Fit) -> f64 {
@@ -41,7 +41,7 @@ impl Machine {
     }
 
     /// The tie-break of two fits that measure the same (R24): a fit whose relations land on the board relations as
-    /// they read before one landing a node on a call through its pose; experiment: the fit whose activations stand
+    /// they read before one landing a node on a call through its phase; experiment: the fit whose activations stand
     /// for more of the same activations underneath; a function with an interneuron before one without; the older
     /// interneuron; the function that joined first; the fit from the older activation.
     fn rank(&self, fit: &Fit) -> (bool, i64, u8, u64, u64, ActRef) {
@@ -79,7 +79,7 @@ impl Machine {
     /// function's chain comes round to it. A function is never the interneuron of one of its own nodes, so no
     /// interneuron whose call is a node of the function is tried; only calls further down the chain, inside the calls
     /// the function's nodes are. Each such earlier call is compared, over its own length, with the function's
-    /// expansion aligned at the present end: its origin, or for a cycle, which has none, the node its call's pose
+    /// expansion aligned at the present end: its origin, or for a cycle, which has none, the node its call's phase
     /// starts at (D15, D37). An interneuron is refused where any call of it, a node of
     /// the function or one met down its chain, stands on any activation of that window: it is present in what is
     /// read, not coming round. Where the two are the same, its interneuron is reused. The nearest meeting first,
@@ -230,7 +230,7 @@ impl Machine {
     }
 
     /// Accept a fit (R24, R16, D53): the call fires once at the next level, at the position of the latest activation
-    /// the fit landed on, in the pose it read; it covers what the fit landed on and the relations it landed on
+    /// the fit landed on, in the phase it read; it covers what the fit landed on and the relations it landed on
     /// (D24); each row that saw what it covers holds the call there instead (D10). Its function's interneuron,
     /// reused or allocated where it has none. Returns 1 where it allocated.
     fn accept(&mut self, fit: &Fit, level: u32) -> usize {
@@ -248,7 +248,7 @@ impl Machine {
         let Some(origin) = self.act(latest.0).cloned() else { return 0 };
         let mut minted = 0;
         let own = f.inter.filter(|n| self.thalamus.get(*n).map_or(false, |x| x.alive));
-        // read from its origin; a cycle has none, so from the node its call's pose starts at, the latest it landed on
+        // read from its origin; a cycle has none, so from the node its call's phase starts at, the latest it landed on
         let found = if own.is_none() { self.reuse(&f, if f.has_cycle() { latest.1 } else { 0 }) } else { None };
         let neuron = match own.or(found) {
             Some(n) if own.is_some() => n,
@@ -290,10 +290,10 @@ impl Machine {
         };
         self.ledger.retain(|x| *x != neuron);
         self.last_func.insert(neuron, f.id);
-        // its pose (D53): from its latest node back to its earliest, round the laps it read; a call of its own
+        // its phase (D53): from its latest node back to its earliest, round the laps it read; a call of its own
         // function it landed on adds what that call stood for, so its half lap is counted with the rest (R23)
         let order = f.back_order(latest.1);
-        let pose = if !order.is_empty() && order.contains(&latest.1) {
+        let phase = if !order.is_empty() && order.contains(&latest.1) {
             let mut len = 0usize;
             for (r, node) in fit.acts() {
                 if !order.contains(&node) { continue; }
@@ -305,7 +305,7 @@ impl Machine {
             }
             let len = len.max(1);
             let c = order.len();
-            Pose { from: f.nodes[latest.1], to: f.nodes[order[(len - 1) % c]], laps: ((len - 1) / c) as u32 }
+            Phase { from: f.nodes[latest.1], to: f.nodes[order[(len - 1) % c]], laps: ((len - 1) / c) as u32 }
         } else {
             let mut laps = fit.laps;
             for (c, _) in &fit.calls {
@@ -313,9 +313,9 @@ impl Machine {
                     if a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { laps += self.dict.pose_of(a.sym).map_or(0, |p| p.laps); }
                 }
             }
-            Pose { from: f.nodes[latest.1], to: f.nodes[earliest.1], laps }
+            Phase { from: f.nodes[latest.1], to: f.nodes[earliest.1], laps }
         };
-        let sym = self.dict.sym_of(neuron, pose);
+        let sym = self.dict.sym_of(neuron, phase);
         let covers: Vec<ActRef> = all.iter().map(|x| x.0).collect();
         let strong = covers.iter().filter_map(|r| self.act(*r)).any(|a| a.strong);
         let height = 1 + covers.iter().filter_map(|r| self.act(*r)).map(|a| a.height).max().unwrap_or(0);
@@ -386,7 +386,7 @@ impl Machine {
                 if !a.coverers.contains(&me) { a.coverers.push(me); }
             }
         }
-        // the call of the lap before took this lap: it is the same call, its pose that much longer (D53); the record
+        // the call of the lap before took this lap: it is the same call, its phase that much longer (D53); the record
         // it grew from is out of the graph from now, and the grown record stands in its stead
         for &(c, _) in &fit.calls {
             let own = self.act(c).and_then(|ca| ca.fired_by.as_ref()).map_or(false, |fb| fb.func == f.id);

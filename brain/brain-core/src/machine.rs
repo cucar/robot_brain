@@ -137,18 +137,18 @@ pub struct Machine {
     pub cycle_calls: FxHashMap<FuncId, (String, Vec<Frame>)>,
     pub print_cycles: bool,
     pub trace_vote: bool,
-    /// Relations of covered activations that no call covered, now ending at their calls (D24, D10)
+    /// Relations of covered activations that no call covered, lifted to their calls (D24, D10, D55)
     pub(crate) lifted: FxHashSet<(ActRef, ActRef)>,
     /// The covered relations at each activation: the other end of each, kept as each fit is accepted (D24, D28)
     pub(crate) cov_inc: FxHashMap<ActRef, Vec<ActRef>>,
-    /// Each relation that went up, and the edges it went up to (D55, D24): covered by a call in any of those forms, it
-    /// is covered, and does not go up again
+    /// Each relation that was lifted, and the relations it was lifted to (D55, D24): covered by a call in any of those,
+    /// it is covered, and is not lifted again
     pub(crate) lift_forms: FxHashMap<(ActRef, ActRef), Vec<(ActRef, ActRef)>>,
     /// The kind each activation's first covered relation decided (D24): true inside the frame, false in time
     pub(crate) kind_of: FxHashMap<ActRef, bool>,
-    /// What each call took that way: the activations or calls its taken relations end at (D10, D26)
+    /// What each call took that way: the activations or calls at the other end of the relations lifted to it (D10, D26)
     pub(crate) taken: FxHashMap<ActRef, Vec<ActRef>>,
-    /// How many relations went up to a call, how many of them between two calls, and activations covered at age 0
+    /// How many relations were lifted to a call, how many of them between two calls, and activations covered at age 0
     pub up_count: usize,
     pub up_pair_count: usize,
     pub cover_age0: usize,
@@ -213,7 +213,7 @@ pub struct Machine {
     /// The calls the election running now has taken (D28): an activation they landed on may be landed on again
     /// in this election, each call covering relations of its own (D8, D10).
     pub(crate) electing: FxHashSet<ActRef>,
-    /// Per call in its pose, every node its expansion puts back, at any depth, each at its offset from the call's
+    /// Per call in its phase, every node its expansion puts back, at any depth, each at its offset from the call's
     /// position (R28, R50); read from the dictionary and dropped whenever the dictionary changes.
     pub(crate) expansions: std::cell::RefCell<FxHashMap<Sym, std::rc::Rc<Vec<(Sym, Offset, Vec<NeuronId>)>>>>,
     /// Per expansion kept, the functions it was read through: a change to one drops the expansions that used it.
@@ -535,7 +535,7 @@ impl Machine {
 
     /// Covering inside the election (D28, D24, R23): of the activations a fit just taken landed on, each whose covered
     /// relations of one kind now reach that kind's count (`cover_count`) is covered from this round: off the board for the rounds after,
-    /// each relation of its own that no call covers ending at the calls that landed on it. Returns what it covered.
+    /// each relation of its own that no call covers lifted to the calls that landed on it. Returns what it covered.
     pub(crate) fn cover_in_election(&mut self, cands: &[ActRef]) -> Vec<ActRef> {
         let fno = self.frame_no;
         let mut seen: FxHashSet<ActRef> = FxHashSet::default();
@@ -618,18 +618,18 @@ impl Machine {
         let coverers: Vec<ActRef> = a.coverers.iter().map(|c| self.latest(*c)).collect();
         for (o, s) in rels {
             let e = edge(me, o);
-            // covered by a call in the form it stands in, or in any form it went up to (D55, D24)
+            // covered by a call as it stands, or in any relation it was lifted to (D55, D24)
             if self.covered_in_any_form(e, 0) { continue; }
-            // a refused relation ends at no call, at any level (D24)
+            // a refused relation is never lifted, at any level (D24)
             if self.refused.contains(&e) { continue; }
             let Some(oa) = self.act(o).cloned() else { continue };
             if oa.gone || coverers.contains(&o) { continue; }
-            // went up already when its other end was covered: now that both ends are, it runs between the calls on
-            // the two, one edge per pair of calls, whichever end was covered first (D26)
+            // lifted already when its other end was covered: now that both ends are, it is lifted to the relation
+            // between the calls on the two, one relation per pair of calls, whichever end was covered first (D26)
             if self.lifted.contains(&e) && oa.covered_at.is_none() { continue; }
             self.lifted.insert(e);
             self.up_count += 1;
-            // where the other end is covered, the relation runs between the calls on the two
+            // where the other end is covered, it is lifted to the relation between the calls on the two
             let others: Vec<ActRef> = if oa.covered_at.is_some() { oa.coverers.iter().map(|c| self.latest(*c)).collect() } else { vec![o] };
             if oa.covered_at.is_some() { self.up_pair_count += 1; }
             for &c in &coverers {
@@ -650,13 +650,13 @@ impl Machine {
                         let v = self.form_src.entry(f).or_default(); if !v.contains(&e) { v.push(e); }
                     }
                     if let Some(xm) = self.act_mut(x) { if !held && !xm.rels.iter().any(|br| br.other == c) { xm.rels.push(BoardRel { other: c, off, strength: s }); } }
-                    if self.trace_cover { eprintln!("[up f{}] {} at frame {} -> {} now ends at {} | {}", self.frame_no, self.dict.sym_text(a.sym), me.frame, self.dict.sym_text(oa.sym), self.dict.sym_text(ca.sym), if oa.covered_at.is_some() { "between two calls" } else { "to the call" }); }
+                    if self.trace_cover { eprintln!("[lifted f{}] {} at frame {} -> {} lifted to {} | {}", self.frame_no, self.dict.sym_text(a.sym), me.frame, self.dict.sym_text(oa.sym), self.dict.sym_text(ca.sym), if oa.covered_at.is_some() { "between two calls" } else { "to the call" }); }
                 }
             }
         }
     }
 
-    /// Whether a call covers a relation in the form it stands in or in any form it has gone up to (D55, D24).
+    /// Whether a call covers a relation as it stands or in any relation it was lifted to (D55, D24).
     fn covered_in_any_form(&self, e: (ActRef, ActRef), depth: usize) -> bool {
         if self.covered_rel.contains(&e) { return true; }
         if depth > 64 { return false; }

@@ -170,7 +170,7 @@ impl Machine {
 
     // ───────────────────────────── the match (R49) ─────────────────────────────
 
-    /// Whether a node stood at a position that has happened (R49): its neuron in its pose there, or a call whose pose
+    /// Whether a node stood at a position that has happened (R49): its pose there, or a call whose phase
     /// starts at it (D54).
     pub(crate) fn stood(&self, n: Sym, q: &Pos) -> bool {
         let Some(f) = self.frames.iter().find(|f| f.no == q[0] as i64) else { return false };

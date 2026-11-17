@@ -14,20 +14,20 @@ pub type DimId = u32;
 pub type ChannelId = u32;
 pub type Frame = i64;
 
-/// A neuron in a pose (D8, D34): a base neuron's symbol is its id, its one pose; a call's is allotted from
-/// `SYM_CALL` up, one per interneuron and pose.
+/// A pose: a neuron in a phase (D8, D34). A base neuron has one phase, so its symbol is its id; a call's is
+/// allotted from `SYM_CALL` up, one per interneuron and phase.
 pub type Sym = u32;
 pub const SYM_CALL: Sym = 1 << 28;
 
-/// A call's pose (D8, D53): the node of the latest activation its fit landed on, the node of the earliest, and how
-/// many laps it went round. A fit reads a cycle one way, the way its relations' offsets advance, so the pose names
-/// no direction. It names its two nodes by their neurons: a function has one node per neuron, so the neuron says
-/// which node, and the function's own definition says which pose that node is in. So a pose is two neurons and a
-/// number and never holds another pose, and a ring of calls keeps the same names lap after lap.
+/// A call's phase (D8, D37, D53): the node the fit started at, the node it ended at, and its laps, how many times it
+/// went round. A fit reads a cycle one way, the way its relations' offsets advance, so the phase names no
+/// direction. A node is a pose (D15), so the phase names each of its two nodes by its pose, the node's neuron in
+/// its own phase. So a phase is two nodes and a number, and a ring of calls, each ending at the call before it,
+/// keeps the same names lap after lap. A neuron in a phase is a pose (`Sym`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default)]
-pub struct Pose {
-    pub from: NeuronId,
-    pub to: NeuronId,
+pub struct Phase {
+    pub from: Sym,
+    pub to: Sym,
     pub laps: u32,
 }
 

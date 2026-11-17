@@ -29,7 +29,7 @@ fn opens(dir: &str, sym: &str) -> Vec<f64> {
 }
 
 /// The events a call stands for, at any depth: (event dimension, frame).
-/// The function a call's symbol is a call of: of its interneuron's functions, the one with a node its pose starts at.
+/// The function a call's symbol is a call of: of its interneuron's functions, the one with a node its phase starts at.
 fn call_func(m: &Machine, s: Sym) -> Option<u32> {
     let p = m.dict.pose_of(s)?;
     let fs = m.dict.of_inter(m.dict.neuron_of(s));
@@ -284,7 +284,7 @@ fn main() {
                 let row = m.thalamus[a.neuron].history.iter().find(|row| row.act == r);
                 let read: Vec<String> = row.map_or(vec![], |row| row.nbs.iter().map(|nb| {
                     let shared: Vec<String> = m.act(nb.act).map_or(vec![], |x| x.covers.iter().filter(|c| mine.contains(c)).map(|c| act_words(&m, &names, four, *c)).collect());
-                    format!("{} at t{}{}", act_words(&m, &names, four, nb.act), nb.off[0], if shared.is_empty() { if m.act(nb.act).map_or(false, |x| x.covers.is_empty()) { " (a bar)".to_string() } else { " (shares no activation: read through a relation that went up)".to_string() } } else { format!(" (shares {})", shared.join(", ")) })
+                    format!("{} at t{}{}", act_words(&m, &names, four, nb.act), nb.off[0], if shared.is_empty() { if m.act(nb.act).map_or(false, |x| x.covers.is_empty()) { " (a bar)".to_string() } else { " (shares no activation: read through a lifted relation)".to_string() } } else { format!(" (shares {})", shared.join(", ")) })
                 }).collect());
                 let rels: Vec<String> = a.rels.iter().map(|br| format!("{} at t{} strength {}", act_words(&m, &names, four, br.other), br.off[0], br.strength)).collect();
                 println!("WATCH {} | {} | frames {:?} | {} | read: {} | relations: {}", fno, act_words(&m, &names, four, r), fs, cov, if read.is_empty() { "-".into() } else { read.join("; ") }, if rels.is_empty() { "-".into() } else { rels.join("; ") });

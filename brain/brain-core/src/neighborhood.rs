@@ -62,8 +62,8 @@ impl Machine {
     /// What one activation observes (D5, D7, D26). A base activation: what stands on the board within one position of
     /// it, in this frame and the one before, in every activation dimension the two share: an activation that is not
     /// covered as itself, and at a covered position each call that landed on the activation there (D4); nothing
-    /// through a call. A call: the calls that landed on an activation it landed on, and what the relations it took
-    /// from the activations it covered end at (D26, D10); nothing it stands for. The policy admits each (D50). Each
+    /// through a call. A call: the calls that landed on an activation it landed on, and the other ends of the
+    /// relations lifted to it from the activations it covered (D26, D10, D55); nothing it stands for. The policy admits each (D50). Each
     /// at its exact offset from the observer (D6).
     pub(crate) fn neighborhood(&self, me: ActRef) -> Vec<Nb> {
         let Some(a) = self.act(me) else { return vec![] };
@@ -113,7 +113,7 @@ impl Machine {
                     push(xr, &mut out, &mut seen);
                 }
             }
-            // what the relations it took end at: an activation as itself, or at a covered one the calls on it (D10)
+            // the other ends of the relations lifted to it: an activation as itself, or at a covered one the calls on it (D10)
             if let Some(ends) = self.taken.get(&me) {
                 for &e in ends {
                     let Some(x) = self.act(e) else { continue };

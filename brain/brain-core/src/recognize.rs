@@ -67,7 +67,7 @@ impl Machine {
     }
 
     /// From a landed activation, the board relation at `delta` whose far end is `want`, or an earlier call of the
-    /// function's own whose pose starts at `want` standing there (D54); none a call covers (D28); the older first
+    /// function's own whose phase starts at `want` standing there (D54); none a call covers (D28); the older first
     /// (R24). Whether it is a call.
     fn step(&self, func: FuncId, from: ActRef, delta: Offset, want: Sym, used: &FxHashSet<ActRef>) -> Option<(ActRef, bool)> {
         self.step_through(func, from, delta, want, used).map(|(w, lap, _, _)| (w, lap))
@@ -98,7 +98,7 @@ impl Machine {
             if used.contains(o) || self.covered_rel.contains(&edge(from, *o)) { continue; }
             let Some(w) = self.act(*o) else { continue };
             if w.sym != want || !self.landable(w) { continue; }
-            // where the call of the lap before stands on that activation, its pose starting there, it takes the lap
+            // where the call of the lap before stands on that activation, its phase starting there, it takes the lap
             // (D53); nothing is read through a call (D5)
             let mut lap: Option<ActRef> = None;
             for &c in &w.coverers {
@@ -124,7 +124,7 @@ impl Machine {
         at[root] = Some(entry);
         let mut used: FxHashSet<ActRef> = FxHashSet::default();
         used.insert(entry);
-        // it starts on the node's own neuron in its pose, or on a call whose pose starts at the node, which it lands
+        // it starts on the node's own pose, or on a call whose phase starts at the node, which it lands
         // on whole and reads the function's relations from (D54, D31)
         let on_call = self.act(entry).map_or(false, |a| a.sym != f.nodes[root]);
         let mut landed = if on_call { vec![] } else { vec![(entry, root)] };
@@ -221,7 +221,7 @@ impl Machine {
     }
 
     /// Every fit of a function this frame (R53, D54): one per node and activation of the present frame on the
-    /// apex that the node admits, its own neuron in its pose or a call whose pose starts at it; the same landing
+    /// apex that the node admits, its own pose or a call whose phase starts at it; the same landing
     /// reached from two entries is one fit.
     pub(crate) fn fits_of(&self, id: FuncId) -> Vec<Fit> {
         let Some(f) = self.dict.get(id) else { return vec![] };
@@ -236,7 +236,7 @@ impl Machine {
             // where it stops landing
             if !f.has_cycle() && f.layout_from(root).position.iter().any(|p| p[0] > 0) { continue; }
             for (i, a) in fr.acts.iter().enumerate() {
-                // the node admits its own neuron in its pose, or a call whose pose starts at it (D54)
+                // the node admits its own pose, or a call whose phase starts at it (D54)
                 let admits = a.sym == *node;
                 if !admits || !a.on_apex() || a.gone { continue; }
                 let fit = self.fit(f, root, ActRef { frame: fno, index: i as u32 });
@@ -262,9 +262,9 @@ impl Machine {
 
     // ───────────────────────────── what the neurons answer (D47, R50) ─────────────────────────────
 
-    /// Every node a call in its pose expands to, at any depth, each at its offset from the call's position and with
+    /// Every node a call in its phase expands to, at any depth, each at its offset from the call's position and with
     /// the interneurons of the calls that put it there, the call's own first (R28, R50): its function read from the
-    /// node its pose starts at, its cycle round as many laps as the pose says, and each call among its nodes
+    /// node its phase starts at, its cycle round as many laps as the phase says, and each call among its nodes
     /// expanded in turn; none for a base neuron.
     pub(crate) fn expansion_of(&self, s: Sym) -> std::rc::Rc<Vec<(Sym, Offset, Vec<NeuronId>)>> {
         if let Some(v) = self.expansions.borrow().get(&s) { return v.clone(); }
@@ -302,20 +302,20 @@ impl Machine {
     }
 
     fn expand_nodes(&self, s: Sym, at: Offset, path: &mut Vec<NeuronId>, out: &mut Vec<(Sym, Offset, Vec<NeuronId>)>, deps: &mut Vec<FuncId>) {
-        let Some(pose) = self.dict.pose_of(s) else { return };
+        let Some(phase) = self.dict.pose_of(s) else { return };
         let n = self.dict.neuron_of(s);
         if path.contains(&n) || path.len() > 64 { return; }
         let Some(f) = self.func_for(s).cloned() else { return };
         deps.push(f.id);
-        let root = f.node_of(pose.from).unwrap_or(0);
+        let root = f.node_of(phase.from).unwrap_or(0);
         let lay = f.layout_from(root);
         let mut nodes: Vec<(Sym, Offset)> = f.nodes.iter().enumerate().map(|(i, m)| (*m, lay.position[i])).collect();
         if let Some(l) = f.lap() {
-            // the cycle read back from the node the pose starts at, lap after lap, to the node it ends at (D53)
+            // the cycle read back from the node the phase starts at, lap after lap, to the node it ends at (D53)
             let order = f.back_order(root);
             if !order.is_empty() {
-                let to = f.node_of(pose.to).unwrap_or(order[order.len() - 1]);
-                let total = f.stretch(root, to, pose.laps);
+                let to = f.node_of(phase.to).unwrap_or(order[order.len() - 1]);
+                let total = f.stretch(root, to, phase.laps);
                 let c = order.len();
                 nodes.retain(|(m, _)| !order.iter().any(|v| f.nodes[*v] == *m));
                 for i in 0..total {
@@ -337,7 +337,7 @@ impl Machine {
     }
 
     /// Whether a row holds a relation to a node the way a call of the function it is read for could cover it there
-    /// (R50): the node's neuron in its pose bare at that offset, or a call whose expansion puts it there with a call
+    /// (R50): the node's pose bare at that offset, or a call whose expansion puts it there with a call
     /// of `own`, the function's interneuron, anywhere in the chain. A row that holds it only through another
     /// function's call holds nothing for it; with no `own`, only bare.
     fn holds_for(&self, row: &Row, far: Sym, off: &Offset, own: Option<NeuronId>) -> bool {
@@ -346,7 +346,7 @@ impl Machine {
         row.nbs.iter().any(|nb| nb.sym == far && nb.off == *off)
     }
 
-    /// Whether a row holds a relation bare: the node's neuron in its pose itself at that offset.
+    /// Whether a row holds a relation bare: the node's pose itself at that offset.
     fn holds_bare(&self, row: &Row, far: Sym, off: &Offset) -> bool { row.nbs.iter().any(|nb| nb.sym == far && nb.off == *off) }
 
     /// Whether a row holds a relation for the count where it stands (R50): the way the function's own call could cover
@@ -356,7 +356,7 @@ impl Machine {
         self.holds_for(row, far, off, own)
     }
 
-    /// The rows of a symbol's neuron that it fired in that pose (D18).
+    /// The rows of a pose's neuron that it fired in that phase (D18).
     fn rows_of(&self, s: Sym) -> impl Iterator<Item = &Row> + '_ {
         let n = self.dict.neuron_of(s);
         self.thalamus.get(n).into_iter().flat_map(move |nn| nn.history.iter().filter(move |r| r.own == s))
@@ -367,7 +367,7 @@ impl Machine {
     /// the connect step of the frame it reaches, so from the frame after that on.
     fn decided(&self, row: &Row, off: &Offset) -> bool { off[0] <= 0 || row.act.frame + (off[0] as i64) < self.frame_no }
 
-    /// The neuron in its pose a relation is read from where it has no node to be counted at (D47, R50): an end whose
+    /// The pose a relation is read from where it has no node to be counted at (D47, R50): an end whose
     /// rows hold it for `own`; where both do, the one with more activations behind it. None where no rows hold it.
     fn held_by(&self, r: &Rel, own: Option<NeuronId>) -> Option<(Sym, Sym, Offset)> {
         if let Some(h) = self.held_memo.borrow().get(&(*r, own)) { return *h; }
@@ -394,7 +394,7 @@ impl Machine {
         self.returned_for(r, None)
     }
 
-    /// How many rows a symbol's neuron holds in that pose: the activations behind that end.
+    /// How many rows a pose's neuron holds in that phase: the activations behind that end.
     fn rows_count(&self, s: Sym) -> usize { self.rows_of(s).count() }
 
     /// `with` and `without` for one relation of a set read for the function whose interneuron is `own` (R50), over
@@ -539,7 +539,7 @@ impl Machine {
         let mut changed: Vec<FuncId> = Vec::new();
         let fno = self.frame_no;
         // the activations each function touches here: what its fits landed on, each as its node, with the position
-        // its origin stands at; and its calls on the board, as the node their pose starts at
+        // its origin stands at; and its calls on the board, as the node their phase starts at
         let mut touch: FxHashMap<FuncId, Vec<(ActRef, Sym, Pos)>> = FxHashMap::default();
         // the board edges each function's fits already land on: one edge is never two of its relations
         let mut taken: FxHashMap<FuncId, FxHashSet<(ActRef, ActRef)>> = FxHashMap::default();
@@ -731,9 +731,10 @@ impl Machine {
                 // read against the function as it now stands: it touches a node, and closes no second cycle
                 let (ka, kb) = (f.node_of(rel.a).is_some(), f.node_of(rel.b).is_some());
                 if !(ka || kb) || (ka && kb && f.has_cycle()) { continue; }
-                // a cycle is a function of its own (D15, R50): a relation of a neuron to itself joins no function; no
+                // a cycle is a function of its own (D15, R50): a relation of a pose to itself joins no function, while one
+                // neuron in two phases is two nodes and a relation between them is a candidate like any other; no
                 // relation joins a cycle; a relation closes a cycle only where every relation is then on the cycle
-                if self.dict.neuron_of(rel.a) == self.dict.neuron_of(rel.b) { continue; }
+                if rel.a == rel.b { continue; }
                 if f.has_cycle() { continue; }
                 if ka && kb {
                     let mut deg: FxHashMap<Sym, u32> = FxHashMap::default();
@@ -1186,7 +1187,7 @@ impl Machine {
         if self.trace || self.trace_origin { eprintln!("[middle stays f{}] {} in {} | {}", self.frame_no, self.rel_text(r), self.dict.get(f).map_or(String::new(), |g| self.dict.describe(g)), why); }
     }
 
-    /// A relation in the trace: each end with its neuron and pose.
+    /// A relation in the trace: each end with its neuron and phase.
     pub(crate) fn rel_text(&self, r: &Rel) -> String { format!("{}→{}{:?}", self.dict.sym_text(r.a), self.dict.sym_text(r.b), &r.off[..]) }
 
     /// A relation leaves a function (R18, R54): what the origin no longer reaches leaves with it and starts a

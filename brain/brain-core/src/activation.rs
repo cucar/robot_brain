@@ -29,7 +29,7 @@ pub struct FiredBy {
 /// One standing inference (R45): a connection as it was read at age 0.
 #[derive(Clone, Copy, Debug)]
 pub struct Inference {
-    /// The neuron in its pose the connection names (D25).
+    /// The pose the connection names (D25).
     pub target: Sym,
     pub offset: Offset,
     pub strength: f64,
@@ -42,7 +42,7 @@ pub struct Inference {
 #[derive(Clone, Debug)]
 pub struct Act {
     pub neuron: NeuronId,
-    /// The neuron in the pose it fired in (D8): its id for a base activation, the call's pose for a call.
+    /// Its pose (D8): its neuron's id for a base activation, the interneuron in the call's phase for a call.
     pub sym: Sym,
     pub kind: Kind,
     pub axes: u8,
@@ -57,8 +57,8 @@ pub struct Act {
     pub covered_at: Option<u32>,
     /// Every accepted call that landed on it as a fixed node (D24, D10).
     pub coverers: Vec<ActRef>,
-    /// Each neuron and activation whose row holds it as a neighbor (D10): what the machine rewrites to the call in
-    /// its pose when a call lands on it.
+    /// Each neuron and activation whose row holds it as a neighbor (D10): what the machine rewrites to the call's
+    /// pose when a call lands on it.
     pub seen_by: Vec<(NeuronId, ActRef)>,
     /// What its call covered (§6.4): the activations its fixed nodes landed on and the calls it landed on.
     pub covers: Vec<ActRef>,

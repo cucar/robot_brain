@@ -56,13 +56,13 @@ fn main() {
     }
 }
 
-/// An activation as the report prints it: a pixel as # or . at its position, a call as its neuron and pose there.
+/// An activation as the report prints it: a pixel as # or . at its position, a call as its pose there.
 fn name(m: &Machine, a: &brain_core::machine::Act) -> String {
     if a.kind == Kind::Inter { format!("{}@{},{}", m.dict.sym_text(a.sym), a.pos[1], a.pos[2]) }
     else { format!("{}@{},{}", if m.thalamus[a.neuron].bucket == 1 { "#" } else { "." }, a.pos[1], a.pos[2]) }
 }
 
-/// Every call this showing made, level by level: its function, pose, position, and the pixels it stands for, the
+/// Every call this showing made, level by level: its function, phase, position, and the pixels it stands for, the
 /// black ones first.
 fn calls(m: &Machine) {
     let fno = m.frame_no;

@@ -40,7 +40,7 @@ impl Rel {
     }
 }
 
-/// A function (D15, D56): its nodes, the origin first, one per neuron in its pose, and its relations.
+/// A function (D15, D56): its nodes, the origin first, one per pose, and its relations.
 #[derive(Clone, Debug)]
 pub struct Func {
     pub id: FuncId,
@@ -86,7 +86,7 @@ impl Func {
         self.at = at;
     }
     /// Its origin, its latest node, which it is listed from (D15, D56); a function that is a cycle has none: the last
-    /// lap may stop at any node of it, and its call's pose says which node the fit started at and ended at (D37).
+    /// lap may stop at any node of it, and its call's phase says which node the fit started at and ended at (D37).
     pub fn origin(&self) -> Option<Sym> { if self.has_cycle() { None } else { Some(self.nodes[0]) } }
     /// The node its node list begins at: its origin, or for a cycle a node of the cycle, which is no origin.
     pub fn root(&self) -> Sym { self.nodes[0] }
@@ -114,7 +114,7 @@ impl Func {
         v
     }
 
-    /// How many nodes of its cycle a call in a pose from node `from` to node `to` round `laps` stands for (D53).
+    /// How many nodes of its cycle a call in a phase from node `from` to node `to` round `laps` stands for (D53).
     pub fn stretch(&self, from: usize, to: usize, laps: u32) -> usize {
         let order = self.back_order(from);
         let c = order.len();
@@ -229,7 +229,7 @@ impl Func {
 
 pub fn describe_rel(r: &Rel) -> String { format!("{}→{}{:?}", sym_name(r.a), sym_name(r.b), r.off) }
 
-/// A symbol as the trace prints it: `#n` for a base neuron, `s<k>` for a call in a pose.
+/// A pose as the trace prints it: `#n` for a base neuron, `#n<from..to xlaps>` for a call in a phase.
 pub fn sym_name(s: Sym) -> String { if s < SYM_CALL { format!("#{}", s) } else { format!("s{}", s - SYM_CALL) } }
 
 /// The dictionary (D36, D56).
@@ -240,11 +240,11 @@ pub struct Dictionary {
     pub by_rel: FxHashMap<Rel, FuncId>,
     /// Per interneuron, its functions (R43: it may hold more than one).
     pub by_inter: FxHashMap<NeuronId, Vec<FuncId>>,
-    /// Per neuron, the functions with a node of it in any pose (R38): kept as the functions change.
+    /// Per neuron, the functions with a node of it in any phase (R38): kept as the functions change.
     by_node: FxHashMap<NeuronId, Vec<FuncId>>,
-    /// The names of the calls (D8): each interneuron in each pose it has fired in.
-    pub syms: Vec<(NeuronId, Pose)>,
-    sym_index: FxHashMap<(NeuronId, Pose), Sym>,
+    /// The names of the calls (D8): each interneuron in each phase it has fired in, a pose.
+    pub syms: Vec<(NeuronId, Phase)>,
+    sym_index: FxHashMap<(NeuronId, Phase), Sym>,
     next_id: FuncId,
     next_join: u64,
 }
@@ -254,7 +254,7 @@ impl Dictionary {
     pub fn len(&self) -> usize { self.funcs.len() }
     pub fn holder(&self, r: &Rel) -> Option<FuncId> { self.by_rel.get(r).copied() }
     pub fn of_inter(&self, n: NeuronId) -> &[FuncId] { self.by_inter.get(&n).map_or(&[], |v| v.as_slice()) }
-    /// The functions whose nodes name a neuron, in any pose (R38, the subtree).
+    /// The functions whose nodes name a neuron, in any phase (R38, the subtree).
     pub fn naming(&self, n: NeuronId) -> Vec<FuncId> {
         let mut v = self.by_node.get(&n).cloned().unwrap_or_default();
         v.sort_unstable();
@@ -278,40 +278,40 @@ impl Dictionary {
 
     /// The neuron a symbol names.
     pub fn neuron_of(&self, s: Sym) -> NeuronId { if s < SYM_CALL { s } else { self.syms.get((s - SYM_CALL) as usize).map_or(NeuronId::MAX, |x| x.0) } }
-    /// The pose a call's symbol names; none for a base neuron.
-    pub fn pose_of(&self, s: Sym) -> Option<Pose> { if s < SYM_CALL { None } else { self.syms.get((s - SYM_CALL) as usize).map(|x| x.1) } }
-    /// The node a call's pose starts at (D54), a neuron in its pose: a fit lands that node on the call.
+    /// The phase a call's pose names; none for a base neuron, which has one phase.
+    pub fn pose_of(&self, s: Sym) -> Option<Phase> { if s < SYM_CALL { None } else { self.syms.get((s - SYM_CALL) as usize).map(|x| x.1) } }
+    /// The node a call's phase starts at (D54), a pose: a fit lands that node on the call.
     pub fn start_of(&self, s: Sym) -> Option<Sym> { self.pose_of(s).map(|p| p.from) }
-    /// Whether a call's pose starts at a node (D54): the node is the pose's start, neuron and pose.
+    /// Whether a call's phase starts at a node (D54): the node is the phase's start, a pose.
     pub fn starts_at(&self, call: Sym, node: Sym) -> bool { self.start_of(call).map_or(false, |n| n == node) }
     /// The node of a function that stands for a neuron: one node per neuron (D15).
     pub fn node_by_neuron(&self, f: &Func, n: NeuronId) -> Option<usize> { f.nodes.iter().position(|s| self.neuron_of(*s) == n) }
-    /// The symbol of an interneuron in a pose, allotted the first time it is named.
-    pub fn sym_of(&mut self, n: NeuronId, pose: Pose) -> Sym {
-        if let Some(s) = self.sym_index.get(&(n, pose)) { return *s; }
+    /// The pose of an interneuron in a phase, allotted the first time it is named.
+    pub fn sym_of(&mut self, n: NeuronId, phase: Phase) -> Sym {
+        if let Some(s) = self.sym_index.get(&(n, phase)) { return *s; }
         let s = SYM_CALL + self.syms.len() as Sym;
-        self.syms.push((n, pose));
-        self.sym_index.insert((n, pose), s);
+        self.syms.push((n, phase));
+        self.sym_index.insert((n, phase), s);
         s
     }
-    /// The symbol of an interneuron in a pose where one is allotted already.
-    pub fn find_sym(&self, n: NeuronId, pose: Pose) -> Option<Sym> { self.sym_index.get(&(n, pose)).copied() }
-    /// A call's symbol in its pose less its laps (D25): the node it started at and the node it stands at.
+    /// The pose of an interneuron in a phase where one is allotted already.
+    pub fn find_sym(&self, n: NeuronId, phase: Phase) -> Option<Sym> { self.sym_index.get(&(n, phase)).copied() }
+    /// A call's pose in its phase less its laps (D25): the node it started at and the node it stands at.
     pub fn sym_no_laps(&mut self, s: Sym) -> Sym {
-        match self.pose_of(s) { Some(p) if p.laps > 0 => { let n = self.neuron_of(s); self.sym_of(n, Pose { laps: 0, ..p }) } _ => s }
+        match self.pose_of(s) { Some(p) if p.laps > 0 => { let n = self.neuron_of(s); self.sym_of(n, Phase { laps: 0, ..p }) } _ => s }
     }
     /// The same, reading only symbols already allotted.
     pub fn sym_no_laps_read(&self, s: Sym) -> Sym {
-        match self.pose_of(s) { Some(p) if p.laps > 0 => self.find_sym(self.neuron_of(s), Pose { laps: 0, ..p }).unwrap_or(s), _ => s }
+        match self.pose_of(s) { Some(p) if p.laps > 0 => self.find_sym(self.neuron_of(s), Phase { laps: 0, ..p }).unwrap_or(s), _ => s }
     }
-    /// Every symbol of a neuron, and its poses are forgotten: a neuron allocated again names its poses afresh.
+    /// Every pose of a neuron, and its phases are forgotten: a neuron allocated again names its phases afresh.
     pub fn drop_syms(&mut self, n: NeuronId) -> Vec<Sym> {
         let mut v = vec![n];
         for (i, (m, _)) in self.syms.iter().enumerate() { if *m == n { v.push(SYM_CALL + i as Sym); } }
         self.sym_index.retain(|(m, _), _| *m != n);
         v
     }
-    /// A symbol with its neuron and pose, for the trace.
+    /// A pose with its neuron and phase, for the trace.
     pub fn sym_text(&self, s: Sym) -> String {
         match self.pose_of(s) {
             None => format!("#{}", s),

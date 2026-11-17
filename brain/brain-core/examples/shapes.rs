@@ -47,7 +47,7 @@ fn inputs(e: &Env, i: &Img) -> Vec<Input> {
 
 fn print_img(i: &Img) { for r in i { println!("    {}", r.iter().collect::<String>()); } }
 
-/// A symbol in words: a pixel's colour, or a call with its function, pose and laps.
+/// A symbol in words: a pixel's colour, or a call with its function and phase.
 fn sname(m: &Machine, s: u32) -> String {
     match m.dict.pose_of(s) {
         None => match m.thalamus[s].bucket { 1 => "white".into(), _ => "black".into() },
