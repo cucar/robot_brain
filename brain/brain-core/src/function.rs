@@ -85,7 +85,11 @@ impl Func {
         self.rels = rels;
         self.at = at;
     }
-    pub fn origin(&self) -> Sym { self.nodes[0] }
+    /// Its origin, its latest node, which it is listed from (D15, D56); a function that is a cycle has none: the last
+    /// lap may stop at any node of it, and its call's pose says which node the fit started at and ended at (D37).
+    pub fn origin(&self) -> Option<Sym> { if self.has_cycle() { None } else { Some(self.nodes[0]) } }
+    /// The node its node list begins at: its origin, or for a cycle a node of the cycle, which is no origin.
+    pub fn root(&self) -> Sym { self.nodes[0] }
     pub fn node_of(&self, n: Sym) -> Option<usize> { self.nodes.iter().position(|x| *x == n) }
     pub fn holds(&self, r: &Rel) -> bool { self.rels.contains(r) }
     pub fn has_cycle(&self) -> bool { self.rels.len() >= self.nodes.len() }
@@ -199,20 +203,24 @@ impl Func {
         steps
     }
 
-    /// How far its activation sees (D4): one position beyond its farthest node from its origin, in each
-    /// dimension of `axes`.
+    /// How far its activation sees (D4, D9): one position beyond its farthest node from its latest, in each
+    /// dimension of `axes`. A cycle has no fixed latest node, since the last lap may stop at any node of it: read
+    /// from each node of it, the farthest.
     pub fn reach(&self, axes: u8) -> Pos {
-        let lay = self.layout();
+        let roots: Vec<usize> = if self.has_cycle() { (0..self.nodes.len()).collect() } else { vec![0] };
         let mut r = [0; MAX_DIMS];
-        for d in 0..MAX_DIMS {
-            if d > 0 && axes & (1 << d) == 0 { continue; }
-            r[d] = lay.position.iter().map(|p| p[d].abs()).max().unwrap_or(0) + 1;
+        for root in roots {
+            let lay = self.layout_from(root);
+            for d in 0..MAX_DIMS {
+                if d > 0 && axes & (1 << d) == 0 { continue; }
+                r[d] = r[d].max(lay.position.iter().map(|p| p[d].abs()).max().unwrap_or(0) + 1);
+            }
         }
         r
     }
 
-    /// Two functions with the same relations and the same origin are one (D36).
-    pub fn key(&self) -> (Sym, Vec<Rel>) {
+    /// Two functions with the same relations and the same origin are one (D36); a cycle has no origin.
+    pub fn key(&self) -> (Option<Sym>, Vec<Rel>) {
         let mut r = self.rels.clone();
         r.sort();
         (self.origin(), r)
@@ -312,7 +320,7 @@ impl Dictionary {
     }
 
     /// Functions with the same relations and origin (D36).
-    pub fn find_key(&self, key: &(Sym, Vec<Rel>)) -> Option<FuncId> {
+    pub fn find_key(&self, key: &(Option<Sym>, Vec<Rel>)) -> Option<FuncId> {
         self.funcs.values().find(|f| f.key() == *key).map(|f| f.id)
     }
 
@@ -424,7 +432,7 @@ impl Dictionary {
 
     pub fn describe(&self, f: &Func) -> String {
         let rels: Vec<String> = f.rels.iter().map(|r| format!("{}→{}{:?}", self.sym_text(r.a), self.sym_text(r.b), &r.off[..])).collect();
-        let mut s = format!("f{} origin {} [{}]", f.id, self.sym_text(f.origin()), rels.join(" "));
+        let mut s = match f.origin() { Some(o) => format!("f{} origin {} [{}]", f.id, self.sym_text(o), rels.join(" ")), None => format!("f{} no origin [{}]", f.id, rels.join(" ")) };
         if f.has_cycle() { s.push_str(" cycle"); }
         if let Some(i) = f.inter { s.push_str(&format!(" -> #{}", i)); }
         s

@@ -9,6 +9,8 @@
 //!   lap    two stocks on six-bar cycles, each with its action: A the stocks example's lap, +1 −2 −3 +2 +3 −1, and
 //!          B +2 +1 −1 −3 +3 −2
 //!   lapa   A alone; lapb  B alone
+//!   three1 one channel whose event has one value per combination of KGC, GLD and SPY's moves (named by the three
+//!          moves, K G S), the same 12-bar sequence as `three`, the reward KGC's move: the control for `three`
 //!   four   one channel whose event has four values, the cycle a b c d a c (A and B's moves together: UU DU DD UD
 //!          UU DD), the action own or out, the reward A's move
 //!
@@ -39,7 +41,7 @@ fn sym_words(m: &Machine, names: &std::collections::BTreeMap<DimId, String>, fou
     if m.dict.pose_of(s).is_some() { return format!("call(f{})", call_func(m, s).map_or(-1, |g| g as i64)); }
     let n = &m.thalamus[s];
     let nm = n.dim.and_then(|d| names.get(&d)).cloned().unwrap_or_default();
-    match n.kind { Kind::Event => if four { format!("{}={}", nm, ["a", "b", "c", "d"][n.bucket as usize]) } else { format!("{}{}", nm, if n.bucket == 1 { "↑" } else { "↓" }) }, _ => format!("{}:{}", nm, if n.bucket == 1 { "own" } else { "out" }) }
+    match n.kind { Kind::Event => if four && nm == "C" { format!("C={}{}{}", if n.bucket & 4 != 0 { "↑" } else { "↓" }, if n.bucket & 2 != 0 { "↑" } else { "↓" }, if n.bucket & 1 != 0 { "↑" } else { "↓" }) } else if four { format!("{}={}", nm, ["a", "b", "c", "d"][n.bucket as usize]) } else { format!("{}{}", nm, if n.bucket == 1 { "↑" } else { "↓" }) }, _ => format!("{}:{}", nm, if n.bucket == 1 { "own" } else { "out" }) }
 }
 
 /// An activation in words: what it is, its level and the frame it stands at.
@@ -61,9 +63,10 @@ fn under(m: &Machine, a: &Act) -> BTreeSet<(DimId, i64)> {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mode = args.get(1).cloned().unwrap_or("two".into());
-    let dir = args.get(3).cloned().unwrap_or(format!("{}/../../apps/stocks/data/1D", env!("CARGO_MANIFEST_DIR")));
+    let dir = args.get(3).filter(|a| !a.starts_with("--")).cloned().unwrap_or(format!("{}/../../apps/stocks/data/1D", env!("CARGO_MANIFEST_DIR")));
     // each channel: its name, the percent move of each bar of its cycle, and whether it has an action
     let mut series: Vec<(String, Vec<f64>, bool)> = Vec::new();
+    let mut combos8: Vec<u32> = Vec::new();
     let (cycle, default_cycles) = match mode.as_str() {
         "two" | "three" => {
             let syms: &[&str] = if mode == "two" { &["KGC", "GLD"] } else { &["KGC", "GLD", "SPY"] };
@@ -79,18 +82,39 @@ fn main() {
             if mode != "lapa" { series.push(("B".into(), vec![2.0, 1.0, -1.0, -3.0, 3.0, -2.0], true)); }
             (6usize, 30usize)
         }
+        // A on its six-bar lap, B on a five-bar lap UUDUD: together they repeat every 30 frames
+        "lap65" => {
+            series.push(("A".into(), vec![1.0, -2.0, -3.0, 2.0, 3.0, -1.0], true));
+            series.push(("B".into(), vec![2.0, 1.0, -1.0, 3.0, -2.0], true));
+            (30usize, 12usize)
+        }
+        // B alone on its five-bar lap
+        "lapb5" => {
+            series.push(("B".into(), vec![2.0, 1.0, -1.0, 3.0, -2.0], true));
+            (5usize, 72usize)
+        }
+        "three1" => {
+            // one value per combination of the three moves: KGC up 4, GLD up 2, SPY up 1
+            let mut pcts: Vec<Vec<f64>> = Vec::new();
+            for s in ["KGC", "GLD", "SPY"] { let p = opens(&dir, s); pcts.push((0..12).map(|i| (p[(i + 1) % 12] - p[i]) / p[i] * 100.0).collect()); }
+            combos8 = (0..12).map(|i| (pcts[0][i] > 0.0) as u32 * 4 + (pcts[1][i] > 0.0) as u32 * 2 + (pcts[2][i] > 0.0) as u32).collect();
+            series.push(("C".into(), pcts[0].clone(), true));
+            (12usize, 10usize)
+        }
         "four" => {
             // a = UU, b = DU, c = DD, d = UD; the reward is A's move
             series.push(("S".into(), vec![1.0, -2.0, -3.0, 2.0, 3.0, -1.0], true));
             (6usize, 30usize)
         }
-        _ => panic!("mode: two, three, lap, lapa, lapb or four"),
+        _ => panic!("mode: two, three, three1, lap, lapa, lapb or four"),
     };
-    let cycles: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(default_cycles);
+    let cycles: usize = args.get(2).filter(|a| !a.starts_with("--")).and_then(|s| s.parse().ok()).unwrap_or(default_cycles);
     let mut m = Machine::new(256, Policy::events_to_actions(), 1);
+    if args.iter().any(|a| a == "--levels") { m.trace_levels = true; }
+    let trace_frame: Option<i64> = args.iter().find(|a| a.starts_with("--trace-frame=")).map(|a| a[14..].parse().unwrap());
     let mut chans: Vec<(ChannelId, DimId, Option<DimId>)> = Vec::new();
     for (name, _, act) in &series {
-        let ch = m.declare_channel(name, Some(("move", if mode == "four" { 4 } else { 2 })), if *act { Some(("position", 2)) } else { None }, &[]);
+        let ch = m.declare_channel(name, Some(("move", if mode == "four" { 4 } else if mode == "three1" { 8 } else { 2 })), if *act { Some(("position", 2)) } else { None }, &[]);
         chans.push((ch, m.channels[ch as usize].event.unwrap(), m.channels[ch as usize].action));
     }
     println!("{}: {} cycles of {} bars", mode, cycles, cycle);
@@ -113,7 +137,10 @@ fn main() {
     // the calls to follow frame by frame: --watch=9,11
     let watch: Vec<u32> = args.iter().find(|a| a.starts_with("--watch=")).map_or(vec![], |a| a[8..].split(',').map(|x| x.parse().unwrap()).collect());
     let (mut last_change_c, mut last_dict_c) = (0i64, String::new());
-    let four = mode == "four";
+    let four = mode == "four" || mode == "three1";
+    let dictf = args.iter().any(|a| a == "--dictf");
+    let assoc = args.iter().any(|a| a == "--assoc");
+    let kinds = args.iter().any(|a| a == "--kinds");
     let names: std::collections::BTreeMap<DimId, String> = chans.iter().zip(series.iter()).flat_map(|(c, s)| [(c.1, s.0.clone())].into_iter().chain(c.2.map(|a| (a, s.0.clone())))).collect();
     if log { m.trace = true; m.trace_retire = true; m.trace_cover = true; }
     for k in 0..total {
@@ -122,7 +149,7 @@ fn main() {
         for (i, (_, pct, _)) in series.iter().enumerate() {
             let p = pct[k % pct.len()];
             let up: u32 = if p > 0.0 { 1 } else { 0 };
-            let ev = if mode == "four" { [0u32, 1, 2, 3, 0, 2][k % 6] } else { up };
+            let ev = if mode == "four" { [0u32, 1, 2, 3, 0, 2][k % 6] } else if mode == "three1" { combos8[k % 12] } else { up };
             inputs.push(Input { dim: chans[i].1, bucket: ev, pos: [0; MAX_DIMS] });
             if let Some(ac) = chans[i].2 {
                 // what the machine said for this bar runs; a lesson (the move itself) where it said nothing
@@ -132,6 +159,7 @@ fn main() {
             }
         }
         if log { eprintln!("=== frame {}", m.frame_no + 1); }
+        if let Some(tf) = trace_frame { let on = m.frame_no + 1 == tf; m.trace = on; m.trace_cover = on; if on { eprintln!("=== frame {}", tf); } }
         let w = m.process_frame(&inputs, rewards);
         let fno = m.frame_no;
         for (i, (_, pct, _)) in series.iter().enumerate() {
@@ -152,6 +180,34 @@ fn main() {
             println!("CYCLE {} | functions {} | highest call level in the cycle {} | the dictionary last changed at frame {}", k / cycle + 1, m.dict.len(), top, last_change);
         }
         let fr = m.frames.back().unwrap();
+        if dictf && !log {
+            let mut ids: Vec<u32> = m.dict.funcs.keys().map(|x| *x as u32).collect();
+            ids.sort();
+            for id in ids { let f = m.dict.get(id as _).unwrap(); println!("DICTF {} | f{} | {}", fno, id, f.rels.iter().map(|r| format!("{} → {} at t{}", sym_words(&m, &names, four, r.a), sym_words(&m, &names, four, r.b), r.off[0])).collect::<Vec<_>>().join("; ")); }
+        }
+        if kinds {
+            // the kind each bar of the frame before was taken by (its first covered relation): inside, time, or none
+            if let Some(pf) = m.frames.iter().find(|f| f.no == fno - 1) {
+                let parts: Vec<String> = pf.acts.iter().enumerate().filter(|(_, a)| a.kind == Kind::Event).map(|(i, _)| {
+                    let r = brain_core::machine::ActRef { frame: pf.no, index: i as u32 };
+                    format!("{}={}", act_words(&m, &names, four, r), match m.kind_decided(r) { Some(true) => "inside", Some(false) => "time", None => "none" })
+                }).collect();
+                println!("KIND {} | {}", pf.no, parts.join(", "));
+            }
+        }
+        if assoc {
+            // the calls over this frame's bars: each call that landed on a bar of this frame, what it covers, and the
+            // bars under no call
+            let mut parts: Vec<String> = Vec::new();
+            for f in m.frames.iter() { for (i, a) in f.acts.iter().enumerate() {
+                let Some(fb) = &a.fired_by else { continue };
+                if !a.covers.iter().any(|c| c.frame == fno && m.act(*c).map_or(false, |x| x.kind == Kind::Event)) && !a.covers.iter().any(|c| m.act(*c).map_or(false, |x| x.fired_by.is_some() && x.covers.iter().any(|cc| cc.frame == fno && m.act(*cc).map_or(false, |y| y.kind == Kind::Event)))) { continue; }
+                let _ = i;
+                parts.push(format!("f{} L{} over {}", fb.func, a.level, a.covers.iter().map(|c| act_words(&m, &names, four, *c)).collect::<Vec<_>>().join(" + ")));
+            } }
+            let bare: Vec<String> = fr.acts.iter().enumerate().filter(|(_, a)| a.kind == Kind::Event && a.coverers.is_empty()).map(|(i, _)| act_words(&m, &names, four, brain_core::machine::ActRef { frame: fno, index: i as u32 })).collect();
+            println!("ASSOC {} | {}.{} | {} | bars under no call: {}", fno, k / cycle + 1, k % cycle + 1, parts.join("; "), if bare.is_empty() { "none".into() } else { bare.join(", ") });
+        }
         if log {
             let mut ids: Vec<u32> = m.dict.funcs.keys().map(|x| *x as u32).collect();
             ids.sort();

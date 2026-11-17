@@ -13,11 +13,12 @@ use crate::types::*;
 impl Machine {
     /// What a fit would take off the board (R22, D28): each board relation its true relations land on, and the
     /// cost of each call it lands on, as a node or through its pose (D22): its failures, a call itself costing
-    /// nothing (experiment); unless a call this election has taken already landed on it and took its cost off.
+    /// nothing (experiment); unless a call this election has taken already landed on it and took its cost off. A
+    /// relation given or blocked is credited to no fit (D24).
     fn coverage(&self, fit: &Fit) -> f64 {
         let mut seen: FxHashSet<(ActRef, ActRef)> = FxHashSet::default();
         let mut c = 0.0;
-        for &(a, b) in &fit.edges { if seen.insert(edge(a, b)) { c += 1.0; } }
+        for &(a, b) in &fit.edges { if !self.given.contains(&edge(a, b)) && !self.blocked(a, b) && seen.insert(edge(a, b)) { c += 1.0; } }
         // credited the relations it read and nothing of a call (D22)
         c
     }
@@ -54,6 +55,11 @@ impl Machine {
         }
     }
 
+    /// Whether a fit is inside the frame: its function holds relations inside the frame only (D15, D34).
+    pub(crate) fn fit_inside(&self, fit: &Fit) -> bool {
+        self.dict.get(fit.func).map_or(false, |f| f.rels.iter().all(|r| r.off[0] == 0))
+    }
+
     /// How many activations at the base stand under two or more of the activations a fit lands on (experiment).
     fn shared_under(&self, fit: &Fit) -> usize {
         let mut seen: rustc_hash::FxHashMap<ActRef, u32> = rustc_hash::FxHashMap::default();
@@ -73,13 +79,13 @@ impl Machine {
     /// function's chain comes round to it. A function is never the interneuron of one of its own nodes, so no
     /// interneuron whose call is a node of the function is tried; only calls further down the chain, inside the calls
     /// the function's nodes are. Each such earlier call is compared, over its own length, with the function's
-    /// expansion aligned at the present end (the origin). An interneuron is refused where any call of it, a node of
+    /// expansion aligned at the present end: its origin, or for a cycle, which has none, the node its call's pose
+    /// starts at (D15, D37). An interneuron is refused where any call of it, a node of
     /// the function or one met down its chain, stands on any activation of that window: it is present in what is
     /// read, not coming round. Where the two are the same, its interneuron is reused. The nearest meeting first,
     /// the older interneuron on a tie.
-    fn reuse(&self, f: &Func) -> Option<NeuronId> {
-        
-        let lay = f.layout();
+    fn reuse(&self, f: &Func, root: usize) -> Option<NeuronId> {
+        let lay = f.layout_from(root);
         let add = |a: &Pos, b: &Offset| { let mut p = *a; for d in 0..MAX_DIMS { p[d] += b[d]; } p };
         // the function's expansion down to base neurons, and the calls met inside its nodes' calls, each at its place
         let mut out: Vec<(Sym, Pos)> = Vec::new();
@@ -150,7 +156,9 @@ impl Machine {
             for (i, fit) in fits.iter().enumerate() {
                 let net = self.coverage(fit) - self.price(fit);
                 if !(net > 0.0) { continue; }
-                let better = match best { None => true, Some((j, bn)) => net > bn || (net == bn && {
+                // the frame first (D28, R24): a fit inside the frame before any fit in time; within a kind as before
+                let (ins_i, ins_j) = match best { Some((j, _)) => (self.fit_inside(fit), self.fit_inside(&fits[j])), None => (false, false) };
+                let better = match best { None => true, Some(_) if ins_i != ins_j => ins_i, Some((j, bn)) => net > bn || (net == bn && {
                     if ranks[i].is_none() { ranks[i] = Some(self.rank(fit)); }
                     if ranks[j].is_none() { ranks[j] = Some(self.rank(&fits[j])); }
                     ranks[i] < ranks[j]
@@ -167,6 +175,9 @@ impl Machine {
             let covered: FxHashSet<ActRef> = if self.frozen { FxHashSet::default() } else {
                 let mut cands: Vec<ActRef> = fit.acts().map(|x| x.0).collect();
                 for &(a, b) in &fit.edges { cands.push(a); cands.push(b); }
+                // the third relation among three neighbors is given, and counts toward covering its ends (D24, D55)
+                let g = self.give_relations(&fit.edges);
+                cands.extend(g);
                 self.cover_in_election(&cands).into_iter().collect()
             };
             // read again what read through a relation the taken fit covers, or through an activation now covered, or
@@ -206,7 +217,8 @@ impl Machine {
         let Some(origin) = self.act(latest.0).cloned() else { return 0 };
         let mut minted = 0;
         let own = f.inter.filter(|n| self.thalamus.get(*n).map_or(false, |x| x.alive));
-        let found = if own.is_none() { self.reuse(&f) } else { None };
+        // read from its origin; a cycle has none, so from the node its call's pose starts at, the latest it landed on
+        let found = if own.is_none() { self.reuse(&f, if f.has_cycle() { latest.1 } else { 0 }) } else { None };
         let neuron = match own.or(found) {
             Some(n) if own.is_some() => n,
             Some(n) => {
@@ -295,7 +307,15 @@ impl Machine {
         let me = ActRef { frame: fno, index: fr.acts.len() as u32 };
         fr.acts.push(act);
         self.electing.insert(me);
+        if self.trace_cover {
+            let show = |x: &ActRef| format!("{}@{}", self.act(*x).map_or("?".into(), |b| self.dict.sym_text(b.sym)), x.frame);
+            eprintln!("[edges f{} l{}] f{} landed {} edges: {}", fno, level, f.id, fit.edges.len(),
+                fit.edges.iter().map(|&(a, b)| format!("{}–{}{}", show(&a), show(&b), if self.blocked(a, b) { " (blocked)" } else { "" })).collect::<Vec<_>>().join(", "));
+        }
         for &(a, b) in &fit.edges {
+            // a blocked relation is never covered; a covered one decides the kind of each end that has none (D24)
+            if self.blocked(a, b) { continue; }
+            self.decide_kind(a, b);
             if self.covered_rel.insert(edge(a, b)) {
                 self.covered_edges.push(edge(a, b));
                 self.cov_inc.entry(a).or_default().push(b);

@@ -1,8 +1,13 @@
 //! Behavioral tests on the machine: what forms over a letter stream (algorithm-text.md), the six-bar
 //! cycle (algorithm-stocks.md), and the weak activation rule (D40).
 use brain_core::machine::Machine;
-use brain_core::function::Node;
+use brain_core::function::Rel;
 use brain_core::types::*;
+
+/// Whether a relation names neuron `x` and neuron `y` with `y` at time offset `dt` from `x`, in either direction.
+fn names(r: &Rel, x: u32, y: u32, dt: i32) -> bool {
+    (r.a == x && r.b == y && r.off[0] == dt) || (r.a == y && r.b == x && r.off[0] == -dt)
+}
 
 fn stream(m: &mut Machine, dim: DimId, text: &str) -> Vec<Option<u32>> {
     let mut preds = Vec::new();
@@ -21,9 +26,9 @@ fn a_repeated_pair_gets_a_function_and_an_interneuron() {
     stream(&mut m, dim, "ab ab ab ab ");
     let b = m.base_neuron(dim, b'b' as u32);
     let a = m.base_neuron(dim, b'a' as u32);
-    // the dictionary holds a function anchored at b naming a a frame before (D15, R50), and the election gave
-    // it an interneuron (R16)
-    let f = m.dict.anchored(b).iter().filter_map(|id| m.dict.get(*id)).find(|f| f.rels.iter().any(|r| r.node == Node::Fixed(a) && r.dim == 0 && r.off == -1));
+    // the dictionary holds a function relating b to a a frame before (D15, R50), and the election gave it an
+    // interneuron (R16)
+    let f = m.dict.funcs.values().find(|f| f.rels.iter().any(|r| names(r, b, a, -1)));
     assert!(f.is_some(), "b should name a at -1: {}", m.describe_neuron(b));
     assert!(f.unwrap().inter.is_some(), "the function should have an interneuron: {}", m.describe_neuron(b));
 }
@@ -37,9 +42,9 @@ fn varied_predecessors_keep_their_own_pairs() {
     let dim = m.channels[ch as usize].event.unwrap();
     stream(&mut m, dim, "th ch sh wh th ch sh wh th ch sh wh th ch sh wh ");
     let h = m.base_neuron(dim, b'h' as u32);
-    let fs: Vec<_> = m.dict.anchored(h).iter().filter_map(|id| m.dict.get(*id)).collect();
+    let fs: Vec<_> = m.dict.funcs.values().filter(|f| f.rels.iter().any(|r| r.a == h || r.b == h)).collect();
     assert!(fs.len() >= 2, "h should hold a function per letter before it: {}", m.describe_neuron(h));
-    assert!(fs.iter().all(|f| f.rels.iter().all(|r| !matches!(r.node, Node::Class(_)))), "no class over one relation: {}", m.describe_neuron(h));
+    // "no class over one relation" (R52): the build has no classes, so this half has nothing to check
 }
 
 #[test]
@@ -69,11 +74,11 @@ fn weak_activations_last_one_frame_and_write_nothing() {
     stream(&mut m, dim, "abababab");
     let a = m.base_neuron(dim, b'a' as u32);
     let b = m.base_neuron(dim, b'b' as u32);
-    let before = m.thalamus[b].connections.get(&(a, [1, 0, 0])).map(|c| c.strength).unwrap_or(0.0);
+    let before = m.thalamus[b].connections.get(&(b, a, [1, 0, 0])).map(|c| c.strength).unwrap_or(0.0);
     assert!(before > 0.0);
     let w = m.process_frame(&[], vec![]);
     assert_eq!(w.iter().find(|w| w.dim == dim).map(|w| w.bucket), Some(b'b' as u32), "the weak a infers b");
-    let after = m.thalamus[b].connections.get(&(a, [1, 0, 0])).map(|c| c.strength).unwrap_or(0.0);
+    let after = m.thalamus[b].connections.get(&(b, a, [1, 0, 0])).map(|c| c.strength).unwrap_or(0.0);
     assert_eq!(before, after, "nothing connects to a weak activation (D40)");
 }
 

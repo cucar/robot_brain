@@ -118,6 +118,7 @@ fn main() {
             m.trace_levels = tracing;
             if tracing { m.stop_after_level = None; }
             m.trace = tracing;
+            m.trace_cover = tracing;
             let (said, t) = run(&mut m, &train_imgs[i]);
             w_added += m.last_stats.added;
             e_added += m.last_stats.added;

@@ -187,7 +187,7 @@ fn report_dict(m: &Machine) {
     fs.sort_by_key(|f| f.id);
     println!("  dictionary: {} functions", fs.len());
     for f in fs {
-        println!("    f{}: origin {}{}{}", f.id, sname(m, f.origin()), if f.has_cycle() { ", a cycle" } else { "" }, f.inter.map_or(String::new(), |n| format!(", interneuron #{}", n)));
+        println!("    f{}: {}{}{}", f.id, f.origin().map_or("a cycle, no origin".to_string(), |o| format!("origin {}", sname(m, o))), "", f.inter.map_or(String::new(), |n| format!(", interneuron #{}", n)));
         for r in &f.rels { println!("      {}   [{}]", rel_words(m, r), rel_text(m, r)); }
     }
 }

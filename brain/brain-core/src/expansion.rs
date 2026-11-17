@@ -1,7 +1,7 @@
 //! Expansion (R28) of an inferred call: read back through its function in the dictionary to its nodes from
 //! its origin, each node that is an interneuron expanded in turn, down to base symbols. A cycle is read round
-//! over the frames that have happened while the node it reaches has something to land on; beyond them, round up
-//! to the nearest node the function has past the cycle in that direction, and once where there is none. A
+//! over the frames that have happened while the node it reaches has something to land on, and beyond them once
+//! more (D54, D15). A
 //! descent stops where it comes back to an interneuron already on its path (D36).
 //!
 //! Read with no board, as the index search reads what an interneuron would stand for (D36), every lap is beyond
@@ -11,7 +11,6 @@ use crate::function::*;
 use crate::machine::*;
 use crate::types::*;
 
-fn dot(a: &Pos, b: &Pos) -> i64 { (0..MAX_DIMS).map(|d| a[d] as i64 * b[d] as i64).sum() }
 
 impl Machine {
     /// The function an interneuron is read through when nothing fired it there: the one that fired it last, or
@@ -46,20 +45,11 @@ impl Machine {
         let mut lap = [0i32; MAX_DIMS];
         for d in 0..MAX_DIMS { lap[d] = lay.position[ua][d] + off[d] - lay.position[ub][d]; }
         let path: Vec<usize> = Func::tree_path(&lay, ub, ua).iter().map(|s| s.2).collect();
-        let mut on_cycle = vec![false; f.nodes.len()];
-        on_cycle[ua] = true;
-        on_cycle[ub] = true;
-        for &v in &path { on_cycle[v] = true; }
-        // the nearest node past the cycle in the direction the laps run, where the function has one
-        let far_cycle = (0..f.nodes.len()).filter(|i| on_cycle[*i]).map(|i| dot(&lay.position[i], &lap)).max().unwrap_or(0);
-        let past: Option<i64> = (0..f.nodes.len()).filter(|i| !on_cycle[*i]).map(|i| dot(&lay.position[i], &lap)).filter(|x| *x > far_cycle).min();
         for k in 1..=64 {
             let reached = shift(&lay.position[ub], k, &lap);
             let happened = board && (reached[0] as i64) <= self.frame_no;
-            let go = if happened { self.stood(f.nodes[ub], &reached) } else {
-                // beyond what has happened: round up to the nearest node past the cycle, and once where none
-                k == 1 || past.map_or(false, |t| dot(&shift(&lay.position[ub], k - 1, &lap), &lap) - dot(&at, &lap) < t)
-            };
+            // over what has happened while something stands there to land on, and beyond it once more (D54, D15)
+            let go = if happened { self.stood(f.nodes[ub], &reached) } else { k == 1 };
             if !go { break; }
             // past the first round, the lap before it: from the node the last round reached, round to the node
             // the closing relation leaves

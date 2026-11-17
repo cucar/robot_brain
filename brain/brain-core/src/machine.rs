@@ -123,6 +123,11 @@ pub struct Machine {
     /// Each relation that went up, and the edges it went up to (D55, D24): covered by a call in any of those forms, it
     /// is covered, and does not go up again
     pub(crate) lift_forms: FxHashMap<(ActRef, ActRef), Vec<(ActRef, ActRef)>>,
+    /// The relations given among three neighbors (D24, D55): each counts as covered for both its ends, no fit is
+    /// credited it, and it goes up to no call
+    pub(crate) given: FxHashSet<(ActRef, ActRef)>,
+    /// The kind each activation's first covered relation decided (D24): true inside the frame, false in time
+    pub(crate) kind_of: FxHashMap<ActRef, bool>,
     /// What each call took that way: the activations or calls its taken relations end at (D10, D26)
     pub(crate) taken: FxHashMap<ActRef, Vec<ActRef>>,
     /// How many relations went up to a call, how many of them between two calls, and activations covered at age 0
@@ -255,6 +260,8 @@ impl Machine {
             lifted: FxHashSet::default(),
             cov_inc: FxHashMap::default(),
             lift_forms: FxHashMap::default(),
+            given: FxHashSet::default(),
+            kind_of: FxHashMap::default(),
             taken: FxHashMap::default(),
             up_count: 0,
             up_pair_count: 0,
@@ -453,6 +460,8 @@ impl Machine {
         self.grown.retain(|c, _| c.frame >= keep_from);
         self.lifted.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
         self.cov_inc.retain(|a, v| { v.retain(|b| b.frame >= keep_from); a.frame >= keep_from });
+        self.given.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
+        self.kind_of.retain(|a, _| a.frame >= keep_from);
         self.lift_forms.retain(|e, v| { v.retain(|x| x.0.frame >= keep_from && x.1.frame >= keep_from); e.0.frame >= keep_from && e.1.frame >= keep_from });
         self.taken.retain(|c, _| c.frame >= keep_from);
         self.call_thru.retain(|c, _| c.frame >= keep_from);
@@ -542,26 +551,30 @@ impl Machine {
         out
     }
 
-    /// Covering is one principle with three counts (D24, D34): an activation is covered when its covered relations
-    /// of one kind reach that kind's count. An association, a relation between two activations at one position in one
-    /// frame: one. In time, a relation to another frame: one to an earlier frame and one to a later, each to any
-    /// channel, the run's first frame excepted. In space, a relation to another position in the frame: any two, or one
-    /// where the layout has no point on the other side of it in that dimension. The counts are separate. Returns
-    /// whether it was covered only by the one relation at the edge of the layout.
+    /// Covering counts the two kinds of relation apart (D24, D34). Inside the frame (its offset in time zero, in space
+    /// or at one position): two covered relations cover an activation, or the one it has there where it has only one,
+    /// a blocked relation not counted. In time: one covered relation to an earlier frame and one to a later, the run's
+    /// first frame excepted. A relation of each kind never make a count together. Returns whether it was covered by
+    /// one relation alone.
     pub(crate) fn cover_count(&self, me: ActRef) -> Option<bool> {
         let a = self.act(me)?;
         let rels = self.covered_offs(me);
-        if rels.iter().any(|(_, o)| o.iter().all(|v| *v == 0)) { return Some(false); }
+        let inside: Vec<ActRef> = rels.iter().filter(|(_, o)| o[0] == 0).map(|x| x.0).collect();
+        if inside.len() >= 2 { return Some(false); }
+        if inside.len() == 1 {
+            // its relations inside its frame, either direction, each other end once
+            let mut others: FxHashSet<ActRef> = FxHashSet::default();
+            for br in &a.rels { if br.off[0] == 0 && !self.blocked(me, br.other) { others.insert(br.other); } }
+            for f in self.frames.iter() { for (j, b) in f.acts.iter().enumerate() { if b.gone { continue; }
+                let x = ActRef { frame: f.no, index: j as u32 };
+                for br in &b.rels { if br.other == me && br.off[0] == 0 && !self.blocked(me, x) { others.insert(x); } } } }
+            others.retain(|x| self.act(*x).map_or(false, |xa| !xa.gone));
+            if others.len() <= 1 { return Some(true); }
+        }
         let time: Vec<Offset> = rels.iter().filter(|(_, o)| o[0] != 0).map(|x| x.1).collect();
-        let space: Vec<Offset> = rels.iter().filter(|(_, o)| o[0] == 0 && (1..MAX_DIMS).any(|d| a.axes & (1 << d) != 0 && o[d] != 0)).map(|x| x.1).collect();
         let (hn, hp) = (time.iter().any(|x| x[0] < 0), time.iter().any(|x| x[0] > 0));
-        let t = if (hn || hp) && (hn || !self.layout_side(me, 0, -1)) && (hp || !self.layout_side(me, 0, 1)) { Some(!(hn && hp)) } else { None };
-        let sp = if space.len() >= 2 { Some(false) } else if space.len() == 1 {
-            let o = space[0];
-            let at_edge = (1..MAX_DIMS).any(|d| a.axes & (1 << d) != 0 && o[d] != 0 && !self.layout_side(me, d, -o[d].signum()));
-            if at_edge { Some(true) } else { None }
-        } else { None };
-        match (t, sp) { (Some(x), Some(y)) => Some(x && y), (Some(x), None) => Some(x), (None, Some(y)) => Some(y), _ => None }
+        if (hn || hp) && (hn || !self.layout_side(me, 0, -1)) && (hp || !self.layout_side(me, 0, 1)) { return Some(!(hn && hp)); }
+        None
     }
 
     /// A relation of a covered activation that no call covers ends, from then on, at each call that landed on it,
@@ -576,6 +589,8 @@ impl Machine {
             let e = edge(me, o);
             // covered by a call in the form it stands in, or in any form it went up to (D55, D24)
             if self.covered_in_any_form(e, 0) { continue; }
+            // a relation given among three neighbors ends at no call (D24)
+            if self.given.contains(&e) { continue; }
             let Some(oa) = self.act(o).cloned() else { continue };
             if oa.gone || coverers.contains(&o) { continue; }
             // went up already when its other end was covered: now that both ends are, it runs between the calls on
@@ -782,5 +797,71 @@ impl Machine {
             s.push_str(&format!("    {} -> {} @{:?} s={:.0} est={:+.2}\n", self.dict.sym_text(*own), self.dict.sym_text(*t), o, c.strength, c.estimate()));
         }
         s
+    }
+}
+
+// ───── the two kinds, the kind decided, and the given relation (D34, D24, D55) ─────
+impl Machine {
+    /// Whether a relation between two activations is inside the frame: its two ends in one frame (D34).
+    pub(crate) fn rel_inside(&self, a: ActRef, b: ActRef) -> Option<bool> { Some(self.act(a)?.pos[0] == self.act(b)?.pos[0]) }
+
+    /// A relation of the other kind than the one an end's first covered relation decided is blocked (D24).
+    pub(crate) fn blocked(&self, a: ActRef, b: ActRef) -> bool {
+        let Some(k) = self.rel_inside(a, b) else { return false };
+        self.kind_of.get(&a).map_or(false, |x| *x != k) || self.kind_of.get(&b).map_or(false, |x| *x != k)
+    }
+
+    /// The kind an activation's first covered relation decided, if any: true inside the frame.
+    pub fn kind_decided(&self, a: ActRef) -> Option<bool> { self.kind_of.get(&a).copied() }
+
+    /// A call covers a relation between the two (D24): each end whose kind is not yet decided takes the relation's
+    /// kind, and its relations of the other kind are blocked from now.
+    pub(crate) fn decide_kind(&mut self, a: ActRef, b: ActRef) {
+        let Some(k) = self.rel_inside(a, b) else { return };
+        for x in [a, b] {
+            if self.kind_of.contains_key(&x) { continue; }
+            self.kind_of.insert(x, k);
+            if self.trace_cover {
+                let Some(xa) = self.act(x) else { continue };
+                let mut others: Vec<ActRef> = xa.rels.iter().map(|br| br.other).collect();
+                for f in self.frames.iter() { for (j, y) in f.acts.iter().enumerate() { if y.gone { continue; } if y.rels.iter().any(|br| br.other == x) { others.push(ActRef { frame: f.no, index: j as u32 }); } } }
+                others.sort(); others.dedup();
+                let show = |r: &ActRef| format!("{}@{}", self.act(*r).map_or("?".into(), |y| self.dict.sym_text(y.sym)), r.frame);
+                let bl: Vec<String> = others.iter().filter(|o| self.rel_inside(x, **o) == Some(!k)).map(|o| show(o)).collect();
+                eprintln!("[kind f{} l{}] {} decided {} by {}–{} | blocked {}: {}", self.frame_no, xa.level, show(&x), if k { "inside the frame" } else { "across frames" }, show(&a), show(&b), bl.len(), bl.join(", "));
+            }
+        }
+    }
+
+    /// Whether two activations hold a relation, in either direction.
+    pub(crate) fn has_rel(&self, a: ActRef, b: ActRef) -> bool {
+        self.act(a).map_or(false, |x| x.rels.iter().any(|br| br.other == b)) || self.act(b).map_or(false, |x| x.rels.iter().any(|br| br.other == a))
+    }
+
+    /// The relations given by the edges a taken fit covered (D24, D55): for each, at either end z, every other relation
+    /// of z a call covers (a side) whose far end is a neighbor of this edge's far end gives the relation between the
+    /// two far ends. A given relation decides no kind. Returns the ends of each given relation.
+    pub(crate) fn give_relations(&mut self, edges: &[(ActRef, ActRef)]) -> Vec<ActRef> {
+        let mut out = Vec::new();
+        for &(p, q) in edges {
+            // only a relation a call covers is a side (a blocked one never is)
+            if !self.covered_rel.contains(&edge(p, q)) { continue; }
+            for (z, x) in [(p, q), (q, p)] {
+                let partners: Vec<ActRef> = self.cov_inc.get(&z).cloned().unwrap_or_default();
+                for y in partners {
+                    if y == x || !self.covered_rel.contains(&edge(z, y)) { continue; }
+                    let e = edge(x, y);
+                    if self.covered_rel.contains(&e) || self.given.contains(&e) || !self.has_rel(x, y) || self.blocked(x, y) { continue; }
+                    if self.act(x).map_or(true, |a| a.gone) || self.act(y).map_or(true, |a| a.gone) { continue; }
+                    self.given.insert(e);
+                    self.cov_inc.entry(x).or_default().push(y);
+                    self.cov_inc.entry(y).or_default().push(x);
+                    if self.trace_cover { eprintln!("[given f{}] {}@{} — {}@{} | the two sides at {}@{}", self.frame_no, self.act(x).map_or("?".into(), |a| self.dict.sym_text(a.sym)), x.frame, self.act(y).map_or("?".into(), |a| self.dict.sym_text(a.sym)), y.frame, self.act(z).map_or("?".into(), |a| self.dict.sym_text(a.sym)), z.frame); }
+                    out.push(x);
+                    out.push(y);
+                }
+            }
+        }
+        out
     }
 }

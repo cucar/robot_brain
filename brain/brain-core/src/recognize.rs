@@ -448,8 +448,8 @@ impl Machine {
     pub(crate) fn contribution_ab(&self, f: &Func, r: &Rel) -> f64 {
         let (without, wat): (Vec<Rel>, Vec<Option<Sym>>) = f.rels.iter().zip(&f.at).filter(|(x, _)| *x != r).map(|(x, a)| (*x, *a)).unzip();
         if without.is_empty() { return self.halved(r) - 2.0; }
-        let origin = if without.iter().any(|x| x.a == f.origin() || x.b == f.origin()) { f.origin() } else { without[0].a };
-        self.worth_ab(f.origin(), &f.rels, &f.at, f.inter) - self.worth_ab(origin, &without, &wat, f.inter)
+        let origin = if without.iter().any(|x| x.a == f.root() || x.b == f.root()) { f.root() } else { without[0].a };
+        self.worth_ab(f.root(), &f.rels, &f.at, f.inter) - self.worth_ab(origin, &without, &wat, f.inter)
     }
 
     // ───────────────────────────── grouping (R50, R54, R18) ─────────────────────────────
@@ -721,9 +721,20 @@ impl Machine {
                 let fown = match rw { Some((c, n)) => Self::rewritten(f0, c, n), None => f0.clone() };
                 let f = &fown;
                 if f.holds(&rel) { continue; }
+                // a function holds one kind, inside the frame or in time (D15, R50)
+                if f.rels.iter().any(|r| (r.off[0] == 0) != (rel.off[0] == 0)) { continue; }
                 // read against the function as it now stands: it touches a node, and closes no second cycle
                 let (ka, kb) = (f.node_of(rel.a).is_some(), f.node_of(rel.b).is_some());
                 if !(ka || kb) || (ka && kb && f.has_cycle()) { continue; }
+                // a cycle is a function of its own (D15, R50): a relation of a neuron to itself joins no function; no
+                // relation joins a cycle; a relation closes a cycle only where every relation is then on the cycle
+                if self.dict.neuron_of(rel.a) == self.dict.neuron_of(rel.b) { continue; }
+                if f.has_cycle() { continue; }
+                if ka && kb {
+                    let mut deg: FxHashMap<Sym, u32> = FxHashMap::default();
+                    for r in f.rels.iter().chain(std::iter::once(&rel)) { *deg.entry(r.a).or_default() += 1; *deg.entry(r.b).or_default() += 1; }
+                    if deg.values().any(|d| *d != 2) { continue; }
+                }
                 let w = {
                     let mut with = f.rels.clone();
                     with.push(rel);
@@ -732,12 +743,12 @@ impl Machine {
                     at.push(Some(attach));
                     // switch 20: a function of one relation read at the node the candidate attaches at, over the
                     // same rows, where no cycle is involved
-                    let lone_before = if f.rels.len() == 1 && Self::cycle_rels_any(f.origin(), &with).is_empty() {
+                    let lone_before = if f.rels.len() == 1 && Self::cycle_rels_any(f.root(), &with).is_empty() {
                         self.alone_over(&f.rels[0], attach, &with, f.inter).map(|x| x - 1.0)
                     } else { None };
-                    let wb = lone_before.unwrap_or_else(|| self.worth_ab(f.origin(), &f.rels, &before, f.inter));
+                    let wb = lone_before.unwrap_or_else(|| self.worth_ab(f.root(), &f.rels, &before, f.inter));
                     if self.trace && lone_before.is_some() { eprintln!("   [at node f{}] {} alone in f{} at {}: {:.0} (its count {:.1})", fno, self.rel_text(&f.rels[0]), fid, self.dict.sym_text(attach), wb, self.halved(&f.rels[0])); }
-                    self.worth_ab(f.origin(), &with, &at, f.inter) - wb
+                    self.worth_ab(f.root(), &with, &at, f.inter) - wb
                 };
                 let mut rels = f.rels.clone();
                 rels.push(rel);
@@ -773,7 +784,7 @@ impl Machine {
                     let f = match rw { Some((c, n)) => Self::rewritten(f0, c, n), None => f0.clone() };
                     let mut with = f.rels.clone();
                     with.push(rel_t);
-                    if !Self::cycle_rels_any(f.origin(), &with).is_empty() { return None; }
+                    if !Self::cycle_rels_any(f.root(), &with).is_empty() { return None; }
                     let own = holder.and_then(|g| g.inter);
                     self.alone_over(&rel_t, attach, &with, own).map(|x| x - 2.0)
                 })
@@ -855,7 +866,7 @@ impl Machine {
                         if h < 2.0 { notes.push((*r, 0, format!("strength below the threshold ({:.1})", h))); }
                         else {
                             let at_r = f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| *a);
-                            let alone = at_r.filter(|_| Self::cycle_rels_any(f.origin(), &f.rels).is_empty()).and_then(|a| self.alone_over(r, a, &f.rels, None)).map(|x| x - 2.0).unwrap_or(h - 2.0);
+                            let alone = at_r.filter(|_| Self::cycle_rels_any(f.root(), &f.rels).is_empty()).and_then(|a| self.alone_over(r, a, &f.rels, None)).map(|x| x - 2.0).unwrap_or(h - 2.0);
                             let inside = self.contribution_split(f, r);
                             if alone > inside { notes.push((*r, 1, format!("worth alone {:.0} above its contribution {:.0}", alone, inside))); }
                         }
@@ -870,13 +881,13 @@ impl Machine {
                     // for a function of its own where its worth alone is higher than its contribution (R54, experiment)
                     if rels.len() > 1 {
                         let at_r = f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| *a);
-                        let s20 = at_r.is_some() && Self::cycle_rels_any(f.origin(), &f.rels).is_empty();
+                        let s20 = at_r.is_some() && Self::cycle_rels_any(f.root(), &f.rels).is_empty();
                         let (inside, alone) = if s20 {
                             let at = at_r.unwrap();
                             let (wo, wat): (Vec<Rel>, Vec<Option<Sym>>) = f.rels.iter().zip(&f.at).filter(|(x, _)| *x != r).map(|(x, a)| (*x, *a)).unzip();
-                            let origin = if wo.iter().any(|x| x.a == f.origin() || x.b == f.origin()) { f.origin() } else { wo[0].a };
+                            let origin = if wo.iter().any(|x| x.a == f.root() || x.b == f.root()) { f.root() } else { wo[0].a };
                             let without = if wo.len() == 1 { self.alone_over(&wo[0], at, &f.rels, f.inter).map(|x| x - 1.0).unwrap_or_else(|| self.worth_ab(origin, &wo, &wat, f.inter)) } else { self.worth_ab(origin, &wo, &wat, f.inter) };
-                            (self.worth_ab(f.origin(), &f.rels, &f.at, f.inter) - without, self.alone_over(r, at, &f.rels, None).map(|x| x - 2.0).unwrap_or(self.halved(r) - 2.0))
+                            (self.worth_ab(f.root(), &f.rels, &f.at, f.inter) - without, self.alone_over(r, at, &f.rels, None).map(|x| x - 2.0).unwrap_or(self.halved(r) - 2.0))
                         } else { (self.contribution_ab(f, r), self.halved(r) - 2.0) };
                         if self.trace { eprintln!("[price f{}] {} in f{}: contribution {:.0} alone {:.0} at {:?}", fno, self.rel_text(r), fid, inside, alone, f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| a.map(|a| self.dict.sym_text(a)))); }
                         if alone > inside {
@@ -1045,7 +1056,7 @@ impl Machine {
             for id in self.dict.naming(n) {
                 if !gone.insert(id) { continue; }
                 let Some(f) = self.dict.get(id) else { continue };
-                out.push((id, self.worth_ab(f.origin(), &f.rels, &f.at, f.inter) - 1.0));
+                out.push((id, self.worth_ab(f.root(), &f.rels, &f.at, f.inter) - 1.0));
                 if let Some(m) = f.inter { if self.dict.of_inter(m).iter().all(|x| gone.contains(x)) { queue.push(m); } }
             }
         }
@@ -1064,30 +1075,20 @@ impl Machine {
         v
     }
 
-    /// A function's worth less its entry under groups A and B (D57): a relation of its cycle is its strength less
-    /// one, at no node; any other relation as before, at the node it shares with the function.
+    /// A function's worth less its entry under groups A and B (D57): a relation of a cycle is its strength less
+    /// one, at no node; any other relation as before, at the node it shares with the function. `origin` is the node
+    /// the relations are read from: the function's origin, or any node of a cycle, which reads the same from each.
     pub(crate) fn worth_ab(&self, origin: Sym, rels: &[Rel], at: &[Option<Sym>], own: Option<NeuronId>) -> f64 {
         if rels.is_empty() { return 0.0; }
         if rels.len() == 1 { return self.halved(&rels[0]) - 1.0; }
         
         let cyc = Self::cycle_rels_any(origin, rels);
         let closing = { Self::closing_of(origin, rels) };
-        // switch 24: in a function that is not only a cycle, a relation of its cycle counts only where the function
-        // lands, read at its ends
-        let only_cycle = rels.iter().all(|r| cyc.contains(r));
-        rels.iter().zip(at).map(|(r, a)| if cyc.contains(r) {
-            if !only_cycle { self.cycle_rel_at_ends(rels, r, own) } else { self.halved(r) - 1.0 }
-        } else { self.worth_in(rels, r, *a, own, closing).0 }).sum()
+        // a function that is a cycle holds the cycle and nothing else (D15): each relation of it is counted at every
+        // occurrence, its strength less one, with no without (D57, D54)
+        rels.iter().zip(at).map(|(r, a)| if cyc.contains(r) { self.halved(r) - 1.0 } else { self.worth_in(rels, r, *a, own, closing).0 }).sum()
     }
 
-    /// Switch 24: a relation of a cycle in a function with other relations, read as a chain relation at each of its
-    /// ends, over that node's rows with the function's relations at that node, with less without less one; the two
-    /// readings added and halved, or one reading where both ends are one node.
-    pub(crate) fn cycle_rel_at_ends(&self, rels: &[Rel], r: &Rel, own: Option<NeuronId>) -> f64 {
-        let ends: Vec<Sym> = if r.a == r.b { vec![r.a] } else { vec![r.a, r.b] };
-        let v: Vec<f64> = ends.iter().map(|n| { let (w, wo) = self.answer(rels, r, Some(*n), own); w as f64 - wo as f64 - 1.0 }).collect();
-        v.iter().sum::<f64>() / v.len() as f64
-    }
 
     /// A function with a node read as another (switch 19): the call's node as the activation it stands at.
     pub(crate) fn rewritten(f: &Func, c: Sym, n: Sym) -> Func {
@@ -1159,10 +1160,10 @@ impl Machine {
         for piece in Self::pieces(&wo) {
             let rs: Vec<Rel> = piece.iter().map(|i| wo[*i]).collect();
             let at: Vec<Option<Sym>> = piece.iter().map(|i| wat[*i]).collect();
-            let origin = if rs.iter().any(|x| x.a == f.origin() || x.b == f.origin()) { f.origin() } else { rs[0].a };
+            let origin = if rs.iter().any(|x| x.a == f.root() || x.b == f.root()) { f.root() } else { rs[0].a };
             without += self.worth_ab(origin, &rs, &at, f.inter);
         }
-        self.worth_ab(f.origin(), &f.rels, &f.at, f.inter) - without
+        self.worth_ab(f.root(), &f.rels, &f.at, f.inter) - without
     }
 
     /// For the count only: a function changed; counted where its interneuron already holds a connection to an action.
@@ -1191,9 +1192,10 @@ impl Machine {
         let mut origin_note: Option<(String, Sym, Sym, bool)> = None;
         {
             if let Some(f) = self.dict.get(fid) {
-                let o = f.origin();
+                let o = f.root();
                 let rest: Vec<Rel> = f.rels.iter().copied().filter(|x| x != r).collect();
-                if !rest.is_empty() && !rest.iter().any(|x| x.a == o || x.b == o) {
+                // a cycle has no origin: what is left of it once a relation leaves takes the latest of its nodes
+                if !rest.is_empty() && (f.origin().is_none() || !rest.iter().any(|x| x.a == o || x.b == o)) {
                     let g = Func::from_rels(rest[0].a, &rest);
                     let lay = g.layout();
                     let mut order: Vec<usize> = (0..g.nodes.len()).collect();
