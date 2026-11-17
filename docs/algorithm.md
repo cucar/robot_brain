@@ -1,9 +1,17 @@
 # Universal Compression with Actions and Rewards (UCAR)
 
-UCAR is an algorithm that compresses what it observes and acts on the best reward estimate it holds. A machine
-running it is a **UCAR machine**, and like a Turing machine it is defined by two alphabets: the **event alphabet**
-it can observe and the **action alphabet** it can execute. Every symbol, base or learned, event or action, is a
-**neuron**.
+UCAR is an algorithm that detects patterns in space and time, and gives each pattern that keeps recurring a
+neuron of its own. Those neurons are symbols too, so the patterns they form get neurons in turn, level by
+level, and what the machine sees comes to be stated more and more briefly. A pattern is held as how its parts
+stand relative to one another, never where they stood, so a pattern learned at one position is known
+everywhere. Every neuron also remembers what followed it and what reward that earned. Each frame, the neurons
+that describe the present say what usually comes next and how well it paid, and the machine acts on the best
+estimate. That is the whole algorithm: it compresses what it sees into names, and acts on what the names have
+learned.
+
+A machine running it is a **UCAR machine**, and like a Turing machine it is defined by two alphabets: the
+**event alphabet** it can observe and the **action alphabet** it can execute. Every symbol, base or learned,
+event or action, is a **neuron**.
 
 Its inputs are the events observed, the actions that ran and the rewards earned. Its output is what it infers
 at the frame ahead, written in the base alphabet: the actions and the events it infers.
