@@ -86,9 +86,9 @@ frame and covers `c` and `a`; at `t`'s frame, `t`'s pattern naming `a` covers no
 credited, and a bid covering only its bidder never pays. With adjacency tied to levels `t` stays stranded, since
 a level-1 pattern names level-1 neighbors only, and `cat` never forms. With the frontier as the neighborhood,
 `t`'s own pattern names the `ca` child one frame back, and `cat` is a child one level above the highest thing it
-covered, level 2. A letter added at a time costs a level each; two children joined cost one. Lifting uncovered
+covered, level 2. A letter added at a time costs a level each; two children joined cost one. Copying uncovered
 neurons to the level above would have bought the same at the price of a table per level per neuron; nothing is
-lifted here, because nothing needs to be: what is uncovered is simply visible. A neighbor may be a neuron of any
+copied here, because nothing needs to be: what is uncovered is simply visible. A neighbor may be a neuron of any
 level, and each is counted at what it cost to write (D13).
 
 **On D5 — why adjacency across channels is not declared.** A conjunction over shared activation dimensions

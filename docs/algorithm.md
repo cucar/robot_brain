@@ -22,9 +22,10 @@ of space, and it is the only record the machine keeps of what happened: it holds
 neuron sees the edges around each of its own activations and reports them with how often each has held. The
 machine groups the edges into **functions**, graphs over neurons that keep recurring, names each with an
 interneuron, and from then on the name stands where the graph recurs. A function is recognized whole, in the
-frame its latest node fires, and its call is one activation of the interneuron in a **pose**: which
-node the fit ran from and to, and how many laps. The call stands for what it covers
-and inherits every relation of it; what always followed it is a function at the level above, over its call.
+frame its latest node fires, and its call is one activation of the interneuron in a **phase**: which
+node the fit ran from and to, and how many laps. A neuron in a phase is a **pose**, and a relation is between
+two poses. The call stands for what it covers, and the relations of it that no call covers are **lifted** to
+the call; what always followed it is a function at the level above, over its call.
 Where a function is general it leaves a **variable**, a node whose neuron changes from one occurrence to the
 next and is filled by what stands there. The interneurons are nodes like any other, so the next level groups
 them in turn, and the dictionary is a hierarchy of named graphs.
@@ -75,7 +76,7 @@ is.
 | Loss      | Description                                                                                                                                       | Reference |
 |-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
 | memory    | A neuron has limited memory: it remembers only its most recent activations, and reports its relations over those, so what it saw earlier no longer shapes the dictionary. | D18       |
-| laps      | A call's pose says how many laps its cycle ran, and a relation to the call names those laps, so the dictionary holds a stretch at each length it recurred at: the same shape at two lengths is two functions until a variable over laps and offsets joins them. | D15, D37, D34 |
+| laps      | A call's phase says how many laps its cycle ran, and a relation to the call names those laps, so the dictionary holds a stretch at each length it recurred at: the same shape at two lengths is two functions until a variable over laps and offsets joins them. | D15, D37, D34 |
 
 **A neuron's vision is a limit, not a loss.** A base neuron sees its neighbors one position away in each
 dimension and nothing beyond (D4). What lies farther reaches the dictionary through the hierarchy: an interneuron
@@ -256,15 +257,22 @@ that fires through it (D8), and expansion ends on base symbols read back through
 > one interneuron that fires at each (D15). The relation between two activations at one position is an
 > association (D34).
 >
-> **An activation has a position and a pose.** A base activation stands where the input laid it, in the one pose a
-> base neuron has. A call is one activation of the interneuron, at the position of the latest activation the fit
-> landed on, in the pose the fit read (D37, D53): its **phase**, the node the fit started at and the node it
-> ended at, and its **laps**, how many times it went round. A fit reads a cycle one way, the way its relations'
-> offsets advance (D15), so the pose names no direction. The pose names its two nodes by their neurons: a
-> node is a neuron in its pose (D15), so the neuron and its pose say which node. So a pose is two nodes and a
-> number. A ring of calls, each ending at the call before it, keeps the same names lap after lap. Everything the fit landed
-> on has already happened (D54). A pose is a name: a relation to the activation names the neuron in that pose
-> (D34), and nothing in it costs (D13).
+> **An activation has a position and a pose.** A **pose** is a neuron in a **phase**. A base neuron has one
+> phase, so its pose is the neuron, and a base activation stands where the input laid it. A call is one
+> activation of the interneuron, at the position of the latest activation the fit landed on, in the phase the
+> fit read (D37, D53). A phase is the node the fit started at, the node it ended at, and its **laps**, how many
+> times it went round. A fit reads a cycle one way, the way its relations' offsets advance (D15), so the phase
+> names no direction. The phase names its two nodes by their neurons: a node is a pose (D15), so the neuron and
+> its phase say which node. So a phase is two nodes and a number. A ring of calls, each ending at the call
+> before it, keeps the same names lap after lap. Everything the fit landed on has already happened (D54). A
+> pose is a name: a relation to the activation names its pose (D34), and nothing in it costs (D13).
+>
+> | | is |
+> |---|---|
+> | phase | the node the fit started at, the node it ended at, and the laps |
+> | pose | a neuron in a phase |
+> | activation | a pose at a position |
+> | relation | two poses and the offset between them (D34) |
 
 > **D9 — Activation window.** An activation at position `f` in time has two spans. It **stands on the board**
 > through `f + S`, where `S` is the longest reach in time among the neurons the machine holds, one beyond the
@@ -281,7 +289,7 @@ that fires through it (D8), and expansion ends on base symbols read back through
 >
 > The machine holds the activation open, not the neuron. There is one open activation per neuron and position, and
 > it holds: the activation, its position on the board, its age, and the age it was covered at, if it has been. An
-> interneuron's activation holds besides what expansion reads (R28): the function that fired it, its pose, which
+> interneuron's activation holds besides what expansion reads (R28): the function that fired it, its phase, which
 > of the function's relations did not come true, and the activations its fit landed on and bound, credited or
 > not.
 >
@@ -324,15 +332,15 @@ assumes for anything no node states.
 > activation it covers or binds is strong, and weak when every one of them is: a situation made entirely of
 > inferred inputs is inferred.
 
-> **D37 — Call.** One activation of a call neuron (D48), in a pose (D8), together with its **arguments**: the
+> **D37 — Call.** One activation of a call neuron (D48), in a phase (D8), together with its **arguments**: the
 > activations bound in its function's variables on that occasion (D10, D38). It is made in one of two ways and
 > is the same thing either way. **Recognized**: the election accepts a fit (R24), and the call neuron fires once,
-> at the position of the latest activation the fit landed on, at age 0, in the pose the fit read, as strong as what
+> at the position of the latest activation the fit landed on, at age 0, in the phase the fit read, as strong as what
 > it covers (D40, D53); among several at one frame the latest is the one at the least position in the order the
 > dimensions are declared, as the origin is (D15), so a row's call stands at its least `x`. It costs nothing of
 > its own (D13);
 > its arguments are what stood in the variables. **Inferred**: a
-> connection names the call neuron in a pose at an offset, and an expansion reads the call there, at its
+> connection names the call neuron in a phase at an offset, and an expansion reads the call there, at its
 > completion, weakly (R36), its nodes at the frames back from it; the part that lies ahead is what it proposes,
 > for the report to make strong what it inferred (R30), and its arguments are bound from what has happened where
 > a variable's node has happened, and expanded where it has not (D44, R28). A call carries its pose and nothing
@@ -412,8 +420,8 @@ what was done together.
 > off removes that kind of target from that kind of holder's neighborhoods or connections, and nothing else:
 > what stands on the apex infers in every setting (D49), and the policy restricts only what it reaches.
 
-> **D26 — Neighbor.** **A neighbor is a neuron in a pose at an offset**: the neuron of an adjacent activation
-> (D5), in the pose it fired in (D8), at its offset (D6). At temporal offset 0 a neighbor co-occurs and at
+> **D26 — Neighbor.** **A neighbor is a pose at an offset**: the pose of an adjacent activation (D5, D8), at
+> its offset (D6). At temporal offset 0 a neighbor co-occurs and at
 > negative offsets it led here; **both are the same kind of thing**, and a neighbor in space, or in space and
 > time at once, is one more of the same.
 >
@@ -422,9 +430,10 @@ what was done together.
 > component is where the activation itself sits, and an activation is not its own neighbor there. Above the base
 > two calls that landed on one activation are each other's neighbors, at the offset between their positions,
 > and the relation between them is a relation like any other (D34). So are two calls where a
-> relation no call covers runs from a covered activation under one to a covered activation under the other:
-> that relation is now the relation between the two calls, and however many such relations run between the
-> same two calls, they are one (D55, D10). Two calls are neighbors in no other way.
+> relation no call covers ran from a covered activation under one to a covered activation under the other:
+> that relation is lifted, and a relation between the two calls stands there instead. However many are lifted
+> between the same two calls, one relation stands there for all of them (D55, D10). Two calls are neighbors in
+> no other way.
 
 > **D7 — Neighborhood.** The set of neighbors (D26) one activation observes is its **neighborhood**. In a text
 > stream, with time its one dimension, the neighborhood of `s` in `p a r i s` is `i` at −1, and `p a r` are out
@@ -441,8 +450,8 @@ what was done together.
 > **An activation bound in a variable is a neighbor like any other** (D10): the neuron that stood, at its own
 > position. Which variable it stood in is the call's business, not the neighbor's.
 
-> **D34 — Relation.** Two neurons, each in a pose, and the offset between them, one component per activation
-> dimension the two share (D1, D6): the same shape as a connection (D25). There is one kind of relation in the
+> **D34 — Relation.** Two poses and the offset between them, one component per activation dimension the two
+> share (D1, D6): the same shape as a connection (D25). A pose is a neuron in a phase (D8). There is one kind of relation in the
 > design: what a neuron returns is a relation, what a function holds is a relation, and they are the same
 > object. Two nodes that differ in several dimensions are in one relation, with a component in each. In a
 > neuron's relation index, one end is the neuron's own activation and the other a neighbor. In a function, both
@@ -463,11 +472,11 @@ what was done together.
 > apart where an activation is covered, and the first covered relation of an activation decides which kind
 > covers it (D24). A function holds one kind (D15). The election takes the fits inside the frame first (R24).
 >
-> **A call's pose is part of its name.** A relation to an interneuron names it in the pose its activation fired
-> in (D8, D53): which node the fit ran from and to, each by its neuron, and how many laps. A base neuron has
-> one pose, so at the base a relation is two neurons and an offset. Two calls of one interneuron in different
-> poses are different ends for a relation, as two neurons are, and two in one pose at one offset are one
-> relation. A pose is a name, and costs nothing (D13).
+> **A call's phase is part of its name.** A relation to an interneuron names it in the phase its activation
+> fired in (D8, D53): which node the fit ran from and to, each by its neuron, and how many laps. A base neuron
+> has one phase, so at the base a relation is two neurons and an offset. Two calls of one interneuron in
+> different phases are two poses. They are different ends for a relation, as two neurons are, and two in one
+> phase at one offset are one relation. A pose is a name, and costs nothing (D13).
 >
 > **A relation has one form, and in time it runs backward.** Where the offset has a component in time, the
 > relation runs from the later neuron to the earlier one, at a negative offset there: that is how the neuron
@@ -491,7 +500,7 @@ what was done together.
 ## 3.5 The graph
 
 > **D55 — Graph.** What a run leaves: a set of **nodes**, each an activation of a neuron (D8), and a set of
-> **edges**, each a relation between two nodes (D34). A node carries its neuron's name and its pose, and nothing
+> **edges**, each a relation between two nodes (D34). A node carries its pose, and nothing
 > else. An edge carries an offset, one component per dimension (D6). Two nodes are joined by at most one edge. A
 > node's position in the world is not in the graph: it is wherever the edges put it relative to the nodes it is
 > joined to, and two nodes joined by no path stand in no particular relation.
@@ -531,7 +540,9 @@ what was done together.
 > (D26). Once `a–b` and `c–d` are covered too, `b` and `c` each have both their relations covered.
 > Then `b` and `c` are covered, and they leave the board (D24).
 >
-> **A relation of a covered node that no call covers ends at the call.**
+> **Lifting.** When a node is covered, each relation of its own that no call covers leaves the board. A
+> relation to the call that landed on the node stands there instead. It has the same other end, and the call's
+> pose where the covered node's pose was (D8). The relation is **lifted** to the call.
 >
 > ```
 >   ( p ) ──── ( q ) ──── ( r )      the call A covers p–q and q–r, so q is covered
@@ -539,8 +550,17 @@ what was done together.
 >   ( s ) ──── ( t ) ──── ( u )      the call B covers s–t and t–u, so t is covered
 > ```
 >
-> No call covers `q–t`. Both its ends are covered, so it is now the edge `A–B`, one level up (D26). However
-> many such relations run between `A` and `B`, they are that one edge.
+> No call covers `q–t`. Once `q` is covered, `q–t` leaves the board and `A–t` stands there instead. Once `t`
+> is covered too, `A–t` leaves and `A–B` stands there instead, one level up (D26). Whichever end is covered
+> first, what stands in the end is `A–B`. Two nodes are joined by at most one edge. So however many relations
+> are lifted between `A` and `B`, one relation stands there for all of them. A refused relation is never
+> lifted (D24).
+>
+> **A lifted relation is a relation like any other.** It is two poses and the offset between their positions
+> (D34). It is not the relation that left the board. That one named the covered node's pose, and this one
+> names the call's. A function fits only relations that stand on the board (D31). So a function built with the
+> relation that left has nothing to fit there, and it gets no call. A function built with the relation that
+> stands instead fits there. This is the same at every level.
 >
 > **Every edge costs one.** No neuron sees a path, only its own neighbors (D4). So an edge between two nodes is
 > paid whether or not a longer path of other edges already fixes the offset between them.
@@ -551,7 +571,7 @@ what was done together.
 > level up the calls are neighbors round the same chain, as many calls cover them, and so at every level
 > after (D26). A deadlock is not a cycle. A cycle is one function whose own relations lead back to where they
 > started, one call covers it, and it is kept (D15). A deadlock is never allowed to close: the edge that
-> would close it is **refused**. No call covers a refused edge, it costs nothing, and it ends at no call
+> would close it is **refused**. No call covers a refused edge, it costs nothing, and it is never lifted
 > (D24).
 
 **Everything in the design is this one object.** What a neuron returns is the edges at one node, with how often
@@ -562,10 +582,10 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 ## 3.6 Functions
 
 > **D15 — Function.** A graph over neurons that recurs: a set of relations (D34), each joining two **nodes**,
-> with **one node per neuron in its pose**: a node is a neuron in a pose (D8), or an open node, a variable (D38), and a
-> relation names its two nodes by naming its two neurons, each in its pose (D34). A base neuron has one pose, so
-> at the base a node is a neuron. An interneuron in two poses is two nodes, so one function may hold it twice.
-> In one pose it is one node, so a cycle closes on it. A function is **connected**: every node is reached from every other along
+> with **one node per pose**: a node is a pose (D8), or an open node, a variable (D38), and a
+> relation names its two nodes by naming its two poses (D34). A base neuron has one phase, so
+> at the base a node is a neuron. An interneuron in two phases is two nodes, so one function may hold it twice.
+> In one phase it is one node, so a cycle closes on it. A function is **connected**: every node is reached from every other along
 > its relations. It is the center the machine keeps for the relations it has grouped (R50): it exists from its
 > first relation, with or without an interneuron, and has one interneuron once a fit of it has been accepted
 > (R16, D48).
@@ -573,7 +593,7 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > **Its origin** is its latest node, listed first in the dictionary (D56): the node later than every other in
 > time, and among several at one frame, the one at the least position in the order the dimensions are declared
 > (D1). The call fires at the position of the latest activation the fit landed on, which is the origin's where
-> the fit reached it (D37, D53), and expansion runs from the node the pose starts at (R28). **Nothing joins a
+> the fit reached it (D37, D53), and expansion runs from the node the phase starts at (R28). **Nothing joins a
 > function later than its origin.** A function is recognized in the frame its origin fires, and its call
 > stands from then on, so what fires later sees the call, and its relation is a function over the call (R50).
 > The origin is no more than the latest node the function has: where the relation at the origin leaves, the
@@ -581,7 +601,7 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > present frame, and only where no node of the function is still to come (D54). In a function in time that
 > node is the origin. A function
 > that is a cycle has no fixed origin, since the last lap may stop at any node of it; its
-> call's pose says which node the fit started at and which it ended at (D37).
+> call's phase says which node the fit started at and which it ended at (D37).
 >
 > **A function is listed from its origin.** Node after node, each relation leads from the node before to the
 > next. A node is listed once. An open node is listed as a neuron is (D38).
@@ -680,18 +700,18 @@ never fit alone, and promotes no interneuron: what stands in it stays on the ape
 
 > **D53 — Interneuron.** The neuron the machine allocates for a function, its **call neuron** (D48). It is
 > allocated the first time a fit of the function is accepted and a neuron is free (R16). It has an id and no
-> dimension and no channel. **It fires once per accepted fit, in a pose** (D37): at the position of the latest
-> activation the fit landed on, in the frame the fit is accepted, at age 0. The pose is read off the fit: the
+> dimension and no channel. **It fires once per accepted fit, in a phase** (D37): at the position of the latest
+> activation the fit landed on, in the frame the fit is accepted, at age 0. The phase is read off the fit: the
 > node the fit started at, the node it ended at, each by its neuron (D8), and how many laps it went round
 > (D54). The call stands for
-> everything the fit landed on, inherits every relation of it the fit did not cover (D10), and sees what it saw
-> (D4). Where an arriving activation reads a relation that is the call's own function going round its cycle,
-> the call goes on: it fires at the new position, the same call, its pose that much longer, so a stretch is
+> everything the fit landed on, the relations of it that no call covers are lifted to it (D55, D10), and it
+> sees what it saw (D4). Where an arriving activation reads a relation that is the call's own function going round its cycle,
+> the call goes on: it fires at the new position, the same call, its phase that much longer, so a stretch is
 > one call however long it runs (D54, R50). The call costs nothing of its own:
 > its failures and its bindings are its cost (D13).
 
-An interneuron is not an event or an action, though what it stands for may be either. Its pose is read off the
-fit, so that other neurons hold it as a neighbor in that pose and expansion reads it. Nothing in the pricing
+An interneuron is not an event or an action, though what it stands for may be either. Its phase is read off the
+fit, so that other neurons hold it as a neighbor in that phase and expansion reads it. Nothing in the pricing
 reads where it stands.
 
 A neuron is never made or destroyed. It is **allocated** when an interneuron is needed, and **decommissioned**
@@ -703,7 +723,7 @@ free, no interneuron is granted (R16, R24).
 >
 > | Thing | Field | What it holds | Costs |
 > |---|---|---|---|
-> | a function | relations | its relations, each a neuron relation as the neurons return it: two neurons, each in a pose, and an offset (D34), and which of its two ends it attached to the function at, where its worth is read, none for a relation of a cycle (D57); together they name its nodes, one per neuron in its pose | one per relation; nothing per node or attachment |
+> | a function | relations | its relations, each a neuron relation as the neurons return it: two poses and an offset (D34), and which of its two ends it attached to the function at, where its worth is read, none for a relation of a cycle (D57); together they name its nodes, one per pose | one per relation; nothing per node or attachment |
 > | | entry | that the function is in the dictionary | one |
 > | | origin | which of its nodes is the origin, its latest (D15); none where the function is a cycle | nothing: the node list begins with it |
 > | | open nodes | which of its nodes are variables, each a class by id or a parameter (D38) | nothing |
@@ -749,11 +769,11 @@ a function or points at an interneuron: a neuron records what it sees and return
 groups, fits and keeps (§6).
 
 > **D48 — Call neuron.** A function's interneuron: the neuron the machine allocates for a function the first
-> time a fit of it is accepted (R16). It fires when a fit of its function is accepted, once, in the pose the
+> time a fit of it is accepted (R16). It fires when a fit of its function is accepted, once, in the phase the
 > fit read (D53), covering the function's fixed nodes the fit landed on (§6.4); what stands in the function's
-> variables is bound beside it, on the apex (D10). It says which function ran, and its pose says how. Its
-> connections are one set per pose it has fired in, and for every value its variables have taken, so a
-> function above learns about it regardless of its arguments by naming the call neuron in a pose alone, and
+> variables is bound beside it, on the apex (D10). It says which function ran, and its phase says how. Its
+> connections are one set per phase it has fired in, and for every value its variables have taken, so a
+> function above learns about it regardless of its arguments by naming the call neuron in a phase alone, and
 > about one argument by naming the call neuron and the activation bound in that variable. It holds a history,
 > a relation index and connections of its own, like any neuron, and an activation of it expands to what its
 > fit landed on and bound (R28).
@@ -774,7 +794,7 @@ groups, fits and keeps (§6).
 > **An expected input never reaches the apex.** An activation a function in the dictionary names at its latest
 > node has its relations covered by that function's call, recognized in the frame it fires, and is covered once what
 > follows it has fired (D24). Where the function is a
-> cycle, the next lap is the same call, its pose that much longer (D53);
+> cycle, the next lap is the same call, its phase that much longer (D53);
 > where a function at the level above names the call, its call covers it (D10). So where a function keeps coming true
 > the apex holds one call, the latest, and what arrives is covered as it arrives.
 >
@@ -785,16 +805,17 @@ groups, fits and keeps (§6).
 > **D10 — Inhibition.** A call that lands on an activation as a fixed node does three things to it. The
 > second, that it is not heard, is from the frame the call lands. The other two are from the frame it is
 > covered in (D24). It takes it out of the cost: the relations of it the fit landed on are covered,
-> paid through the call, and every other relation of it the call inherits, standing for it, at the
-> offset from the call's position (D12, D5). Those are the call's neighbors from then on. Every row that saw the
+> paid through the call, and every other relation of it that no call covers is lifted to the call, which
+> stands for it, at the offset from the call's position (D55, D12, D5). Those are the call's neighbors from
+> then on. Every row that saw the
 > covered activation as on the board, in the history of each neuron outside the call, keeps it as it saw it.
 > The row takes no call for it: a row holds what stood on the board when it was written, and no relation to a
 > call that landed on a neighbor afterward is counted (D18, D47). Nothing in a history is ever changed to a call. An activation
 > that fires later sees the calls that landed on it, and not the covered activation (D5). The rows of the activations the call stands for take nothing: what they saw of the call's other parts
 > are the function's own relations, read from the rows that saw them (D57). Where several calls land on one
 > activation, each covers relations of
-> its own and inherits the rest; an inherited relation is paid once, between positions, however many calls
-> hold it; the calls are neighbors, at their two poses, and the relation between them is on the board at the level above
+> its own and the rest are lifted to each; a lifted relation is paid once, between positions, however many
+> calls hold it; the calls are neighbors, at their two poses, and the relation between them is on the board at the level above
 > (D26). It is not heard, from the frame the call lands on it, covered or not: it is inhibited, and
 > resolution reads the call's standing inferences, not its own (D24, R46). And it stops connecting: from the frame after it is
 > covered it writes nothing about what follows, though its row still takes what followed, since the history
@@ -939,7 +960,7 @@ occurs is what the worth measures (D57).
 > one activation of its interneuron, and each fit is priced as it falls (D22).
 >
 > **A fit is read at the present, over what has happened.** It enters at a node of the function, on an
-> activation at the frame being recognized that the node admits, its own neuron in its pose,
+> activation at the frame being recognized that the node admits, its own pose,
 > and reads the function's relations from there (D31). **A function is fit only in a frame where none of its
 > nodes is still to come.** Read from the node entered at, where a node of the function would stand later than
 > the present, there is no fit: nothing is offered, and nothing is charged. So a function in time is fit in
@@ -947,7 +968,7 @@ occurs is what the worth measures (D57).
 > of its nodes, since all of them stand in the present frame. A cycle is entered at any node too: its fit ends
 > where the cycle stops landing, so none of its nodes is still to come. Every node is then at or before the
 > present, so every
-> relation of the function is true or failed when the function is fit, and nothing is pending. Its pose is the
+> relation of the function is true or failed when the function is fit, and nothing is pending. Its phase is the
 > node of the latest activation it lands on, the node of the earliest, and the laps it read (D37). Without an
 > activation at the present that some node admits there is no fit.
 >
@@ -955,10 +976,10 @@ occurs is what the worth measures (D57).
 > matched one after another, each from the node the one before reached, round the cycle and round again
 > (D15). The fit goes round while they land, and ends at the first that does not. That relation is not a
 > failure, whichever of the cycle's relations it is: every fit of a cycle ends where the cycle stops landing.
-> So a cycle's call may stand on part of a lap, and its pose says the node it started at and the node it ended
+> So a cycle's call may stand on part of a lap, and its phase says the node it started at and the node it ended
 > at (D12, D37). A node of the cycle may land on several activations, one per lap; how many is the call's laps
 > (D53). Where the activation it reaches stands under an earlier call of the same function, the relation is
-> that call's own function going round, and the call takes the lap: it is the same call, its pose that much
+> that call's own function going round, and the call takes the lap: it is the same call, its phase that much
 > longer, and no new call is made (D53). Nothing is read past
 > the cycle.
 >
@@ -991,7 +1012,7 @@ occurs is what the worth measures (D57).
 > **A call's cost stays with the call.** A fit that names a call is
 > credited the relations it read and nothing more: the call's failures and bindings are paid where it stands
 > (D12). What a call covers went with it: a relation it covers is there for no other fit to
-> land on, and what it inherited stands, from the call, for a later fit to read (D24). So
+> land on, and what was lifted to it stands, at the call, for a later fit to read (D24, D55). So
 > a function saves what it takes out of the cost, and that is relations.
 
 **What a function's call stands in for is what it covers**; that is A. What it costs is its cost; that is B.
@@ -1068,7 +1089,7 @@ is stated here and cited from there.
 >    one covered relation inside the frame and no other that counts there is covered by it (D24). An
 >    activation that is covered once the fit is taken is off the board from the
 >    next round (D24): no fit lands on it, and each relation of its own that no call covers, and that is not
->    refused, ends at the calls that landed on it (D5).
+>    refused, is lifted to the calls that landed on it (D55).
 >    An activation at one of its variables stays on the apex, bound, and the relations the function does not
 >    fix at it stay in the set, so a later round may cover them (D10). The round repeats from 1.
 >
@@ -1190,7 +1211,7 @@ one winner per dimension.
 ## 4.2 History
 
 > **D18 — History.** A neuron's record of its own activations: the last `H` of them, oldest first, each holding
-> the pose it fired in (D8), the neighborhood it observed in the frame it fired (D7), each neighbor in its pose
+> the phase it fired in (D8), the neighborhood it observed in the frame it fired (D7), each neighbor a pose
 > at its offset (D6, D26), and what followed it within its reach, each at its offset too. A neighbor is held as what stood on the board, as
 > itself (D5). **A row is written
 > when the activation fires and takes what followed as it comes**: at every frame of the activation's window
@@ -1244,27 +1265,27 @@ rows of the history that hold it, and which rows those are leaves the neuron for
 What follows an activation enters no cost (D12) and no test. It is held only here, as connections: what stood
 on the apex in the frames after it, event and action alike.
 
-> **D25 — Connections.** A neuron holds, per pose of its own and per `(neuron, offset)`, the neuron in its
-> pose, one **connection**: a **strength**, the number of times an activation of the neuron in that pose saw
+> **D25 — Connections.** A neuron holds, per phase of its own and per `(neuron, offset)`, the neuron in its
+> phase, one **connection**: a **strength**, the number of times an activation of the neuron in that phase saw
 > that neuron stand on the apex at that offset, and its **earnings**, the total reward the actions of those
 > frames received. Its **estimate** is its earnings over its strength,
 > and is read, never stored. The offset is a full D6 offset from the holder's activation's position: positive in
 > time, because what is connected to comes after, and signed in every other activation dimension. A connection
-> to a call names it in its pose and is at its offset (D53, D34). **A connection reaches as far as a
+> to a call names it in its phase and is at its offset (D53, D34). **A connection reaches as far as a
 > neighbor does, in every dimension at once** (D4): an activation connects to what stands on the apex within
 > its reach in every activation dimension the two share, the window in time (D9) and the same reach in every
 > other, and to nothing beyond it. What is connected to may differ from the activation in several dimensions,
 > as a neighbor may (D5), so a thing that moved is connected to where it went: that is where displacement is
 > learned. **A connection is written only where the future table of the policy admits the target's kind among
 > the holder's kind's connections** (D50). Nothing about any one activation is kept. A call's connections are
-> keyed by its pose less its laps, the node it started at and the node it stands at, and a call a connection
+> keyed by its phase less its laps, the node it started at and the node it stands at, and a call a connection
 > names is named the same way. So a cycle's call standing at one node of the cycle learns apart from one
 > standing at another, in one neuron (D48), and a running cycle learns what follows each of its nodes once,
 > for every length it reaches.
 >
 > | Component | Description                                                                              |
 > |-----------|------------------------------------------------------------------------------------------|
-> | key       | the holder's pose less its laps, and `(neuron, offset)`, the neuron in its pose, the offset strictly positive in time |
+> | key       | the holder's phase less its laps, and `(neuron, offset)`, the neuron in its phase, the offset strictly positive in time |
 > | strength  | the number of exposures: the times an activation saw that neuron on the apex at that offset |
 > | earnings  | the total reward those exposures received                                                |
 > | estimate  | earnings / strength, read whenever the connection is read                                |
@@ -1373,7 +1394,7 @@ frame reported, each after it over what the level before accepted, until a level
 
 | Step       | Description |
 |------------|-------------|
-| activate   | Fire every interneuron the level below accepted, once, in its fit's pose (D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations with strengths. |
+| activate   | Fire every interneuron the level below accepted, once, in its fit's phase (D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations with strengths. |
 | find       | Read every returned relation in the index, as it is and with either end open, and fit every function it reaches on the board wherever its relations match, one fit per position (R53, D31). |
 | elect      | Take the fits inside the frame first and the fits in time after them, within each the largest coverage less price each round, stopping when the board is covered (R24). The dictionary as it stands covers what it knows before anything in it changes. |
 | count      | Hand each neuron every function it stands in, fit at this level or not, with the candidates of the ones that fit, and call `count` on it: it returns with and without for each relation and each candidate (R50, D47). |
@@ -1443,9 +1464,14 @@ argument.
 > **A function is fit whole.** The machine takes it or leaves it, its variables with it: it cannot hold where
 > they do not.
 >
+> **A function is fit only on relations that stand on the board.** Where a relation of it has been lifted, the
+> relation that stands there instead names another pose (D55). So the function has nothing to fit there, and
+> it gets no call. That alone does not remove it from the dictionary (R18, R54). It is fit again wherever its
+> own relations stand on the board.
+>
 > **The fitting rule.** A fit is anchored at the node it enters at, and it is made only where no node of the
 > function is still to come (D54). The machine lands that node on an activation
-> at the present frame the node admits, its own neuron in its pose,
+> at the present frame the node admits, its own pose,
 > or one admitted at it where the node is a variable (D54), and extends the match relation by
 > relation from there: each next relation of the function that shares a node with
 > one already landed is matched to a board relation that shares that end and reads as it says. A parameter's value
@@ -1528,7 +1554,7 @@ argument.
 > for the call (D10). So a relation to a neuron is in the same rows whether or not a call had landed on it,
 > and whether or not that call's function is still in the dictionary. The count reads those rows and nothing
 > else: it never expands a call. A relation to a call
-> is counted the same way, in the rows that hold that call in that pose at that offset (D34).
+> is counted the same way, in the rows that hold that call in that phase at that offset (D34).
 >
 > **Distance and worth.** A candidate's distance to a function is `1 − with / (with + without)`: zero where it
 > stood at every occasion the function did, one where it never did. Its worth in the function is
@@ -1714,10 +1740,10 @@ machine works out itself (R22).
 > do not refuse one another: a function that holds every relation among its nodes covers them with one call.
 >
 > **A refused relation is eliminated.** It is never covered, and no fit is credited it: a fit that would
-> cover nothing else is not taken (D28). It is not counted among the relations either end has. It ends at no
-> call, at any level. Where an end was covered before the refusal and the relation already ended at a call,
-> that edge leaves the board, and every edge it became above. An edge between two calls that also stands
-> for a relation that is not refused stays, for that relation. A relation stays refused for as long as its
+> cover nothing else is not taken (D28). It is not counted among the relations either end has. It is never
+> lifted, at any level (D55). Where an end was covered before the refusal and the relation had been lifted,
+> the relation that stood there instead leaves the board, and every relation that one was lifted to above. A
+> relation between two calls that also stands for a relation that is not refused stays, for that relation. A relation stays refused for as long as its
 > two activations exist.
 >
 > **The ends of the chain are covered by the one relation they have.** A refused relation is not counted. So
@@ -1737,8 +1763,9 @@ machine works out itself (R22).
 > Until an activation is
 > covered it stands on the board, whatever calls have landed on it, and a neighbor reads it as itself. Once
 > covered it has left the apex and the graph (D55). A relation of its own that no call covers is not lost:
-> from then on it ends at each call that landed on the activation, at the offset from that call's position
-> (D10, D5). A blocked relation goes up the same way. A refused relation does not: it ends at no call.
+> it is **lifted** (D55). It leaves the board, and a relation to each call that landed on the activation
+> stands there instead, at the offset from that call's position (D10, D5). A blocked relation is lifted the
+> same way. A refused relation is never lifted.
 >
 > An activation is **inhibited** when one relation of its own is covered. That is sooner than it is covered,
 > and may be in the frame it fires. The calls over it are every call that covers a relation of its own, and
@@ -1811,7 +1838,7 @@ one fit**, which is what stops an activation being paid for twice.
 > stands with an activation in its frame is all there when the frame fires, and what follows it is still to
 > come (D34). So a fit in time is taken only once no fit inside the frame pays. Once a fit inside the frame
 > covers a relation of an activation, that activation is taken inside the frame, and its relations in time are
-> blocked (D24). They go up to the calls, and the level above reads them there.
+> blocked (D24). They are lifted to the calls, and the level above reads them there (D55).
 >
 > **Two fits that measure the same are told apart in this order**: the fit whose
 > calls stand for more of the same base activations, since an activation that stood under two calls then stands
@@ -1860,26 +1887,26 @@ lost is given nothing.
 > once no other function of it remains (R38).
 >
 > **Allocating is immediate.** The machine allocates or reuses the interneuron the moment the fit is accepted,
-> which is all the next level needs to activate it in the fit's pose (D53) and call it.
+> which is all the next level needs to activate it in the fit's phase (D53) and call it.
 
 > **R43 — Reuse.** An accepted fit fires its function's own interneuron where it has one. Where it has none,
 > the machine looks the function up in the interneuron index, by what its interneuron would stand for (D36).
 > Where one already stands for that, the function is added to it, and that interneuron fires. Otherwise the
-> machine allocates one. **An interneuron never holds two functions whose nodes are the same neurons in the same poses**: the
+> machine allocates one. **An interneuron never holds two functions whose nodes are the same poses**: the
 > two expand to one stretch, and when the second comes the older gives way, its relations leaving with it
-> (R54, R18). So the two neurons a pose names pick out one function of the interneuron, and a call in that pose
+> (R54, R18). So the two neurons a phase names pick out one function of the interneuron, and a call in that phase
 > expands through it (R28).
 >
-> **Otherwise the machine allocates one** (R16): a free neuron, its first activation at the fit, in its pose
+> **Otherwise the machine allocates one** (R16): a free neuron, its first activation at the fit, in its phase
 > (D53). Where none is free the fit was not in the election (R24).
 
 ## 6.4 Activate interneurons
 
 An interneuron fires at the level after the one its fit was accepted at, before that level is called. It fires
-once per accepted fit, at the position of the latest activation the fit landed on, at age 0, in the pose the fit
+once per accepted fit, at the position of the latest activation the fit landed on, at age 0, in the phase the fit
 read (D53), and what stood in its function's variables stays on the apex beside it, bound (D10). Nothing sees an
 interneuron until it fires (D5). An interneuron's activation records the function that fired it, since it may
-have several (R43), its pose, which of that function's relations did not come true, and what its fit landed on
+have several (R43), its phase, which of that function's relations did not come true, and what its fit landed on
 and bound, credited or not, which is what it expands to (R28). Every activation no accepted fit covers stands as itself.
 
 > **R27 — The apex is a frontier.** It is every active neuron **that is not covered** (D49, D24), base neurons and interneurons alike, so a base neuron no function found worth naming
@@ -1955,12 +1982,12 @@ and nothing scales with the run. What is cached, and how, is the implementation'
 
 Two things that are cycles, and one that is not, told apart, because the design holds them apart.
 
-**Within a function, a cycle is the pattern repeating.** A function has one node per neuron in its pose, so a relation back to
+**Within a function, a cycle is the pattern repeating.** A function has one node per pose, so a relation back to
 a node already in it closes the cycle, and the function is then that cycle and nothing else; the function says that the pattern comes
 round: `x` to `y` at 1 and `y` to `x` at 1 is `x y x y …` for as long as it runs (D15). A fit at either letter reads back
 round the cycle while the relation that closes it lands; where the call of the lap before stands there, that
 call takes the lap (D54); nothing is read past the cycle, and the call's
-pose says how far it went (D53). What comes after
+phase says how far it went (D53). What comes after
 the pattern is no part of the cycle's function: it sees the call, and a function at the level above holds
 its relation to the call (R50).
 
@@ -2025,7 +2052,7 @@ two things:
 | the reward | any reward that arrived, for the actions of this frame and for any earlier frame the reward spans, at the distance each one names, with the action that ran at that frame in each channel it pays (D24, R33). |
 
 The neuron writes each apex activation into the row at its offset (D18) and, while uncovered, strengthens a
-connection per apex activation: the connection at `(neuron, age)` under its own pose, created at strength 1 or
+connection per apex activation: the connection at `(neuron, age)` under its own phase, created at strength 1 or
 incremented (R31), and
 for each reward share the earnings of the connections it names (R33). For this frame, the connections just
 strengthened, in the same write. A share for an earlier frame, at distance `d`, goes into the connection at offset
@@ -2053,7 +2080,7 @@ here**, and no test is waiting on any of it.
 > activation's position to the frame the call ran, exact (D6), so a neuron open at ages 1, 2 and 3 holds the same
 > neuron at three offsets, and the exposure at each age strengthens its own. A neuron that stood at two ages
 > over one activation is two exposures: each frame has its own reward, and each connection keeps its own (D25).
-> A connection to a call names it in its pose and is at its offset (D34).
+> A connection to a call names it in its phase and is at its offset (D34).
 >
 > **An exposure is written at its age, and an inference stands at its offset.** An activation that saw a
 > neuron at age 2 strengthens the connection at offset 2, and an inference at that offset stands exactly 2
@@ -2177,7 +2204,7 @@ is saved twice.
 > `b` was written when that neuron stood on the apex `b` frames after the activation's frame (R31), so an
 > inference at offset `b` stands `b` frames after the activation that made it, and at the offset's components
 > in every other activation dimension from its position, as a neighbor is read (R28). An inference that names a
-> base symbol infers it there. One that names a call neuron infers a call there, in the pose it names, weak
+> base symbol infers it there. One that names a call neuron infers a call there, in the phase it names, weak
 > (D37), and the call's function hangs from it (R28): its nodes at the frames back from it, every one carrying
 > the strength and the estimate of the connection it came from, its parameters bound from what stands at their
 > nodes where those have happened (D44). What its expansion puts at the frame ahead is what it proposes there,
@@ -2246,16 +2273,16 @@ happened (R32).
 > where a function comes back to its own interneuron (§6.7).
 >
 > **An inferred call expands through its function**, since it covers nothing yet (R36): the function of its
-> interneuron whose nodes its pose names (R43). It follows the function's relations back from the node it
+> interneuron whose nodes its phase names (R43). It follows the function's relations back from the node it
 > entered at, one dimension at a time:
 >
-> 1. **Start** at the node the call's pose starts at (R36, D37), at the call's position in every dimension.
+> 1. **Start** at the node the call's phase starts at (R36, D37), at the call's position in every dimension.
 > 2. **Follow** each relation from an expanded node to the node at its far end, at that relation's offset, to
->    the node the pose ends at. Offsets compose because each is a difference (D34). Round a cycle the laps the
->    pose says; where the pose leaves the laps open, round while the node it reaches has something to land on in
+>    the node the phase ends at. Offsets compose because each is a difference (D34). Round a cycle the laps the
+>    phase says; where the phase leaves the laps open, round while the node it reaches has something to land on in
 >    the frames that have happened, and beyond them once more (D54, D15). Repeat until no relation leads to a
 >    node not yet expanded, in any dimension.
-> 3. **Expand** each expanded node that is an interneuron the same way, through its function, in its own pose.
+> 3. **Expand** each expanded node that is an interneuron the same way, through its function, in its own phase.
 >    Expand each variable to its argument where one is bound, and otherwise as the next paragraph says.
 >
 > A fixed node expands to its neuron; a variable expands to its argument.
