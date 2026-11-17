@@ -472,8 +472,8 @@ what was done together.
 >
 > **Relations compose.** Given the offset from `a` to `b` and from `b` to `c`, the offset from `a` to `c`
 > follows, component by component. Where `a` and `c` are neighbors, the relation from `a` to `c` is still a
-> relation of its own: the neurons return it, and a fit may land on it. Once calls cover the other two, it is
-> given (D24, D55).
+> relation of its own: the neurons return it, and a fit may land on it. It is refused where calls already join
+> `a` and `c`, since it would close a deadlock (D24, D55).
 
 > **D11 — Identity.** A neuron's identity is its type alone, a base symbol or an interneuron's id (D2), so
 > nothing about where it occurred is part of it. **The same shape at two positions is two activations of one
@@ -537,11 +537,14 @@ what was done together.
 > **Every edge costs one.** No neuron sees a path, only its own neighbors (D4). So an edge between two nodes is
 > paid whether or not a longer path of other edges already fixes the offset between them.
 >
-> **Among three neighbors the third edge is given.** One case is seen from a single node: three nodes, each a
-> neighbor of the other two. A node there holds its offsets to the other two, and the offset between those two
-> follows (D34). `a–b`, `b–c` and `c–a` are three relations on the board, and a fit may land on any of them.
-> Two of them fix the three nodes, so two are paid (D12). Once calls cover two, the third is **given**: no
-> call covers it, it costs nothing, and it ends at no call (D24).
+> **A deadlock is a chain of calls that closes.** Each call shares a node with the next, and the last shares
+> one with the first. It is of any length, and no function holds it: it is made of the calls of different
+> fits. `a–b`, `b–c` and `c–a`, each covered by its own call, is the shortest. Left alone it never ends. One
+> level up the calls are neighbors round the same chain, as many calls cover them, and so at every level
+> after (D26). A deadlock is not a cycle. A cycle is one function whose own relations lead back to where they
+> started, one call covers it, and it is kept (D15). A deadlock is never allowed to close: the edge that
+> would close it is **refused**. No call covers a refused edge, it costs nothing, and it ends at no call
+> (D24).
 
 **Everything in the design is this one object.** What a neuron returns is the edges at one node, with how often
 each has held (R21). A function is a graph over neurons that recurs (D15). The dictionary is those graphs, held
@@ -849,7 +852,7 @@ groups, fits and keeps (§6).
 > | On the apex | Costs |
 > |---|---|
 > | a bare activation | nothing of its own |
-> | a relation between two activations on the apex | its offset, once per pair, and not where other relations on the apex imply it (D55) |
+> | a relation between two activations on the apex | its offset, once per pair, and nothing where it is refused (D24) |
 > | a call | nothing for the activation; each relation of its function that did not come true, one each; and each of its arguments, the edge that binds the activation to it, one each |
 > | an activation bound in a variable | nothing of its own: its binding is paid with the call, and the relations the function fixes are the call's |
 >
@@ -1047,17 +1050,18 @@ is stated here and cited from there.
 >    relation a taken fit covers and on no activation the taken fits have covered, so one read through either
 >    is read again over what stands, and a
 >    cycle's laps past it are a fit of their own. Its coverage is what it would take off the board: the
->    relations it lands on, less any that are given or blocked (D24, D54). Its price is its call's cost there
+>    relations it lands on, less any that are refused or blocked (D24, D54). Its price is its call's cost there
 >    (D22): its failures and bindings, and nothing else (R22).
 > 2. **Take** one fit, and **stop** where none covers more than it costs. A fit is inside the frame or in
 >    time, as its function is (D15). Among the fits inside the frame, the one whose `coverage` exceeds its
 >    `price` by the most is taken. Where no fit inside the frame covers more than it costs, that one among the
 >    fits in time is taken (D34). It covers what it was measured on. A relation it covers decides the kind of
->    each of its ends that had none, and that activation's relations of the other kind are blocked. Where it
->    is the second covered relation among three neighbors, the third is given (D24). An activation that is
->    covered once the fit is taken is off the board from the
->    next round (D24): no fit lands on it, and each relation of its own that no call covers ends at the calls
->    that landed on it (D5).
+>    each of its ends that had none, and that activation's relations of the other kind are blocked. Every
+>    relation whose two ends the fits taken at this level now join is refused, and an activation left with
+>    one covered relation inside the frame and no other that counts there is covered by it (D24). An
+>    activation that is covered once the fit is taken is off the board from the
+>    next round (D24): no fit lands on it, and each relation of its own that no call covers, and that is not
+>    refused, ends at the calls that landed on it (D5).
 >    An activation at one of its variables stays on the apex, bound, and the relations the function does not
 >    fix at it stay in the set, so a later round may cover them (D10). The round repeats from 1.
 >
@@ -1689,28 +1693,45 @@ machine works out itself (R22).
 >
 > **The first covered relation decides the kind.** From the round of the election in which a relation of an
 > activation is first covered, the activation is covered through that relation's kind and no other. Every
-> relation of its own of the other kind is **blocked**. A blocked relation is never covered and never given,
+> relation of its own of the other kind is **blocked**. A blocked relation is never covered,
 > and no fit is credited it. It is not counted among the relations its other end has. So an activation is
 > taken inside its frame or in time, never both, and the calls over it are of one kind.
 >
-> **The third relation among three neighbors is given.** Take three activations, each a neighbor of the other
-> two. Once calls cover two of the three relations, the third is **given** from that round: the offsets of the
-> two fix it (D34, D55). One call may cover the two, or two calls one each. A given relation counts as a
-> covered relation of both its ends. No fit is credited it, and a fit that would cover nothing else is not
-> taken (D28). Only a relation a call covers is one of the two: a given relation is not. This holds at every
-> level, for calls as for base activations.
+> **A deadlock is broken where it would close.** A deadlock is a chain of calls, each sharing an activation
+> with the next, where the last shares one with the first (D55). It is of any length. At one level of one
+> frame, two activations are **joined** when a chain of relations that the calls taken so far cover leads
+> from one to the other. Only relations covered at this level in this frame join them, across both elections
+> of the level (R24). A relation whose two ends are joined is **refused**, from that round, inside the frame
+> or in time. It makes no difference whether a fit offers it, whether any function holds it, whether one call
+> joined its ends or several, or whether the function that would cover it is a cycle. A fit's own relations
+> do not refuse one another: a function that holds every relation among its nodes covers them with one call.
 >
-> **Three at one position are covered by two calls.** The first call covers one association and no
-> activation. The second covers the activation the two calls share. The third association is given, and it
-> covers the other two activations. The two calls landed on one activation, so they stand at one position, one
-> level up, with one association between them (D26). Each has that one relation inside its frame, and one call
-> covers both.
+> **A refused relation is eliminated.** It is never covered, and no fit is credited it: a fit that would
+> cover nothing else is not taken (D28). It is not counted among the relations either end has. It ends at no
+> call, at any level. Where an end was covered before the refusal and the relation already ended at a call,
+> that edge leaves the board, and every edge it became above. An edge between two calls that also stands
+> for a relation that is not refused stays, for that relation. A relation stays refused for as long as its
+> two activations exist.
+>
+> **The ends of the chain are covered by the one relation they have.** A refused relation is not counted. So
+> an activation with one covered relation inside its frame, whose every other relation there is refused, has
+> only one there and is covered by it, from the round of the refusal. It is not covered while it has a
+> relation there that is not refused.
+>
+> **Three at one position are covered by two calls, and four by three.** The first call covers one
+> association and no activation. The second covers the activation the two calls share. The third association
+> would close the chain and is refused. Each of the other two activations then has one relation there and is
+> covered by it. The two calls landed on one activation, so they stand at one position, one level up, with
+> one association between them (D26). Each has that one relation inside its frame, and one call covers both.
+> With four at one position, the fourth is still on the board when the third association is refused, and so
+> are the two of the first three that have one covered relation each. A third call lands on the fourth and
+> on one of those two. Every association left is refused, and all four are covered inside the frame.
 >
 > Until an activation is
 > covered it stands on the board, whatever calls have landed on it, and a neighbor reads it as itself. Once
 > covered it has left the apex and the graph (D55). A relation of its own that no call covers is not lost:
 > from then on it ends at each call that landed on the activation, at the offset from that call's position
-> (D10, D5). A blocked relation goes up the same way. A given relation does not: it ends at no call.
+> (D10, D5). A blocked relation goes up the same way. A refused relation does not: it ends at no call.
 >
 > An activation is **inhibited** when one relation of its own is covered. That is sooner than it is covered,
 > and may be in the frame it fires. The calls over it are every call that covers a relation of its own, and
@@ -1925,7 +1946,7 @@ and nothing scales with the run. What is cached, and how, is the implementation'
 
 ## 6.7 Cycles
 
-Two things that are cycles, told apart, because the design holds them apart.
+Two things that are cycles, and one that is not, told apart, because the design holds them apart.
 
 **Within a function, a cycle is the pattern repeating.** A function has one node per neuron in its pose, so a relation back to
 a node already in it closes the cycle, and the function is then that cycle and nothing else; the function says that the pattern comes
@@ -1945,6 +1966,13 @@ unrolled over the run it is a chain, since the call at one frame and at the next
 Expansion follows what fired, frame by frame, and stops at reach (R28), so it never runs round. It is how a
 periodic world is covered for a fixed dictionary: each call covers the one before it, the whole run stands as
 one node at the end, and the dictionary says the rest, with one failure wherever the chain breaks.
+
+**A deadlock is not a cycle.** A cycle is a function: its own relations lead back to where they started, one
+call covers it, and the machine keeps it. A deadlock is made of the calls of different fits in one frame: each
+shares an activation with the next, and the last with the first (D55). No function holds it. Three calls round
+three activations at one position come back, one level up, as three calls round three calls, and so without
+end. The election never lets one close: the relation that would close it is refused and eliminated, and the
+activations at the two ends of the chain are covered by the one relation they have (D24).
 
 # Part IV — Future: a neuron
 
