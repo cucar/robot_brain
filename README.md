@@ -1,5 +1,10 @@
 # Robot Brain
 
+> [!NOTE]
+> **This project is under active development.**
+> The algorithm currently in development is written up in [docs/algorithm.md on the `wavefront` branch](https://github.com/cucar/robot_brain/blob/wavefront/docs/algorithm.md).
+> Prototypes of the new algorithm are on the [`ucar` branch](https://github.com/cucar/robot_brain/tree/ucar).
+
 A hierarchical temporal neural network that learns patterns from raw sequential data, builds its own neuron hierarchy on demand, and makes predictions through a voting mechanism inspired by how neurons reach consensus.
 
 No training epochs. No backpropagation. No labeled data.
