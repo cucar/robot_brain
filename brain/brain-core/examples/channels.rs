@@ -195,6 +195,10 @@ fn main() {
     let mut ep_profit: Vec<(f64, usize)> = Vec::new();
     let mut est = vec![0.0f64; nch];
     let mut last_act: Vec<Option<u32>> = vec![None; nch];
+    // seq mode: the trader's positions and cost (trader.js maxPositions, transactionCost in percent), and the report
+    let max_positions: usize = args.iter().find(|a| a.starts_with("--max-positions=")).map_or(1, |a| a[16..].parse().unwrap());
+    let tcost: f64 = args.iter().find(|a| a.starts_with("--cost=")).map_or(0.0, |a| a[7..].parse().unwrap());
+    let report_every: usize = args.iter().find(|a| a.starts_with("--every=")).map_or(0, |a| a[8..].parse().unwrap());
     for k in 0..total {
         if k % cycle == 0 { cash = 15000.0; shares = vec![0; nch]; trades = 0; }
         let mut inputs = Vec::new();
@@ -232,19 +236,62 @@ fn main() {
                 let price = |i: usize| prices[i][at];
                 let total_value = cash + (0..nch).map(|i| shares[i] as f64 * price(i)).sum::<f64>();
                 let mut own: Vec<usize> = (0..nch).filter(|&i| last_act[i] == Some(1) && price(i) > 0.0).collect();
-                own.sort_by(|&a, &b| est[b].exp().partial_cmp(&est[a].exp()).unwrap().then(price(b).partial_cmp(&price(a)).unwrap()).then(series[a].0.cmp(&series[b].0)));
-                own.truncate(1);
+                // more owns than positions: the best by estimate, then the higher price, then the symbol, priced under
+                // $5,000 (trader.js distributeAllocations)
+                if own.len() > max_positions {
+                    own.sort_by(|&a, &b| est[b].exp().partial_cmp(&est[a].exp()).unwrap().then(price(b).partial_cmp(&price(a)).unwrap()).then(series[a].0.cmp(&series[b].0)));
+                    own.retain(|&i| price(i) < 5000.0);
+                    own.truncate(max_positions);
+                }
+                // the plan (trader.js getActionPlan): sell what is out, bring each own to its equal share of the value,
+                // sweep what cash is left into the cheapest own; then sells, then buys, each at its cost
+                let mul = tcost / 100.0;
+                let mut remaining = cash;
+                let mut sells: Vec<(usize, i64)> = Vec::new();
+                let mut buys: Vec<(usize, i64)> = Vec::new();
+                let mut cheapest: Option<usize> = None;
                 for i in 0..nch {
-                    if own.contains(&i) || shares[i] == 0 { continue; }
-                    cash += shares[i] as f64 * price(i);
-                    shares[i] = 0;
-                    trades += 1;
+                    if !own.contains(&i) {
+                        if shares[i] > 0 { sells.push((i, shares[i])); remaining += shares[i] as f64 * price(i) * (1.0 - mul); }
+                        continue;
+                    }
+                    if cheapest.map_or(true, |c| price(i) < price(c)) { cheapest = Some(i); }
+                    let buy_price = price(i) * (1.0 + mul);
+                    let target = ((total_value / own.len() as f64) / buy_price).floor() as i64;
+                    let diff = target - shares[i];
+                    if diff < 0 { sells.push((i, -diff)); remaining += (-diff) as f64 * price(i) * (1.0 - mul); }
+                    else if diff > 0 { buys.push((i, diff)); remaining -= diff as f64 * buy_price; }
                 }
-                if let Some(&c) = own.first() {
-                    let target = (total_value / price(c)).floor() as i64;
-                    let diff = target - shares[c];
-                    if diff != 0 { cash -= diff as f64 * price(c); shares[c] = target; trades += 1; }
+                if let Some(c) = cheapest {
+                    if remaining > 0.0 {
+                        let extra = (remaining / (price(c) * (1.0 + mul))).floor() as i64;
+                        if extra > 0 { if let Some(b) = buys.iter_mut().find(|b| b.0 == c) { b.1 += extra; } else { buys.push((c, extra)); } }
+                    }
                 }
+                for (i, n) in sells { cash += n as f64 * price(i) * (1.0 - mul); shares[i] -= n; trades += 1; }
+                for (i, n) in buys {
+                    let eff = price(i) * (1.0 + mul);
+                    let n = n.min((cash / eff).floor() as i64);
+                    if n <= 0 { continue; }
+                    cash -= n as f64 * eff; shares[i] += n; trades += 1;
+                }
+            }
+            // every 100 frames: neurons, functions, the share right over the last 100 frames and so far, and the profit
+            if report_every > 0 && (k % cycle + 1) % report_every == 0 {
+                let lap = k / cycle;
+                let lo = (k % cycle + 1) - report_every;
+                let (mut r100, mut n100, mut rall, mut nall) = (0usize, 0usize, 0usize, 0usize);
+                for i in 0..nch {
+                    for (c, x) in grid[i][lap].iter().enumerate().take(k % cycle + 1) {
+                        if *x == '-' { continue; }
+                        nall += 1; if *x == 'R' { rall += 1; }
+                        if c >= lo { n100 += 1; if *x == 'R' { r100 += 1; } }
+                    }
+                }
+                let at = (k % cycle) + 1;
+                let profit = cash + (0..nch).map(|i| shares[i] as f64 * prices[i][at]).sum::<f64>() - 15000.0;
+                println!("EVERY100 frame {} | neurons {} | functions {} | right last 100 frames {:.2}% | right so far {:.2}% | net profit ${:.2} | trades {} | {:.0}s",
+                    k + 1, m.alive, m.dict.len(), 100.0 * r100 as f64 / n100.max(1) as f64, 100.0 * rall as f64 / nall.max(1) as f64, profit, trades, t0.elapsed().as_secs_f64());
             }
         }
         // recognition: the dictionary's last change, and this frame's combination calls (a level-1 call over two of
@@ -403,6 +450,8 @@ fn main() {
         }
     }
     println!("recognition: {} functions | the dictionary last changed at frame {}", m.dict.len(), last_change);
+    println!("NEVERCALLED {} of {}", m.funcs_never_called(), m.dict.len());
+    println!("JOINSMOVES joins frame {} time {} | moves frame {} time {}", m.joins_by[0], m.joins_by[1], m.moves_by[0], m.moves_by[1]);
     println!("  combination calls per frame, per cycle: {}", combos.iter().enumerate().map(|(c, v)| format!("{}:{}", c + 1, v.iter().map(|x| x.to_string()).collect::<String>())).collect::<Vec<_>>().join(" "));
     if mode.starts_with("lap") || mode == "four" {
         let show = |v: &Vec<usize>| if v.is_empty() { "never".to_string() } else { format!("from lap {} ({} of {} laps)", v[0], v.len(), cycles) };

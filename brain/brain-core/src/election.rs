@@ -148,7 +148,7 @@ impl Machine {
     /// Returns how many were accepted and allocated.
     pub(crate) fn elect(&mut self, level: u32, mut fits: Vec<Fit>) -> (usize, usize) {
         self.electing.clear();
-        // what joins two activations is what the calls taken at this level of this frame cover, across both elections
+        // what joins two activations is what the calls taken at this level of this frame cover, across every election
         // of the level (D24, R24); a refused relation stays refused for as long as its two activations exist
         if self.joined_at != Some((self.frame_no, level)) {
             self.joined_at = Some((self.frame_no, level));
@@ -183,7 +183,8 @@ impl Machine {
             for (i, fit) in fits.iter().enumerate() {
                 let net = self.coverage(fit) - self.price(fit);
                 if !(net > 0.0) { continue; }
-                // the frame first (D28, R24): a fit inside the frame before any fit in time; within a kind as before
+                // the frame before time (R24, D34): where one election holds both kinds, as a frozen machine's does, a fit
+                // inside the frame before any fit in time; within a kind as before
                 let (ins_i, ins_j) = match best { Some((j, _)) => (self.fit_inside(fit), self.fit_inside(&fits[j])), None => (false, false) };
                 let better = match best { None => true, Some(_) if ins_i != ins_j => ins_i, Some((j, bn)) => net > bn || (net == bn && {
                     if ranks[i].is_none() { ranks[i] = Some(self.rank(fit)); }

@@ -215,6 +215,7 @@ fn train(m: &mut Machine, e: &Env, i: &Img, n: usize, label: &str) -> usize {
         m.process_frame(&[Input { dim: e.dig, bucket: 0, pos: [0; MAX_DIMS] }], vec![Reward { reward: 1.0, channels: vec![e.digit], frames: 1 }]);
         m.reset_context();
     }
+    println!("NEVERCALLED {} {} of {}", label, m.funcs_never_called(), m.dict.len());
     println!("  {}: the dictionary last changed at showing {}{}", label, last_change, if last_change < n { format!(" (unchanged over the last {} showings)", n - last_change) } else { " (still changing at the last showing)".into() });
     last_change
 }

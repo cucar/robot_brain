@@ -536,6 +536,7 @@ impl Machine {
     fn group_inner(&mut self, fits: &[Fit], fresh: &[Fresh], board: &[Fresh], fired: &FxHashSet<Sym>) -> Vec<FuncId> {
         
         self.forget_all_expansions();
+        self.start_queue.clear();
         let mut changed: Vec<FuncId> = Vec::new();
         let fno = self.frame_no;
         // the activations each function touches here: what its fits landed on, each as its node, with the position
@@ -643,6 +644,7 @@ impl Machine {
         
         for (e, only) in offered.iter() {
             let e = *e;
+            if self.half.map_or(false, |k| (e.rel.off[0] == 0) != k) { continue; }
             if !through && e.strength < 2 { continue; }
             // two calls that landed on one activation relate like any two neighbors (D26, R50); a relation between
             // an activation and one it stands over is no relation
@@ -654,6 +656,7 @@ impl Machine {
                     let Some(f) = self.dict.get(fid) else { continue };
                     if taken.get(&fid).map_or(false, |t| t.contains(&edge(act, other))) { continue; }
                     for rel in self.candidates(f, act, as_node, &opos, other) {
+                        if self.half.map_or(false, |k| (rel.off[0] == 0) != k) { continue; }
                         // a candidate has strength 2 or more, read through calls (R50, D47)
                         if self.halved(&rel) < 2.0 { continue; }
                         // where both its ends are nodes of the function, it attaches at the end whose activation
@@ -669,12 +672,14 @@ impl Machine {
             }
         }
         for &(e, fid, shared, as_node, rw, opos, first) in &offered19 {
+            if self.half.map_or(false, |k| (e.rel.off[0] == 0) != k) { continue; }
             if self.stands_over(e.near, e.far) { continue; }
             let other = if e.near == shared { e.far } else { e.near };
             let Some(f0) = self.dict.get(fid) else { continue };
             if taken.get(&fid).map_or(false, |t| t.contains(&edge(shared, other))) { continue; }
             let f = match rw { Some((c, n)) => Self::rewritten(f0, c, n), None => f0.clone() };
             for rel in self.candidates(&f, shared, as_node, &opos, other) {
+                if self.half.map_or(false, |k| (rel.off[0] == 0) != k) { continue; }
                 if self.halved(&rel) < 2.0 { continue; }
                 let attach = if f.node_of(rel.a).is_some() && f.node_of(rel.b).is_some() {
                     [e.near, e.far].iter().filter_map(|r| self.act(*r)).map(|a| a.sym).find(|s| *s == rel.a || *s == rel.b).unwrap_or(as_node)
@@ -836,6 +841,8 @@ impl Machine {
                 renamed.entry(fid).or_default().push((c, n));
             }
             self.dict.join(fid, rel_t, attach);
+            self.joins_by[(rel_t.off[0] != 0) as usize] += if from.is_some() { 0 } else { 1 };
+            self.moves_by[(rel_t.off[0] != 0) as usize] += if from.is_some() { 1 } else { 0 };
             // for the count only: a relation that moved from one function into another, and whether only a fit of
             // the first election offered it (switch 17)
             if from.is_some() {
@@ -858,6 +865,7 @@ impl Machine {
         let mut moved: Vec<FuncId> = fits.iter().map(|f| f.func).chain(changed.iter().copied()).chain(standing).collect();
         moved.sort_unstable();
         moved.dedup();
+        if let Some(k) = self.half { moved.retain(|id| self.dict.get(*id).map_or(false, |f| f.rels.iter().all(|r| r.off[0] == 0) == k)); }
         for fid in moved {
             loop {
                 let Some(f) = self.dict.get(fid) else { break };
@@ -913,10 +921,10 @@ impl Machine {
                 }
             }
         }
-        // a recurring relation no function holds starts one (R50)
+        // a recurring relation no function holds may start one (R50)
         for e in fresh {
-            // a relation no call covers starts a function at strength 3, whether or not a call has landed on one of
-            // its ends: it is counted as itself (R50, R18)
+            // a relation held 3 times or more may start a function, counted as itself; what stops it is that no
+            // instance of it stands, never that a call has landed on one of its ends (R50, R18)
             let _st = { self.start_strength(&e.rel, e.strength).max(self.strength_through(e)) };
             let st = { if self.halved(&e.rel) >= 3.0 { 3 } else { 0 } };
             let need = { 3 };
@@ -930,6 +938,9 @@ impl Machine {
                 continue;
             }
             
+            // functions start one at a time (R50): what may start one is queued, and starts after this half's second
+            // election from a relation that still stands
+            if self.half.is_some() { if !self.start_queue.contains(&e.rel) { self.start_queue.push(e.rel); } continue; }
             let id = self.dict.start(e.rel);
             self.stats_added += 1;
             if self.trace { eprintln!("[new f{}] {}", fno, self.dict.describe(self.dict.get(id).unwrap())); }
