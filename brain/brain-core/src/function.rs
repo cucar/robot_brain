@@ -413,20 +413,6 @@ impl Dictionary {
         (cut, None)
     }
 
-    /// A function's nodes, relations and where each is counted, replaced in place (switch 19): its relations
-    /// indexed afresh and its nodes reindexed.
-    pub fn replace_body(&mut self, id: FuncId, g: &Func) {
-        let Some(f) = self.funcs.get_mut(&id) else { return };
-        let before = f.nodes.clone();
-        let old = f.rels.clone();
-        f.nodes = g.nodes.clone();
-        f.rels = g.rels.clone();
-        f.at = g.at.clone();
-        let after = f.nodes.clone();
-        for r in &old { if self.by_rel.get(r) == Some(&id) { self.by_rel.remove(r); } }
-        for r in &g.rels { self.by_rel.insert(*r, id); }
-        self.reindex(id, &before, &after);
-    }
 
     /// A function's origin set to one of its nodes (switch 21), the others in their order.
     pub fn set_origin(&mut self, id: FuncId, o: Sym) {

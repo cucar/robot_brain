@@ -178,12 +178,11 @@ pub struct Machine {
     pub grown: FxHashMap<ActRef, ActRef>,
     pub(crate) middle_seen: FxHashSet<(Frame, FuncId, Rel, u8)>,
     /// For the count only: relations that moved from one function into another, those only a fit of the first
-    /// election offered (switch 17), and moves of a relation that had moved before; candidates no longer read.
+    /// election offered (switch 17), and moves of a relation that had moved before.
     pub moves_total: u64,
     pub moves_first: u64,
     pub moves_again: u64,
     pub move_count: FxHashMap<Rel, u32>,
-    pub reread_skips: u64,
     /// For the count only: changes to a function whose interneuron already held a connection to an action.
     pub changed_after_action: u64,
     pub changed_after_action_funcs: FxHashSet<FuncId>,
@@ -314,7 +313,6 @@ impl Machine {
             moves_first: 0,
             moves_again: 0,
             move_count: FxHashMap::default(),
-            reread_skips: 0,
             changed_after_action: 0,
             changed_after_action_funcs: FxHashSet::default(),
             halved_memo: std::cell::RefCell::new(None),

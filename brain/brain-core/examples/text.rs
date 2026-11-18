@@ -23,6 +23,9 @@ fn main() {
         if i + 1 < bytes.len() && pred == Some(bytes[i + 1] as u32) { right += 1; }
     }
     println!("right {}/{} | neurons {} alive of {} | patterns {} | heights {:?}", right, bytes.len() - 1, m.last_stats.neurons, m.thalamus.len(), m.last_stats.patterns, m.height_counts());
+    let mut ids: Vec<u32> = m.dict.funcs.keys().map(|x| *x as u32).collect();
+    ids.sort();
+    for id in ids { let f = m.dict.get(id as _).unwrap(); println!("DICTF f{} | {}", id, m.dict.describe(f)); }
     for c in dump.bytes() {
         let id = m.base_neuron(dim, c as u32);
         print!("{}", m.describe_neuron(id));

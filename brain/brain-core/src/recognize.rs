@@ -597,7 +597,7 @@ impl Machine {
         let mut cand_first: FxHashSet<(Rel, FuncId)> = FxHashSet::default();
         let mut cand_own: FxHashSet<(Rel, FuncId)> = FxHashSet::default();
         // the candidates (R50)
-        let mut cands: FxHashMap<Rel, Vec<(FuncId, Sym, Option<(Sym, Sym)>)>> = FxHashMap::default();
+        let mut cands: FxHashMap<Rel, Vec<(FuncId, Sym)>> = FxHashMap::default();
         let mut at_act: FxHashMap<ActRef, Vec<(FuncId, Sym, Pos)>> = FxHashMap::default();
         let mut fids: Vec<FuncId> = touch.keys().copied().collect();
         fids.sort_unstable();
@@ -606,10 +606,9 @@ impl Machine {
         // switch 17: besides what the first election left on the board, each fit is offered the relations covered by
         // the calls it names or reads a node through
         let offered: Vec<(Fresh, Option<FuncId>)> = board.iter().map(|e| (*e, None)).collect();
-        // switch 19: a relation under a call the fit touches, at the one activation it shares with the fit: the node
-        // the fit read through the call, or the activation a call the fit landed on as a node stands at, with the
-        // function read with that call's node as that activation
-        let mut offered19: Vec<(Fresh, FuncId, ActRef, Sym, Option<(Sym, Sym)>, Pos, bool)> = Vec::new();
+        // switch 19: a relation under a call that also landed on an activation the fit landed on, at that activation;
+        // where the fit landed on a call as a node, the relations under it are no candidates (R50)
+        let mut offered19: Vec<(Fresh, FuncId, ActRef, Sym, Pos, bool)> = Vec::new();
         {
             let mut seen: FxHashSet<(FuncId, (ActRef, ActRef), ActRef)> = FxHashSet::default();
             for (fi, fit) in all_fits.iter().enumerate() {
@@ -619,37 +618,24 @@ impl Machine {
                 let Some(entry) = self.act(fit.entry.1) else { continue };
                 let mut opos = entry.pos;
                 for d in 0..MAX_DIMS { opos[d] -= lay.position[fit.entry.0][d]; }
-                let mut offers: Vec<(ActRef, ActRef, Sym, Option<(Sym, Sym)>)> = Vec::new();
+                let mut offers: Vec<(ActRef, ActRef, Sym)> = Vec::new();
                 // a call that also landed on an activation the fit landed on: its relations that share that
                 // activation (R50)
                 for &(l, node) in &fit.landed {
                     let Some(la) = self.act(l) else { continue };
                     for &c in &la.coverers {
                         if self.act(c).and_then(|ca| ca.fired_by.as_ref()).map_or(true, |fb| fb.func == fit.func) { continue; }
-                        offers.push((c, l, f.nodes[node], None));
+                        offers.push((c, l, f.nodes[node]));
                     }
                 }
-                // landed on the call as a node: the relations under it that share the activation it stands at
-                for &(c, node) in &fit.landed {
-                    if f.nodes[node] < SYM_CALL { continue; }
-                    let Some(ca) = self.act(c) else { continue };
-                    if ca.covers.is_empty() { continue; }
-                    let Some(p) = self.dict.pose_of(ca.sym) else { continue };
-                    let at: Vec<ActRef> = ca.covers.iter().copied().filter(|r| self.act(*r).map_or(false, |x| x.sym == p.from && x.pos == ca.pos)).collect();
-                    if at.len() != 1 { if self.trace { eprintln!("[offer choice f{}] {} as a node of f{}: {} activations it stands at", fno, self.dict.sym_text(ca.sym), f.id, at.len()); } continue; }
-                    let Some(sa) = self.act(at[0]) else { continue };
-                    let cs = f.nodes[node];
-                    if sa.sym != cs && f.node_of(sa.sym).is_some() { if self.trace { eprintln!("[offer choice f{}] {} as a node of f{}: the function already has a node {}", fno, self.dict.sym_text(cs), f.id, self.dict.sym_text(sa.sym)); } continue; }
-                    offers.push((c, at[0], sa.sym, if sa.sym == cs { None } else { Some((cs, sa.sym)) }));
-                }
-                for (c, shared, as_node, rw) in offers {
+                for (c, shared, as_node) in offers {
                     let Some(es) = self.call_edges.get(&c) else { continue };
                     for &(p, q) in es {
                         if p != shared && q != shared { continue; }
                         if !seen.insert((fit.func, (p, q), shared)) { continue; }
                         let (Some(pa), Some(qa)) = (self.act(p), self.act(q)) else { continue };
                         let off = offset_between(pa, qa);
-                        offered19.push((Fresh { near: p, far: q, off, strength: 2, rel: canon(pa.sym, qa.sym, off) }, fit.func, shared, as_node, rw, opos, first));
+                        offered19.push((Fresh { near: p, far: q, off, strength: 2, rel: canon(pa.sym, qa.sym, off) }, fit.func, shared, as_node, opos, first));
                     }
                 }
             }
@@ -679,70 +665,43 @@ impl Machine {
                         } else { as_node };
                         if touch_first.contains(&(fid, act)) && !touch_own.contains(&(fid, act)) { cand_first.insert((rel, fid)); } else { cand_own.insert((rel, fid)); }
                         let v = cands.entry(rel).or_default();
-                        if !v.iter().any(|x| x.0 == fid) { v.push((fid, attach, None)); }
+                        if !v.iter().any(|x| x.0 == fid) { v.push((fid, attach)); }
                     }
                 }
             }
         }
-        for &(e, fid, shared, as_node, rw, opos, first) in &offered19 {
+        for &(e, fid, shared, as_node, opos, first) in &offered19 {
             if self.half.map_or(false, |k| (e.rel.off[0] == 0) != k) { continue; }
             if self.stands_over(e.near, e.far) { continue; }
             let other = if e.near == shared { e.far } else { e.near };
-            let Some(f0) = self.dict.get(fid) else { continue };
+            let Some(f) = self.dict.get(fid) else { continue };
             if taken.get(&fid).map_or(false, |t| t.contains(&edge(shared, other))) { continue; }
-            let f = match rw { Some((c, n)) => Self::rewritten(f0, c, n), None => f0.clone() };
-            for rel in self.candidates(&f, shared, as_node, &opos, other) {
+            for rel in self.candidates(f, shared, as_node, &opos, other) {
                 if self.half.map_or(false, |k| (rel.off[0] == 0) != k) { continue; }
                 if self.halved(&rel) < 2.0 { continue; }
                 let attach = if f.node_of(rel.a).is_some() && f.node_of(rel.b).is_some() {
                     [e.near, e.far].iter().filter_map(|r| self.act(*r)).map(|a| a.sym).find(|s| *s == rel.a || *s == rel.b).unwrap_or(as_node)
                 } else { as_node };
-                if self.trace { eprintln!("[offered f{}] {} to f{} at {}{}", fno, self.rel_text(&rel), fid, self.dict.sym_text(attach), rw.map_or(String::new(), |(c, n)| format!(" | the function read with {} as {}", self.dict.sym_text(c), self.dict.sym_text(n)))); }
+                if self.trace { eprintln!("[offered f{}] {} to f{} at {}", fno, self.rel_text(&rel), fid, self.dict.sym_text(attach)); }
                 if first { cand_first.insert((rel, fid)); } else { cand_own.insert((rel, fid)); }
                 let v = cands.entry(rel).or_default();
-                if !v.iter().any(|x| x.0 == fid) { v.push((fid, attach, rw)); }
+                if !v.iter().any(|x| x.0 == fid) { v.push((fid, attach)); }
             }
         }
         // one that closes a cycle before one that adds a node (R50)
-        let closes = |m: &Machine, rel: &Rel, fs: &[(FuncId, Sym, Option<(Sym, Sym)>)]| fs.iter().filter_map(|x| m.dict.get(x.0).map(|f| match x.2 { Some((c, n)) => Self::rewritten(f, c, n), None => f.clone() })).any(|f| f.node_of(rel.a).is_some() && f.node_of(rel.b).is_some());
+        let closes = |m: &Machine, rel: &Rel, fs: &[(FuncId, Sym)]| fs.iter().filter_map(|x| m.dict.get(x.0)).any(|f| f.node_of(rel.a).is_some() && f.node_of(rel.b).is_some());
         let mut keys: Vec<(bool, Rel)> = cands.iter().map(|(r, fs)| (!closes(self, r, fs), *r)).collect();
         keys.sort();
         let mut joined: FxHashSet<Rel> = FxHashSet::default();
-        // switch 19: the calls each function has held from then on as the activations they stand at, this grouping
-        let mut renamed: FxHashMap<FuncId, Vec<(Sym, Sym)>> = FxHashMap::default();
         for (_, rel) in keys {
             let fs = cands[&rel].clone();
             // its contribution where it stands: to its function, or alone, its strength less one; standing alone or
             // in a function of one relation, a tie joins, since it leaves fewer functions (R54)
             let holder = self.dict.holder(&rel).and_then(|g| self.dict.get(g));
             let lone = holder.map_or(true, |g| g.rels.len() == 1);
-            let mut best: Option<(f64, f64, u64, FuncId, Sym, Option<(Sym, Sym)>, Rel)> = None;
-            for (fid, attach, rw) in fs {
-                let Some(f0) = self.dict.get(fid) else { continue };
-                // read again against the function as it now stands (switch 19): a call it no longer has as a node is
-                // the activation that call stands at; a rewrite already made is not made again, and none that would
-                // give the function a second node of one neuron
-                let (rel, attach, rw) = {
-                    let mut r = rel;
-                    let mut at = attach;
-                    if let Some(list) = renamed.get(&fid) {
-                        for &(c, n) in list {
-                            if r.a == c || r.b == c { r = canon(if r.a == c { n } else { r.a }, if r.b == c { n } else { r.b }, r.off); }
-                            if at == c { at = n; }
-                        }
-                    }
-                    let rw = match rw {
-                        Some((c, _)) if f0.node_of(c).is_none() => None,
-                        Some((c, n)) if c != n && f0.node_of(n).is_some() => { self.reread_skips += 1; if self.trace { eprintln!("[reread f{}] {} to f{}: holding {} as {} would give it a second node {}", fno, self.rel_text(&r), fid, self.dict.sym_text(c), self.dict.sym_text(n), self.dict.sym_text(n)); } continue; }
-                        x => x,
-                    };
-                    if r != rel {
-                        if let Some(h) = self.dict.holder(&r) { if h != fid { self.reread_skips += 1; if self.trace { eprintln!("[reread f{}] {} read as {} for f{}: f{} holds that", fno, self.rel_text(&rel), self.rel_text(&r), fid, h); } continue; } }
-                    }
-                    (r, at, rw)
-                };
-                let fown = match rw { Some((c, n)) => Self::rewritten(f0, c, n), None => f0.clone() };
-                let f = &fown;
+            let mut best: Option<(f64, f64, u64, FuncId, Sym)> = None;
+            for (fid, attach) in fs {
+                let Some(f) = self.dict.get(fid) else { continue };
                 if f.holds(&rel) { continue; }
                 // a function holds one kind, inside the frame or in time (D15, R50)
                 if f.rels.iter().any(|r| (r.off[0] == 0) != (rel.off[0] == 0)) { continue; }
@@ -777,19 +736,10 @@ impl Machine {
                 let mut rels = f.rels.clone();
                 rels.push(rel);
                 let near = self.worth_in(&rels, &rel, Some(attach), f.inter, None).1;
-                if self.trace && rw.is_some() {
-                    let mut with = f.rels.clone();
-                    with.push(rel);
-                    let before = Func::meeting(&f.rels, &f.at, attach);
-                    let mut at = before.clone();
-                    at.push(Some(attach));
-                    let parts: Vec<String> = with.iter().zip(&at).map(|(r, a)| { let (x, y) = self.answer(&with, r, *a, f.inter); format!("{} at {}: with {} without {} count {:.1}", self.rel_text(r), a.map_or("-".into(), |z| self.dict.sym_text(z)), x, y, self.halved(r)) }).collect();
-                    eprintln!("   [read as f{}] f{} {} | gain {:.0} | {}", fno, fid, self.dict.describe(f), w, parts.join("; "));
-                }
-                let better = match best { None => true, Some((bw, bn, bj, _, _, _, _)) => w > bw || (w == bw && (near > bn || (near == bn && f.joined < bj))) };
-                if better { best = Some((w, near, f.joined, fid, attach, rw, rel)); }
+                let better = match best { None => true, Some((bw, bn, bj, _, _)) => w > bw || (w == bw && (near > bn || (near == bn && f.joined < bj))) };
+                if better { best = Some((w, near, f.joined, fid, attach)); }
             }
-            let Some((w, _, _, fid, attach, rw, rel_t)) = best else { continue };
+            let Some((w, _, _, fid, attach)) = best else { continue };
             // switch 21: a relation not at an end of the function it is in does not leave it, to join or otherwise
             {
                 if let Some(g) = holder {
@@ -804,13 +754,12 @@ impl Machine {
             // alone, read at the node it would attach at (R50)
             // switch 20: alone, read at the node it would attach at, over the rows of the function it is compared with
             let here20 = if lone {
-                self.dict.get(fid).and_then(|f0| {
-                    let f = match rw { Some((c, n)) => Self::rewritten(f0, c, n), None => f0.clone() };
+                self.dict.get(fid).and_then(|f| {
                     let mut with = f.rels.clone();
-                    with.push(rel_t);
+                    with.push(rel);
                     if !Self::cycle_rels_any(f.root(), &with).is_empty() { return None; }
                     let own = holder.and_then(|g| g.inter);
-                    self.alone_over(&rel_t, attach, &with, own).map(|x| x - 2.0)
+                    self.alone_over(&rel, attach, &with, own).map(|x| x - 2.0)
                 })
             } else { None };
             if self.trace { if let Some(h) = here20 { eprintln!("   [at node f{}] {} alone at {}: {:.0} (its count {:.1})", fno, self.rel_text(&rel), self.dict.sym_text(attach), h, self.halved(&rel)); } }
@@ -832,31 +781,15 @@ impl Machine {
             if self.trace { eprintln!("[cand f{}] {} best f{} gain {:.0} | where it stands f{:?} {:.0}", fno, self.rel_text(&rel), fid, w, self.dict.holder(&rel), here); }
             if !(w > here) { continue; }
             if self.trace { eprintln!("[join f{}] {} into {} gain {:.0} over {:.0}", fno, self.rel_text(&rel), self.dict.describe(self.dict.get(fid).unwrap()), w, here); }
-            let closes_now = self.dict.get(fid).map_or(false, |f| !f.has_cycle() && f.node_of(rel_t.a).is_some() && f.node_of(rel_t.b).is_some());
+            let closes_now = self.dict.get(fid).map_or(false, |f| !f.has_cycle() && f.node_of(rel.a).is_some() && f.node_of(rel.b).is_some());
             if self.trace_joins { eprintln!("[join-count f{}] {}{}", fno, if w == here { "tie" } else { "gain" }, if closes_now { " closing a cycle" } else { "" }); }
-            // switch 19: the function's relation to the call is held from then on as the relation to the activation
-            // the call stands at; where another function already holds that relation, nothing moves
-            let rewrite = match rw {
-                Some((c, n)) => {
-                    let g = Self::rewritten(self.dict.get(fid).unwrap(), c, n);
-                    let clash: Vec<Rel> = g.rels.iter().copied().filter(|r| self.dict.holder(r).map_or(false, |h| h != fid)).collect();
-                    if !clash.is_empty() { self.reread_skips += 1; if self.trace { eprintln!("[join choice f{}] {} | read as {}, another function holds {}", fno, self.rel_text(&rel), self.dict.describe(&g), clash.iter().map(|r| self.rel_text(r)).collect::<Vec<_>>().join(", ")); } continue; }
-                    Some((c, n, g))
-                }
-                None => None,
-            };
             self.joined_ever.insert(rel);
             let from = self.dict.holder(&rel);
             if let Some(g) = from { self.leave(g, &rel, &mut changed, "its last relation joined another function"); }
             if self.dict.get(fid).is_none() { continue; }
-            if let Some((c, n, g)) = rewrite {
-                if self.trace { eprintln!("[held as f{}] f{} now {}", fno, fid, self.dict.describe(&g)); }
-                self.dict.replace_body(fid, &g);
-                renamed.entry(fid).or_default().push((c, n));
-            }
-            self.dict.join(fid, rel_t, attach);
-            self.joins_by[(rel_t.off[0] != 0) as usize] += if from.is_some() { 0 } else { 1 };
-            self.moves_by[(rel_t.off[0] != 0) as usize] += if from.is_some() { 1 } else { 0 };
+            self.dict.join(fid, rel, attach);
+            self.joins_by[(rel.off[0] != 0) as usize] += if from.is_some() { 0 } else { 1 };
+            self.moves_by[(rel.off[0] != 0) as usize] += if from.is_some() { 1 } else { 0 };
             // for the count only: a relation that moved from one function into another, and whether only a fit of
             // the first election offered it (switch 17)
             if from.is_some() {
@@ -869,7 +802,6 @@ impl Machine {
             self.note_change(fid);
             self.forget_expansions(fid);
             joined.insert(rel);
-            joined.insert(rel_t);
             if !changed.contains(&fid) { changed.push(fid); }
         }
         // leaving (R54, R18): one relation at a time, the one whose leaving raises the dictionary's worth most, the
@@ -1117,21 +1049,6 @@ impl Machine {
         rels.iter().zip(at).map(|(r, a)| if cyc.contains(r) { self.halved(r) - 1.0 } else { self.worth_in(rels, r, *a, own, closing).0 }).sum()
     }
 
-
-    /// A function with a node read as another (switch 19): the call's node as the activation it stands at.
-    pub(crate) fn rewritten(f: &Func, c: Sym, n: Sym) -> Func {
-        let mut g = f.clone();
-        for x in g.nodes.iter_mut() { if *x == c { *x = n; } }
-        for r in g.rels.iter_mut() {
-            if r.a == c || r.b == c {
-                let a = if r.a == c { n } else { r.a };
-                let b = if r.b == c { n } else { r.b };
-                *r = canon(a, b, r.off);
-            }
-        }
-        for a in g.at.iter_mut() { if *a == Some(c) { *a = Some(n); } }
-        g
-    }
 
     /// A relation alone, read at node `at` over the rows a set is read over there (switch 20): the rows of that node
     /// on which every relation of the set at it has held or failed, counting those that hold this one. None where
