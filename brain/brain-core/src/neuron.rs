@@ -78,6 +78,10 @@ pub struct Neuron {
     pub h: usize,
     /// The relation index (D47): every relation its rows hold, with its strength.
     pub index: FxHashMap<RelKey, u32>,
+    /// The same index over the rows of one frame only, the latest frame a row was written for (a speed-up only):
+    /// what this frame's rows hold, read without going through the history.
+    pub now_frame: Frame,
+    pub now_index: FxHashMap<RelKey, u32>,
     /// Per phase of its own less its laps, per pose and offset, one connection (D25).
     pub connections: FxHashMap<(Sym, Sym, Offset), Conn>,
     next_row: u64,
@@ -92,22 +96,43 @@ fn keys_of(row: &Row) -> Vec<RelKey> {
 
 impl Neuron {
     pub fn base(id: NeuronId, kind: Kind, dim: DimId, bucket: u32, channel: ChannelId, axes: u8, h: usize) -> Self {
-        Neuron { id, kind, dim: Some(dim), bucket, channel: Some(channel), axes, alive: true, history: VecDeque::new(), h, index: FxHashMap::default(), connections: FxHashMap::default(), next_row: 0 }
+        Neuron { id, kind, dim: Some(dim), bucket, channel: Some(channel), axes, alive: true, history: VecDeque::new(), h, index: FxHashMap::default(), now_frame: Frame::MIN, now_index: FxHashMap::default(), connections: FxHashMap::default(), next_row: 0 }
     }
 
     pub fn inter(id: NeuronId, axes: u8, h: usize) -> Self {
-        Neuron { id, kind: Kind::Inter, dim: None, bucket: 0, channel: None, axes, alive: true, history: VecDeque::new(), h, index: FxHashMap::default(), connections: FxHashMap::default(), next_row: 0 }
+        Neuron { id, kind: Kind::Inter, dim: None, bucket: 0, channel: None, axes, alive: true, history: VecDeque::new(), h, index: FxHashMap::default(), now_frame: Frame::MIN, now_index: FxHashMap::default(), connections: FxHashMap::default(), next_row: 0 }
     }
 
     pub fn strength(&self, k: &RelKey) -> u32 { self.index.get(k).copied().unwrap_or(0) }
 
-    fn index_add(&mut self, keys: &[RelKey]) { for k in keys { *self.index.entry(*k).or_insert(0) += 1; } }
+    /// How many of the rows written for `frame` hold the relation, where `frame` is the latest frame rows were
+    /// written for; none otherwise.
+    pub fn now_strength(&self, frame: Frame, k: &RelKey) -> u32 {
+        if self.now_frame != frame { return 0; }
+        self.now_index.get(k).copied().unwrap_or(0)
+    }
 
-    fn index_sub(&mut self, keys: &[RelKey]) {
+    /// Keys a row of `frame` came to hold: the index counts them, and the frame's own index where the row is of the
+    /// latest frame (a row of a later frame starts that index afresh).
+    fn index_add(&mut self, keys: &[RelKey], frame: Frame) {
+        for k in keys { *self.index.entry(*k).or_insert(0) += 1; }
+        if frame > self.now_frame { self.now_frame = frame; self.now_index.clear(); }
+        if frame == self.now_frame { for k in keys { *self.now_index.entry(*k).or_insert(0) += 1; } }
+    }
+
+    fn index_sub(&mut self, keys: &[RelKey], frame: Frame) {
         for k in keys {
             if let Some(v) = self.index.get_mut(k) {
                 *v -= 1;
                 if *v == 0 { self.index.remove(k); }
+            }
+        }
+        if frame == self.now_frame {
+            for k in keys {
+                if let Some(v) = self.now_index.get_mut(k) {
+                    *v -= 1;
+                    if *v == 0 { self.now_index.remove(k); }
+                }
             }
         }
     }
@@ -118,13 +143,13 @@ impl Neuron {
         let incoming = inputs.len().min(self.h);
         while self.history.len() + incoming > self.h {
             let old = self.history.pop_front().unwrap();
-            self.index_sub(&keys_of(&old));
+            self.index_sub(&keys_of(&old), old.act.frame);
         }
         let mut admitted: Vec<(ActRef, Sym, Vec<Nb>)> = Vec::new();
         for inp in inputs.into_iter().take(incoming) {
             let row = Row { id: self.next_row, act: inp.act, own: inp.own, nbs: inp.nbs, saved: Vec::new(), extra: Vec::new(), discount: Vec::new() };
             self.next_row += 1;
-            self.index_add(&keys_of(&row));
+            self.index_add(&keys_of(&row), row.act.frame);
             admitted.push((row.act, row.own, row.nbs.clone()));
             self.history.push_back(row);
         }
@@ -172,8 +197,9 @@ impl Neuron {
         let after = keys_of(&self.history[pos]);
         let gone: Vec<RelKey> = before.iter().filter(|k| !after.contains(k)).copied().collect();
         let came: Vec<RelKey> = after.iter().filter(|k| !before.contains(k)).copied().collect();
-        self.index_sub(&gone);
-        self.index_add(&came);
+        let fr = self.history[pos].act.frame;
+        self.index_sub(&gone, fr);
+        self.index_add(&came, fr);
         true
     }
 
@@ -195,7 +221,8 @@ impl Neuron {
         self.history[pos].extra.push(key);
         let after = keys_of(&self.history[pos]);
         let came: Vec<RelKey> = after.iter().filter(|k| !before.contains(k)).copied().collect();
-        self.index_add(&came);
+        let fr = self.history[pos].act.frame;
+        self.index_add(&came, fr);
     }
 
     /// One count (switch 9): relations this row holds that do not count; the index drops them, and they stay
@@ -206,7 +233,8 @@ impl Neuron {
         for k in keys { if !self.history[pos].discount.contains(k) { self.history[pos].discount.push(*k); } }
         let after = keys_of(&self.history[pos]);
         let gone: Vec<RelKey> = before.iter().filter(|k| !after.contains(k)).copied().collect();
-        self.index_sub(&gone);
+        let fr = self.history[pos].act.frame;
+        self.index_sub(&gone, fr);
     }
 
     /// The row's relations, as (its activation, the neighbor's activation, the key).
@@ -222,7 +250,8 @@ impl Neuron {
         self.history[pos].nbs.push(call);
         let after = keys_of(&self.history[pos]);
         let came: Vec<RelKey> = after.iter().filter(|k| !before.contains(k)).copied().collect();
-        self.index_add(&came);
+        let fr = self.history[pos].act.frame;
+        self.index_add(&came, fr);
         true
     }
 
@@ -234,7 +263,8 @@ impl Neuron {
         for nb in nbs { if !row.nbs.iter().any(|x| x.act == nb.act) { row.nbs.push(*nb); } }
         let after = keys_of(&self.history[pos]);
         let came: Vec<RelKey> = after.iter().filter(|k| !before.contains(k)).copied().collect();
-        self.index_add(&came);
+        let fr = self.history[pos].act.frame;
+        self.index_add(&came, fr);
         true
     }
 
@@ -242,6 +272,7 @@ impl Neuron {
     /// that names it.
     pub fn forget(&mut self, dead: &[Sym]) {
         self.index.retain(|k, _| !dead.contains(&k.0) && !dead.contains(&k.1));
+        self.now_index.retain(|k, _| !dead.contains(&k.0) && !dead.contains(&k.1));
         for row in self.history.iter_mut() {
             row.nbs.retain(|nb| !dead.contains(&nb.sym));
             row.saved.retain(|(s, _)| !dead.contains(s));

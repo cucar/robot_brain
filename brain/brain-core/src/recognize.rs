@@ -980,23 +980,19 @@ impl Machine {
         v
     }
 
+    /// The two end counts read off each end's neuron's relation index (D47) instead of its rows: the rows of that
+    /// pose that hold the relation, and of those the rows of this frame, for an occurrence earlier in time.
     fn end_counts_read(&self, r: &Rel) -> (u32, u32) {
         let fno = self.frame_no;
-        let (a, b) = { (r.a, r.b) };
         let mut neg = r.off;
         for x in neg.iter_mut() { *x = -*x; }
         let count = |n: Sym, far: Sym, off: &Offset| -> (u32, u32) {
-            let mut c = 0;
-            let mut now = 0;
-            for row in self.rows_of(n) {
-                if !self.holds_for(row, far, off, None) { continue; }
-                c += 1;
-                if off[0] < 0 && row.act.frame == fno { now += 1; }
-            }
-            (c, now)
+            let Some(nn) = self.thalamus.get(self.dict.neuron_of(n)) else { return (0, 0) };
+            let k = (n, far, *off);
+            (nn.strength(&k), if off[0] < 0 { nn.now_strength(fno, &k) } else { 0 })
         };
-        let (ca, na) = count(a, b, &r.off);
-        let (cb, nb) = count(b, a, &neg);
+        let (ca, na) = count(r.a, r.b, &r.off);
+        let (cb, nb) = count(r.b, r.a, &neg);
         // this frame's occurrence, written so far only at its later end, counts at the earlier end too
         (ca + nb, cb + na)
     }

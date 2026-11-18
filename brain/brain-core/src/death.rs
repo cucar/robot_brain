@@ -54,6 +54,7 @@ impl Machine {
         let n = &mut self.thalamus[c];
         n.history.clear();
         n.index.clear();
+        n.now_index.clear();
         n.connections.clear();
         let dead = self.dict.drop_syms(c);
         self.thalamus.forget(&dead);
