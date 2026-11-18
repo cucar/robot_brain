@@ -1348,8 +1348,8 @@ every row's entry for it. Nothing else touches the index.
 > activation with no neighbor has nothing in its part.
 >
 > **The machine reads every relation in its one form** (D34). Every occurrence of a relation is on two rows,
-> one at each of its ends, so each end counts it, and no end is picked to say how strong it is: the machine
-> adds the two ends' counts and halves them, and that is how often it occurred. A relation between two
+> one at each of its ends, so each end counts it, and the machine takes the larger of the two counts as how
+> often it occurred: a history is a window that can only miss occasions (D18, D34). A relation between two
 > activations of this level comes back from both in this return. A relation to an activation of an earlier
 > level or frame comes back from the activation that fired now, and the machine asks the earlier neuron for
 > its count at the count step (§6.1). That neuron's row takes this occurrence afterward (D18, R50), and the
@@ -1556,21 +1556,22 @@ argument.
 > one row. **A relation is counted at the node it attached to the function at**, which the function keeps with
 > it (D56), at the offset that node's rows hold it (D18): that is the node the function already had
 > relations at when it joined, so the reading is conditioned on them, and it does not move as the histories
-> slide. A function's first relation attached at no node: it is read at its end with the more activations
-> behind it until a second relation joins, and from then on at the node that relation joined at. A relation
+> slide. A function's first relation attached at no node: it is read as a returned relation is, at the larger
+> of its two ends' counts (R21), until a second relation joins, and from then on at the node that relation
+> joined at. A relation
 > alone is read at the node it would attach at in the function it is compared with, over the same rows, so
 > joining and leaving are one comparison at one neuron, and a function's worth with a candidate and its worth
 > without it are read at the same nodes, so a function of one relation is read, in both, at the node the
-> candidate would attach at; a relation no function is a candidate of is read at its end with the more
-> activations behind it, as a returned relation is (R21). A relation of a
+> candidate would attach at; a relation no function is a candidate of is read as a returned relation is, at
+> the larger of its two ends' counts (R21). A relation of a
 > pose to itself is read in one direction, from an activation toward the one its offset reaches (D34): a row
 > holds it where that neighbor stands, whether or not the same neighbor stands at the opposite offset, so the
 > ends of a run count as its middle does.
 >
 > **A relation counts in a function only where that function lands** (D57). A function that is a cycle lands
 > on every occurrence of its relations (D15). So a relation
-> of it is counted at no one node: every occurrence of it counts, and its count is its strength, half of what
-> its two ends count together (R21). Where both its ends are one node there is
+> of it is counted at no one node: every occurrence of it counts, and its count is its strength, the larger of
+> its two ends' counts (R21). Where both its ends are one node there is
 > one reading. A candidate is read by what the function would be with it.
 
 > **A relation forward in time is read once the row has taken what followed** (D18). A relation backward in
