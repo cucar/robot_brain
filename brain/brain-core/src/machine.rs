@@ -92,6 +92,9 @@ pub struct Machine {
     pub(crate) retired_funcs: FxHashMap<FuncId, (Func, Frame)>,
     /// Per interneuron, the function that fired it last, for inferring it (R28).
     pub(crate) last_func: FxHashMap<NeuronId, FuncId>,
+    /// The same while frozen: what a frozen machine's calls would have written there, read before `last_func` and
+    /// dropped once the machine learns again, so a test leaves `last_func` as it found it
+    pub(crate) frozen_last_func: FxHashMap<NeuronId, FuncId>,
     /// Interneurons whose last function has left, waiting for their windows to close (R38).
     pub ledger: Vec<NeuronId>,
     /// Per interneuron on the ledger, the frame before which its subtree still stands on the board: it is not
@@ -231,9 +234,11 @@ pub struct Machine {
     pub(crate) held_memo: std::cell::RefCell<FxHashMap<(crate::function::Rel, Option<NeuronId>), Option<(Sym, Sym, Offset)>>>,
     pub(crate) strength_memo: std::cell::RefCell<FxHashMap<(crate::function::Rel, Option<NeuronId>), u32>>,
     pub(crate) returned_memo: std::cell::RefCell<FxHashMap<(crate::function::Rel, Option<NeuronId>), u32>>,
-    /// A test: the machine recognizes and predicts but changes nothing of itself. No rows enter a history, no
-    /// function is added, moved or pruned, no interneuron is allocated, no connection or reward is written,
-    /// nothing is decommissioned.
+    /// A test: the machine runs each level as it was trained to, the frame first and time after it, its elections
+    /// covering, lifting, refusing and blocking as each fit is taken, its calls firing level after level, and infers
+    /// and resolves as usual; but it changes nothing of itself. No rows enter a history and the relation index stays
+    /// as it is, no function starts, joins, moves or leaves, no interneuron is allocated (so a fit of a function with
+    /// no living interneuron is not elected), no connection or reward is written, nothing is decommissioned.
     pub frozen: bool,
     /// Experiment: at each level, elect the fits of the functions the dictionary already holds before grouping,
     /// then group over what that left uncovered, then fit what grouping changed and elect again over the rest.
@@ -267,6 +272,7 @@ impl Machine {
             dict: Dictionary::default(),
             retired_funcs: FxHashMap::default(),
             last_func: FxHashMap::default(),
+            frozen_last_func: FxHashMap::default(),
             ledger: Vec::new(),
             ledger_due: FxHashMap::default(),
             stats_added: 0,
@@ -393,6 +399,13 @@ impl Machine {
     /// machine's output for the frame ahead.
     pub fn process_frame(&mut self, inputs: &[Input], rewards: Vec<Reward>) -> Vec<Winner> {
         let start = std::time::Instant::now();
+        // what a frozen machine named or recorded for its own calls goes once it learns again (`last_func`, poses);
+        // the expansions kept may have been read through those poses
+        self.dict.frozen = self.frozen;
+        if !self.frozen {
+            self.frozen_last_func.clear();
+            if self.dict.drop_frozen_syms() { self.forget_all_expansions(); }
+        }
         self.frame_no += 1;
         let fno = self.frame_no;
         self.middle_seen.clear();
@@ -442,7 +455,7 @@ impl Machine {
             let lt = std::time::Instant::now();
             let added_before = self.stats_added;
             let (bids, accepted, minted) = self.run_level(level, &refs);
-            if !self.frozen { let (b, c) = self.cover_pass(); self.cover_log.push((level as i64, b, c)); }
+            { let (b, c) = self.cover_pass(); self.cover_log.push((level as i64, b, c)); }
             stats.per_level.push((refs.len(), bids, self.last_fits, accepted, self.stats_added - added_before, lt.elapsed().as_secs_f64() * 1000.0));
             if self.trace_levels {
                 let (acts, rels, fits, acc, added, ms) = stats.per_level[stats.per_level.len() - 1];
@@ -457,7 +470,7 @@ impl Machine {
             if level > 1024 { break; }
         }
         // and once more after the frame's last level (D24)
-        if !self.frozen { let (b, c) = self.cover_pass(); self.cover_log.push((-1, b, c)); }
+        { let (b, c) = self.cover_pass(); self.cover_log.push((-1, b, c)); }
         stats.added = self.stats_added;
         stats.reused = self.stats_reused;
         stats.retired = self.stats_retired;
@@ -742,7 +755,7 @@ impl Machine {
             by_neuron.entry(n).or_default().push(RowInput { act: r, own, nbs });
         }
         // each neighbor learns whose row holds it, for the calls that land on it to be written there (D10)
-        if !self.frozen { for (b, n, r) in seen { if let Some(x) = self.act_mut(b) { x.seen_by.push((n, r)); } } }
+        for (b, n, r) in seen { if let Some(x) = self.act_mut(b) { x.seen_by.push((n, r)); } }
         let tasks: Vec<(NeuronId, Vec<RowInput>)> = order.iter().map(|&n| (n, by_neuron.remove(&n).unwrap())).collect();
         let returns: Vec<ActReturn> = if self.frozen {
             tasks.into_iter().flat_map(|(n, rows)| self.thalamus[n].peek(rows)).collect()
@@ -815,6 +828,26 @@ impl Machine {
                 let (a3, m3) = self.start_one_at_a_time(level, &queue, &left);
                 accepted += a3;
                 minted += m3;
+            }
+            return (bids, accepted, minted);
+        }
+        // a frozen machine runs the level as the build does, the frame first and time after it, over the fits of the
+        // functions that exist; it changes nothing that lasts: no function starts, joins, moves or leaves, and a fit
+        // of a function with no living interneuron is not in the election, since none is allocated
+        if self.frozen && self.recognize_first {
+            let (mut accepted, mut minted) = (0, 0);
+            self.last_fits = 0;
+            for inside in [true, false] {
+                let kind: Vec<Fresh> = fresh.iter().filter(|e| (e.rel.off[0] == 0) == inside).copied().collect();
+                let found: Vec<FuncId> = self.find(&kind);
+                let mine: Vec<_> = found.iter().filter(|id| self.dict.get(**id).and_then(|f| f.inter).map_or(false, |n| self.thalamus.get(n).map_or(false, |x| x.alive)))
+                    .flat_map(|id| self.fits_of(*id)).collect();
+                if self.trace { eprintln!("[half f{} l{}] {} (frozen) | fits of the functions that exist {}", self.frame_no, level, if inside { "the frame" } else { "time" }, mine.len()); }
+                self.last_fits += mine.len();
+                self.call_fit.clear();
+                let (a1, m1) = self.elect(level, mine);
+                accepted += a1;
+                minted += m1;
             }
             return (bids, accepted, minted);
         }

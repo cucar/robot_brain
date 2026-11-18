@@ -29,7 +29,7 @@ impl Machine {
     }
 
     pub(crate) fn func_of(&self, n: NeuronId) -> Option<&Func> {
-        self.last_func.get(&n).and_then(|id| self.func(*id)).or_else(|| self.dict.of_inter(n).first().and_then(|id| self.dict.get(*id)))
+        (if self.frozen { self.frozen_last_func.get(&n).or_else(|| self.last_func.get(&n)) } else { self.last_func.get(&n) }).and_then(|id| self.func(*id)).or_else(|| self.dict.of_inter(n).first().and_then(|id| self.dict.get(*id)))
     }
 
     /// What a function expands to from node `root` standing at `at`, one expansion down (R28): each node at its

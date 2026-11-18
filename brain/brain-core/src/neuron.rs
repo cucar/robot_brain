@@ -132,8 +132,22 @@ impl Neuron {
     }
 
     /// What `activate` would return, admitting nothing: a frozen machine's call (the machine's test mode).
+    /// The strengths are the ones `activate` returns: the rows it would evict taken out, the rows it would admit
+    /// counted in.
     pub fn peek(&self, inputs: Vec<RowInput>) -> Vec<ActReturn> {
-        inputs.into_iter().map(|inp| ActReturn { act: inp.act, rels: inp.nbs.iter().map(|nb| (*nb, self.strength(&(inp.own, nb.sym, nb.off)) + 1)).collect() }).collect()
+        let incoming = inputs.len().min(self.h);
+        let evict = (self.history.len() + incoming).saturating_sub(self.h);
+        let mut delta: FxHashMap<RelKey, i64> = FxHashMap::default();
+        for old in self.history.iter().take(evict) { for k in keys_of(old) { *delta.entry(k).or_insert(0) -= 1; } }
+        let rows: Vec<RowInput> = inputs.into_iter().take(incoming).collect();
+        for inp in &rows {
+            let mut k: Vec<RelKey> = inp.nbs.iter().map(|nb| (inp.own, nb.sym, nb.off)).collect();
+            k.sort_unstable();
+            k.dedup();
+            for k in k { *delta.entry(k).or_insert(0) += 1; }
+        }
+        let at = |k: &RelKey| (self.strength(k) as i64 + delta.get(k).copied().unwrap_or(0)).max(0) as u32;
+        rows.into_iter().map(|inp| ActReturn { act: inp.act, rels: inp.nbs.iter().map(|nb| (*nb, at(&(inp.own, nb.sym, nb.off)))).collect() }).collect()
     }
 
     /// A call landed on an activation this row saw (D10): the row holds the call's pose at its offset where

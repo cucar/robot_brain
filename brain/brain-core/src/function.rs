@@ -245,6 +245,11 @@ pub struct Dictionary {
     /// The names of the calls (D8): each interneuron in each phase it has fired in, a pose.
     pub syms: Vec<(NeuronId, Phase)>,
     sym_index: FxHashMap<(NeuronId, Phase), Sym>,
+    /// While the machine is frozen: the poses its calls name that the table does not hold, numbered on from it,
+    /// read after it; dropped once the machine learns again, so a test leaves the table as it found it
+    pub frozen: bool,
+    pub frozen_syms: Vec<(NeuronId, Phase)>,
+    frozen_index: FxHashMap<(NeuronId, Phase), Sym>,
     next_id: FuncId,
     next_join: u64,
 }
@@ -277,9 +282,14 @@ impl Dictionary {
     }
 
     /// The neuron a symbol names.
-    pub fn neuron_of(&self, s: Sym) -> NeuronId { if s < SYM_CALL { s } else { self.syms.get((s - SYM_CALL) as usize).map_or(NeuronId::MAX, |x| x.0) } }
+    pub fn neuron_of(&self, s: Sym) -> NeuronId { if s < SYM_CALL { s } else { self.pose_entry(s).map_or(NeuronId::MAX, |x| x.0) } }
+    /// A call's entry in the pose table, or in the frozen machine's copy after it.
+    fn pose_entry(&self, s: Sym) -> Option<(NeuronId, Phase)> {
+        let i = (s - SYM_CALL) as usize;
+        if i < self.syms.len() { Some(self.syms[i]) } else { self.frozen_syms.get(i - self.syms.len()).copied() }
+    }
     /// The phase a call's pose names; none for a base neuron, which has one phase.
-    pub fn pose_of(&self, s: Sym) -> Option<Phase> { if s < SYM_CALL { None } else { self.syms.get((s - SYM_CALL) as usize).map(|x| x.1) } }
+    pub fn pose_of(&self, s: Sym) -> Option<Phase> { if s < SYM_CALL { None } else { self.pose_entry(s).map(|x| x.1) } }
     /// The node a call's phase starts at (D54), a pose: a fit lands that node on the call.
     pub fn start_of(&self, s: Sym) -> Option<Sym> { self.pose_of(s).map(|p| p.from) }
     /// Whether a call's phase starts at a node (D54): the node is the phase's start, a pose.
@@ -289,13 +299,27 @@ impl Dictionary {
     /// The pose of an interneuron in a phase, allotted the first time it is named.
     pub fn sym_of(&mut self, n: NeuronId, phase: Phase) -> Sym {
         if let Some(s) = self.sym_index.get(&(n, phase)) { return *s; }
+        if self.frozen {
+            if let Some(s) = self.frozen_index.get(&(n, phase)) { return *s; }
+            let s = SYM_CALL + (self.syms.len() + self.frozen_syms.len()) as Sym;
+            self.frozen_syms.push((n, phase));
+            self.frozen_index.insert((n, phase), s);
+            return s;
+        }
         let s = SYM_CALL + self.syms.len() as Sym;
         self.syms.push((n, phase));
         self.sym_index.insert((n, phase), s);
         s
     }
     /// The pose of an interneuron in a phase where one is allotted already.
-    pub fn find_sym(&self, n: NeuronId, phase: Phase) -> Option<Sym> { self.sym_index.get(&(n, phase)).copied() }
+    pub fn find_sym(&self, n: NeuronId, phase: Phase) -> Option<Sym> { self.sym_index.get(&(n, phase)).or_else(|| self.frozen_index.get(&(n, phase))).copied() }
+    /// Drop the frozen machine's poses; returns whether there were any.
+    pub fn drop_frozen_syms(&mut self) -> bool {
+        let any = !self.frozen_syms.is_empty();
+        self.frozen_syms.clear();
+        self.frozen_index.clear();
+        any
+    }
     /// A call's pose in its phase less its laps (D25): the node it started at and the node it stands at.
     pub fn sym_no_laps(&mut self, s: Sym) -> Sym {
         match self.pose_of(s) { Some(p) if p.laps > 0 => { let n = self.neuron_of(s); self.sym_of(n, Phase { laps: 0, ..p }) } _ => s }

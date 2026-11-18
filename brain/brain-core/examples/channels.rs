@@ -148,6 +148,11 @@ fn main() {
         _ => panic!("mode: two, three, three1, lap, lapa, lapb or four"),
     };
     let cycles: usize = args.get(2).filter(|a| !a.starts_with("--")).and_then(|s| s.parse().ok()).unwrap_or(default_cycles);
+    // --frozen-laps=N: after the laps that train, so many more laps of the same data on the machine frozen
+    let frozen_laps: usize = args.iter().find(|a| a.starts_with("--frozen-laps=")).map_or(0, |a| a[14..].parse().unwrap());
+    let train_laps = cycles;
+    let cycles = cycles + frozen_laps;
+    let mut before: Option<(usize, usize, usize, usize, usize, u64, u64, usize)> = None;
     let mut m = Machine::new(256, Policy::events_to_actions(), 1);
     m.print_cycles = std::env::args().any(|a| a == "--cycles");
     if args.iter().any(|a| a == "--levels") { m.trace_levels = true; }
@@ -200,6 +205,7 @@ fn main() {
     let tcost: f64 = args.iter().find(|a| a.starts_with("--cost=")).map_or(0.0, |a| a[7..].parse().unwrap());
     let report_every: usize = args.iter().find(|a| a.starts_with("--every=")).map_or(0, |a| a[8..].parse().unwrap());
     for k in 0..total {
+        if frozen_laps > 0 && k == cycle * train_laps { before = Some(fingerprint(&m)); m.frozen = true; println!("FROZEN from lap {} | poses {}", train_laps + 1, m.dict.syms.len()); }
         if k % cycle == 0 { cash = 15000.0; shares = vec![0; nch]; trades = 0; }
         let mut inputs = Vec::new();
         let mut rewards = Vec::new();
@@ -451,6 +457,19 @@ fn main() {
     }
     println!("recognition: {} functions | the dictionary last changed at frame {}", m.dict.len(), last_change);
     println!("NEVERCALLED {} of {}", m.funcs_never_called(), m.dict.len());
+    if let Some(b) = before {
+        let a = fingerprint(&m);
+        for lap in train_laps..cycles {
+            let per: Vec<String> = series.iter().enumerate().filter(|(i, _)| chans[*i].2.is_some()).map(|(i, (name, _, _))| {
+                let r = grid[i][lap].iter().filter(|c| **c == 'R').count();
+                let n = grid[i][lap].iter().filter(|c| **c != '-').count();
+                format!("{} {}/{}", name, r, n)
+            }).collect();
+            println!("FROZENLAP {} | {}", lap + 1, per.join(", "));
+        }
+        println!("READONLY {} (neurons, functions, history rows, connections, index, connection sum, dictionary, pose table) {:?}{} | poses named while frozen, kept apart {}",
+            if a == b { "unchanged" } else { "CHANGED" }, b, if a == b { String::new() } else { format!(" -> {:?}", a) }, m.dict.frozen_syms.len());
+    }
     println!("JOINSMOVES joins frame {} time {} | moves frame {} time {}", m.joins_by[0], m.joins_by[1], m.moves_by[0], m.moves_by[1]);
     println!("  combination calls per frame, per cycle: {}", combos.iter().enumerate().map(|(c, v)| format!("{}:{}", c + 1, v.iter().map(|x| x.to_string()).collect::<String>())).collect::<Vec<_>>().join(" "));
     if mode.starts_with("lap") || mode == "four" {
@@ -519,4 +538,20 @@ fn main() {
         println!("  apex: call of f{} | level {} | frames {:?} | channels {}", a.fired_by.as_ref().map_or(0, |f| f.func), a.level, frames, chs.len());
     }
     println!("  {:.1} s", t0.elapsed().as_secs_f64());
+}
+
+/// Everything a neuron or the dictionary holds, summed: if a test changes any of it, this changes (as in `split`).
+fn fingerprint(m: &Machine) -> (usize, usize, usize, usize, usize, u64, u64, usize) {
+    let mut d: Vec<String> = m.dict.funcs.values().map(|f| m.dict.describe(f)).collect();
+    d.sort();
+    let h = d.join(";").bytes().fold(1469598103934665603u64, |h, b| (h ^ b as u64).wrapping_mul(1099511628211));
+    let (mut rows, mut conns, mut index) = (0usize, 0usize, 0usize);
+    let mut cs: u64 = 0;
+    for n in m.thalamus.iter() {
+        rows += n.history.len();
+        index += n.index.values().map(|v| *v as usize).sum::<usize>();
+        conns += n.connections.len();
+        for (k, c) in &n.connections { cs = cs.wrapping_add((c.strength.to_bits() ^ c.earnings.to_bits()).wrapping_mul(k.0 as u64 + 31 * k.1 as u64 + 1)); }
+    }
+    (m.alive, m.dict.len(), rows, conns, index, cs, h, m.dict.syms.len())
 }

@@ -161,7 +161,7 @@ impl Machine {
             {
                 let ends = self.mark_refused(&fits, level);
                 // an end left with one covered relation inside its frame and no other that counts is covered by it (D24)
-                if !ends.is_empty() && !self.frozen {
+                if !ends.is_empty() {
                     let covered: FxHashSet<ActRef> = self.cover_in_election(&ends).into_iter().collect();
                     if !covered.is_empty() {
                         let mut next = Vec::with_capacity(fits.len());
@@ -183,8 +183,8 @@ impl Machine {
             for (i, fit) in fits.iter().enumerate() {
                 let net = self.coverage(fit) - self.price(fit);
                 if !(net > 0.0) { continue; }
-                // the frame before time (R24, D34): where one election holds both kinds, as a frozen machine's does, a fit
-                // inside the frame before any fit in time; within a kind as before
+                // the frame before time (R24, D34): where one election holds both kinds, a fit inside the frame before
+                // any fit in time; within a kind as before
                 let (ins_i, ins_j) = match best { Some((j, _)) => (self.fit_inside(fit), self.fit_inside(&fits[j])), None => (false, false) };
                 let better = match best { None => true, Some(_) if ins_i != ins_j => ins_i, Some((j, bn)) => net > bn || (net == bn && {
                     if ranks[i].is_none() { ranks[i] = Some(self.rank(fit)); }
@@ -207,7 +207,7 @@ impl Machine {
             accepted += 1;
             // covering takes effect as the fit is taken (D28, D24, R23): what it landed on and the taken fits now
             // cover is off the board from the next round
-            let covered: FxHashSet<ActRef> = if self.frozen { FxHashSet::default() } else {
+            let covered: FxHashSet<ActRef> = {
                 let mut cands: Vec<ActRef> = fit.acts().map(|x| x.0).collect();
                 for &(a, b) in &fit.edges { cands.push(a); cands.push(b); }
                 self.cover_in_election(&cands).into_iter().collect()
@@ -289,8 +289,10 @@ impl Machine {
                 id
             }
         };
-        self.ledger.retain(|x| *x != neuron);
-        self.last_func.insert(neuron, f.id);
+        if self.frozen { self.frozen_last_func.insert(neuron, f.id); } else {
+            self.ledger.retain(|x| *x != neuron);
+            self.last_func.insert(neuron, f.id);
+        }
         // its phase (D53): from its latest node back to its earliest, round the laps it read; a call of its own
         // function it landed on adds what that call stood for, so its half lap is counted with the rest (R23)
         let order = f.back_order(latest.1);
@@ -334,7 +336,7 @@ impl Machine {
             fired_by: Some(FiredBy { func: f.id, failed: fit.failed.clone() }),
             rels: Vec::new(), inferences: Vec::new(), opened_at: fno, level: level + 1, height, gone: false,
         };
-        { let r = self.reach_of.entry(neuron).or_insert([0; MAX_DIMS]); for d in 0..MAX_DIMS { r[d] = r[d].max(act.reach[d]); } }
+        if !self.frozen { let r = self.reach_of.entry(neuron).or_insert([0; MAX_DIMS]); for d in 0..MAX_DIMS { r[d] = r[d].max(act.reach[d]); } }
         let Some(fr) = self.frame_mut(fno) else { return minted };
         let me = ActRef { frame: fno, index: fr.acts.len() as u32 };
         fr.acts.push(act);
