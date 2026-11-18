@@ -1400,12 +1400,13 @@ level takes and starts nothing:
 | the frame  | Run the six steps below over the relations inside the frame and the functions that hold them (R24). |
 | allocate   | Give each accepted function with no interneuron one, reused where a stretch comes round (R43), allocated otherwise where a neuron is free (R16). It fires at the next level. |
 
-Then the levels run again from the first, on the board as the frame left it, until a level fires nothing:
+Then the levels run again from the first, on the board as the frame left it, until a level holds no
+activation in this frame. A level whose activations all came from the frame's own run still runs for time:
 
 | Step       | Description |
 |------------|-------------|
 | activate   | Fire every interneuron accepted at the level below since this level last ran, once, and call `activate` on it. An activation is activated once in a frame. |
-| the frame  | Run the six steps over the relations inside the frame that those activations returned (R24). |
+| the frame  | Run the six steps over the relations inside the frame that those activations returned (R24). Functions are fit and start from those relations only. Group reads the whole board for its moves. |
 | time       | Run the same six steps over the relations in time and the functions that hold them (R24). |
 | allocate   | As above. |
 
@@ -1438,16 +1439,18 @@ argument.
 > frame reported, all of them together: they are activated and return relations, the machine fits what the
 > dictionary holds and groups, and the election settles which fits are accepted. The next level is the
 > interneurons of those fits:
-> they fire, are activated and return relations, and so on upward. **When a level fires nothing, the frame's
-> levels end there.** Nothing declares the depth and nothing caps it. A level belongs to a frame and not to a
+> they fire, are activated and return relations, and so on upward. **When a level holds no activation in this
+> frame, the frame's levels end there.** Nothing declares the depth and nothing caps it. A level belongs to a frame and not to a
 > neuron: a neuron fires at whatever level accepts its function, and one neuron may fire at different levels of
 > different frames.
 >
 > **The frame runs up all its levels before time runs at any.** At each level of the frame the order is
 > activate; then find, elect, count, group, elect and start over the relations inside the frame; then
-> allocate. It ends at the level that takes and starts nothing. Then the levels run again from the first. At
+> allocate. It ends at the level that takes and starts nothing. Then the levels run again from the first,
+> every level that holds an activation in this frame, whether or not anything new fires there. At
 > each the order is activate, for what was accepted since the level last ran; the six steps over the
-> relations inside the frame that those returned; the same six over the relations in time; then allocate. So
+> relations inside the frame that those returned, where functions are fit and start from those relations
+> only and group reads the whole board for its moves; the same six over the relations in time; then allocate. So
 > a call made in time is still related inside the frame to what stands at its position. Nothing in time is
 > fit, joined, moved or started, at any level, until the frame has nothing left to do at every level (R24).
 > What fires is what
