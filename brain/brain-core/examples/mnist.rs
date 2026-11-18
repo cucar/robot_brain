@@ -26,7 +26,7 @@ fn labels(path: &str) -> Vec<u32> { read(path)[8..].iter().map(|&x| x as u32).co
 fn main() {
     // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
     let s15_off = std::env::args().any(|a| a == "--s15-off");
-    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && a != "--landed" && a != "--cycles" && !a.starts_with("--only=") && !a.starts_with("--changes-from=") && a != "--apex-all" && !a.starts_with("--neurons=")).collect();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && a != "--landed" && a != "--cycles" && !a.starts_with("--only=") && !a.starts_with("--changes-from=") && a != "--apex-all" && !a.starts_with("--test-per-class=") && !a.starts_with("--neurons=")).collect();
     // --only=i: train on image i of the file alone
     let only: Option<usize> = std::env::args().find_map(|a| a.strip_prefix("--only=").map(|s| s.parse().unwrap()));
     // --changes-from=k: report every change to the dictionary from episode k on (default: the last 5 episodes)
@@ -41,7 +41,14 @@ fn main() {
     let test_imgs = images(&format!("{}/t10k-images-idx3-ubyte", dir));
     let test_lbls = labels(&format!("{}/t10k-labels-idx1-ubyte", dir));
     let train_n = num(2).unwrap_or(train_imgs.len()).min(train_imgs.len());
-    let test_n = num(3).unwrap_or(500).min(test_imgs.len());
+    // --test-per-class=k: the test is the first k test images of each digit, in the file's order, in place of the
+    // first [test] images
+    let test_per_class: Option<usize> = std::env::args().find_map(|a| a.strip_prefix("--test-per-class=").map(|s| s.parse().unwrap()));
+    let test_order: Vec<usize> = match test_per_class {
+        Some(k) => { let mut got = [0usize; 10]; (0..test_imgs.len()).filter(|&i| { let d = test_lbls[i] as usize; if got[d] < k { got[d] += 1; true } else { false } }).collect() }
+        None => (0..num(3).unwrap_or(500).min(test_imgs.len())).collect(),
+    };
+    let test_n = test_order.len();
     let h = num(4).unwrap_or(2048);
     let size = num(5).unwrap_or(14);
     let teach_arg = num(6);
@@ -220,13 +227,14 @@ fn main() {
     let t1 = Instant::now();
     let (mut spoke, mut right, mut apex) = (0usize, 0usize, 0usize);
     let mut confusion = [[0usize; 10]; 10];
-    for i in 0..test_n {
+    for (t, &i) in test_order.iter().enumerate() {
         let label = test_lbls[i];
         let (said, _) = run(&mut m, &test_imgs[i]);
         apex += m.last_stats.apex_acts;
         if let Some(s) = said { spoke += 1; confusion[label as usize][s as usize] += 1; if s == label { right += 1; } }
         answer(&mut m, said, None);
         m.reset_context();
+        if (t + 1) % 100 == 0 { eprintln!("  test {}/{} | spoke {} right {} ({:.1}%)", t + 1, test_n, spoke, right, 100.0 * right as f64 / (t + 1) as f64); }
     }
     println!("  test: {} images | spoke {} | right {} ({:.1}%) | apex/image {:.1} | neurons {} functions {} | {:.0}s",
         test_n, spoke, right, 100.0 * right as f64 / test_n.max(1) as f64, apex as f64 / test_n.max(1) as f64, m.alive, m.dict.len(), t1.elapsed().as_secs_f64());
