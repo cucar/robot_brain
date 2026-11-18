@@ -1521,12 +1521,12 @@ argument.
 > before while its activations still stand (D9), that the fit did not land on, and that the fit touches in
 > one of two ways. The first election left it on the board, and it shares a neuron with an activation the fit
 > landed on or with the call. Or a call covers it, and the fit touches that call: the fit landed on an
-> activation that call also landed on, and the relation shares that activation, or the fit landed on the call
-> as a node, and the relation shares the activation the call stands at (D54). So a relation another function holds is offered
-> where the fit touches the call that covers it, and whether it moves is decided by its gain here against
-> its contribution there (R54). Where a relation under a call the function names joins, the function's
-> relation to that call is held from then on as the relation to the activation the call stands at, the node
-> the two share. A relation under a call the fit does not touch is no candidate. Its
+> activation that call also landed on, and the relation shares that activation. So a relation another function
+> holds is offered where the fit landed on an activation that function's call also landed on, and whether it
+> moves is decided by its gain here against its contribution there (R54). Where the fit landed on a call as a
+> node, the relations under that call are no candidates: a function that names a call is offered nothing from
+> under it, and its relation to the call stays a relation to the call. A relation under a call the fit does not
+> touch is no candidate. Its
 > other end is a
 > neuron the function does not name, which would be a new node, or a node the function has, which would close
 > a cycle (D15). An activation returns the relation to what stands on the board,
