@@ -470,7 +470,7 @@ what was done together.
 > **The two kinds are held apart, for one reason.** A frame is complete when it fires, and time is not: what
 > stands with an activation is all there, and what follows it is still to come. So the two kinds are counted
 > apart where an activation is covered, and the first covered relation of an activation decides which kind
-> covers it (D24). A function holds one kind (D15). The election takes the fits inside the frame first (R24).
+> covers it (D24). A function holds one kind (D15). A level runs for the frame first and for time after it (R24).
 >
 > **A call's phase is part of its name.** A relation to an interneuron names it in the phase its activation
 > fired in (D8, D53): which node the fit ran from and to, each by its neuron, and how many laps. A base neuron
@@ -1082,9 +1082,8 @@ is stated here and cited from there.
 >    relations it lands on, less any that are refused or blocked (D24, D54). Its price is its call's cost there
 >    (D22): its failures and bindings, and nothing else (R22).
 > 2. **Take** one fit, and **stop** where none covers more than it costs. A fit is inside the frame or in
->    time, as its function is (D15). Among the fits inside the frame, the one whose `coverage` exceeds its
->    `price` by the most is taken. Where no fit inside the frame covers more than it costs, that one among the
->    fits in time is taken (D34). It covers what it was measured on. A relation it covers decides the kind of
+>    time, as its function is (D15), and the cover runs over one kind at a time, the frame before time (R24).
+>    The fit whose `coverage` exceeds its `price` by the most is taken. It covers what it was measured on. A relation it covers decides the kind of
 >    each of its ends that had none, and that activation's relations of the other kind are blocked. Every
 >    relation whose two ends the fits taken at this level now join is refused, and an activation left with
 >    one covered relation inside the frame and no other that counts there is covered by it (D24). An
@@ -1396,12 +1395,20 @@ frame reported, each after it over what the level before accepted, until a level
 | Step       | Description |
 |------------|-------------|
 | activate   | Fire every interneuron the level below accepted, once, in its fit's phase (D53), and call `activate` on every neuron with an activation at this level (§5). They return their relations with strengths. |
-| find       | Read every returned relation in the index, as it is and with either end open, and fit every function it reaches on the board wherever its relations match, one fit per position (R53, D31). |
-| elect      | Take the fits inside the frame first and the fits in time after them, within each the largest coverage less price each round, stopping when the board is covered (R24). The dictionary as it stands covers what it knows before anything in it changes. |
-| count      | Hand each neuron every function it stands in, fit at this level or not, with the candidates of the ones that fit, and call `count` on it: it returns with and without for each relation and each candidate (R50, D47). |
-| group      | Over those counts, move each relation where the dictionary's worth rises most, to a function it is a candidate of, one that closes a cycle before one that adds a node, the nearest on a tie, to its own function or to none, and start a function for each relation no function holds that is worth one (R50, R54, R18). |
-| elect      | Fit every function that changed or formed in group on what the first election left, and elect again over those fits the same way (R24). |
+| the frame  | Run the six steps below over the relations inside the frame and the functions that hold them (R24). |
+| time       | Run the same six steps over the relations in time and the functions that hold them, on the board as the frame left it (R24). |
 | allocate   | Give each accepted function with no interneuron one, reused where a stretch comes round (R43), allocated otherwise where a neuron is free (R16). It fires at the next level. |
+
+The six steps, run once for the frame and then once for time, each over its own kind of relation (D34):
+
+| Step       | Description |
+|------------|-------------|
+| find       | Read every returned relation in the index, as it is and with either end open, and fit every function it reaches on the board wherever its relations match, one fit per position (R53, D31). |
+| elect      | Take the fits, the largest coverage less price each round, stopping when no fit pays (R24). The dictionary as it stands covers what it knows before anything in it changes. |
+| count      | Hand each neuron every function it stands in, fit at this level or not, with the candidates of the ones that fit, and call `count` on it: it returns with and without for each relation and each candidate (R50, D47). |
+| group      | Over those counts, move each relation where the dictionary's worth rises most, to a function it is a candidate of, one that closes a cycle before one that adds a node, the nearest on a tie, to its own function or to none (R50, R54, R18). |
+| elect      | Fit every function that changed in group on what the first election left, and elect again over those fits the same way (R24). |
+| start      | One function at a time. Of the relations no function holds that are worth a function and still stand on the board, start a function from the one with the most instances standing, elect its fits, and look again at what stands. Stop when none is left (R50). |
 
 Then, once the last level has run:
 
@@ -1426,14 +1433,18 @@ argument.
 > neuron: a neuron fires at whatever level accepts its function, and one neuron may fire at different levels of
 > different frames.
 >
-> **Within a level the order is activate, find, elect, count, group, elect, allocate.** What fires is what
+> **Within a level the frame comes first and time after it.** The order is activate; then find, elect, count,
+> group, elect and start over the relations inside the frame; then the same six over the relations in time, on
+> the board as the frame left it; then allocate. Nothing in time is fit, joined, moved or started until the
+> frame has nothing left to do (R24). What fires is what
 > the level before accepted; what a neuron returns is what is fit; the first election takes the best fits of
 > the dictionary as it stands, so what is known covers its pixels before anything in the dictionary changes;
-> the neurons count over what was fit; the moves read their counts; a function that changed or formed in
-> group is fit on what the first election left, and the second election is over those fits; and an
+> the neurons count over what was fit; the moves read their counts; a function that changed in
+> group is fit on what the first election left, and the second election is over those fits; functions then
+> start one at a time, each elected before the next is chosen (R50); and an
 > interneuron is allocated only for a fit an election accepted (R16). A function cannot form over the relations the
 > first election covered: a function that wins there keeps them until its relations leave on their
-> worth (R18, R54). The dictionary changes in group, and the index is read before and after it.
+> worth (R18, R54). The dictionary changes in group and in start, and the index is read before and after them.
 >
 > Every neuron runs the same rule at its own reach (D4). **Compression is spatio-temporal for every neuron, in
 > one pass**: a function names neighbors in its own frame or in earlier ones, one kind per function (D15), and
@@ -1574,16 +1585,29 @@ argument.
 > relation and the entry is its to pay (R54, R18). That asks whether it recurs at all, so it is read over
 > every row that holds it (D47), where a worth is read over the rows that have taken what followed. A relation
 > the neurons returned with strength 3 or more that no function
-> holds and no call covers starts a function of its own, two nodes and an offset, worth its strength less two
-> (D57), fit wherever it fits and taken where it covers its relation (R24). A relation of a pose to itself
-> starts one the same way: one node and an offset, a cycle from its first relation (D15). What stops a relation from starting
-> one is that a call covers that relation, never that a call has landed on one of its ends. A relation held less often is left where it is:
+> holds may start a function of its own, two nodes and an offset, worth its strength less two
+> (D57). A relation of a pose to itself
+> starts one the same way: one node and an offset, a cycle from its first relation (D15). A relation held less often is left where it is:
 > nothing is built that is worth nothing (R21).
+>
+> **Functions start one at a time, and only from a relation that still stands.** A relation **stands** where
+> at least one instance of it on the board is covered by no call and is not lifted, refused or blocked (D24,
+> D55). Starting comes last in its half of the level, after the fits of the functions that exist and after the
+> moves (R26). Of the relations that may start a function and stand, the one with the most instances standing
+> starts first, and on a tie the one whose standing instance is oldest. Its function is fit, and the election
+> takes its fits (R24). Covering, lifting, refusing and blocking follow as each fit is taken. Then the machine
+> looks again at what stands, and starts the next. It stops when no relation that may start a function stands.
+>
+> **So nothing starts from a relation that has already gone to the calls.** In an image, the row is started
+> first and its fits cover the pixels. The relations those pixels had to the pixels beside the row are lifted
+> to the row's calls, so no function between two bare pixels starts from them. The relation that stands
+> instead, between the calls, starts a function at the level above (D55). What stops a relation from starting
+> a function is that no instance of it stands, never that a call has landed on one of its ends.
 >
 > **Which relation it is, and where none is built.** A relation has one reading. Where its far end stands on
 > the board, it is the relation to that activation as itself, whatever calls have landed on it. Where its far
-> end is covered, it is the relation to each call that landed on it (D24, D5). It is counted in the rows that hold it (D47) and starts a function at its own strength of 3 where no
-> call covers it. So one pattern has one form, and nothing is built on a call while the activation under it can
+> end is covered, it is the relation to each call that landed on it (D24, D5). It is counted in the rows that hold it (D47) and may start a function at its own strength of 3 where it
+> still stands. So one pattern has one form, and nothing is built on a call while the activation under it can
 > still be read (R18). A relation to
 > a call that is the call's own function going round its cycle starts nothing: it is a lap of that call (D53),
 > so a pattern that repeats adds laps and never a function over itself. Two calls that landed on one
@@ -1599,9 +1623,10 @@ argument.
 > from itself back to the call, is a function at the level above, over the call (R26). Two relations that never
 > touch are never one function: where they recur together, the level above relates their two calls.
 >
-> **The fits the first election chooses among** are every fit of this level, of functions with an interneuron
-> and without (R24). A function that changed or formed at this level is fit again before the second
-> election, with its relations as they now stand, on what the first election left.
+> **The fits the first election chooses among** are every fit of this level of its kind, of functions with an
+> interneuron and without (R24). A function that changed at this level is fit again before the second
+> election, with its relations as they now stand, on what the first election left. A function that starts is
+> fit as it starts, on what the elections before it left.
 
 > **R54 — Moving.** A function changes by relations moving, one at a time, and by nothing else. There are three
 > moves, and each is the same decision, whether the dictionary's worth rises (D57), read from the neurons the
@@ -1711,7 +1736,7 @@ machine works out itself (R22).
 >
 > | kind | count |
 > |---|---|
-> | inside the frame | any two, in space or at one position; the one it has, where it has only one there |
+> | inside the frame | any two, in space or at one position; the one it has, where it has only one there; one, where nothing lies beyond the activation on the other side in that dimension |
 > | in time | one relation to an earlier frame and one to a later frame, each to any channel |
 >
 > The counts are separate: a relation inside the frame and a relation in time never make a count together.
@@ -1726,6 +1751,13 @@ machine works out itself (R22).
 > enough (D3). The first activation of a run is such a case: nothing is before it. The latest activation is
 > not: the layout does not end after it, and what follows has not fired, so it waits for what follows (D9).
 >
+> **In space, the edge is an end.** It is the same rule in every dimension of space. Where nothing lies beyond
+> an activation on one side in a dimension, within its reach, one covered relation toward the other side in
+> that dimension is enough. A pixel at the edge of an image is such a case, and a corner is one in both
+> dimensions. A relation that runs across two dimensions counts in each. So a row that runs to the edge
+> covers its last pixel as it covers the rest, and no second call is needed to cover that pixel. An end of a
+> row that stops short of the edge is not such a case: something lies beyond it.
+>
 > **The first covered relation decides the kind.** From the round of the election in which a relation of an
 > activation is first covered, the activation is covered through that relation's kind and no other. Every
 > relation of its own of the other kind is **blocked**. A blocked relation is never covered,
@@ -1735,7 +1767,7 @@ machine works out itself (R22).
 > **A deadlock is broken where it would close.** A deadlock is a chain of calls, each sharing an activation
 > with the next, where the last shares one with the first (D55). It is of any length. At one level of one
 > frame, two activations are **joined** when a chain of relations that the calls taken so far cover leads
-> from one to the other. Only relations covered at this level in this frame join them, across both elections
+> from one to the other. Only relations covered at this level in this frame join them, across every election
 > of the level (R24). A relation whose two ends are joined is **refused**, from that round, inside the frame
 > or in time. It makes no difference whether a fit offers it, whether any function holds it, whether one call
 > joined its ends or several, or whether the function that would cover it is a cycle. A fit's own relations
@@ -1803,9 +1835,9 @@ machine works out itself (R22).
 > together. So no relation is paid for twice. Covering takes effect inside the election, as each fit is accepted
 > (D28). An activation an accepted fit has landed on stays on the board while it is not covered, and another
 > fit of that election may land on it and cover a relation of its own. Once the accepted fits cover it, it is
-> off the board: no later fit of that election lands on it, each relation of its own that no call covers ends
-> at the calls that landed on it, and only those calls stand there (D24, D5). The second election of a level
-> fits what the first left, so a relation the first covered is not there for it, nor an activation it covered.
+> off the board: no later fit of that election lands on it, each relation of its own that no call covers is
+> lifted to the calls that landed on it, and only those calls stand there (D24, D55). A later election of a level
+> fits what the ones before it left, so a relation they covered is not there for it, nor an activation they covered.
 >
 > **A later frame reads the past as it stands on the board.** An activation of an earlier frame that is not
 > covered is returned as itself, and a fit at `f` lands on the relations to it that no call has covered. A
@@ -1824,21 +1856,25 @@ the election stops at the first that does not pay. **The election does not minim
 and returns a good solution, not a proved minimum. **Every activation a fit covers ends up credited to exactly
 one fit**, which is what stops an activation being paid for twice.
 
-> **R24 — The election is D28, run by the machine.** It runs twice in a level. The first time the fits are
-> everything find fit at this level, over the dictionary as it stands (R53); the second time they are the fits
-> of the functions grouping changed or formed, on what the first election left (R50, R52). Either time, less
+> **R24 — The election is D28, run by the machine.** In a level it runs for the frame and then for time, over
+> the fits of that kind (R26). In each it runs over three sets of fits. First, everything find fit at this
+> level, over the dictionary as it stands (R53). Second, the fits of the functions grouping changed, on what
+> the first left (R50, R52). Third, the fits of each function that starts, one function at a time (R50). Each
+> time, less
 > any whose function would need a neuron when none is free (R16), and what they cover is the **free set**:
 > every activation on the board that some fit lands on and no accepted call covers, with its relations
 > (D54).
 >
-> Each fit stands on the board before the first round (D31), and `price` is R22's. Then D28 runs: the fits
-> inside the frame before the fits in time, and within a kind the largest
+> Each fit stands on the board before the first round (D31), and `price` is R22's. Then D28 runs: the largest
 > `coverage` less `price` first, each while `coverage > price` against the board as it then stands, and it
 > stops when nothing on the board is left that a fit could cover for less than it costs.
 >
-> **The frame is settled before time.** It is one election, and the kind is the first thing it orders by. What
+> **The frame is settled before time.** The whole level runs for the frame first: its fits, its moves, and the
+> functions that start inside it. Only then does it run for time, on the board as the frame left it. What
 > stands with an activation in its frame is all there when the frame fires, and what follows it is still to
-> come (D34). So a fit in time is taken only once no fit inside the frame pays. Once a fit inside the frame
+> come (D34). So nothing in time is fit, joined, moved or started while anything inside the frame is left to
+> do. A relation inside the frame is therefore never blocked by a fit in time before it has had its turn to
+> start a function. Once a fit inside the frame
 > covers a relation of an activation, that activation is taken inside the frame, and its relations in time are
 > blocked (D24). They are lifted to the calls, and the level above reads them there (D55).
 >
