@@ -187,7 +187,7 @@ pub struct Machine {
     pub changed_after_action: u64,
     pub changed_after_action_funcs: FxHashSet<FuncId>,
     /// A relation's two end counts, remembered for one grouping step, while no row changes (a speed-up only).
-    pub(crate) halved_memo: std::cell::RefCell<Option<FxHashMap<Rel, (u32, u32)>>>,
+    pub(crate) end_counts_memo: std::cell::RefCell<Option<FxHashMap<Rel, (u32, u32)>>>,
     /// A relation's with and without at a node, given the set's relations there, remembered for one grouping step
     /// while no row changes (a speed-up only).
     pub(crate) answer_memo: std::cell::RefCell<Option<FxHashMap<(Sym, Sym, Offset, Vec<(Sym, Offset)>), (u32, u32)>>>,
@@ -315,7 +315,7 @@ impl Machine {
             move_count: FxHashMap::default(),
             changed_after_action: 0,
             changed_after_action_funcs: FxHashSet::default(),
-            halved_memo: std::cell::RefCell::new(None),
+            end_counts_memo: std::cell::RefCell::new(None),
             answer_memo: std::cell::RefCell::new(None),
             share_memo: std::cell::RefCell::new(None),
             last_stats: FrameStats::default(),

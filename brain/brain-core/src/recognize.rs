@@ -465,7 +465,7 @@ impl Machine {
 
     pub(crate) fn contribution_ab(&self, f: &Func, r: &Rel) -> f64 {
         let (without, wat): (Vec<Rel>, Vec<Option<Sym>>) = f.rels.iter().zip(&f.at).filter(|(x, _)| *x != r).map(|(x, a)| (*x, *a)).unzip();
-        if without.is_empty() { return self.halved(r) - 2.0; }
+        if without.is_empty() { return self.strength(r) - 2.0; }
         let origin = if without.iter().any(|x| x.a == f.root() || x.b == f.root()) { f.root() } else { without[0].a };
         self.worth_ab(f.root(), &f.rels, &f.at, f.inter) - self.worth_ab(origin, &without, &wat, f.inter)
     }
@@ -536,11 +536,11 @@ impl Machine {
 
     pub(crate) fn group(&mut self, fits: &[Fit], fresh: &[Fresh], board: &[Fresh], fired: &FxHashSet<Sym>) -> Vec<FuncId> {
         // no row changes while grouping, so each relation's count is read once
-        *self.halved_memo.borrow_mut() = Some(FxHashMap::default());
+        *self.end_counts_memo.borrow_mut() = Some(FxHashMap::default());
         *self.answer_memo.borrow_mut() = Some(FxHashMap::default());
         *self.share_memo.borrow_mut() = Some(FxHashMap::default());
         let out = self.group_inner(fits, fresh, board, fired);
-        *self.halved_memo.borrow_mut() = None;
+        *self.end_counts_memo.borrow_mut() = None;
         *self.answer_memo.borrow_mut() = None;
         *self.share_memo.borrow_mut() = None;
         out
@@ -657,7 +657,7 @@ impl Machine {
                     for rel in self.candidates(f, act, as_node, &opos, other) {
                         if self.half.map_or(false, |k| (rel.off[0] == 0) != k) { continue; }
                         // a candidate has strength 2 or more, read through calls (R50, D47)
-                        if self.halved(&rel) < 2.0 { continue; }
+                        if self.strength(&rel) < 2.0 { continue; }
                         // where both its ends are nodes of the function, it attaches at the end whose activation
                         // returned it, never at a node read through a call (R50)
                         let attach = if f.node_of(rel.a).is_some() && f.node_of(rel.b).is_some() {
@@ -678,7 +678,7 @@ impl Machine {
             if taken.get(&fid).map_or(false, |t| t.contains(&edge(shared, other))) { continue; }
             for rel in self.candidates(f, shared, as_node, &opos, other) {
                 if self.half.map_or(false, |k| (rel.off[0] == 0) != k) { continue; }
-                if self.halved(&rel) < 2.0 { continue; }
+                if self.strength(&rel) < 2.0 { continue; }
                 let attach = if f.node_of(rel.a).is_some() && f.node_of(rel.b).is_some() {
                     [e.near, e.far].iter().filter_map(|r| self.act(*r)).map(|a| a.sym).find(|s| *s == rel.a || *s == rel.b).unwrap_or(as_node)
                 } else { as_node };
@@ -730,7 +730,7 @@ impl Machine {
                         self.alone_over(&f.rels[0], attach, &with, f.inter).map(|x| x - 1.0)
                     } else { None };
                     let wb = lone_before.unwrap_or_else(|| self.worth_ab(f.root(), &f.rels, &before, f.inter));
-                    if self.trace && lone_before.is_some() { eprintln!("   [at node f{}] {} alone in f{} at {}: {:.0} (its count {:.1})", fno, self.rel_text(&f.rels[0]), fid, self.dict.sym_text(attach), wb, self.halved(&f.rels[0])); }
+                    if self.trace && lone_before.is_some() { eprintln!("   [at node f{}] {} alone in f{} at {}: {:.0} (its count {:.1})", fno, self.rel_text(&f.rels[0]), fid, self.dict.sym_text(attach), wb, self.strength(&f.rels[0])); }
                     self.worth_ab(f.root(), &with, &at, f.inter) - wb
                 };
                 let mut rels = f.rels.clone();
@@ -762,13 +762,13 @@ impl Machine {
                     self.alone_over(&rel, attach, &with, own).map(|x| x - 2.0)
                 })
             } else { None };
-            if self.trace { if let Some(h) = here20 { eprintln!("   [at node f{}] {} alone at {}: {:.0} (its count {:.1})", fno, self.rel_text(&rel), self.dict.sym_text(attach), h, self.halved(&rel)); } }
+            if self.trace { if let Some(h) = here20 { eprintln!("   [at node f{}] {} alone at {}: {:.0} (its count {:.1})", fno, self.rel_text(&rel), self.dict.sym_text(attach), h, self.strength(&rel)); } }
             let own = match holder {
                 _ if here20.is_some() => here20.unwrap(),
-                _ if lone => self.halved(&rel) - 2.0,
+                _ if lone => self.strength(&rel) - 2.0,
                 // its contribution where it stands, read as leaving reads it, at the node it attached at (R54, R50)
                 Some(g) => self.contribution_at_node(g, &rel),
-                None => self.halved(&rel) - 2.0,
+                None => self.strength(&rel) - 2.0,
             };
             // a function's last relation is weighed against everything that leaves with it: the function and its
             // subtree, every function that leaves the dictionary with its interneuron, and so on up (D57, R54, R38)
@@ -822,7 +822,7 @@ impl Machine {
                 for r in &rels {
                     // switch 21: a relation not at an end is not priced for leaving; what it would have done is counted
                     if middle21 && !Self::at_an_end(f, r) {
-                        let h = self.halved(r);
+                        let h = self.strength(r);
                         if h < 2.0 { notes.push((*r, 0, format!("strength below the threshold ({:.1})", h))); }
                         else {
                             let at_r = f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| *a);
@@ -835,7 +835,7 @@ impl Machine {
                     // for nothing once the neurons return it below 2 (R18)
                     // the neurons return it with strength below 2 over every row that holds it (R18, D47)
                     // the neurons return it below 2, bare or under this function's calls, over every row (R18, R50)
-                    let nothing = { let h = self.halved(r); if self.trace && (h < 2.0 || (rels.len() == 1 && h < 3.0)) { eprintln!("[leaves on f{}] {} count {:.1}", fno, self.rel_text(r), h); } h < 2.0 || (rels.len() == 1 && h < 3.0) };
+                    let nothing = { let h = self.strength(r); if self.trace && (h < 2.0 || (rels.len() == 1 && h < 3.0)) { eprintln!("[leaves on f{}] {} count {:.1}", fno, self.rel_text(r), h); } h < 2.0 || (rels.len() == 1 && h < 3.0) };
                     if nothing { if self.trace { eprintln!("[price f{}] {} in f{}: returned below 2 ({})", fno, self.rel_text(r), fid, self.returned_for(r, f.inter)); }
                         if worst.map_or(true, |w| f64::INFINITY > w.0) { worst = Some((f64::INFINITY, *r, true)); } continue; }
                     // for a function of its own where its worth alone is higher than its contribution (R54, experiment)
@@ -844,8 +844,8 @@ impl Machine {
                         let s20 = at_r.is_some() && Self::cycle_rels_any(f.root(), &f.rels).is_empty();
                         let (inside, alone) = if s20 {
                             let at = at_r.unwrap();
-                            (self.contribution_at_node(f, r), self.alone_over(r, at, &f.rels, None).map(|x| x - 2.0).unwrap_or(self.halved(r) - 2.0))
-                        } else { (self.contribution_ab(f, r), self.halved(r) - 2.0) };
+                            (self.contribution_at_node(f, r), self.alone_over(r, at, &f.rels, None).map(|x| x - 2.0).unwrap_or(self.strength(r) - 2.0))
+                        } else { (self.contribution_ab(f, r), self.strength(r) - 2.0) };
                         if self.trace { eprintln!("[price f{}] {} in f{}: contribution {:.0} alone {:.0} at {:?}", fno, self.rel_text(r), fid, inside, alone, f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| a.map(|a| self.dict.sym_text(a)))); }
                         if alone > inside {
                             let gain = alone - inside;
@@ -869,7 +869,7 @@ impl Machine {
             // a relation held 3 times or more may start a function, counted as itself; what stops it is that no
             // instance of it stands, never that a call has landed on one of its ends (R50, R18)
             let _st = { self.start_strength(&e.rel, e.strength).max(self.strength_through(e)) };
-            let st = { if self.halved(&e.rel) >= 3.0 { 3 } else { 0 } };
+            let st = { if self.strength(&e.rel) >= 3.0 { 3 } else { 0 } };
             let need = { 3 };
             if joined.contains(&e.rel) || self.dict.holder(&e.rel).is_some() || st < need { continue; }
             // a lap of a call starts nothing (R50, D53); two calls that landed on one activation relate like any two
@@ -964,23 +964,23 @@ impl Machine {
         false
     }
 
-    /// Group A: a relation's strength, its two ends' counts added and halved (R21, R50): at each end the rows that
+    /// Group A: a relation's strength, the larger of its two ends' counts (R21, R50): at each end the rows that
     /// hold it there, bare or through a call (as the count reads it), and an occurrence whose later end fired this
     /// frame counted at the earlier end too, whose row takes it only at the connect step.
-    pub(crate) fn halved(&self, r: &Rel) -> f64 { let (a, b) = self.halved_ends(r); (a + b) as f64 / 2.0 }
+    pub(crate) fn strength(&self, r: &Rel) -> f64 { let (a, b) = self.end_counts(r); a.max(b) as f64 }
 
     /// A relation's count at each of its two ends (group A): each end the neuron the relation is about, its rows
     /// that hold the relation, bare or through a call; an occurrence whose later end fired this frame is counted
     /// at the earlier end as well, whose row takes it only at the connect step. Where an end names a call the
     /// expansion gives no one neuron for, that end is read as the call itself.
-    pub(crate) fn halved_ends(&self, r: &Rel) -> (u32, u32) {
-        if let Some(m) = self.halved_memo.borrow().as_ref() { if let Some(v) = m.get(r) { return *v; } }
-        let v = self.halved_ends_read(r);
-        if let Some(m) = self.halved_memo.borrow_mut().as_mut() { m.insert(*r, v); }
+    pub(crate) fn end_counts(&self, r: &Rel) -> (u32, u32) {
+        if let Some(m) = self.end_counts_memo.borrow().as_ref() { if let Some(v) = m.get(r) { return *v; } }
+        let v = self.end_counts_read(r);
+        if let Some(m) = self.end_counts_memo.borrow_mut().as_mut() { m.insert(*r, v); }
         v
     }
 
-    fn halved_ends_read(&self, r: &Rel) -> (u32, u32) {
+    fn end_counts_read(&self, r: &Rel) -> (u32, u32) {
         let fno = self.frame_no;
         let (a, b) = { (r.a, r.b) };
         let mut neg = r.off;
@@ -1040,13 +1040,13 @@ impl Machine {
     /// the relations are read from: the function's origin, or any node of a cycle, which reads the same from each.
     pub(crate) fn worth_ab(&self, origin: Sym, rels: &[Rel], at: &[Option<Sym>], own: Option<NeuronId>) -> f64 {
         if rels.is_empty() { return 0.0; }
-        if rels.len() == 1 { return self.halved(&rels[0]) - 1.0; }
+        if rels.len() == 1 { return self.strength(&rels[0]) - 1.0; }
         
         let cyc = Self::cycle_rels_any(origin, rels);
         let closing = { Self::closing_of(origin, rels) };
         // a function that is a cycle holds the cycle and nothing else (D15): each relation of it is counted at every
         // occurrence, its strength less one, with no without (D57, D54)
-        rels.iter().zip(at).map(|(r, a)| if cyc.contains(r) { self.halved(r) - 1.0 } else { self.worth_in(rels, r, *a, own, closing).0 }).sum()
+        rels.iter().zip(at).map(|(r, a)| if cyc.contains(r) { self.strength(r) - 1.0 } else { self.worth_in(rels, r, *a, own, closing).0 }).sum()
     }
 
 
@@ -1165,7 +1165,7 @@ impl Machine {
         self.forget_expansions(fid);
         for c in cut {
             let _st = { self.returned_for(&c, None) };
-            let st = { if self.halved(&c) >= 3.0 { 3 } else { 0 } };
+            let st = { if self.strength(&c) >= 3.0 { 3 } else { 0 } };
             let need = { 3 };
             if st >= need && self.dict.holder(&c).is_none() { let g = self.dict.start(c); changed.push(g); }
         }
