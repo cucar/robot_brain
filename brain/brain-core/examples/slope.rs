@@ -13,6 +13,7 @@ fn main() {
     let showings: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(20);
     let size: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(9);
     let mut m = Machine::new(2048, Policy::events_to_actions(), 1);
+    let trace_first = std::env::args().any(|a| a == "--trace-first");
     let ax = m.declare_axis("x", 1);
     let ay = m.declare_axis("y", 1);
     let image = m.declare_channel("image", Some(("pixel", 2)), None, &[ax, ay]);
@@ -30,6 +31,7 @@ fn main() {
     for y in 0..size { println!("    {}", (0..size).map(|x| if ink[y][x] { '#' } else { '.' }).collect::<String>()); }
     let mut last: Vec<String> = Vec::new();
     for k in 1..=showings {
+        m.trace = trace_first && k == 1;
         let mut inputs = Vec::new();
         for y in 0..size { for x in 0..size {
             let mut pos = [0i32; MAX_DIMS];
@@ -38,6 +40,7 @@ fn main() {
             inputs.push(Input { dim: pix, bucket: if ink[y][x] { 1 } else { 0 }, pos });
         } }
         m.process_frame(&inputs, vec![]);
+        if k == 1 || k == 2 || k == showings { let mut b = m.bare_after_l0.clone(); b.sort_by_key(|x| (x.1, x.0)); println!("BARE showing {}: {}", k, if b.is_empty() { "none".to_string() } else { b.iter().map(|(x, y, v)| format!("{}({},{})", if *v == 0 { "black" } else { "white" }, x, y)).collect::<Vec<_>>().join(" ") }); }
         let fr = m.frames.back().unwrap();
         let mut ap: Vec<String> = fr.acts.iter().filter(|a| a.on_apex() && a.kind != Kind::Action).map(|a| name(&m, a)).collect();
         ap.sort();
@@ -54,6 +57,10 @@ fn main() {
         // each showing stands alone: nothing of it is on the board when the next is shown
         m.reset_context();
     }
+    println!("NEVERCALLED {} of {}", m.funcs_never_called(), m.dict.len());
+    let mut ids: Vec<_> = m.dict.funcs.keys().copied().collect();
+    ids.sort();
+    for id in ids { println!("DICT {}", m.dict.describe(m.dict.get(id).unwrap())); }
 }
 
 /// An activation as the report prints it: a pixel as # or . at its position, a call as its pose there.

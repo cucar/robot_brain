@@ -211,6 +211,7 @@ fn train(m: &mut Machine, e: &Env, i: &Img, n: usize, label: &str) -> usize {
         prev = fp;
         let apex = m.frames.back().unwrap().acts.iter().filter(|a| a.on_apex() && a.kind != Kind::Action).count();
         println!("  {} showing {:2}: said {} | levels {} | on the apex {} | functions {} | dictionary {}", label, k, said.map_or("-".into(), |s| s.to_string()), m.last_stats.levels, apex, m.dict.len(), if changed { "changed" } else { "same" });
+        if k == 1 || k == 2 || k == n { let mut b = m.bare_after_l0.clone(); b.sort_by_key(|x| (x.1, x.0)); println!("BARE showing {}: {}", k, if b.is_empty() { "none".to_string() } else { b.iter().map(|(x, y, v)| format!("{}({},{})", if *v == 0 { "black" } else { "white" }, x, y)).collect::<Vec<_>>().join(" ") }); }
         if k == n { report_apex(m); }
         m.process_frame(&[Input { dim: e.dig, bucket: 0, pos: [0; MAX_DIMS] }], vec![Reward { reward: 1.0, channels: vec![e.digit], frames: 1 }]);
         m.reset_context();

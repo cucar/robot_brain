@@ -151,32 +151,20 @@ impl Machine {
         // what joins two activations is what the calls taken at this level of this frame cover, across every election
         // of the level (D24, R24); a refused relation stays refused for as long as its two activations exist
         if self.joined_at != Some((self.frame_no, level)) {
+            // a level visited twice in one frame, in the climb and after it, keeps what it joined across both visits
+            match self.joined_at {
+                Some((f, l)) if f == self.frame_no => { let j = std::mem::take(&mut self.joined); let p = std::mem::take(&mut self.jparent); self.joined_stash.insert(l, (j, p)); }
+                _ => self.joined_stash.clear(),
+            }
+            let (j, p) = self.joined_stash.remove(&level).unwrap_or_default();
+            self.joined = j;
+            self.jparent = p;
             self.joined_at = Some((self.frame_no, level));
-            self.joined.clear();
-            self.jparent.clear();
         }
         let (mut accepted, mut minted) = (0, 0);
         loop {
             // a relation whose two ends the calls taken so far join would close a deadlock: it is refused (D24, D55)
-            {
-                let ends = self.mark_refused(&fits, level);
-                // an end left with one covered relation inside its frame and no other that counts is covered by it (D24)
-                if !ends.is_empty() {
-                    let covered: FxHashSet<ActRef> = self.cover_in_election(&ends).into_iter().collect();
-                    if !covered.is_empty() {
-                        let mut next = Vec::with_capacity(fits.len());
-                        for g in fits {
-                            let stale = g.acts().any(|(r, _)| covered.contains(&r)) || g.edges.iter().any(|(a, b)| covered.contains(a) || covered.contains(b)) || g.thru.iter().any(|r| covered.contains(r));
-                            if !stale { next.push(g); continue; }
-                            let Some(f) = self.dict.get(g.func) else { continue };
-                            if !self.act(g.entry.1).map_or(false, |a| self.landable(a)) { continue; }
-                            let again = self.fit(f, g.entry.0, g.entry.1);
-                            if !again.edges.is_empty() { next.push(again); }
-                        }
-                        fits = next;
-                    }
-                }
-            }
+            let _ = self.mark_refused(&fits, level);
             let mut best: Option<(usize, f64)> = None;
             // each fit's tie order read once per round, not at every comparison (speed only)
             let mut ranks: Vec<Option<(bool, i64, u8, u64, u64, ActRef)>> = vec![None; fits.len()];

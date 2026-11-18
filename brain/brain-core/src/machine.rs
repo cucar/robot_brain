@@ -146,6 +146,12 @@ pub struct Machine {
     /// For the count only: joins (from no function) and moves (from another function), relations inside the frame
     /// first, in time second
     pub joins_by: [u64; 2],
+    /// How many functions the last start step started
+    pub(crate) last_start_rounds: usize,
+    /// What each level of this frame has joined, kept while the frame visits another level (D24, R24, R26)
+    pub(crate) joined_stash: FxHashMap<u32, (FxHashMap<ActRef, Vec<(ActRef, ActRef, FuncId)>>, FxHashMap<ActRef, ActRef>)>,
+    /// For the report: the pixels (x, y, value) left bare after level 0 of the last frame
+    pub bare_after_l0: Vec<(i32, i32, u32)>,
     pub moves_by: [u64; 2],
     pub trace_vote: bool,
     /// Relations of covered activations that no call covered, lifted to their calls (D24, D10, D55)
@@ -290,7 +296,7 @@ impl Machine {
             last_heard: Vec::new(), trace_vote: false,
             joined: FxHashMap::default(), jparent: FxHashMap::default(), joined_at: None, refused: FxHashSet::default(), form_src: FxHashMap::default(), form_pre: FxHashSet::default(),
             cover_landed: Vec::new(),
-            cycle_calls: FxHashMap::default(), print_cycles: false, start_queue: Vec::new(), half: None, joins_by: [0; 2], moves_by: [0; 2],
+            cycle_calls: FxHashMap::default(), print_cycles: false, start_queue: Vec::new(), half: None, last_start_rounds: 0, joined_stash: FxHashMap::default(), bare_after_l0: Vec::new(), joins_by: [0; 2], moves_by: [0; 2],
             grown: FxHashMap::default(),
             cover_log: Vec::new(),
             lifted: FxHashSet::default(),
@@ -446,7 +452,12 @@ impl Machine {
         self.stats_retired = 0;
         if self.first_frame.is_none() { self.first_frame = Some(fno); }
         let mut level: u32 = 0;
+        if self.recognize_first {
+            self.frame_up_levels(&mut stats);
+            level = u32::MAX;
+        }
         loop {
+            if level == u32::MAX { break; }
             let refs: Vec<ActRef> = self.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter().enumerate()
                 .filter(|(_, a)| a.opened_at == fno && a.level == level && !a.gone).map(|(i, _)| ActRef { frame: fno, index: i as u32 }).collect::<Vec<_>>()).collect();
             if refs.is_empty() { break; }
@@ -456,6 +467,10 @@ impl Machine {
             let added_before = self.stats_added;
             let (bids, accepted, minted) = self.run_level(level, &refs);
             { let (b, c) = self.cover_pass(); self.cover_log.push((level as i64, b, c)); }
+            if level == 0 {
+                let thal = &self.thalamus;
+                self.bare_after_l0 = self.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter()).filter(|a| a.level == 0 && a.kind == Kind::Event && !a.gone && a.covered_at.is_none()).map(|a| (a.pos[1], a.pos[2], thal[a.neuron].bucket)).collect();
+            }
             stats.per_level.push((refs.len(), bids, self.last_fits, accepted, self.stats_added - added_before, lt.elapsed().as_secs_f64() * 1000.0));
             if self.trace_levels {
                 let (acts, rels, fits, acc, added, ms) = stats.per_level[stats.per_level.len() - 1];
@@ -599,45 +614,14 @@ impl Machine {
     }
 
     /// Covering counts the two kinds of relation apart (D24, D34). Inside the frame (its offset in time zero, in space
-    /// or at one position): two covered relations cover an activation, or the one it has there where it has only one,
-    /// a blocked relation not counted; and in space the edge is an end, where nothing lies beyond it on one side in a
-    /// dimension, one covered relation toward the other side is enough. In time: one covered relation to an earlier frame and one to a later, the run's
-    /// first frame excepted. A relation of each kind never make a count together. Returns whether it was covered by
-    /// one relation alone.
+    /// or at one position): one covered relation, so a call inside the frame covers every activation it landed on, at
+    /// a relation it covered, as it is taken. In time: one covered relation to an earlier frame and one to a later,
+    /// one to a later at the run's first frame. A relation of each kind never make a count together. Returns whether
+    /// it was covered by one relation alone.
     pub(crate) fn cover_count(&self, me: ActRef) -> Option<bool> {
-        let a = self.act(me)?;
         let rels = self.covered_offs(me);
-        let inside: Vec<ActRef> = rels.iter().filter(|(_, o)| o[0] == 0).map(|x| x.0).collect();
-        if inside.len() >= 2 { return Some(false); }
-        if inside.len() == 1 {
-            // its relations inside its frame, either direction, each other end once
-            let mut others: FxHashSet<ActRef> = FxHashSet::default();
-            // a refused relation is not counted among what it has (D24)
-            let refused = |x: ActRef| self.refused.contains(&edge(me, x));
-            for br in &a.rels { if br.off[0] == 0 && !self.blocked(me, br.other) && !refused(br.other) { others.insert(br.other); } }
-            for f in self.frames.iter() { for (j, b) in f.acts.iter().enumerate() { if b.gone { continue; }
-                let x = ActRef { frame: f.no, index: j as u32 };
-                for br in &b.rels { if br.other == me && br.off[0] == 0 && !self.blocked(me, x) && !refused(x) { others.insert(x); } } } }
-            others.retain(|x| self.act(*x).map_or(false, |xa| !xa.gone));
-            if others.len() <= 1 {
-                if self.trace_cover { eprintln!("[one-relation f{}] {}@{} covered by its one relation inside the frame", self.frame_no, self.act(me).map_or("?".into(), |x| self.dict.sym_text(x.sym)), me.frame); }
-                return Some(true);
-            }
-        }
-        // in space the edge is an end (D24, D3): where nothing lies beyond it on one side in a dimension, within its
-        // reach, one covered relation toward the other side in that dimension is enough; one that runs across two
-        // dimensions counts in each
-        if inside.len() == 1 {
-            if let Some((_, o)) = rels.iter().find(|(_, o)| o[0] == 0) {
-                for d in 1..MAX_DIMS {
-                    if a.axes & (1 << d) == 0 || o[d] == 0 { continue; }
-                    if !self.layout_side(me, d, -o[d].signum()) {
-                        if self.trace_cover { eprintln!("[edge-end f{}] {}@{} covered by its one relation toward {}{} at an end of the layout", self.frame_no, self.dict.sym_text(a.sym), me.frame, if o[d] > 0 { "+" } else { "-" }, ["t", "x", "y", "z"].get(d).unwrap_or(&"?")); }
-                        return Some(true);
-                    }
-                }
-            }
-        }
+        let inside = rels.iter().filter(|(_, o)| o[0] == 0).count();
+        if inside >= 1 { return Some(inside == 1); }
         let time: Vec<Offset> = rels.iter().filter(|(_, o)| o[0] != 0).map(|x| x.1).collect();
         let (hn, hp) = (time.iter().any(|x| x[0] < 0), time.iter().any(|x| x[0] > 0));
         if (hn || hp) && (hn || !self.layout_side(me, 0, -1)) && (hp || !self.layout_side(me, 0, 1)) { return Some(!(hn && hp)); }
@@ -743,7 +727,81 @@ impl Machine {
     /// One level (R26): activate every neuron with an activation here (R20); find what the dictionary holds and
     /// fit it (R53, D31); count and group (R50, R54, R18), fitting again what changed; elect and allocate (R24,
     /// R16). Returns the relations returned, the fits accepted, and the interneurons allocated.
-    fn run_level(&mut self, level: u32, refs: &[ActRef]) -> (usize, usize, usize) {
+    /// The frame runs up all its levels before time runs at any (R26, R24). The climb: from level 0 up,
+    /// each level's activations are activated and its frame half runs, until a level takes and starts nothing. Then
+    /// from level 0 up each level as built: what is new at it since the climb is activated, its frame half runs over
+    /// the relations only that brought, and its time half over every relation of the level.
+    fn frame_up_levels(&mut self, stats: &mut FrameStats) {
+        let fno = self.frame_no;
+        let mut activated: FxHashSet<ActRef> = FxHashSet::default();
+        let mut fresh_of: Vec<Vec<Fresh>> = Vec::new();
+        // per level, what the climb did there: relations, fits, accepted, functions added, ms
+        let mut climb: Vec<(usize, usize, usize, usize, f64)> = Vec::new();
+        let at_level = |m: &Machine, level: u32| -> Vec<ActRef> { m.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter().enumerate()
+            .filter(|(_, a)| a.opened_at == fno && a.level == level && !a.gone).map(|(i, _)| ActRef { frame: fno, index: i as u32 }).collect::<Vec<_>>()).collect() };
+        let fired_of = |m: &Machine, refs: &[ActRef]| -> FxHashSet<Sym> { refs.iter().filter_map(|r| m.act(*r)).map(|a| a.sym).collect() };
+        // the climb
+        let mut level: u32 = 0;
+        loop {
+            let refs: Vec<ActRef> = at_level(self, level).into_iter().filter(|r| !activated.contains(r)).collect();
+            if refs.is_empty() { break; }
+            let lt = std::time::Instant::now();
+            let added_before = self.stats_added;
+            activated.extend(refs.iter().copied());
+            let fresh = self.activate_level(level, &refs);
+            while fresh_of.len() <= level as usize { fresh_of.push(Vec::new()); }
+            fresh_of[level as usize] = fresh.clone();
+            let fired = fired_of(self, &at_level(self, level));
+            self.last_fits = 0;
+            if self.trace { eprintln!("[climb f{} l{}] the frame half", fno, level); }
+            let (a, m, started) = if self.frozen { self.frozen_half(level, true, &fresh) } else { self.run_half(level, true, &fresh, &fired) };
+            { let (b, c) = self.cover_pass(); self.cover_log.push((level as i64, b, c)); }
+            while climb.len() <= level as usize { climb.push((0, 0, 0, 0, 0.0)); }
+            climb[level as usize] = (fresh.len(), self.last_fits, a, self.stats_added - added_before, lt.elapsed().as_secs_f64() * 1000.0);
+            stats.bids += fresh.len();
+            stats.accepted += a;
+            stats.minted += m;
+            if a == 0 && started == 0 { break; }
+            level += 1;
+            if level > 1024 { break; }
+        }
+        // the levels as built, on the board the climb left
+        let mut level: u32 = 0;
+        loop {
+            let all = at_level(self, level);
+            if all.is_empty() { break; }
+            let lt = std::time::Instant::now();
+            let added_before = self.stats_added;
+            let new: Vec<ActRef> = all.iter().copied().filter(|r| !activated.contains(r)).collect();
+            activated.extend(new.iter().copied());
+            let new_fresh = if new.is_empty() { Vec::new() } else { self.activate_level(level, &new) };
+            while fresh_of.len() <= level as usize { fresh_of.push(Vec::new()); }
+            fresh_of[level as usize].extend(new_fresh.iter().copied());
+            let all_fresh = fresh_of[level as usize].clone();
+            let fired = fired_of(self, &all);
+            self.last_fits = 0;
+            if self.trace { eprintln!("[levels f{} l{}] the frame half over {} new relations, then time", fno, level, new_fresh.len()); }
+            let (a1, m1, _) = if self.frozen { self.frozen_half(level, true, &new_fresh) } else { self.run_half(level, true, &new_fresh, &fired) };
+            let (a2, m2, _) = if self.frozen { self.frozen_half(level, false, &all_fresh) } else { self.run_half(level, false, &all_fresh, &fired) };
+            { let (b, c) = self.cover_pass(); self.cover_log.push((level as i64, b, c)); }
+            if level == 0 {
+                let thal = &self.thalamus;
+                self.bare_after_l0 = self.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter()).filter(|a| a.level == 0 && a.kind == Kind::Event && !a.gone && a.covered_at.is_none()).map(|a| (a.pos[1], a.pos[2], thal[a.neuron].bucket)).collect();
+            }
+            stats.levels += 1;
+            let c = climb.get(level as usize).copied().unwrap_or((0, 0, 0, 0, 0.0));
+            stats.per_level.push((all.len(), c.0 + new_fresh.len(), c.1 + self.last_fits, c.2 + a1 + a2, c.3 + self.stats_added - added_before, c.4 + lt.elapsed().as_secs_f64() * 1000.0));
+            stats.bids += new_fresh.len();
+            stats.accepted += a1 + a2;
+            stats.minted += m1 + m2;
+            level += 1;
+            if level > 1024 { break; }
+        }
+    }
+
+    /// Activate a level's activations (§5): each row into its neuron's history, its relations returned, and the
+    /// relations of this level in their one form (R21, D34).
+    fn activate_level(&mut self, level: u32, refs: &[ActRef]) -> Vec<Fresh> {
         let mut by_neuron: FxHashMap<NeuronId, Vec<RowInput>> = FxHashMap::default();
         let mut order: Vec<NeuronId> = Vec::new();
         let mut seen: Vec<(ActRef, NeuronId, ActRef)> = Vec::new();
@@ -776,81 +834,13 @@ impl Machine {
         }
         let mut fresh: Vec<Fresh> = fresh.into_values().collect();
         fresh.sort_by(|a, b| (a.near, a.far).cmp(&(b.near, b.far)));
-        let bids = fresh.len();
         if self.trace { for e in &fresh { eprintln!("[fresh f{} l{}] {}→{}{:?} s={} held {:?}", self.frame_no, level, self.dict.sym_text(e.rel.a), self.dict.sym_text(e.rel.b), &e.rel.off[..], e.strength, self.dict.holder(&e.rel)); } }
-        // a level runs for the frame first and for time after it (R24, R26, D34): find, elect, count, group, elect
-        // and start over the relations inside the frame and the functions that hold them, and only then the same six
-        // over the relations in time, on the board as the frame left it; nothing in time is fit, joined, moved or
-        // started until the frame has nothing left to do
-        if !self.frozen && self.recognize_first {
-            let fired: FxHashSet<Sym> = refs.iter().filter_map(|r| self.act(*r)).map(|a| a.sym).collect();
-            let (mut accepted, mut minted) = (0, 0);
-            self.last_fits = 0;
-            for inside in [true, false] {
-                let kind: Vec<Fresh> = fresh.iter().filter(|e| (e.rel.off[0] == 0) == inside).copied().collect();
-                // find (R53, D31): the functions that hold a relation of this kind returned at this level; a function
-                // holds one kind (D15)
-                let found: Vec<FuncId> = self.find(&kind);
-                // elect (R24): the fits of the dictionary as it stands cover what it knows before anything in it changes
-                let mine: Vec<_> = found.iter().filter(|id| self.dict.get(**id).is_some()).flat_map(|id| self.fits_of(*id)).collect();
-                if self.trace { eprintln!("[half f{} l{}] {} | fits of the functions that exist {}", self.frame_no, level, if inside { "the frame" } else { "time" }, mine.len()); }
-                self.last_fits += mine.len();
-                // grouping reads the fits this election takes, and no other (switch 17)
-                self.call_fit.clear();
-                let (a1, m1) = self.elect(level, mine);
-                accepted += a1;
-                minted += m1;
-                // what the election left on the board: every relation of this kind no call covers and that is not
-                // lifted, its ends standing (switch 15)
-                let left: Vec<Fresh> = if self.sw.s15_uncovered_relations {
-                    kind.iter().filter(|e| !self.covered_rel.contains(&crate::recognize::edge(e.near, e.far)) && !self.lifted.contains(&crate::recognize::edge(e.near, e.far))
-                        && self.act(e.near).map_or(false, |a| !a.gone && a.covered_at.is_none() && self.stands(a, self.frame_no)) && self.act(e.far).map_or(false, |a| !a.gone && a.covered_at.is_none() && self.stands(a, self.frame_no))).copied().collect()
-                } else {
-                    kind.iter().filter(|e| self.act(e.near).map_or(false, |a| a.on_apex()) && self.act(e.far).map_or(false, |a| a.on_apex())).copied().collect()
-                };
-                // count and group (R50, R54, R18): over the relations of this kind and the functions that hold them
-                let rest: Vec<_> = found.iter().filter(|id| self.dict.get(**id).is_some()).flat_map(|id| self.fits_of(*id)).collect();
-                let board: Vec<Fresh> = self.board_rels().into_iter().filter(|e| (e.rel.off[0] == 0) == inside).collect();
-                self.half = Some(inside);
-                let changed = self.group(&rest, &left, &board, &fired);
-                self.half = None;
-                self.call_fit.clear();
-                self.span_s = self.board_span();
-                // elect again (R24): a function that changed in group is fit on what the first election left
-                let again: Vec<_> = changed.iter().filter(|id| self.dict.get(**id).is_some()).flat_map(|id| self.fits_of(*id)).collect();
-                if self.trace { for f in &again { eprintln!("[fit2 f{} l{}] f{} entry {:?} at node {} landed {} calls {} edges {} failed {:?} laps {}", self.frame_no, level, f.func, f.entry.1, f.entry.0, f.landed.len(), f.calls.len(), f.edges.len(), f.failed, f.laps); } }
-                self.last_fits += again.len();
-                let (a2, m2) = self.elect(level, again);
-                accepted += a2;
-                minted += m2;
-                // start (R50): one function at a time, from the relations that may start one and still stand
-                let queue = std::mem::take(&mut self.start_queue);
-                let (a3, m3) = self.start_one_at_a_time(level, &queue, &left);
-                accepted += a3;
-                minted += m3;
-            }
-            return (bids, accepted, minted);
-        }
-        // a frozen machine runs the level as the build does, the frame first and time after it, over the fits of the
-        // functions that exist; it changes nothing that lasts: no function starts, joins, moves or leaves, and a fit
-        // of a function with no living interneuron is not in the election, since none is allocated
-        if self.frozen && self.recognize_first {
-            let (mut accepted, mut minted) = (0, 0);
-            self.last_fits = 0;
-            for inside in [true, false] {
-                let kind: Vec<Fresh> = fresh.iter().filter(|e| (e.rel.off[0] == 0) == inside).copied().collect();
-                let found: Vec<FuncId> = self.find(&kind);
-                let mine: Vec<_> = found.iter().filter(|id| self.dict.get(**id).and_then(|f| f.inter).map_or(false, |n| self.thalamus.get(n).map_or(false, |x| x.alive)))
-                    .flat_map(|id| self.fits_of(*id)).collect();
-                if self.trace { eprintln!("[half f{} l{}] {} (frozen) | fits of the functions that exist {}", self.frame_no, level, if inside { "the frame" } else { "time" }, mine.len()); }
-                self.last_fits += mine.len();
-                self.call_fit.clear();
-                let (a1, m1) = self.elect(level, mine);
-                accepted += a1;
-                minted += m1;
-            }
-            return (bids, accepted, minted);
-        }
+        fresh
+    }
+
+    fn run_level(&mut self, level: u32, refs: &[ActRef]) -> (usize, usize, usize) {
+        let fresh = self.activate_level(level, refs);
+        let bids = fresh.len();
         // find, and fit what was found (R53, D31)
         let mut found = self.find(&fresh);
         let mut fits: Vec<_> = found.iter().flat_map(|id| self.fits_of(*id)).collect();
@@ -874,6 +864,70 @@ impl Machine {
         self.last_fits = fits.len();
         let (accepted, minted) = self.elect(level, fits);
         (bids, accepted, minted)
+    }
+
+    /// One half of a level on a frozen machine: the elections over the fits of the functions that exist, of one kind,
+    /// as the build runs them; it changes nothing that lasts: no function starts, joins, moves or leaves, and a fit
+    /// of a function with no living interneuron is not in the election, since none is allocated.
+    fn frozen_half(&mut self, level: u32, inside: bool, fresh: &[Fresh]) -> (usize, usize, usize) {
+        let kind: Vec<Fresh> = fresh.iter().filter(|e| (e.rel.off[0] == 0) == inside).copied().collect();
+        let found: Vec<FuncId> = self.find(&kind);
+        let mine: Vec<_> = found.iter().filter(|id| self.dict.get(**id).and_then(|f| f.inter).map_or(false, |n| self.thalamus.get(n).map_or(false, |x| x.alive)))
+            .flat_map(|id| self.fits_of(*id)).collect();
+        if self.trace { eprintln!("[half f{} l{}] {} (frozen) | fits of the functions that exist {}", self.frame_no, level, if inside { "the frame" } else { "time" }, mine.len()); }
+        self.last_fits += mine.len();
+        self.call_fit.clear();
+        let (a, m) = self.elect(level, mine);
+        (a, m, 0)
+    }
+
+    /// One half of a level (R24, R26, D34): find, elect, count, group, elect and start over the relations of one kind,
+    /// inside the frame or in time, and the functions that hold them. Returns what its elections accepted and
+    /// allocated, and how many functions it started.
+    fn run_half(&mut self, level: u32, inside: bool, fresh: &[Fresh], fired: &FxHashSet<Sym>) -> (usize, usize, usize) {
+        let (mut accepted, mut minted) = (0, 0);
+            let kind: Vec<Fresh> = fresh.iter().filter(|e| (e.rel.off[0] == 0) == inside).copied().collect();
+            // find (R53, D31): the functions that hold a relation of this kind returned at this level; a function
+            // holds one kind (D15)
+            let found: Vec<FuncId> = self.find(&kind);
+            // elect (R24): the fits of the dictionary as it stands cover what it knows before anything in it changes
+            let mine: Vec<_> = found.iter().filter(|id| self.dict.get(**id).is_some()).flat_map(|id| self.fits_of(*id)).collect();
+            if self.trace { eprintln!("[half f{} l{}] {} | fits of the functions that exist {}", self.frame_no, level, if inside { "the frame" } else { "time" }, mine.len()); }
+            self.last_fits += mine.len();
+            // grouping reads the fits this election takes, and no other (switch 17)
+            self.call_fit.clear();
+            let (a1, m1) = self.elect(level, mine);
+            accepted += a1;
+            minted += m1;
+            // what the election left on the board: every relation of this kind no call covers and that is not
+            // lifted, its ends standing (switch 15)
+            let left: Vec<Fresh> = if self.sw.s15_uncovered_relations {
+                kind.iter().filter(|e| !self.covered_rel.contains(&crate::recognize::edge(e.near, e.far)) && !self.lifted.contains(&crate::recognize::edge(e.near, e.far))
+                    && self.act(e.near).map_or(false, |a| !a.gone && a.covered_at.is_none() && self.stands(a, self.frame_no)) && self.act(e.far).map_or(false, |a| !a.gone && a.covered_at.is_none() && self.stands(a, self.frame_no))).copied().collect()
+            } else {
+                kind.iter().filter(|e| self.act(e.near).map_or(false, |a| a.on_apex()) && self.act(e.far).map_or(false, |a| a.on_apex())).copied().collect()
+            };
+            // count and group (R50, R54, R18): over the relations of this kind and the functions that hold them
+            let rest: Vec<_> = found.iter().filter(|id| self.dict.get(**id).is_some()).flat_map(|id| self.fits_of(*id)).collect();
+            let board: Vec<Fresh> = self.board_rels().into_iter().filter(|e| (e.rel.off[0] == 0) == inside).collect();
+            self.half = Some(inside);
+            let changed = self.group(&rest, &left, &board, fired);
+            self.half = None;
+            self.call_fit.clear();
+            self.span_s = self.board_span();
+            // elect again (R24): a function that changed in group is fit on what the first election left
+            let again: Vec<_> = changed.iter().filter(|id| self.dict.get(**id).is_some()).flat_map(|id| self.fits_of(*id)).collect();
+            if self.trace { for f in &again { eprintln!("[fit2 f{} l{}] f{} entry {:?} at node {} landed {} calls {} edges {} failed {:?} laps {}", self.frame_no, level, f.func, f.entry.1, f.entry.0, f.landed.len(), f.calls.len(), f.edges.len(), f.failed, f.laps); } }
+            self.last_fits += again.len();
+            let (a2, m2) = self.elect(level, again);
+            accepted += a2;
+            minted += m2;
+            // start (R50): one function at a time, from the relations that may start one and still stand
+            let queue = std::mem::take(&mut self.start_queue);
+            let (a3, m3) = self.start_one_at_a_time(level, &queue, &left);
+            accepted += a3;
+            minted += m3;
+        (accepted, minted, self.last_start_rounds)
     }
 
     /// How many functions of the dictionary never took a call: no interneuron, or none alive.
@@ -923,6 +977,7 @@ impl Machine {
                 eprintln!("[start-one f{} l{}] round {}: taken {} | still standing bare: {}", self.frame_no, level, round, a, if rest.is_empty() { "nothing".to_string() } else { rest.join(", ") });
             }
         }
+        self.last_start_rounds = round;
         (accepted, minted)
     }
 
