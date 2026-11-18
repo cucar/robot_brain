@@ -26,7 +26,14 @@ fn labels(path: &str) -> Vec<u32> { read(path)[8..].iter().map(|&x| x as u32).co
 fn main() {
     // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
     let s15_off = std::env::args().any(|a| a == "--s15-off");
-    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && a != "--landed" && a != "--cycles").collect();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && a != "--landed" && a != "--cycles" && !a.starts_with("--only=") && !a.starts_with("--changes-from=") && a != "--apex-all" && !a.starts_with("--neurons=")).collect();
+    // --only=i: train on image i of the file alone
+    let only: Option<usize> = std::env::args().find_map(|a| a.strip_prefix("--only=").map(|s| s.parse().unwrap()));
+    // --changes-from=k: report every change to the dictionary from episode k on (default: the last 5 episodes)
+    let changes_from: Option<usize> = std::env::args().find_map(|a| a.strip_prefix("--changes-from=").map(|s| s.parse().unwrap()));
+    // --apex-all: the apex of every showing of a single image; --neurons=a,b: those neurons after every showing
+    let apex_all = std::env::args().any(|a| a == "--apex-all");
+    let show_neurons: Vec<usize> = std::env::args().find_map(|a| a.strip_prefix("--neurons=").map(|s| s.split(',').map(|x| x.parse().unwrap()).collect())).unwrap_or_default();
     let dir = args.get(1).expect("usage: mnist <data-dir> [train] [test] [h] [size] [teach] [threshold]").clone();
     let num = |i: usize| -> Option<usize> { args.get(i).and_then(|s| if s == "all" { None } else { s.parse().ok() }) };
     let train_imgs = images(&format!("{}/train-images-idx3-ubyte", dir));
@@ -50,6 +57,10 @@ fn main() {
         let d = train_lbls[i] as usize;
         if per_class.map_or(true, |k| picked[d] < k) { picked[d] += 1; order.push(i); }
     }
+    if let Some(i) = only { order = vec![i]; }
+    // what the dictionary holds, function by function, for seeing what changes
+    let dict_map = |m: &Machine| -> std::collections::BTreeMap<u64, String> { m.dict.funcs.iter().map(|(id, f)| (*id as u64, m.dict.describe(f))).collect() };
+    let mut ep_dict = dict_map(&Machine::new(1, Policy::events_to_actions(), 1));
     let shown = order.len() * episodes;
     assert!(28 % size == 0, "size must divide 28");
     let f = 28 / size;
@@ -120,7 +131,14 @@ fn main() {
             if tracing { m.stop_after_level = None; }
             m.trace = tracing;
             m.trace_cover = tracing;
+            let before = if changes_from.map_or(ep + 5 >= episodes, |c| ep + 1 >= c) { Some((dict_map(&m), m.joins_by, m.moves_by)) } else { None };
             let (said, t) = run(&mut m, &train_imgs[i]);
+            if ep + 1 == episodes {
+                let fr = m.frames.back().unwrap();
+                let calls = fr.acts.iter().filter(|a| a.on_apex() && a.kind == Kind::Inter).count();
+                let bare = fr.acts.iter().filter(|a| a.on_apex() && a.kind == Kind::Event).count();
+                println!("LASTEP image {} (digit {}) | calls on the apex {} | bare pixels on the apex {} | levels {}", i, train_lbls[i], calls, bare, m.last_stats.levels);
+            }
             w_added += m.last_stats.added;
             e_added += m.last_stats.added;
             e_retired += m.last_stats.retired;
@@ -139,7 +157,7 @@ fn main() {
                 ap.sort();
                 let kept = ap.iter().filter(|x| last_apex.contains(x)).count();
                 apex_note = format!(" | apex {} ({} kept, {} new, {} gone) levels {} added {}", ap.len(), kept, ap.len() - kept, last_apex.len() - kept, m.last_stats.levels, m.last_stats.added);
-                if ep + 1 == episodes || ep < 3 { apex_note.push_str(&format!(" [{}]", ap.join(" "))); }
+                if ep + 1 == episodes || ep < 3 || apex_all { apex_note.push_str(&format!(" [{}]", ap.join(" "))); }
                 last_apex = ap;
             }
             said_list.push(format!("{}:{}", label, said.map_or("-".to_string(), |s| s.to_string())));
@@ -148,6 +166,20 @@ fn main() {
             if lesson { lessons += 1; }
             let ran = if lesson { label } else { said.unwrap() };
             ms += answer(&mut m, Some(ran), Some(if ran == label { 1.0 } else { -1.0 }));
+            if let Some((b, j0, v0)) = before {
+                let a = dict_map(&m);
+                let started: Vec<String> = a.iter().filter(|(k, _)| !b.contains_key(k)).map(|(k, d)| format!("f{} {}", k, d)).collect();
+                let left: Vec<String> = b.iter().filter(|(k, _)| !a.contains_key(k)).map(|(k, d)| format!("f{} {}", k, d)).collect();
+                let changed: Vec<String> = a.iter().filter(|(k, d)| b.get(k).map_or(false, |x| x != *d)).map(|(k, d)| format!("f{} {}", k, d)).collect();
+                let (jn, mv) = ((m.joins_by[0] + m.joins_by[1]) - (j0[0] + j0[1]), (m.moves_by[0] + m.moves_by[1]) - (v0[0] + v0[1]));
+                if !started.is_empty() || !left.is_empty() || !changed.is_empty() || jn > 0 || mv > 0 {
+                    println!("CHANGE episode {} image {} | started {} | left {} | changed {} | joins {} | moves {}", ep + 1, i, started.len(), left.len(), changed.len(), jn, mv);
+                    for s in &started { println!("    + {}", s); }
+                    for s in &left { println!("    - {}", s); }
+                    for s in &changed { println!("    ~ {}", s); }
+                }
+            }
+            for &n in &show_neurons { if n < m.thalamus.len() { let nn = &m.thalamus[n as u32]; let (s, e): (f64, f64) = nn.connections.values().fold((0.0, 0.0), |(s, e), c| (s + c.strength, e + c.earnings)); println!("NEURON showing {} #{} alive {} | history rows {} | connections {} (exposures {:.0}, earnings {:.2}) | functions {:?}", k, n, nn.alive, nn.history.len(), nn.connections.len(), s, e, m.dict.of_inter(n as u32)); } }
             // each image stands alone: nothing of it is on the board when the next is shown
             m.reset_context();
             if k % 100 == 0 {
@@ -160,6 +192,10 @@ fn main() {
                 w_ms = ms;
             }
         }
+        let now = dict_map(&m);
+        let dict_changed = now != ep_dict;
+        ep_dict = now;
+        println!("EPISODE {} | dictionary {} | functions {}", ep + 1, if dict_changed { "changed" } else { "same" }, m.dict.len());
         if episodes > 1 {
             println!("  episode {:2}: added {} retired {} | right {}/{} (spoke {}) | max levels {} | neurons {} functions {} | {:.0} ms/image | digit:said {}{}",
                 ep + 1, e_added, e_retired, e_right, order.len(), e_spoke, e_levels, m.alive, m.dict.len(), e_ms / order.len().max(1) as f64, said_list.join(" "), apex_note);

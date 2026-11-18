@@ -450,6 +450,19 @@ impl Machine {
     /// A relation's contribution to its function under groups A and B: the function's worth with it less without
     /// it, the entry the same on both sides; as its function's only relation, that function's worth, its strength
     /// less two.
+    /// A relation's contribution to the function it is in, read at the node it attached at, over that node's rows
+    /// (R54, R50, switch 20): the function's worth with it less without it, a function of one relation left without
+    /// it read alone at that node over the same rows. Where the relation attached at no node, or the function holds a
+    /// cycle, as `contribution_ab`.
+    pub(crate) fn contribution_at_node(&self, f: &Func, r: &Rel) -> f64 {
+        let at_r = f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| *a);
+        let Some(at) = at_r.filter(|_| f.rels.len() > 1 && Self::cycle_rels_any(f.root(), &f.rels).is_empty()) else { return self.contribution_ab(f, r) };
+        let (wo, wat): (Vec<Rel>, Vec<Option<Sym>>) = f.rels.iter().zip(&f.at).filter(|(x, _)| *x != r).map(|(x, a)| (*x, *a)).unzip();
+        let origin = if wo.iter().any(|x| x.a == f.root() || x.b == f.root()) { f.root() } else { wo[0].a };
+        let without = if wo.len() == 1 { self.alone_over(&wo[0], at, &f.rels, f.inter).map(|x| x - 1.0).unwrap_or_else(|| self.worth_ab(origin, &wo, &wat, f.inter)) } else { self.worth_ab(origin, &wo, &wat, f.inter) };
+        self.worth_ab(f.root(), &f.rels, &f.at, f.inter) - without
+    }
+
     pub(crate) fn contribution_ab(&self, f: &Func, r: &Rel) -> f64 {
         let (without, wat): (Vec<Rel>, Vec<Option<Sym>>) = f.rels.iter().zip(&f.at).filter(|(x, _)| *x != r).map(|(x, a)| (*x, *a)).unzip();
         if without.is_empty() { return self.halved(r) - 2.0; }
@@ -804,7 +817,8 @@ impl Machine {
             let own = match holder {
                 _ if here20.is_some() => here20.unwrap(),
                 _ if lone => self.halved(&rel) - 2.0,
-                Some(g) => self.contribution_ab(g, &rel),
+                // its contribution where it stands, read as leaving reads it, at the node it attached at (R54, R50)
+                Some(g) => self.contribution_at_node(g, &rel),
                 None => self.halved(&rel) - 2.0,
             };
             // a function's last relation is weighed against everything that leaves with it: the function and its
@@ -898,10 +912,7 @@ impl Machine {
                         let s20 = at_r.is_some() && Self::cycle_rels_any(f.root(), &f.rels).is_empty();
                         let (inside, alone) = if s20 {
                             let at = at_r.unwrap();
-                            let (wo, wat): (Vec<Rel>, Vec<Option<Sym>>) = f.rels.iter().zip(&f.at).filter(|(x, _)| *x != r).map(|(x, a)| (*x, *a)).unzip();
-                            let origin = if wo.iter().any(|x| x.a == f.root() || x.b == f.root()) { f.root() } else { wo[0].a };
-                            let without = if wo.len() == 1 { self.alone_over(&wo[0], at, &f.rels, f.inter).map(|x| x - 1.0).unwrap_or_else(|| self.worth_ab(origin, &wo, &wat, f.inter)) } else { self.worth_ab(origin, &wo, &wat, f.inter) };
-                            (self.worth_ab(f.root(), &f.rels, &f.at, f.inter) - without, self.alone_over(r, at, &f.rels, None).map(|x| x - 2.0).unwrap_or(self.halved(r) - 2.0))
+                            (self.contribution_at_node(f, r), self.alone_over(r, at, &f.rels, None).map(|x| x - 2.0).unwrap_or(self.halved(r) - 2.0))
                         } else { (self.contribution_ab(f, r), self.halved(r) - 2.0) };
                         if self.trace { eprintln!("[price f{}] {} in f{}: contribution {:.0} alone {:.0} at {:?}", fno, self.rel_text(r), fid, inside, alone, f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| a.map(|a| self.dict.sym_text(a)))); }
                         if alone > inside {
