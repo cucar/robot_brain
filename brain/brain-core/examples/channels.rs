@@ -200,8 +200,6 @@ fn main() {
     // dollar in it in whole shares, no transaction cost; profit is cash and holdings less the start
     let nch = series.len();
     let (mut cash, mut shares, mut trades) = (15000.0f64, vec![0i64; nch], 0usize);
-    // for the report only: per stock, what its sales brought in less what its buys cost, in the cycle so far
-    let mut flow = vec![0.0f64; nch];
     let mut ep_profit: Vec<(f64, usize)> = Vec::new();
     let mut est = vec![0.0f64; nch];
     let mut last_act: Vec<Option<u32>> = vec![None; nch];
@@ -210,12 +208,11 @@ fn main() {
     let tcost: f64 = args.iter().find(|a| a.starts_with("--cost=")).map_or(0.0, |a| a[7..].parse().unwrap());
     let report_every: usize = args.iter().find(|a| a.starts_with("--every=")).map_or(0, |a| a[8..].parse().unwrap());
     let day_log = args.iter().any(|a| a == "--day-log");
-    let infer_log = args.iter().any(|a| a == "--infer-log");
     let follow: Option<u32> = args.iter().find(|a| a.starts_with("--follow=")).map(|a| a[9..].parse().unwrap());
     m.join_log = args.iter().any(|a| a == "--join-log");
     for k in 0..total {
         if frozen_laps > 0 && k == cycle * train_laps { before = Some(fingerprint(&m)); m.frozen = true; println!("FROZEN from lap {} | poses {}", train_laps + 1, m.dict.syms.len()); }
-        if k % cycle == 0 { cash = 15000.0; shares = vec![0; nch]; trades = 0; flow = vec![0.0; nch]; }
+        if k % cycle == 0 { cash = 15000.0; shares = vec![0; nch]; trades = 0; }
         let mut inputs = Vec::new();
         let mut rewards = Vec::new();
         for (i, (_, pct, _)) in series.iter().enumerate() {
@@ -241,22 +238,6 @@ fn main() {
             est[i] = w.iter().find(|x| x.dim == ac).map_or(0.0, |x| x.estimate);
             let next_up = if pct[(k + 1) % pct.len()] > 0.0 { 1 } else { 0 };
             if let Some(g) = pending[i] { grid[i][k / cycle][k % cycle] = if g == next_up { 'R' } else { 'W' }; }
-        }
-        // test only, --infer-log: each bar's inference, right or wrong, and every call of this frame that infers
-        // an action of that stock, with its function and level
-        if infer_log {
-            let fr = m.frames.back().unwrap();
-            for (i, (name, pct, _)) in series.iter().enumerate() {
-                let Some(ac) = chans[i].2 else { continue };
-                let next_up = if pct[(k + 1) % pct.len()] > 0.0 { 1 } else { 0 };
-                let acts: Vec<(u32, Sym)> = (0..2u32).map(|b| (b, m.base_neuron(ac, b) as Sym)).collect();
-                let calls: Vec<String> = fr.acts.iter().filter_map(|a| {
-                    let fb = a.fired_by.as_ref()?;
-                    let infs: Vec<String> = a.inferences.iter().filter_map(|x| acts.iter().find(|(_, s)| *s == x.target).map(|(b, _)| format!("{} s{:.1} e{:.3}{}", if *b == 1 { "own" } else { "out" }, x.strength, x.estimate, if x.struck { " struck" } else { "" }))).collect();
-                    if infs.is_empty() { None } else { Some(format!("f{} L{} -> {}", fb.func, a.level, infs.join(", "))) }
-                }).collect();
-                println!("INFER {} | {} said {} next {} {} | {}", fno, name, pending[i].map_or("-".to_string(), |x| x.to_string()), next_up, pending[i].map_or("-", |g| if g == next_up { "R" } else { "W" }), if calls.is_empty() { "no call".to_string() } else { calls.join("; ") });
-            }
         }
         // the trader, at the price this frame's bar ended at: a stock keeps its last action where the machine says
         // nothing new; where none has an action yet, nothing trades
@@ -299,12 +280,12 @@ fn main() {
                         if extra > 0 { if let Some(b) = buys.iter_mut().find(|b| b.0 == c) { b.1 += extra; } else { buys.push((c, extra)); } }
                     }
                 }
-                for (i, n) in sells { cash += n as f64 * price(i) * (1.0 - mul); flow[i] += n as f64 * price(i) * (1.0 - mul); shares[i] -= n; trades += 1; }
+                for (i, n) in sells { cash += n as f64 * price(i) * (1.0 - mul); shares[i] -= n; trades += 1; }
                 for (i, n) in buys {
                     let eff = price(i) * (1.0 + mul);
                     let n = n.min((cash / eff).floor() as i64);
                     if n <= 0 { continue; }
-                    cash -= n as f64 * eff; flow[i] -= n as f64 * eff; shares[i] += n; trades += 1;
+                    cash -= n as f64 * eff; shares[i] += n; trades += 1;
                 }
             }
             // test only, --day-log: each frame's functions, joins, calls, each stock's inference with its estimate, what
@@ -362,10 +343,6 @@ fn main() {
             let accs: Vec<String> = series.iter().enumerate().filter(|(_, x)| x.2).map(|(i, x)| { let row = &grid[i][k / cycle]; let (r, w) = row.iter().fold((0, 0), |(r, w), c| (r + (*c == 'R') as usize, w + (*c == 'W') as usize)); format!("{} {:.2}%", x.0, 100.0 * r as f64 / (r + w).max(1) as f64) }).collect();
             let profit = if prices.is_empty() { 0.0 } else { cash + (0..nch).map(|i| shares[i] as f64 * prices[i][(k % cycle) + 1]).sum::<f64>() - 15000.0 };
             if !prices.is_empty() { ep_profit.push((profit, trades)); }
-            if !prices.is_empty() {
-                let per: Vec<String> = (0..nch).map(|i| format!("{} ${:.2}", series[i].0, flow[i] + shares[i] as f64 * prices[i][(k % cycle) + 1])).collect();
-                println!("PROFIT per stock, cycle {} | {}", k / cycle + 1, per.join(", "));
-            }
             println!("CYCLE {} | neurons {} | functions {} | highest call level in the cycle {} | the dictionary last changed at frame {} | right {}{}", k / cycle + 1, m.alive, m.dict.len(), top, last_change, accs.join(", "),
                 if prices.is_empty() { String::new() } else { format!(" | net profit ${:.2}, ROI {:.2}% ({} trades)", profit, profit / 15000.0 * 100.0, trades) });
         }
@@ -512,19 +489,11 @@ fn main() {
     println!("recognition: {} functions | the dictionary last changed at frame {}", m.dict.len(), last_change);
     println!("NEVERCALLED {} of {}", m.funcs_never_called(), m.dict.len());
     println!("CLOSING weighed {} joined {} (from a function of more relations {}) | cycles at the end {} of {} | build joins the calls count would refuse {} | largest such gain as a cycle {} | weighs beyond every offset the rows hold {} | weighs with neither end where the call stands {} | weighs where one lap on cannot be worked out {}", m.closing_weighed, m.closing_joined, m.closing_from_multi, m.dict.funcs.values().filter(|f| f.has_cycle()).count(), m.dict.len(), m.closing_refused[0], m.closing_max.map_or("-".to_string(), |(c, lo, _)| format!("{:.1} (on the calls {:.1})", c, lo)), m.closing_beyond, m.closing_no_end, m.closing_no_lap);
-    if m.trace_closing { for l in m.closing_follow_lines() { println!("{}", l); } }
     if m.join_log {
         for (f, r, fid, d) in &m.joins_seen { println!("JOINLOG {} | {} | f{} | {}", f, r, fid, d); }
         for (f, r, fid, d, g, h, ca, cb, at, c) in &m.refused_seen { println!("REFUSED {} | {} | f{} | {} | gain {:.1} against {:.1} | counts {} {} | attach {} count {}", f, r, fid, d, g, h, ca, cb, at, c); }
         let mut ids: Vec<_> = m.func_calls.keys().copied().collect(); ids.sort();
         for id in ids { println!("CALLS f{} | {}", id, m.func_calls[&id].iter().map(|x| x.to_string()).collect::<Vec<_>>().join(" ")); }
-        // each function's interneuron's connections at the end: the target, its strength and estimate
-        let mut fids: Vec<u32> = m.dict.funcs.keys().map(|x| *x as u32).collect(); fids.sort();
-        for id in fids {
-            let Some(nn) = m.dict.get(id as _).and_then(|f| f.inter).and_then(|n| m.thalamus.get(n)) else { continue };
-            let mut v: Vec<String> = nn.connections.iter().map(|((_, t, o), c)| format!("{} at {:?} s{:.1} e{:.3}", m.dict.sym_text(*t), &o[..1], c.strength, c.estimate())).collect(); v.sort();
-            println!("CONN f{} | {} connections | {}", id, v.len(), v.join("; "));
-        }
     }
     println!("JOINREFUSED held by no function, gain not above zero {} | lowest gain refused {}", m.help_refused, m.help_refused_min.map_or("-".to_string(), |x| format!("{:.1}", x)));
     for l in m.cycle_lap_lines() { println!("{}", l); }

@@ -172,6 +172,9 @@ pub struct Machine {
     pub(crate) kind_of: FxHashMap<ActRef, bool>,
     /// What each call took that way: the activations or calls at the other end of the relations lifted to it (D10, D26)
     pub(crate) taken: FxHashMap<ActRef, Vec<ActRef>>,
+    /// Relations lifted inside the frame to a call whose other end's row is not written yet: per that activation, the
+    /// call and its offset from it, held by the row when it is written; dropped at the frame's end (D10)
+    pub(crate) lift_pending: FxHashMap<ActRef, Vec<(ActRef, Offset)>>,
     /// How many relations were lifted to a call, how many of them between two calls, and activations covered at age 0
     pub up_count: usize,
     pub up_pair_count: usize,
@@ -241,14 +244,6 @@ pub struct Machine {
     pub func_calls: FxHashMap<FuncId, Vec<Frame>>,
     /// For the count only: closing weighs where one lap on cannot be worked out, the lap having a part in space
     pub closing_no_lap: u64,
-    /// Test only, with `trace_closing`: each closing candidate weighed, with the function it was weighed for, that
-    /// function's relations then, the frame of its first weigh, and at each later call of the motif whose reading is
-    /// complete, the frame and what happened: the candidate beside the call or not, and if beside, weighed, offered
-    /// but not weighed, or not offered and why
-    pub closing_follow: Vec<(Rel, FuncId, Vec<Rel>, Frame, Vec<(Frame, String)>)>,
-    pub closing_offered_now: FxHashSet<(Rel, FuncId)>,
-    pub closing_weighed_now: FxHashSet<(Rel, FuncId)>,
-    pub closing_follow_at: Frame,
     /// For the count only: each function closed into a cycle by a relation, the frame it closed in, the closing
     /// relation's strength and the strength of each relation it already held; and for each function that is a cycle,
     /// its calls on less than one lap, on one lap or more, and the most laps any stood on, a call counted at its
@@ -357,6 +352,7 @@ impl Machine {
             lift_forms: FxHashMap::default(),
             kind_of: FxHashMap::default(),
             taken: FxHashMap::default(),
+            lift_pending: FxHashMap::default(),
             up_count: 0,
             up_pair_count: 0,
             cover_age0: 0,
@@ -376,7 +372,7 @@ impl Machine {
             last_winners: Vec::new(),
             tie_join: false,
             trace_joins: true,
-            trace_closing: false, watch_rels: FxHashSet::default(), closing_weighed: 0, closing_joined: 0, closing_refused: [0; 2], closing_max: None, closing_beyond: 0, closing_no_end: 0, closing_from_multi: 0, help_refused: 0, help_refused_min: None, join_log: false, joins_seen: Vec::new(), refused_seen: Vec::new(), func_calls: FxHashMap::default(), closing_no_lap: 0, closing_follow: Vec::new(), closing_offered_now: FxHashSet::default(), closing_weighed_now: FxHashSet::default(), closing_follow_at: Frame::MIN,
+            trace_closing: false, watch_rels: FxHashSet::default(), closing_weighed: 0, closing_joined: 0, closing_refused: [0; 2], closing_max: None, closing_beyond: 0, closing_no_end: 0, closing_from_multi: 0, help_refused: 0, help_refused_min: None, join_log: false, joins_seen: Vec::new(), refused_seen: Vec::new(), func_calls: FxHashMap::default(), closing_no_lap: 0,
             closed_cycles: Vec::new(), cycle_laps: FxHashMap::default(), cycle_counted: FxHashMap::default(),
             joined_ever: Default::default(),
             sw: Switches::default(),
@@ -547,6 +543,7 @@ impl Machine {
 
         // connect and infer (§7), then decommission what is due (R38)
         self.connect_all();
+        self.lift_pending.clear();
         self.infer_all();
         if !self.frozen { self.reap(); }
 
@@ -682,6 +679,28 @@ impl Machine {
         None
     }
 
+    /// The row an activation wrote in the frame it fired: under its own record, or for a call that took a lap, under the
+    /// record its row was written for (D18, D53).
+    fn row_of(&self, h: ActRef) -> Option<(NeuronId, usize)> {
+        let a = self.act(h)?;
+        let nn = self.thalamus.get(a.neuron)?;
+        if let Some(i) = nn.history.iter().rposition(|r| r.act == h) { return Some((a.neuron, i)); }
+        let lh = self.latest(h);
+        nn.history.iter().rposition(|r| r.act.frame == h.frame && self.latest(r.act) == lh).map(|i| (a.neuron, i))
+    }
+
+    /// Row `h` takes `nb` as a neighbor at offset `o` where it does not hold it there yet (D10). False where `h` has no
+    /// row.
+    fn row_takes(&mut self, h: ActRef, nb: ActRef, o: Offset) -> bool {
+        let Some((n, i)) = self.row_of(h) else { return false };
+        let lb = self.latest(nb);
+        if self.thalamus[n].history[i].nbs.iter().any(|x| (x.act == nb || self.latest(x.act) == lb) && x.off == o) { return true; }
+        let Some(sym) = self.act(nb).map(|a| a.sym) else { return true };
+        let row_act = self.thalamus[n].history[i].act;
+        self.thalamus[n].add_followed(row_act, &[crate::neuron::Nb::seen(nb, sym, o, nb)]);
+        true
+    }
+
     /// A relation of a covered activation that no call covers is lifted, from then on, to each call that landed on it,
     /// at the offset from that call's position; where its other end is covered too, it is the relation between the
     /// calls on the two, one edge however many such relations run between them (D24, D10, D26).
@@ -724,6 +743,15 @@ impl Machine {
                         let v = self.form_src.entry(f).or_default(); if !v.contains(&e) { v.push(e); }
                     }
                     if let Some(xm) = self.act_mut(x) { if !held && !xm.rels.iter().any(|br| br.other == c) { xm.rels.push(BoardRel { other: c, off, strength: s }); } }
+                    // the row at the relation's other end holds it too (D18, D55, R50): the row of what stands there on the
+                    // board, an activation no call has landed on, as itself, or the call that had already landed on that
+                    // end, the row of the activation under it taking nothing. Inside the frame it takes the call as a
+                    // neighbor at the call's offset from it, keeping what it saw, one neighbor per call; a row not yet
+                    // written, a call of this frame, holds it when it is written. The row of the call the relation is
+                    // lifted to takes nothing for the lift, and in time a row takes only what the connect call hands it
+                    if off[0] == 0 && !self.frozen && !self.row_takes(x, c, off) && xa.fired_by.is_some() && xa.opened_at == self.frame_no {
+                        self.lift_pending.entry(x).or_default().push((c, off));
+                    }
                     if self.trace_cover { eprintln!("[lifted f{}] {} at frame {} -> {} lifted to {} | {}", self.frame_no, self.dict.sym_text(a.sym), me.frame, self.dict.sym_text(oa.sym), self.dict.sym_text(ca.sym), if oa.covered_at.is_some() { "between two calls" } else { "to the call" }); }
                 }
             }
@@ -874,6 +902,15 @@ impl Machine {
         } else {
             self.thalamus.process_level(tasks).into_iter().flat_map(|r| r.returns).collect()
         };
+        // a row written now holds the relations lifted to a call before it was written (D10)
+        if !self.lift_pending.is_empty() {
+            for &r in refs {
+                for key in [r, self.latest(r)] {
+                    let Some(v) = self.lift_pending.remove(&key) else { continue };
+                    for (nb, o) in v { self.row_takes(r, nb, o); }
+                }
+            }
+        }
         // the board's edges at each activation, and the relations of this level in their one form (R21, D34)
         let mut fresh: FxHashMap<(ActRef, ActRef), Fresh> = FxHashMap::default();
         for ret in &returns {
@@ -1087,18 +1124,6 @@ impl Machine {
             }
         }
         (twice, seen)
-    }
-
-    /// Test only: one line per closing candidate followed (`closing_follow`).
-    pub fn closing_follow_lines(&self) -> Vec<String> {
-        self.closing_follow.iter().map(|(r, fid, _, first, ev)| {
-            let beside = ev.iter().filter(|e| e.1 != "not beside" && e.1 != "motif changed" && e.1 != "motif gone").count();
-            let mut counts: std::collections::BTreeMap<&str, u32> = Default::default();
-            for e in ev { *counts.entry(e.1.as_str()).or_default() += 1; }
-            format!("FOLLOWCLOSE {} to f{} | first weighed at frame {} | later calls read {} | candidate beside the call {} | {} | frames beside: {}", self.rel_text(r), fid, first, ev.len(), beside,
-                counts.iter().map(|(k, v)| format!("{} {}", k, v)).collect::<Vec<_>>().join(", "),
-                ev.iter().filter(|e| e.1 != "not beside" && e.1 != "motif changed" && e.1 != "motif gone").map(|e| format!("{}:{}", e.0, e.1)).take(12).collect::<Vec<_>>().join(" "))
-        }).collect()
     }
 
     /// For the count only: one line per closing of a function into a cycle, with its calls' laps over the run.

@@ -143,6 +143,9 @@ impl Machine {
         let through = std::cell::Cell::new(false);
         let thru_calls: std::cell::RefCell<Vec<ActRef>> = std::cell::RefCell::new(Vec::new());
         let s11 = true;
+        // a function in time is fit as it unfolds (D54, D31): entered at a node, the nodes later than it are still to
+        // come, and the fit leaves them out with anything reached only through them, charging nothing for them
+        let later: Vec<bool> = lay.position.iter().map(|p| lay.closing.is_none() && p[0] > 0).collect();
         // the step: what the node stands on, whether a call, and the activation the relation was read to
         let go = |this: &Machine, au: ActRef, off: Offset, want: Sym, used: &FxHashSet<ActRef>| -> Option<(ActRef, bool, ActRef)> {
             if s11 {
@@ -154,6 +157,7 @@ impl Machine {
         };
         let try_step = |this: &Machine, ri: usize, u: usize, v: usize, off: Offset, at: &mut Vec<Option<ActRef>>, via_call: &mut Vec<bool>, used: &mut FxHashSet<ActRef>, landed: &mut Vec<(ActRef, usize)>, calls: &mut Vec<(ActRef, usize)>, edges: &mut Vec<(ActRef, ActRef)>, came: &mut Vec<bool>, beyond: &mut Vec<bool>, inside: &mut Vec<bool>| -> Option<bool> {
             if beyond[u] || (at[u].is_some() && via_call[u]) { inside[ri] = true; if at[v].is_none() { beyond[v] = true; } return None; }
+            if later[v] { inside[ri] = true; if at[v].is_none() { beyond[v] = true; } return None; }
             let au = at[u]?;
             let (w, call, to) = go(this, au, off, f.nodes[v], used)?;
             came[ri] = true;
@@ -230,11 +234,8 @@ impl Machine {
         let mut keys: FxHashSet<Vec<ActRef>> = FxHashSet::default();
         let Some(fr) = self.frames.iter().find(|fr| fr.no == fno) else { return out };
         for (root, node) in f.nodes.iter().enumerate() {
-            // a function is fit only in a frame where none of its nodes is still to come (D54, D15, D31): read from the
-            // node entered at, a node later than the present is no fit, offered or charged. A function in time is so
-            // entered at its latest node, one inside the frame at any node, and a cycle at any node, since its fit ends
-            // where it stops landing
-            if !f.has_cycle() && f.layout_from(root).position.iter().any(|p| p[0] > 0) { continue; }
+            // a function is entered at any node that fires in the present frame (D54, D31, R53): in time the nodes later
+            // than that node are still to come and the fit leaves them out; a cycle's fit ends where it stops landing
             for (i, a) in fr.acts.iter().enumerate() {
                 // the node admits its own pose, or a call whose phase starts at it (D54)
                 let admits = a.sym == *node;
@@ -539,12 +540,6 @@ impl Machine {
         *self.end_counts_memo.borrow_mut() = Some(FxHashMap::default());
         *self.answer_memo.borrow_mut() = Some(FxHashMap::default());
         *self.share_memo.borrow_mut() = Some(FxHashMap::default());
-        // test only: the follow of weighed closing candidates reads each frame once, when the next frame first groups
-        if self.trace_closing && self.closing_follow_at != self.frame_no {
-            if self.closing_follow_at != Frame::MIN { self.follow_closings(self.closing_follow_at); }
-            self.closing_offered_now.clear(); self.closing_weighed_now.clear();
-            self.closing_follow_at = self.frame_no;
-        }
         let out = self.group_inner(fits, fresh, board, fired);
         *self.end_counts_memo.borrow_mut() = None;
         *self.answer_memo.borrow_mut() = None;
@@ -671,7 +666,6 @@ impl Machine {
                         } else { as_node };
                         if self.watch_rels.contains(&rel) && self.trace { eprintln!("[watch-offered f{}] {} to f{} at {}: on the board, {} at {:?} with {} at {:?} (the fit of f{} touched {} as node {})", fno, self.rel_text(&rel), fid, self.dict.sym_text(attach), self.act(e.near).map_or("?".into(), |a| self.dict.sym_text(a.sym)), self.act(e.near).map(|a| a.pos), self.act(e.far).map_or("?".into(), |a| self.dict.sym_text(a.sym)), self.act(e.far).map(|a| a.pos), fid, self.act(act).map_or("?".into(), |a| self.dict.sym_text(a.sym)), self.dict.sym_text(as_node)); }
                         if touch_first.contains(&(fid, act)) && !touch_own.contains(&(fid, act)) { cand_first.insert((rel, fid)); } else { cand_own.insert((rel, fid)); }
-                        if self.trace_closing { self.closing_offered_now.insert((rel, fid)); }
                         let v = cands.entry(rel).or_default();
                         if !v.iter().any(|x| x.0 == fid) { v.push((fid, attach)); }
                     }
@@ -693,7 +687,6 @@ impl Machine {
                 if self.trace { eprintln!("[offered f{}] {} to f{} at {}", fno, self.rel_text(&rel), fid, self.dict.sym_text(attach)); }
                 if self.watch_rels.contains(&rel) && self.trace { eprintln!("[watch-offered f{}] {} to f{} at {}: under a call, shared activation {} at {:?}, other end {} at {:?}", fno, self.rel_text(&rel), fid, self.dict.sym_text(attach), self.act(shared).map_or("?".into(), |a| self.dict.sym_text(a.sym)), self.act(shared).map(|a| a.pos), self.act(other).map_or("?".into(), |a| self.dict.sym_text(a.sym)), self.act(other).map(|a| a.pos)); }
                 if first { cand_first.insert((rel, fid)); } else { cand_own.insert((rel, fid)); }
-                if self.trace_closing { self.closing_offered_now.insert((rel, fid)); }
                 let v = cands.entry(rel).or_default();
                 if !v.iter().any(|x| x.0 == fid) { v.push((fid, attach)); }
             }
@@ -767,10 +760,6 @@ impl Machine {
                 // worth `with − without − 1` is the gain, nothing else re-read
                 let standing: Standing = if ka && kb {
                     self.closing_weighed += 1;
-                    if self.trace_closing {
-                        self.closing_weighed_now.insert((rel, fid));
-                        if !self.closing_follow.iter().any(|x| x.0 == rel && x.1 == fid) { self.closing_follow.push((rel, fid, f.rels.clone(), fno, Vec::new())); }
-                    }
                     let (wi, wo, und, at_off, beyond) = self.calls_pair(f, &rel);
                     // test `closing`, `round`: the gain is `with − 1`; the rows without are not read
                     let worth = wi as f64 - 1.0;
@@ -1201,48 +1190,6 @@ impl Machine {
         }
         let beyond = (0..MAX_DIMS).any(|d| at[d].abs() > span[d]);
         (w, wo, und, at, beyond)
-    }
-
-    /// Test only, with `trace_closing`: for each closing candidate weighed before, at each call of its motif whose
-    /// reading completes this frame, whether the candidate stands beside the call on the board (as the weigh reads
-    /// the present call), and where it does, whether it was weighed, offered and not weighed, or not offered, with
-    /// the reason the offer path gives: its strength below 2, held by another function, or no board edge offered
-    fn follow_closings(&mut self, fno: Frame) {
-        let mut items = std::mem::take(&mut self.closing_follow);
-        for (rel, fid, rels0, first, ev) in items.iter_mut() {
-            if *first >= fno { continue; }
-            let Some(f) = self.dict.get(*fid) else { if ev.last().map_or(true, |e| e.1 != "motif gone") { ev.push((fno, "motif gone".into())); } continue };
-            if f.rels != *rels0 { if ev.last().map_or(true, |e| e.1 != "motif changed") { ev.push((fno, "motif changed".into())); } continue; }
-            let Some(inter) = f.inter else { continue };
-            let origin = f.nodes[0];
-            let (far, at) = if rel.a == origin { (rel.b, rel.off) } else if rel.b == origin { (rel.a, neg(&rel.off)) } else { continue };
-            let own_call: Vec<NeuronId> = self.dict.holder(rel).and_then(|id| self.dict.get(id)).filter(|g| g.rels.len() == 1).and_then(|g| g.inter).into_iter().collect();
-            // each call once, read at its own frame as the weigh reads the present call; where the candidate's far
-            // end lies ahead and is not yet beside it, read again once that frame has come
-            let mut seen: Vec<Pos> = Vec::new();
-            for fr in self.frames.iter().filter(|g| g.no == fno || (at[0] > 0 && g.no == fno - at[0] as i64)) {
-                for a in fr.acts.iter() {
-                    if a.neuron != inter || a.gone || seen.contains(&a.pos) { continue; }
-                    seen.push(a.pos);
-                    let own_now = self.frames.iter().flat_map(|g| g.acts.iter()).any(|x| !x.gone && own_call.contains(&x.neuron) && offset_between(a, x) == rel.off);
-                    let far_now = self.frames.iter().flat_map(|g| g.acts.iter()).any(|x| !x.gone && x.sym == far && offset_between(a, x) == at);
-                    let present = fr.no == fno;
-                    // a present call whose far end is still ahead is read when that frame comes, unless it is beside now
-                    if present && at[0] > 0 && !own_now && !far_now { continue; }
-                    // a deferred call already beside at its own frame was counted then
-                    if !present && own_now { continue; }
-                    let beside = own_now || far_now;
-                    let what = if !beside { "not beside".to_string() }
-                        else if self.closing_weighed_now.contains(&(*rel, *fid)) { "weighed".to_string() }
-                        else if self.closing_offered_now.contains(&(*rel, *fid)) { "offered, not weighed".to_string() }
-                        else if self.strength(rel) < 2.0 { "not offered: strength below 2".to_string() }
-                        else if let Some(g) = self.dict.holder(rel).filter(|g| *g != *fid) { format!("not offered: held by f{}", g) }
-                        else { "not offered: no board edge offered for it".to_string() };
-                    ev.push((fno, what));
-                }
-            }
-        }
-        self.closing_follow = items;
     }
 
     /// A relation alone, read at node `at` over the rows a set is read over there (switch 20): the rows of that node

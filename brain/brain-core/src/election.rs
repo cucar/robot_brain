@@ -304,7 +304,14 @@ impl Machine {
                     if a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { laps += self.dict.pose_of(a.sym).map_or(0, |p| p.laps); }
                 }
             }
-            Phase { from: f.nodes[latest.1], to: f.nodes[earliest.1], laps }
+            // where it took an earlier call of its own, the same call, its phase reaches as far back as that call's did (D54, D53)
+            let mut to = f.nodes[earliest.1];
+            {
+                for (c, _) in &fit.calls {
+                    if let Some(a) = self.act(*c) { if a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { if let Some(p) = self.dict.pose_of(a.sym) { to = p.to; } } }
+                }
+            }
+            Phase { from: f.nodes[latest.1], to, laps }
         };
         let sym = self.dict.sym_of(neuron, phase);
         let covers: Vec<ActRef> = all.iter().map(|x| x.0).collect();
