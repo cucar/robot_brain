@@ -21,8 +21,8 @@ one at an offset from the other in time and space together, is an edge. The grap
 of space, and it is the only record the machine keeps of what happened: it holds offsets, never coordinates. A
 neuron sees the edges around each of its own activations and reports them with how often each has held. The
 machine groups the edges into **functions**, graphs over neurons that keep recurring, names each with an
-interneuron, and from then on the name stands where the graph recurs. A function is recognized whole, in the
-frame its latest node fires, and its call is one activation of the interneuron in a **phase**: which
+interneuron, and from then on the name stands where the graph recurs. A function in time is recognized as it
+unfolds, over the nodes that have come, and its call is one activation of the interneuron in a **phase**: which
 node the fit ran from and to, and how many laps. A neuron in a phase is a **pose**, and a relation is between
 two poses. The call stands for what it covers, and the relations of it that no call covers are **lifted** to
 the call; what always followed it is a function at the level above, over its call.
@@ -63,8 +63,9 @@ interneuron stands for it wherever it does. The graph of the run is stated short
 graph. Functions may name base symbols or the interneurons of other functions. This substitution is the whole
 mechanism of compression.
 
-**A function is what has happened, and a connection is what followed.** A function is recognized in the frame
-its latest node fires, once every node of it has fired, and in no frame before (D54). A relation
+**A function is what has happened, and a connection is what followed.** A function in time is recognized as
+it unfolds: in each frame one of its nodes fires, over the nodes that have come, its call standing in the
+phase that ends at that node (D54). A relation
 joins a function where it pays over the occasions the neurons remember (R50). A function's latest node never
 moves, so it gains nodes toward its past only, and what followed it is a function at the level above, over its
 call. What followed any activation, its function's later nodes
@@ -597,12 +598,13 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > time, and among several at one frame, the one at the least position in the order the dimensions are declared
 > (D1). The call fires at the position of the latest activation the fit landed on, which is the origin's where
 > the fit reached it (D37, D53), and expansion runs from the node the phase starts at (R28). **Nothing joins a
-> function later than its origin.** A function is recognized in the frame its origin fires, and its call
-> stands from then on, so what fires later sees the call, and its relation is a function over the call (R50).
+> function later than its origin.** A function is recognized through to its origin in the frame its origin
+> fires, and its call stands from then on in that phase, so what fires later sees the call, and its relation
+> is a function over the call (R50).
 > The origin is no more than the latest node the function has: where the relation at the origin leaves, the
 > latest of the nodes that remain is the origin (R54). A fit enters the function at a node that stands in the
-> present frame, and only where no node of the function is still to come (D54). In a function in time that
-> node is the origin. A function
+> present frame (D54). In a function in time that is any node that fires in the frame: the nodes later than
+> it are still to come, and the fit leaves them out. A function
 > that is a cycle has no fixed origin, since the last lap may stop at any node of it; its
 > call's phase says which node the fit started at and which it ended at (D37).
 >
@@ -968,14 +970,20 @@ occurs is what the worth measures (D57).
 >
 > **A fit is read at the present, over what has happened.** It enters at a node of the function, on an
 > activation at the frame being recognized that the node admits, its own pose,
-> and reads the function's relations from there (D31). **A function is fit only in a frame where none of its
-> nodes is still to come.** Read from the node entered at, where a node of the function would stand later than
-> the present, there is no fit: nothing is offered, and nothing is charged. So a function in time is fit in
-> the frame its latest node fires, entered at that node (D15). A function inside the frame is entered at any
+> and reads the function's relations from there (D31). **A function in time is fit as it unfolds, as a cycle
+> is.** It is entered at any of its nodes that fires in the present frame. The nodes later than that node are
+> still to come. The fit leaves them out, with anything reached only through them. Nothing is charged for
+> them, now or if they never come: stopping is not a failure. What lies behind the node entered at is read as
+> any fit reads it, each relation true or failed. So the call stands in the phase that ends at the node
+> entered at, and it stays in the phase it reached (D37). It stands as any call stands, whether or not its
+> later nodes come. Where a later node fires, and the fit from it reaches an activation that stands under an
+> earlier call of the same function, uncovered, whose latest node is that node, that call takes the new node:
+> it is the same call, its phase that much longer, and no new call is made (D53). A fit needs one relation to
+> land, so a function's earliest node alone is no fit. A function inside the frame is entered at any
 > of its nodes, since all of them stand in the present frame. A cycle is entered at any node too: its fit ends
-> where the cycle stops landing, so none of its nodes is still to come. Every node is then at or before the
+> where the cycle stops landing. Every node the fit reads is then at or before the
 > present, so every
-> relation of the function is true or failed when the function is fit, and nothing is pending. Its phase is the
+> relation it reads is true or failed when the function is fit, and nothing is pending. Its phase is the
 > node of the latest activation it lands on, the node of the earliest, and the laps it read (D37). Without an
 > activation at the present that some node admits there is no fit.
 >
@@ -1292,7 +1300,8 @@ on the apex in the frames after it, event and action alike.
 > keyed by its phase less its laps, the node it started at and the node it stands at, and a call a connection
 > names is named the same way. So a cycle's call standing at one node of the cycle learns apart from one
 > standing at another, in one neuron (D48), and a running cycle learns what follows each of its nodes once,
-> for every length it reaches.
+> for every length it reaches. A function in time that is not a cycle does the same: its call in the phase
+> that ends at one node learns and infers apart from its call in the phase that ends at another (D54).
 >
 > | Component | Description                                                                              |
 > |-----------|------------------------------------------------------------------------------------------|
@@ -1491,7 +1500,7 @@ argument.
 > reading tells the machine the function may fit, and the fit begins on an activation at the present frame
 > that can stand at that node, or nowhere. Matched relation by relation out from there, those of its relations
 > that land on a board relation are true, those that do not are its failures (D22). A function is fit once
-> per activation at the present it can enter at, which is only where none of its nodes is still to come
+> per activation at the present it can enter at, in time at each of its nodes that fires in the frame
 > (D54), and a fit reached from two of its relations is one fit. A relation no
 > reading reaches is left for grouping (R50). Everything find fits goes to the election once every relation
 > of the level has been read (R24).
@@ -1500,16 +1509,17 @@ argument.
 > matches (D15). Competing matches over the same board relations are all fit, and the election picks among
 > them (R24). The same function matched to the same board relations from two of its relations is one fit.
 >
-> **A function is fit whole.** The machine takes it or leaves it, its variables with it: it cannot hold where
-> they do not.
+> **A function is fit whole over what has come.** The machine takes it or leaves it, its variables with it:
+> it cannot hold where they do not. In time the nodes still to come are left out of the fit, and the call's
+> phase says how far it has got (D54).
 >
 > **A function is fit only on relations that stand on the board.** Where a relation of it has been lifted, the
 > relation that stands there instead names another pose (D55). So the function has nothing to fit there, and
 > it gets no call. That alone does not remove it from the dictionary (R18, R54). It is fit again wherever its
 > own relations stand on the board.
 >
-> **The fitting rule.** A fit is anchored at the node it enters at, and it is made only where no node of the
-> function is still to come (D54). The machine lands that node on an activation
+> **The fitting rule.** A fit is anchored at the node it enters at. In time the nodes later than that node
+> are left out, and nothing is charged for them (D54). The machine lands that node on an activation
 > at the present frame the node admits, its own pose,
 > or one admitted at it where the node is a variable (D54), and extends the match relation by
 > relation from there: each next relation of the function that shares a node with
