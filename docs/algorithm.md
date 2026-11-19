@@ -544,7 +544,8 @@ what was done together.
 >
 > **Lifting.** When a node is covered, each relation of its own that no call covers leaves the board. A
 > relation to the call that landed on the node stands there instead. It has the same other end, and the call's
-> pose where the covered node's pose was (D8). The relation is **lifted** to the call.
+> pose where the covered node's pose was (D8). The relation is **lifted** to the call. Inside the frame, the
+> row of the activation at its other end takes the call (D18).
 >
 > ```
 >   ( p ) ──── ( q ) ──── ( r )      the call A covers p–q and q–r, so q is covered
@@ -1223,8 +1224,13 @@ one winner per dimension.
 > the connect call hands the neuron what
 > stood on the apex (§7.1, D5), and the row takes it at the
 > activation's age, whether the activation is covered or not (D10). **Nothing a row holds is ever replaced.**
-> Where a call lands on an activation the row holds, the row keeps that activation and takes nothing for the
-> call (D10). So in the history the frame around an activation is whole on both sides in time, as it is in
+> Where a call lands on an activation the row holds, the row keeps that activation (D10). Inside the frame,
+> where the row's relation to that activation is lifted to the call (D55), the row takes the call as well, at
+> the call's offset. The lifted relation is a relation of the row's own activation, so its row holds it, as
+> the call's row does. Where the row is not yet written when the relation is lifted, it holds the call when it
+> is written. A row takes one neighbor for a call, however many relations were lifted to it. The row of the
+> call takes nothing for the lift: it is written when the call fires, with what stands on the board then (D5).
+> In time a row takes what the connect call hands it and nothing else. So in the history the frame around an activation is whole on both sides in time, as it is in
 > space, and the relation between two activations is held by both of them, each from its own side (D34). It is
 > the evidence every strength is counted over, and it holds nothing else: the neuron's connections are not in
 > the history and `H` does not bound them (R31).
@@ -1587,9 +1593,11 @@ argument.
 > and the row is neither `with` nor `without` for it and counts nothing toward its strength alone.
 >
 > **A relation is counted as the row saw it.** A row holds every neighbor as what stood on the board when the
-> row was written: an activation as itself, whatever calls had landed on it (D18, D5). A row that saw a neuron before a call landed on it keeps the neuron and takes nothing
-> for the call (D10). So a relation to a neuron is in the same rows whether or not a call had landed on it,
-> and whether or not that call's function is still in the dictionary. The count reads those rows and nothing
+> row was written: an activation as itself, whatever calls had landed on it (D18, D5). A row that saw a neuron before a call landed on it keeps the neuron (D10).
+> Inside the frame it takes the call too, where its relation to that neuron is lifted to the call (D18, D55).
+> So a relation to a neuron is in the same rows whether or not a call had landed on it,
+> and whether or not that call's function is still in the dictionary. And a relation lifted inside the frame
+> is in the rows of both its ends, so each end counts it. The count reads those rows and nothing
 > else: it never expands a call. A relation to a call
 > is counted the same way, in the rows that hold that call in that phase at that offset (D34).
 >
