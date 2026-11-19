@@ -213,10 +213,24 @@ fn train(m: &mut Machine, e: &Env, i: &Img, n: usize, label: &str) -> usize {
         println!("  {} showing {:2}: said {} | levels {} | on the apex {} | functions {} | dictionary {}", label, k, said.map_or("-".into(), |s| s.to_string()), m.last_stats.levels, apex, m.dict.len(), if changed { "changed" } else { "same" });
         if k == 1 || k == 2 || k == n { let mut b = m.bare_after_l0.clone(); b.sort_by_key(|x| (x.1, x.0)); println!("BARE showing {}: {}", k, if b.is_empty() { "none".to_string() } else { b.iter().map(|(x, y, v)| format!("{}({},{})", if *v == 0 { "black" } else { "white" }, x, y)).collect::<Vec<_>>().join(" ") }); }
         if k == n { report_apex(m); }
+        // --each-showing: every function, and every call on the apex with where it stands, after each showing
+        if std::env::args().any(|a| a == "--each-showing") {
+            let mut fs: Vec<&Func> = m.dict.funcs.values().collect();
+            fs.sort_by_key(|f| f.id);
+            for f in fs { println!("EACH showing {} | f{} interneuron #{} | {}", k, f.id, f.inter.unwrap_or(0), f.rels.iter().map(|r| rel_words(m, r)).collect::<Vec<_>>().join("; ")); }
+            let fr = m.frames.back().unwrap();
+            let mut ap: Vec<String> = fr.acts.iter().filter(|a| a.kind == Kind::Inter).map(|a| format!("#{}{} f{:?} at ({}, {}) covers {}", a.neuron, if a.on_apex() { " (apex)" } else { "" }, a.fired_by.as_ref().map(|fb| fb.func), a.pos[1], a.pos[2], a.covers.len())).collect();
+            ap.sort();
+            println!("EACH showing {} | calls: {}", k, ap.join("; "));
+        }
         m.process_frame(&[Input { dim: e.dig, bucket: 0, pos: [0; MAX_DIMS] }], vec![Reward { reward: 1.0, channels: vec![e.digit], frames: 1 }]);
         m.reset_context();
     }
     println!("NEVERCALLED {} {} of {}", label, m.funcs_never_called(), m.dict.len());
+    println!("CLOSING weighed {} joined {} (from a function of more relations {}) | cycles at the end {} of {} | build joins the calls count would refuse {} | largest such gain as a cycle {} | weighs beyond every offset the rows hold {} | weighs with neither end where the call stands {} | weighs where one lap on cannot be worked out {}", m.closing_weighed, m.closing_joined, m.closing_from_multi, m.dict.funcs.values().filter(|f| f.has_cycle()).count(), m.dict.len(), m.closing_refused[0], m.closing_max.map_or("-".to_string(), |(c, lo, _)| format!("{:.1} (on the calls {:.1})", c, lo)), m.closing_beyond, m.closing_no_end, m.closing_no_lap);
+    println!("JOINREFUSED held by no function, gain not above zero {} | lowest gain refused {}", m.help_refused, m.help_refused_min.map_or("-".to_string(), |x| format!("{:.1}", x)));
+    { let (t, s) = m.twice_counts(); println!("TWICE frames with an interneuron called more than once {} | of those, a row holds another call of the same interneuron {}", t, s); }
+    for l in m.cycle_lap_lines() { println!("{}", l); }
     println!("  {}: the dictionary last changed at showing {}{}", label, last_change, if last_change < n { format!(" (unchanged over the last {} showings)", n - last_change) } else { " (still changing at the last showing)".into() });
     last_change
 }
@@ -224,11 +238,14 @@ fn train(m: &mut Machine, e: &Env, i: &Img, n: usize, label: &str) -> usize {
 fn main() {
     // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
     let s15_off = std::env::args().any(|a| a == "--s15-off");
-    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && a != "--landed" && a != "--cycles").collect();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && !a.starts_with("--closing=") && a != "--trace-closing" && a != "--join-at-a-loss" && a != "--landed" && a != "--each-showing" && a != "--cycles").collect();
     let mode = args.get(1).cloned().unwrap_or("square".into());
     let n: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(30);
     let mut m = Machine::new(2048, Policy::events_to_actions(), 1);
     m.print_cycles = std::env::args().any(|a| a == "--cycles");
+    m.sw.closing = std::env::args().find_map(|a| a.strip_prefix("--closing=").map(|v| match v { "cycle" => 0, "round" => 1, _ => panic!("--closing=cycle|round") })).unwrap_or(0);
+    m.trace_closing = std::env::args().any(|a| a == "--trace-closing");
+    m.sw.join_at_a_loss = std::env::args().any(|a| a == "--join-at-a-loss");
     if s15_off { m.sw.s15_uncovered_relations = false; }
     let ax = m.declare_axis("x", 1);
     let ay = m.declare_axis("y", 1);

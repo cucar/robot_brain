@@ -329,6 +329,14 @@ impl Machine {
         let me = ActRef { frame: fno, index: fr.acts.len() as u32 };
         fr.acts.push(act);
         self.electing.insert(me);
+        if self.join_log && !self.frozen { self.func_calls.entry(f.id).or_default().push(fno); }
+        // for the count only: a call of a function that is a cycle, with the laps it stands on
+        if !self.frozen && f.has_cycle() {
+            let e = self.cycle_laps.entry(f.id).or_insert((0, 0, 0));
+            if phase.laps == 0 { e.0 += 1; } else { e.1 += 1; }
+            e.2 = e.2.max(phase.laps);
+            self.cycle_counted.insert(me, (f.id, phase.laps));
+        }
         if self.trace_cover {
             let show = |x: &ActRef| format!("{}@{}", self.act(*x).map_or("?".into(), |b| self.dict.sym_text(b.sym)), x.frame);
             eprintln!("[edges f{} l{}] f{} landed {} edges: {}", fno, level, f.id, fit.edges.len(),
@@ -383,6 +391,10 @@ impl Machine {
             let own = self.act(c).and_then(|ca| ca.fired_by.as_ref()).map_or(false, |fb| fb.func == f.id);
             if !own { continue; }
             self.grown.insert(c, me);
+            // for the count only: the record it grew from is the same call, counted now at this record
+            if let Some((g, l)) = self.cycle_counted.remove(&c) {
+                if let Some(e) = self.cycle_laps.get_mut(&g) { if l == 0 { e.0 -= 1; } else { e.1 -= 1; } }
+            }
             if let Some(ca) = self.act_mut(c) { if ca.covered_at.is_none() { ca.covered_at = Some((fno - ca.pos[0] as i64).max(0) as u32); } }
         }
         // switch 11: what the call covered, each at its offset from it, kept for as long as rows may name it (R28)

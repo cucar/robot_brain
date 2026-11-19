@@ -13,6 +13,9 @@ fn main() {
     let showings: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(20);
     let size: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(9);
     let mut m = Machine::new(2048, Policy::events_to_actions(), 1);
+    m.sw.closing = std::env::args().find_map(|a| a.strip_prefix("--closing=").map(|v| match v { "cycle" => 0, "round" => 1, _ => panic!("--closing=cycle|round") })).unwrap_or(0);
+    m.trace_closing = std::env::args().any(|a| a == "--trace-closing");
+    m.sw.join_at_a_loss = std::env::args().any(|a| a == "--join-at-a-loss");
     let trace_first = std::env::args().any(|a| a == "--trace-first");
     let ax = m.declare_axis("x", 1);
     let ay = m.declare_axis("y", 1);
@@ -58,6 +61,9 @@ fn main() {
         m.reset_context();
     }
     println!("NEVERCALLED {} of {}", m.funcs_never_called(), m.dict.len());
+    println!("CLOSING weighed {} joined {} (from a function of more relations {}) | cycles at the end {} of {} | build joins the calls count would refuse {} | largest such gain as a cycle {} | weighs beyond every offset the rows hold {} | weighs with neither end where the call stands {} | weighs where one lap on cannot be worked out {}", m.closing_weighed, m.closing_joined, m.closing_from_multi, m.dict.funcs.values().filter(|f| f.has_cycle()).count(), m.dict.len(), m.closing_refused[0], m.closing_max.map_or("-".to_string(), |(c, lo, _)| format!("{:.1} (on the calls {:.1})", c, lo)), m.closing_beyond, m.closing_no_end, m.closing_no_lap);
+    println!("JOINREFUSED held by no function, gain not above zero {} | lowest gain refused {}", m.help_refused, m.help_refused_min.map_or("-".to_string(), |x| format!("{:.1}", x)));
+    { let (t, s) = m.twice_counts(); println!("TWICE frames with an interneuron called more than once {} | of those, a row holds another call of the same interneuron {}", t, s); }
     let mut ids: Vec<_> = m.dict.funcs.keys().copied().collect();
     ids.sort();
     for id in ids { println!("DICT {}", m.dict.describe(m.dict.get(id).unwrap())); }

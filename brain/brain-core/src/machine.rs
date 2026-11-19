@@ -64,10 +64,17 @@ pub struct Switches {
     /// The committed build's crossing charge: a fit pays one for each call taken earlier in the same election that
     /// landed on an activation it lands on.
     pub cross_charge: bool,
+    /// Test: how a candidate that would close a cycle is weighed: 0 the function's worth as a cycle less its worth
+    /// as it stands (the build); 1 (`round`) the candidate over the function's interneuron's rows: it joins where
+    /// the rows that hold it, less one, is above zero, nothing else read
+    pub closing: u8,
+    /// Test only (off by default): a relation no function holds joins at a loss as it did before, its gain against its
+    /// worth in a function of its own even where that is below zero; off, it joins only where its gain is above zero
+    pub join_at_a_loss: bool,
 }
 
 impl Default for Switches {
-    fn default() -> Self { Switches { s15_uncovered_relations: true, cross_charge: false } }
+    fn default() -> Self { Switches { s15_uncovered_relations: true, cross_charge: false, closing: 0, join_at_a_loss: false } }
 }
 
 pub struct Machine {
@@ -202,6 +209,53 @@ pub struct Machine {
     pub tie_join: bool,
     /// print a line for every join, on a tie or by gain, and for every relation that joined and later left
     pub trace_joins: bool,
+    /// Test only: each candidate weighed for closing a cycle, its gains and what they were compared against
+    pub trace_closing: bool,
+    /// Test only: relations watched (`--watch`), each traced in detail where it is weighed, offered or priced
+    pub watch_rels: FxHashSet<Rel>,
+    /// For the count only: candidates weighed for closing a cycle, those that joined; under the build, the joins
+    /// that the reading as it stands would refuse, attached at the end of the smaller gain (0) or the larger (1),
+    /// and of those the largest gain the build read, with the gains read as it stands (smaller, larger)
+    pub closing_weighed: u64,
+    pub closing_joined: u64,
+    pub closing_refused: [u64; 2],
+    pub closing_max: Option<(f64, f64, f64)>,
+    /// For the count only: closing weighs where the candidate's offset from the call lies beyond every offset the
+    /// interneuron's rows hold anything at
+    pub closing_beyond: u64,
+    /// For the count only: closing weighs where neither end of the candidate is where the call stands
+    pub closing_no_end: u64,
+    /// For the count only: closing joins that took the relation out of a function holding other relations
+    pub closing_from_multi: u64,
+    /// For the count only: joins of a relation no function held that were refused because the gain was not above zero, and the lowest gain
+    /// it refused
+    pub help_refused: u64,
+    pub help_refused_min: Option<f64>,
+    /// Test only (`join_log`): every join (frame, relation, function, the function before it), every join
+    /// refused that way (frame, relation, function, the function, gain, what it was compared against with the
+    /// flag off, the count at each end, the node it would attach at, the count there), and each function's calls by
+    /// frame
+    pub join_log: bool,
+    pub joins_seen: Vec<(Frame, String, FuncId, String)>,
+    pub refused_seen: Vec<(Frame, String, FuncId, String, f64, f64, u32, u32, String, u32)>,
+    pub func_calls: FxHashMap<FuncId, Vec<Frame>>,
+    /// For the count only: closing weighs where one lap on cannot be worked out, the lap having a part in space
+    pub closing_no_lap: u64,
+    /// Test only, with `trace_closing`: each closing candidate weighed, with the function it was weighed for, that
+    /// function's relations then, the frame of its first weigh, and at each later call of the motif whose reading is
+    /// complete, the frame and what happened: the candidate beside the call or not, and if beside, weighed, offered
+    /// but not weighed, or not offered and why
+    pub closing_follow: Vec<(Rel, FuncId, Vec<Rel>, Frame, Vec<(Frame, String)>)>,
+    pub closing_offered_now: FxHashSet<(Rel, FuncId)>,
+    pub closing_weighed_now: FxHashSet<(Rel, FuncId)>,
+    pub closing_follow_at: Frame,
+    /// For the count only: each function closed into a cycle by a relation, the frame it closed in, the closing
+    /// relation's strength and the strength of each relation it already held; and for each function that is a cycle,
+    /// its calls on less than one lap, on one lap or more, and the most laps any stood on, a call counted at its
+    /// latest record (a call that took a lap is the same call); the records counted so far, with their laps
+    pub closed_cycles: Vec<(FuncId, Frame, f64, Vec<f64>)>,
+    pub cycle_laps: FxHashMap<FuncId, (u64, u64, u32)>,
+    pub(crate) cycle_counted: FxHashMap<ActRef, (FuncId, u32)>,
     /// relations that have joined a function, to tell a relation that joined and later left (diagnostic)
     pub(crate) joined_ever: rustc_hash::FxHashSet<crate::function::Rel>,
     /// The changes since the committed build, each on or off on its own, for measuring them (a diagnostic).
@@ -322,6 +376,8 @@ impl Machine {
             last_winners: Vec::new(),
             tie_join: false,
             trace_joins: true,
+            trace_closing: false, watch_rels: FxHashSet::default(), closing_weighed: 0, closing_joined: 0, closing_refused: [0; 2], closing_max: None, closing_beyond: 0, closing_no_end: 0, closing_from_multi: 0, help_refused: 0, help_refused_min: None, join_log: false, joins_seen: Vec::new(), refused_seen: Vec::new(), func_calls: FxHashMap::default(), closing_no_lap: 0, closing_follow: Vec::new(), closing_offered_now: FxHashSet::default(), closing_weighed_now: FxHashSet::default(), closing_follow_at: Frame::MIN,
+            closed_cycles: Vec::new(), cycle_laps: FxHashMap::default(), cycle_counted: FxHashMap::default(),
             joined_ever: Default::default(),
             sw: Switches::default(),
             trace_retire: false,
@@ -999,6 +1055,59 @@ impl Machine {
         let edges: usize = self.dict.funcs.values().map(|f| f.rels.len()).sum();
         format!("dictionary: {} functions, {} edges | not at an end, would have left: {} (strength below the threshold {}, worth alone above its contribution {}, to join another function {}) | relation at the origin left {} (ties for the latest node {})",
             self.dict.len(), edges, self.middle_strength + self.middle_worth + self.middle_join, self.middle_strength, self.middle_worth, self.middle_join, self.origin_moves, self.origin_ties)
+    }
+
+    /// Test only: the relations of any function whose text holds `pat` are watched from now on; one line for each
+    /// watched relation: where it is held, its count at each end, and each end's neuron's rows.
+    pub fn watch_lines(&mut self, pat: &str) -> Vec<String> {
+        let found: Vec<Rel> = self.dict.funcs.values().flat_map(|f| f.rels.iter().copied()).filter(|r| self.rel_text(r).contains(pat)).collect();
+        for r in found { self.watch_rels.insert(r); }
+        let mut v: Vec<Rel> = self.watch_rels.iter().copied().collect();
+        v.sort();
+        v.into_iter().map(|r| {
+            let (ca, cb) = self.end_counts(&r);
+            let held = self.dict.holder(&r).and_then(|g| self.dict.get(g)).map_or("in no function".to_string(), |g| format!("in f{} ({} relations)", g.id, g.rels.len()));
+            let rows = |s: Sym| { let n = self.dict.neuron_of(s); self.thalamus.get(n).map_or("-".to_string(), |nn| format!("#{} {} of {} rows", n, nn.history.len(), nn.h)) };
+            format!("{} | {} | count at {} {} , at {} {} | strength {} | rows {} ; {}", self.rel_text(&r), held, self.dict.sym_text(r.a), ca, self.dict.sym_text(r.b), cb, ca.max(cb), rows(r.a), rows(r.b))
+        }).collect()
+    }
+
+    /// For the count only: over every interneuron's history, the frames in which it has more than one call, and of
+    /// those the frames in which a row holds another call of the same interneuron.
+    pub fn twice_counts(&self) -> (u64, u64) {
+        let (mut twice, mut seen) = (0u64, 0u64);
+        for n in self.thalamus.iter() {
+            if n.kind != Kind::Inter { continue; }
+            let mut by_frame: FxHashMap<Frame, Vec<&crate::neuron::Row>> = FxHashMap::default();
+            for row in n.history.iter() { by_frame.entry(row.act.frame).or_default().push(row); }
+            for (_, rows) in by_frame {
+                if rows.len() < 2 { continue; }
+                twice += 1;
+                if rows.iter().any(|r| r.nbs.iter().any(|nb| self.dict.neuron_of(nb.sym) == n.id)) { seen += 1; }
+            }
+        }
+        (twice, seen)
+    }
+
+    /// Test only: one line per closing candidate followed (`closing_follow`).
+    pub fn closing_follow_lines(&self) -> Vec<String> {
+        self.closing_follow.iter().map(|(r, fid, _, first, ev)| {
+            let beside = ev.iter().filter(|e| e.1 != "not beside" && e.1 != "motif changed" && e.1 != "motif gone").count();
+            let mut counts: std::collections::BTreeMap<&str, u32> = Default::default();
+            for e in ev { *counts.entry(e.1.as_str()).or_default() += 1; }
+            format!("FOLLOWCLOSE {} to f{} | first weighed at frame {} | later calls read {} | candidate beside the call {} | {} | frames beside: {}", self.rel_text(r), fid, first, ev.len(), beside,
+                counts.iter().map(|(k, v)| format!("{} {}", k, v)).collect::<Vec<_>>().join(", "),
+                ev.iter().filter(|e| e.1 != "not beside" && e.1 != "motif changed" && e.1 != "motif gone").map(|e| format!("{}:{}", e.0, e.1)).take(12).collect::<Vec<_>>().join(" "))
+        }).collect()
+    }
+
+    /// For the count only: one line per closing of a function into a cycle, with its calls' laps over the run.
+    pub fn cycle_lap_lines(&self) -> Vec<String> {
+        self.closed_cycles.iter().map(|(id, fr, cs, held)| {
+            let (lt, ge, mx) = self.cycle_laps.get(id).copied().unwrap_or((0, 0, 0));
+            let now = self.dict.get(*id).map_or("gone".to_string(), |f| format!("{}{}", self.dict.describe(f), if f.has_cycle() { "" } else { " (no longer a cycle)" }));
+            format!("CYCLELAPS f{} | closed at frame {} | closing strength {:.0} | held {:?} | calls under one lap {} | one lap or more {} | most laps {} | now {}", id, fr, cs, held.iter().map(|x| *x as u32).collect::<Vec<_>>(), lt, ge, mx, now)
+        }).collect()
     }
 
     pub fn describe_neuron(&self, id: NeuronId) -> String {

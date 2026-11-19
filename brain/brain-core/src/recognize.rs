@@ -539,6 +539,12 @@ impl Machine {
         *self.end_counts_memo.borrow_mut() = Some(FxHashMap::default());
         *self.answer_memo.borrow_mut() = Some(FxHashMap::default());
         *self.share_memo.borrow_mut() = Some(FxHashMap::default());
+        // test only: the follow of weighed closing candidates reads each frame once, when the next frame first groups
+        if self.trace_closing && self.closing_follow_at != self.frame_no {
+            if self.closing_follow_at != Frame::MIN { self.follow_closings(self.closing_follow_at); }
+            self.closing_offered_now.clear(); self.closing_weighed_now.clear();
+            self.closing_follow_at = self.frame_no;
+        }
         let out = self.group_inner(fits, fresh, board, fired);
         *self.end_counts_memo.borrow_mut() = None;
         *self.answer_memo.borrow_mut() = None;
@@ -663,7 +669,9 @@ impl Machine {
                         let attach = if f.node_of(rel.a).is_some() && f.node_of(rel.b).is_some() {
                             [e.near, e.far].iter().filter_map(|r| self.act(*r)).map(|a| a.sym).find(|s| *s == rel.a || *s == rel.b).unwrap_or(as_node)
                         } else { as_node };
+                        if self.watch_rels.contains(&rel) && self.trace { eprintln!("[watch-offered f{}] {} to f{} at {}: on the board, {} at {:?} with {} at {:?} (the fit of f{} touched {} as node {})", fno, self.rel_text(&rel), fid, self.dict.sym_text(attach), self.act(e.near).map_or("?".into(), |a| self.dict.sym_text(a.sym)), self.act(e.near).map(|a| a.pos), self.act(e.far).map_or("?".into(), |a| self.dict.sym_text(a.sym)), self.act(e.far).map(|a| a.pos), fid, self.act(act).map_or("?".into(), |a| self.dict.sym_text(a.sym)), self.dict.sym_text(as_node)); }
                         if touch_first.contains(&(fid, act)) && !touch_own.contains(&(fid, act)) { cand_first.insert((rel, fid)); } else { cand_own.insert((rel, fid)); }
+                        if self.trace_closing { self.closing_offered_now.insert((rel, fid)); }
                         let v = cands.entry(rel).or_default();
                         if !v.iter().any(|x| x.0 == fid) { v.push((fid, attach)); }
                     }
@@ -683,7 +691,9 @@ impl Machine {
                     [e.near, e.far].iter().filter_map(|r| self.act(*r)).map(|a| a.sym).find(|s| *s == rel.a || *s == rel.b).unwrap_or(as_node)
                 } else { as_node };
                 if self.trace { eprintln!("[offered f{}] {} to f{} at {}", fno, self.rel_text(&rel), fid, self.dict.sym_text(attach)); }
+                if self.watch_rels.contains(&rel) && self.trace { eprintln!("[watch-offered f{}] {} to f{} at {}: under a call, shared activation {} at {:?}, other end {} at {:?}", fno, self.rel_text(&rel), fid, self.dict.sym_text(attach), self.act(shared).map_or("?".into(), |a| self.dict.sym_text(a.sym)), self.act(shared).map(|a| a.pos), self.act(other).map_or("?".into(), |a| self.dict.sym_text(a.sym)), self.act(other).map(|a| a.pos)); }
                 if first { cand_first.insert((rel, fid)); } else { cand_own.insert((rel, fid)); }
+                if self.trace_closing { self.closing_offered_now.insert((rel, fid)); }
                 let v = cands.entry(rel).or_default();
                 if !v.iter().any(|x| x.0 == fid) { v.push((fid, attach)); }
             }
@@ -699,7 +709,11 @@ impl Machine {
             // in a function of one relation, a tie joins, since it leaves fewer functions (R54)
             let holder = self.dict.holder(&rel).and_then(|g| self.dict.get(g));
             let lone = holder.map_or(true, |g| g.rels.len() == 1);
-            let mut best: Option<(f64, f64, u64, FuncId, Sym)> = None;
+            let holder_multi = holder.map_or(false, |g| g.rels.len() > 1);
+            // the readings as it stands where the candidate would close a cycle: (gain, node) for the smaller and the
+            // larger gain, and the gain as a cycle (test `closing`)
+            type Standing = Option<((f64, Sym), (f64, Sym), f64)>;
+            let mut best: Option<(f64, f64, u64, FuncId, Sym, Standing)> = None;
             for (fid, attach) in fs {
                 let Some(f) = self.dict.get(fid) else { continue };
                 if f.holds(&rel) { continue; }
@@ -713,6 +727,17 @@ impl Machine {
                 // relation joins a cycle; a relation closes a cycle only where every relation is then on the cycle
                 if rel.a == rel.b { continue; }
                 if f.has_cycle() { continue; }
+                // a candidate that closes the cycle (R50): across frames any return closes it; inside the frame only
+                // the way back itself, from the node it attaches at to the other end, as the function's relations lay
+                // those nodes out, in every component, so it reaches the very activation the fit has there
+                if ka && kb && rel.off[0] == 0 {
+                    let (u, v, seen) = if attach == rel.b { (rel.b, rel.a, neg(&rel.off)) } else { (rel.a, rel.b, rel.off) };
+                    let lay = f.layout();
+                    let (iu, iv) = (f.node_of(u).unwrap(), f.node_of(v).unwrap());
+                    let mut back = [0i32; MAX_DIMS];
+                    for d in 0..MAX_DIMS { back[d] = lay.position[iv][d] - lay.position[iu][d]; }
+                    if seen != back { continue; }
+                }
                 if ka && kb {
                     let mut deg: FxHashMap<Sym, u32> = FxHashMap::default();
                     for r in f.rels.iter().chain(std::iter::once(&rel)) { *deg.entry(r.a).or_default() += 1; *deg.entry(r.b).or_default() += 1; }
@@ -731,15 +756,38 @@ impl Machine {
                     } else { None };
                     let wb = lone_before.unwrap_or_else(|| self.worth_ab(f.root(), &f.rels, &before, f.inter));
                     if self.trace && lone_before.is_some() { eprintln!("   [at node f{}] {} alone in f{} at {}: {:.0} (its count {:.1})", fno, self.rel_text(&f.rels[0]), fid, self.dict.sym_text(attach), wb, self.strength(&f.rels[0])); }
-                    self.worth_ab(f.root(), &with, &at, f.inter) - wb
+                    let wa = self.worth_ab(f.root(), &with, &at, f.inter);
+                    if self.trace && self.watch_rels.contains(&rel) {
+                        let parts = |rs: &[Rel], ats: &[Option<Sym>]| -> String { rs.iter().zip(ats).map(|(r, a)| { let (x, y) = self.answer(rs, r, *a, f.inter); format!("{} at {}: with {} without {} worth {}", self.rel_text(r), a.map_or("-".into(), |z| self.dict.sym_text(z)), x, y, x as f64 - y as f64 - 1.0) }).collect::<Vec<_>>().join("; ") };
+                        eprintln!("[watch-weigh f{}] {} to f{} at {} | worth with it {:.1}: {} | worth without it {:.1}{}: {} | gain {:.1}", fno, self.rel_text(&rel), fid, self.dict.sym_text(attach), wa, parts(&with, &at), wb, if lone_before.is_some() { " (its one relation read alone at the node)" } else { "" }, parts(&f.rels, &before), wa - wb);
+                    }
+                    wa - wb
                 };
+                // test `closing`: a candidate that would close the cycle, read on its own at each of its two nodes: its
+                // worth `with − without − 1` is the gain, nothing else re-read
+                let standing: Standing = if ka && kb {
+                    self.closing_weighed += 1;
+                    if self.trace_closing {
+                        self.closing_weighed_now.insert((rel, fid));
+                        if !self.closing_follow.iter().any(|x| x.0 == rel && x.1 == fid) { self.closing_follow.push((rel, fid, f.rels.clone(), fno, Vec::new())); }
+                    }
+                    let (wi, wo, und, at_off, beyond) = self.calls_pair(f, &rel);
+                    // test `closing`, `round`: the gain is `with − 1`; the rows without are not read
+                    let worth = wi as f64 - 1.0;
+                    if beyond { self.closing_beyond += 1; }
+                    if at_off[0] == i32::MIN { self.closing_no_end += 1; }
+                    if at_off[0] == i32::MAX { self.closing_no_lap += 1; }
+                    if self.trace_closing { eprintln!("[closing f{}] {} to {} | as a cycle {:.1} at {} | on the interneuron's rows: {} at {:?} from the call: with {} (not holding it {}) worth {:.1} (not yet taken {}){}", fno, self.rel_text(&rel), self.dict.describe(f), w, self.dict.sym_text(attach), self.dict.sym_text(if rel.a == f.nodes[0] { rel.b } else { rel.a }), at_off, wi, wo, worth, und, if at_off[0] == i32::MIN { " | NEITHER END is where the call stands" } else if at_off[0] == i32::MAX { " | ONE LAP ON cannot be worked out: the lap has a part in space" } else if beyond { " | BEYOND every offset its rows hold" } else { "" }); }
+                    Some(((worth, attach), (worth, attach), w))
+                } else { None };
+                let (w, attach) = match (standing, self.sw.closing) { (Some((c, _, _)), 1) => c, _ => (w, attach) };
                 let mut rels = f.rels.clone();
                 rels.push(rel);
                 let near = self.worth_in(&rels, &rel, Some(attach), f.inter, None).1;
-                let better = match best { None => true, Some((bw, bn, bj, _, _)) => w > bw || (w == bw && (near > bn || (near == bn && f.joined < bj))) };
-                if better { best = Some((w, near, f.joined, fid, attach)); }
+                let better = match best { None => true, Some((bw, bn, bj, _, _, _)) => w > bw || (w == bw && (near > bn || (near == bn && f.joined < bj))) };
+                if better { best = Some((w, near, f.joined, fid, attach, standing)); }
             }
-            let Some((w, _, _, fid, attach)) = best else { continue };
+            let Some((w, _, _, fid, attach, standing)) = best else { continue };
             // switch 21: a relation not at an end of the function it is in does not leave it, to join or otherwise
             {
                 if let Some(g) = holder {
@@ -757,12 +805,19 @@ impl Machine {
                 self.dict.get(fid).and_then(|f| {
                     let mut with = f.rels.clone();
                     with.push(rel);
+                    // test `closing`: read as it stands, the candidate that closes a cycle is read alone at the same node
                     if !Self::cycle_rels_any(f.root(), &with).is_empty() { return None; }
                     let own = holder.and_then(|g| g.inter);
                     self.alone_over(&rel, attach, &with, own).map(|x| x - 2.0)
                 })
             } else { None };
             if self.trace { if let Some(h) = here20 { eprintln!("   [at node f{}] {} alone at {}: {:.0} (its count {:.1})", fno, self.rel_text(&rel), self.dict.sym_text(attach), h, self.strength(&rel)); } }
+            if self.trace && self.watch_rels.contains(&rel) {
+                let (ca, cb) = self.end_counts(&rel);
+                let n = self.dict.neuron_of(attach);
+                let rows = self.rows_of(attach).count();
+                eprintln!("[watch-against f{}] {} | held by {:?} (lone {}) | alone at {} (neuron #{}, {} rows of that pose): {:?} | strength {} (counts {} at {}, {} at {})", fno, self.rel_text(&rel), holder.map(|g| g.id), lone, self.dict.sym_text(attach), n, rows, here20, ca.max(cb), ca, self.dict.sym_text(rel.a), cb, self.dict.sym_text(rel.b));
+            }
             let own = match holder {
                 _ if here20.is_some() => here20.unwrap(),
                 _ if lone => self.strength(&rel) - 2.0,
@@ -779,6 +834,38 @@ impl Machine {
                 eprintln!("[last-move f{}] {} to f{} | gain {:.1} | its function f{:?} worth {:.1} | subtree {} | total {:.1} | {}", fno, self.rel_text(&rel), fid, w, holder.map(|g| g.id), own, parts.join(", "), here, if w > here { "MOVES" } else { "stays" });
             }
             if self.trace { eprintln!("[cand f{}] {} best f{} gain {:.0} | where it stands f{:?} {:.0}", fno, self.rel_text(&rel), fid, w, self.dict.holder(&rel), here); }
+            if self.trace && self.watch_rels.contains(&rel) { eprintln!("[watch-decide f{}] {} best f{} at {} gain {:.1} against {:.1} (its own figure {:.1}, subtree {:.1}) -> {}", fno, self.rel_text(&rel), fid, self.dict.sym_text(attach), w, here, own, sub.iter().map(|x| x.1).sum::<f64>(), if w > here { "JOINS" } else { "stays" }); }
+            // test `closing`, `round`: a candidate that would close the cycle joins where `with − 1`, over the
+            // interneuron's rows, is above zero; nothing else is read
+            let here = if standing.is_some() && self.sw.closing == 1 { 0.0 } else { here };
+            // a relation no function holds joins only where the dictionary's worth rises: its gain above zero, and above
+            // its worth in a function of its own where that is above zero (D57, R54); `join_at_a_loss` restores the old
+            // comparison, for the test only
+            let here = if !self.sw.join_at_a_loss && holder.is_none() {
+                let h = here.max(0.0);
+                if w > here && !(w > h) {
+                    self.help_refused += 1;
+                    self.help_refused_min = Some(self.help_refused_min.map_or(w, |m: f64| m.min(w)));
+                    if self.trace { eprintln!("[help-refused f{}] {} to f{} gain {:.1} against {:.1}, held by no function", fno, self.rel_text(&rel), fid, w, here); }
+                    if self.join_log {
+                        let (ca, cb) = self.end_counts(&rel);
+                        let d = self.dict.get(fid).map_or(String::new(), |f| self.dict.describe(f));
+                        self.refused_seen.push((fno, self.rel_text(&rel), fid, d, w, here, ca, cb, self.dict.sym_text(attach), if attach == rel.a { ca } else { cb }));
+                    }
+                }
+                h
+            } else { here };
+            if let Some((lo, hi, wc)) = standing {
+                // under the build, the reading on the calls is compared against zero
+                let (h_lo, h_hi) = (0.0, 0.0);
+                if self.trace_closing { eprintln!("[closing-weigh f{}] {} to f{} | gain {:.1} at {} against {:.1} | {} | as a cycle {:.1}; on the calls {:.1}", fno, self.rel_text(&rel), fid, w, self.dict.sym_text(attach), here, if w > here { "JOINS" } else { "refused" }, wc, lo.0); }
+                if self.sw.closing == 0 && w > here {
+                    let (r_lo, r_hi) = (!(lo.0 > h_lo), !(hi.0 > h_hi));
+                    if r_lo { self.closing_refused[0] += 1; }
+                    if r_hi { self.closing_refused[1] += 1; }
+                    if (r_lo || r_hi) && self.closing_max.map_or(true, |m| wc > m.0) { self.closing_max = Some((wc, lo.0, hi.0)); }
+                }
+            }
             if !(w > here) { continue; }
             if self.trace { eprintln!("[join f{}] {} into {} gain {:.0} over {:.0}", fno, self.rel_text(&rel), self.dict.describe(self.dict.get(fid).unwrap()), w, here); }
             let closes_now = self.dict.get(fid).map_or(false, |f| !f.has_cycle() && f.node_of(rel.a).is_some() && f.node_of(rel.b).is_some());
@@ -787,6 +874,13 @@ impl Machine {
             let from = self.dict.holder(&rel);
             if let Some(g) = from { self.leave(g, &rel, &mut changed, "its last relation joined another function"); }
             if self.dict.get(fid).is_none() { continue; }
+            if self.join_log { let d = self.dict.get(fid).map_or(String::new(), |f| self.dict.describe(f)); self.joins_seen.push((fno, self.rel_text(&rel), fid, d)); }
+            if closes_now {
+                self.closing_joined += 1;
+                if from.is_some() && holder_multi { self.closing_from_multi += 1; }
+                let held: Vec<f64> = self.dict.get(fid).map_or(Vec::new(), |f| f.rels.iter().map(|r| self.strength(r)).collect());
+                self.closed_cycles.push((fid, fno, self.strength(&rel), held));
+            }
             self.dict.join(fid, rel, attach);
             self.joins_by[(rel.off[0] != 0) as usize] += if from.is_some() { 0 } else { 1 };
             self.moves_by[(rel.off[0] != 0) as usize] += if from.is_some() { 1 } else { 0 };
@@ -836,6 +930,12 @@ impl Machine {
                     // the neurons return it with strength below 2 over every row that holds it (R18, D47)
                     // the neurons return it below 2, bare or under this function's calls, over every row (R18, R50)
                     let nothing = { let h = self.strength(r); if self.trace && (h < 2.0 || (rels.len() == 1 && h < 3.0)) { eprintln!("[leaves on f{}] {} count {:.1}", fno, self.rel_text(r), h); } h < 2.0 || (rels.len() == 1 && h < 3.0) };
+                    if self.trace && self.watch_rels.contains(r) {
+                        let (ca, cb) = self.end_counts(r);
+                        let rows = |s: Sym| { let n = self.dict.neuron_of(s); self.thalamus.get(n).map_or("-".to_string(), |nn| format!("neuron #{}: {} rows of {} ({} of that pose)", n, nn.history.len(), nn.h, self.rows_of(s).count())) };
+                        let fitted: Vec<String> = fits.iter().filter(|x| x.func == fid).map(|x| x.landed.iter().map(|(a, node)| format!("{}@{:?}", self.dict.sym_text(f.nodes[*node]), self.act(*a).map(|z| z.pos))).collect::<Vec<_>>().join(" ")).collect();
+                        eprintln!("[watch-price f{}] {} in f{} ({} relations) | at an end {} | count {} at {} ({}), {} at {} ({}) | strength {} | for nothing below {} → {} | this frame's fits of f{}: {}", fno, self.rel_text(r), fid, rels.len(), Self::at_an_end(f, r), ca, self.dict.sym_text(r.a), rows(r.a), cb, self.dict.sym_text(r.b), rows(r.b), ca.max(cb), if rels.len() == 1 { 3 } else { 2 }, nothing, fid, if fitted.is_empty() { "none".to_string() } else { fitted.join(" || ") });
+                    }
                     if nothing { if self.trace { eprintln!("[price f{}] {} in f{}: returned below 2 ({})", fno, self.rel_text(r), fid, self.returned_for(r, f.inter)); }
                         if worst.map_or(true, |w| f64::INFINITY > w.0) { worst = Some((f64::INFINITY, *r, true)); } continue; }
                     // for a function of its own where its worth alone is higher than its contribution (R54, experiment)
@@ -1045,6 +1145,105 @@ impl Machine {
         rels.iter().zip(at).map(|(r, a)| if cyc.contains(r) { self.strength(r) - 1.0 } else { self.worth_in(rels, r, *a, own, closing).0 }).sum()
     }
 
+
+    /// A candidate that would close a function's cycle, read over the function's interneuron's history (test
+    /// `closing`, `round`): every activation of the interneuron is a fit of its function, so its rows are counted,
+    /// each against the candidate at the offset it has from where the call stands, its origin: `with` the rows that
+    /// hold it there, or there the call of a function whose only relation is the candidate. A row that has not yet
+    /// taken what followed where the candidate reaches forward counts as neither. For the count only: the rows that
+    /// do not hold it, those counted as neither, and whether the offset lies beyond every offset the rows hold
+    /// anything at (where they could not hold it).
+    pub(crate) fn calls_pair(&self, f: &Func, rel: &Rel) -> (u32, u32, u32, Offset, bool) {
+        let (mut w, mut wo, mut und) = (0u32, 0u32, 0u32);
+        // read from the end that stands where the call stands, the function's origin, to the other end; where
+        // neither end is the origin there is no reading (the caller counts it)
+        let origin = f.nodes[0];
+        let (far, at) = if rel.a == origin { (rel.b, rel.off) } else if rel.b == origin { (rel.a, neg(&rel.off)) } else { return (0, 0, 0, [i32::MIN; MAX_DIMS], false) };
+        let Some(nn) = f.inter.and_then(|n| self.thalamus.get(n)) else { return (0, 0, 0, at, true) };
+        // a row holds the candidate where it holds the candidate itself, or, at the candidate's offset, the call of a
+        // function whose only relation is the candidate: the closing relation under its own function's call
+        let own_call: Vec<NeuronId> = self.dict.holder(rel).and_then(|id| self.dict.get(id)).filter(|g| g.rels.len() == 1).and_then(|g| g.inter).into_iter().collect();
+        let holds_c = |row: &Row| -> bool {
+            self.holds_for(row, far, &at, None) || (!own_call.is_empty() && row.nbs.iter().any(|nb| nb.off == rel.off && own_call.contains(&self.dict.neuron_of(nb.sym))))
+        };
+        let mut span = [0i32; MAX_DIMS];
+        for row in nn.history.iter() {
+            for nb in &row.nbs { for d in 0..MAX_DIMS { span[d] = span[d].max(nb.off[d].abs()); } }
+            if !self.decided(row, &at) { und += 1; continue; }
+            if holds_c(row) { w += 1; } else { wo += 1; }
+        }
+        // R21: an occurrence found in this frame is counted already, though the row that takes it is written
+        // afterward: each call of the interneuron standing in this frame with no row yet counts as a row, `with`
+        // where the candidate, or the call of the function whose only relation is the candidate, stands at the
+        // candidate's offset from it on the board now; where what would follow has not come yet, as neither
+        let mut present: Vec<&'static str> = Vec::new();
+        if let (Some(inter), Some(fr)) = (f.inter, self.frames.back()) {
+            if fr.no == self.frame_no {
+                let written: FxHashSet<ActRef> = nn.history.iter().filter(|row| row.act.frame == fr.no).map(|row| row.act).collect();
+                for (i, a) in fr.acts.iter().enumerate() {
+                    if a.neuron != inter || a.gone || written.contains(&ActRef { frame: fr.no, index: i as u32 }) { continue; }
+                    let holds = self.frames.iter().flat_map(|g| g.acts.iter()).any(|x| !x.gone && {
+                        let o = offset_between(a, x);
+                        (x.sym == far && o == at) || (own_call.contains(&x.neuron) && o == rel.off)
+                    });
+                    if holds { w += 1; present.push("with"); }
+                    else if at[0] > 0 { und += 1; present.push("not yet"); }
+                    else { wo += 1; present.push("without"); }
+                }
+            }
+        }
+        if self.trace_closing {
+            let marks: Vec<String> = nn.history.iter().map(|row| {
+                let m = if !self.decided(row, &at) { "not yet" } else if holds_c(row) { "with" } else { "without" };
+                format!("frame {} {}", row.act.frame, m)
+            }).chain(present.iter().map(|m| format!("frame {} (this frame's call) {}", self.frame_no, m))).collect();
+            eprintln!("   [closing-rows f{}] f{} interneuron #{}: {} rows, candidate {} at {:?} | with {} | rows: {}", self.frame_no, f.id, f.inter.unwrap_or(0), nn.history.len(), self.dict.sym_text(far), at, w, marks.join("; "));
+        }
+        let beyond = (0..MAX_DIMS).any(|d| at[d].abs() > span[d]);
+        (w, wo, und, at, beyond)
+    }
+
+    /// Test only, with `trace_closing`: for each closing candidate weighed before, at each call of its motif whose
+    /// reading completes this frame, whether the candidate stands beside the call on the board (as the weigh reads
+    /// the present call), and where it does, whether it was weighed, offered and not weighed, or not offered, with
+    /// the reason the offer path gives: its strength below 2, held by another function, or no board edge offered
+    fn follow_closings(&mut self, fno: Frame) {
+        let mut items = std::mem::take(&mut self.closing_follow);
+        for (rel, fid, rels0, first, ev) in items.iter_mut() {
+            if *first >= fno { continue; }
+            let Some(f) = self.dict.get(*fid) else { if ev.last().map_or(true, |e| e.1 != "motif gone") { ev.push((fno, "motif gone".into())); } continue };
+            if f.rels != *rels0 { if ev.last().map_or(true, |e| e.1 != "motif changed") { ev.push((fno, "motif changed".into())); } continue; }
+            let Some(inter) = f.inter else { continue };
+            let origin = f.nodes[0];
+            let (far, at) = if rel.a == origin { (rel.b, rel.off) } else if rel.b == origin { (rel.a, neg(&rel.off)) } else { continue };
+            let own_call: Vec<NeuronId> = self.dict.holder(rel).and_then(|id| self.dict.get(id)).filter(|g| g.rels.len() == 1).and_then(|g| g.inter).into_iter().collect();
+            // each call once, read at its own frame as the weigh reads the present call; where the candidate's far
+            // end lies ahead and is not yet beside it, read again once that frame has come
+            let mut seen: Vec<Pos> = Vec::new();
+            for fr in self.frames.iter().filter(|g| g.no == fno || (at[0] > 0 && g.no == fno - at[0] as i64)) {
+                for a in fr.acts.iter() {
+                    if a.neuron != inter || a.gone || seen.contains(&a.pos) { continue; }
+                    seen.push(a.pos);
+                    let own_now = self.frames.iter().flat_map(|g| g.acts.iter()).any(|x| !x.gone && own_call.contains(&x.neuron) && offset_between(a, x) == rel.off);
+                    let far_now = self.frames.iter().flat_map(|g| g.acts.iter()).any(|x| !x.gone && x.sym == far && offset_between(a, x) == at);
+                    let present = fr.no == fno;
+                    // a present call whose far end is still ahead is read when that frame comes, unless it is beside now
+                    if present && at[0] > 0 && !own_now && !far_now { continue; }
+                    // a deferred call already beside at its own frame was counted then
+                    if !present && own_now { continue; }
+                    let beside = own_now || far_now;
+                    let what = if !beside { "not beside".to_string() }
+                        else if self.closing_weighed_now.contains(&(*rel, *fid)) { "weighed".to_string() }
+                        else if self.closing_offered_now.contains(&(*rel, *fid)) { "offered, not weighed".to_string() }
+                        else if self.strength(rel) < 2.0 { "not offered: strength below 2".to_string() }
+                        else if let Some(g) = self.dict.holder(rel).filter(|g| *g != *fid) { format!("not offered: held by f{}", g) }
+                        else { "not offered: no board edge offered for it".to_string() };
+                    ev.push((fno, what));
+                }
+            }
+        }
+        self.closing_follow = items;
+    }
 
     /// A relation alone, read at node `at` over the rows a set is read over there (switch 20): the rows of that node
     /// on which every relation of the set at it has held or failed, counting those that hold this one. None where
