@@ -612,9 +612,13 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > relation of the other kind does not join it (R50). Where a pattern inside the frame and a pattern in time
 > recur together, the level above relates their calls.
 >
-> **A cycle is a function of its own.** The moment a node comes again, the relation that reached it closes the
-> cycle. A relation of a pose to itself closes one alone. A relation between one neuron in two phases
-> does not: it joins two nodes (D8). A cycle advances by one offset, the one its
+> **A cycle is a function of its own.** In time, the moment a node comes again, the relation that reached it
+> closes the cycle. The frame has passed, so what comes round is the pose, and any relation back to it closes.
+> Inside the frame, a relation back to a pose the function has closes the cycle only where it reaches the
+> activation the fit landed on at that node. There its offset is the one the function's relations compose to
+> between its two nodes (D34). At any other offset it reaches another activation of that pose, and it closes
+> nothing. A relation of a pose to itself closes one alone, in time and inside the frame. A relation between
+> one neuron in two phases does not: it joins two nodes (D8). A cycle advances by one offset, the one its
 > relations compose to round a lap, in whatever direction that runs, time included. A function that is a cycle
 > holds the relations of the cycle and no other. No relation joins it, and a relation closes a cycle only
 > where every relation of the function is then on the cycle (R50). So a function is a cycle and nothing else,
@@ -1537,7 +1541,9 @@ argument.
 > **Three more things are no candidate** (D15, D34). A relation of the other kind than the function's
 > relations is none: a function holds relations in time or relations inside the frame, never both. No relation
 > is a candidate of a function that is a cycle. A relation that would close a cycle is a candidate only where
-> every relation of the function would then be on the cycle. And a relation of a pose to itself is a
+> every relation of the function would then be on the cycle. Inside the frame it is a candidate only where
+> its offset is the one the function's relations compose to between its two nodes, so that it reaches the
+> activation the fit landed on there. In time it is a candidate at any offset. And a relation of a pose to itself is a
 > candidate of no function, since it is a cycle alone: it starts a function of its own. A relation between one
 > neuron in two phases is between two nodes, and it is a candidate like any other (D8).
 >
@@ -1595,9 +1601,11 @@ argument.
 > their strength less one: the cycle's call covers them wherever they hold, and a lap's end is not a failure
 > (D57, D54). A candidate joins the function where its
 > gain is highest, the function's worth with it less without it, where that is higher than its worth alone
-> and higher than its contribution in the function it is in (R54); among the candidates of one function
+> and higher than its contribution in the function it is in (R54). A candidate no function holds joins only
+> where that gain is also above zero. Its worth alone is the worth of a function it has not started, so a
+> gain below zero lowers the dictionary's worth whatever that worth alone is. Among the candidates of one function
 > that pay, one that leads back to a node the function has, closing its cycle, joins before one that would add
-> a node (D15); and where two functions tie, the one it is nearest to (D57, R54). A relation of a function
+> a node (D15). Where two functions tie, it joins the one it is nearest to (D57, R54). A relation of a function
 > leaves it for one of its own where its worth alone is higher than its contribution, and for nothing once it
 > is worth nothing: the neurons return it with strength below 2, or below 3 where it is its function's only
 > relation and the entry is its to pay (R54, R18). That asks whether it recurs at all, so it is read over
@@ -1650,7 +1658,8 @@ argument.
 > moves, and each is the same decision, whether the dictionary's worth rises (D57), read from the neurons the
 > functions stand in (R50). A relation's **gain** in a function is that function's worth with it less without
 > it; its **contribution** where it stands is the same for the function it is in, and alone its strength less
-> two, its relation and its entry. Where the relation is its function's last, its contribution there is that
+> two, its relation and its entry. A relation no function holds contributes nothing where it stands, so it
+> joins only where its gain is above zero, and above its worth alone where that is above zero. Where the relation is its function's last, its contribution there is that
 > function's worth and the worth of every function in its subtree, since all of them leave with it (R38).
 > The subtree is read from the dictionary as it stands, the function the relation would join included.
 > Nothing the move would change is read.
@@ -1660,7 +1669,7 @@ argument.
 >
 > | Move | When |
 > |---|---|
-> | a relation joins | its gain in the function is higher than its contribution where it stands, alone or in a function; and higher than its gain in any other function it is a candidate of, the nearest on a tie (R50) |
+> | a relation joins | its gain in the function is higher than its contribution where it stands, alone or in a function, and above zero where no function holds it; and higher than its gain in any other function it is a candidate of, the nearest on a tie (R50) |
 > | a relation leaves for a function of its own | its worth alone is higher than its contribution to its function, and higher than its gain in any function it is a candidate of |
 > | a relation leaves for nothing | the neurons return it with strength below 2, or below 3 where it is its function's only relation, over every row that holds it (R18) |
 > | two functions merge | a relation of one is a candidate of the other and joins it, and the rest follow one at a time, each where its gain is higher; the last gains the entry its function no longer pays, and is weighed against the worth of every function that leaves with it (R38) |
@@ -2032,8 +2041,9 @@ and nothing scales with the run. What is cached, and how, is the implementation'
 
 Two things that are cycles, and one that is not, told apart, because the design holds them apart.
 
-**Within a function, a cycle is the pattern repeating.** A function has one node per pose, so a relation back to
-a node already in it closes the cycle, and the function is then that cycle and nothing else; the function says that the pattern comes
+**Within a function, a cycle is the pattern repeating.** A function has one node per pose, so in time a relation back to
+a node already in it closes the cycle. Inside the frame it closes the cycle only where it reaches the
+activation the fit landed on at that node (D15). The function is then that cycle and nothing else; the function says that the pattern comes
 round: `x` to `y` at 1 and `y` to `x` at 1 is `x y x y …` for as long as it runs (D15). A fit at either letter reads back
 round the cycle while the relation that closes it lands; where the call of the lap before stands there, that
 call takes the lap (D54); nothing is read past the cycle, and the call's
