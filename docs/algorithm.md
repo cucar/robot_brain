@@ -546,7 +546,9 @@ what was done together.
 > **Lifting.** When a node is covered, each relation of its own that no call covers leaves the board. A
 > relation to the call that landed on the node stands there instead. It has the same other end, and the call's
 > pose where the covered node's pose was (D8). The relation is **lifted** to the call. Inside the frame, the
-> row of the activation at its other end takes the call (D18).
+> row at its other end takes the call (D18). The other end is what stands there on the board: an activation
+> no call has landed on, as itself, or, where that end was covered first, the call the relation already stood
+> lifted to there.
 >
 > ```
 >   ( p ) ──── ( q ) ──── ( r )      the call A covers p–q and q–r, so q is covered
@@ -556,7 +558,10 @@ what was done together.
 >
 > No call covers `q–t`. Once `q` is covered, `q–t` leaves the board and `A–t` stands there instead. Once `t`
 > is covered too, `A–t` leaves and `A–B` stands there instead, one level up (D26). Whichever end is covered
-> first, what stands in the end is `A–B`. Two nodes are joined by at most one edge. So however many relations
+> first, what stands in the end is `A–B`. Where `q` is covered first, `t`'s row takes `A`, and then `A`'s
+> row takes `B`. Where `t` is covered first, `q`'s row takes `B`, and then `B`'s row takes `A`: the row that
+> takes a call is always the row of what stood at the other end when the relation was lifted, never the row
+> of an activation a call had already covered there (D18). Two nodes are joined by at most one edge. So however many relations
 > are lifted between `A` and `B`, one relation stands there for all of them. A refused relation is never
 > lifted (D24).
 >
@@ -1236,8 +1241,11 @@ one winner per dimension.
 > where the row's relation to that activation is lifted to the call (D55), the row takes the call as well, at
 > the call's offset. The lifted relation is a relation of the row's own activation, so its row holds it, as
 > the call's row does. Where the row is not yet written when the relation is lifted, it holds the call when it
-> is written. A row takes one neighbor for a call, however many relations were lifted to it. The row of the
-> call takes nothing for the lift: it is written when the call fires, with what stands on the board then (D5).
+> is written. A row takes one neighbor for a call, however many relations were lifted to it. The row that
+> takes the call is the row of what stands at the relation's other end on the board. Where a call had already
+> landed on that end, the relation stood lifted to that call, so it is that call's row, and the row of the
+> activation under it takes nothing (D55). The row of the call the relation is lifted to takes nothing for
+> the lift: it is written when the call fires, with what stands on the board then (D5).
 > In time a row takes what the connect call hands it and nothing else. So in the history the frame around an activation is whole on both sides in time, as it is in
 > space, and the relation between two activations is held by both of them, each from its own side (D34). It is
 > the evidence every strength is counted over, and it holds nothing else: the neuron's connections are not in
