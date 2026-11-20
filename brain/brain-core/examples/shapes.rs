@@ -228,7 +228,7 @@ fn train(m: &mut Machine, e: &Env, i: &Img, n: usize, label: &str) -> usize {
     }
     println!("NEVERCALLED {} {} of {}", label, m.funcs_never_called(), m.dict.len());
     println!("CLOSING weighed {} joined {} (from a function of more relations {}) | cycles at the end {} of {} | build joins the calls count would refuse {} | largest such gain as a cycle {} | weighs beyond every offset the rows hold {} | weighs with neither end where the call stands {} | weighs where one lap on cannot be worked out {}", m.closing_weighed, m.closing_joined, m.closing_from_multi, m.dict.funcs.values().filter(|f| f.has_cycle()).count(), m.dict.len(), m.closing_refused[0], m.closing_max.map_or("-".to_string(), |(c, lo, _)| format!("{:.1} (on the calls {:.1})", c, lo)), m.closing_beyond, m.closing_no_end, m.closing_no_lap);
-    println!("JOINREFUSED held by no function, gain not above zero {} | lowest gain refused {}", m.help_refused, m.help_refused_min.map_or("-".to_string(), |x| format!("{:.1}", x)));
+    println!("UNPAID {} relations left a function because they did not pay there", m.left_unpaid);
     { let (t, s) = m.twice_counts(); println!("TWICE frames with an interneuron called more than once {} | of those, a row holds another call of the same interneuron {}", t, s); }
     for l in m.cycle_lap_lines() { println!("{}", l); }
     println!("  {}: the dictionary last changed at showing {}{}", label, last_change, if last_change < n { format!(" (unchanged over the last {} showings)", n - last_change) } else { " (still changing at the last showing)".into() });
@@ -238,14 +238,13 @@ fn train(m: &mut Machine, e: &Env, i: &Img, n: usize, label: &str) -> usize {
 fn main() {
     // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
     let s15_off = std::env::args().any(|a| a == "--s15-off");
-    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && !a.starts_with("--closing=") && a != "--trace-closing" && a != "--join-at-a-loss" && a != "--landed" && a != "--each-showing" && a != "--cycles").collect();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && !a.starts_with("--closing=") && a != "--trace-closing" && a != "--landed" && a != "--each-showing" && a != "--cycles").collect();
     let mode = args.get(1).cloned().unwrap_or("square".into());
     let n: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(30);
     let mut m = Machine::new(2048, Policy::events_to_actions(), 1);
     m.print_cycles = std::env::args().any(|a| a == "--cycles");
     m.sw.closing = std::env::args().find_map(|a| a.strip_prefix("--closing=").map(|v| match v { "cycle" => 0, "round" => 1, _ => panic!("--closing=cycle|round") })).unwrap_or(0);
     m.trace_closing = std::env::args().any(|a| a == "--trace-closing");
-    m.sw.join_at_a_loss = std::env::args().any(|a| a == "--join-at-a-loss");
     if s15_off { m.sw.s15_uncovered_relations = false; }
     let ax = m.declare_axis("x", 1);
     let ay = m.declare_axis("y", 1);

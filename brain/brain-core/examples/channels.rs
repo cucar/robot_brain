@@ -157,7 +157,6 @@ fn main() {
     m.print_cycles = std::env::args().any(|a| a == "--cycles");
     m.sw.closing = std::env::args().find_map(|a| a.strip_prefix("--closing=").map(|v| match v { "cycle" => 0, "round" => 1, _ => panic!("--closing=cycle|round") })).unwrap_or(0);
     m.trace_closing = std::env::args().any(|a| a == "--trace-closing");
-    m.sw.join_at_a_loss = std::env::args().any(|a| a == "--join-at-a-loss");
     if args.iter().any(|a| a == "--levels") { m.trace_levels = true; }
     let trace_frame: Option<i64> = args.iter().find(|a| a.starts_with("--trace-frame=")).map(|a| a[14..].parse().unwrap());
     let mut chans: Vec<(ChannelId, DimId, Option<DimId>)> = Vec::new();
@@ -491,11 +490,10 @@ fn main() {
     println!("CLOSING weighed {} joined {} (from a function of more relations {}) | cycles at the end {} of {} | build joins the calls count would refuse {} | largest such gain as a cycle {} | weighs beyond every offset the rows hold {} | weighs with neither end where the call stands {} | weighs where one lap on cannot be worked out {}", m.closing_weighed, m.closing_joined, m.closing_from_multi, m.dict.funcs.values().filter(|f| f.has_cycle()).count(), m.dict.len(), m.closing_refused[0], m.closing_max.map_or("-".to_string(), |(c, lo, _)| format!("{:.1} (on the calls {:.1})", c, lo)), m.closing_beyond, m.closing_no_end, m.closing_no_lap);
     if m.join_log {
         for (f, r, fid, d) in &m.joins_seen { println!("JOINLOG {} | {} | f{} | {}", f, r, fid, d); }
-        for (f, r, fid, d, g, h, ca, cb, at, c) in &m.refused_seen { println!("REFUSED {} | {} | f{} | {} | gain {:.1} against {:.1} | counts {} {} | attach {} count {}", f, r, fid, d, g, h, ca, cb, at, c); }
         let mut ids: Vec<_> = m.func_calls.keys().copied().collect(); ids.sort();
         for id in ids { println!("CALLS f{} | {}", id, m.func_calls[&id].iter().map(|x| x.to_string()).collect::<Vec<_>>().join(" ")); }
     }
-    println!("JOINREFUSED held by no function, gain not above zero {} | lowest gain refused {}", m.help_refused, m.help_refused_min.map_or("-".to_string(), |x| format!("{:.1}", x)));
+    println!("UNPAID {} relations left a function because they did not pay there", m.left_unpaid);
     for l in m.cycle_lap_lines() { println!("{}", l); }
     if let Some(b) = before {
         let a = fingerprint(&m);

@@ -827,23 +827,9 @@ impl Machine {
             // test `closing`, `round`: a candidate that would close the cycle joins where `with − 1`, over the
             // interneuron's rows, is above zero; nothing else is read
             let here = if standing.is_some() && self.sw.closing == 1 { 0.0 } else { here };
-            // a relation no function holds joins only where the dictionary's worth rises: its gain above zero, and above
-            // its worth in a function of its own where that is above zero (D57, R54); `join_at_a_loss` restores the old
-            // comparison, for the test only
-            let here = if !self.sw.join_at_a_loss && holder.is_none() {
-                let h = here.max(0.0);
-                if w > here && !(w > h) {
-                    self.help_refused += 1;
-                    self.help_refused_min = Some(self.help_refused_min.map_or(w, |m: f64| m.min(w)));
-                    if self.trace { eprintln!("[help-refused f{}] {} to f{} gain {:.1} against {:.1}, held by no function", fno, self.rel_text(&rel), fid, w, here); }
-                    if self.join_log {
-                        let (ca, cb) = self.end_counts(&rel);
-                        let d = self.dict.get(fid).map_or(String::new(), |f| self.dict.describe(f));
-                        self.refused_seen.push((fno, self.rel_text(&rel), fid, d, w, here, ca, cb, self.dict.sym_text(attach), if attach == rel.a { ca } else { cb }));
-                    }
-                }
-                h
-            } else { here };
+            // a candidate no function holds joins where its gain is above zero, and nothing else is asked of it: it is
+            // not weighed against a function of its own, which it does not have (R50, R54)
+            let here = if holder.is_none() { 0.0 } else { here };
             if let Some((lo, hi, wc)) = standing {
                 // under the build, the reading on the calls is compared against zero
                 let (h_lo, h_hi) = (0.0, 0.0);
@@ -900,6 +886,8 @@ impl Machine {
                 let Some(f) = self.dict.get(fid) else { break };
                 let rels = f.rels.clone();
                 let mut worst: Option<(f64, Rel, bool)> = None;
+                // whether the relation chosen to leave leaves because it does not pay there (R54)
+                let mut worst_unpaid = false;
                 let middle21 = true;
                 let mut notes: Vec<(Rel, u8, String)> = Vec::new();
                 for r in &rels {
@@ -927,18 +915,28 @@ impl Machine {
                     }
                     if nothing { if self.trace { eprintln!("[price f{}] {} in f{}: returned below 2 ({})", fno, self.rel_text(r), fid, self.returned_for(r, f.inter)); }
                         if worst.map_or(true, |w| f64::INFINITY > w.0) { worst = Some((f64::INFINITY, *r, true)); } continue; }
-                    // for a function of its own where its worth alone is higher than its contribution (R54, experiment)
                     if rels.len() > 1 {
                         let at_r = f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| *a);
-                        let s20 = at_r.is_some() && Self::cycle_rels_any(f.root(), &f.rels).is_empty();
-                        let (inside, alone) = if s20 {
-                            let at = at_r.unwrap();
-                            (self.contribution_at_node(f, r), self.alone_over(r, at, &f.rels, None).map(|x| x - 2.0).unwrap_or(self.strength(r) - 2.0))
-                        } else { (self.contribution_ab(f, r), self.strength(r) - 2.0) };
-                        if self.trace { eprintln!("[price f{}] {} in f{}: contribution {:.0} alone {:.0} at {:?}", fno, self.rel_text(r), fid, inside, alone, f.rels.iter().zip(&f.at).find(|(x, _)| *x == r).and_then(|(_, a)| a.map(|a| self.dict.sym_text(a)))); }
-                        if alone > inside {
-                            let gain = alone - inside;
-                            if worst.map_or(true, |w| gain > w.0) { worst = Some((gain, *r, false)); }
+                        if Self::cycle_rels_any(f.root(), &f.rels).is_empty() {
+                            // a relation in a function of more than one relation leaves it where it does not pay there: its
+                            // own worth, with less without less one at the node it is attached at, is not above zero; it is
+                            // not weighed against a function of its own, and the one worth least leaves first (R50, R54)
+                            let (wi, wo) = self.answer(&f.rels, r, at_r, f.inter);
+                            let worth = wi as f64 - wo as f64 - 1.0;
+                            if self.trace { eprintln!("[price f{}] {} in f{}: with {} without {} worth {:.0} at {:?}", fno, self.rel_text(r), fid, wi, wo, worth, at_r.map(|a| self.dict.sym_text(a))); }
+                            if !(worth > 0.0) {
+                                let gain = -worth;
+                                if worst.map_or(true, |w| gain > w.0) { worst = Some((gain, *r, false)); worst_unpaid = true; }
+                            }
+                        } else {
+                            // a relation of a cycle has no without: it leaves for a function of its own where its worth alone
+                            // is higher than its contribution to the cycle (R50, R54)
+                            let (inside, alone) = (self.contribution_ab(f, r), self.strength(r) - 2.0);
+                            if self.trace { eprintln!("[price f{}] {} in f{}: contribution {:.0} alone {:.0} (a cycle)", fno, self.rel_text(r), fid, inside, alone); }
+                            if alone > inside {
+                                let gain = alone - inside;
+                                if worst.map_or(true, |w| gain > w.0) { worst = Some((gain, *r, false)); worst_unpaid = false; }
+                            }
                         }
                     }
                 }
@@ -946,8 +944,11 @@ impl Machine {
                 let Some((_, r, nothing)) = worst else { break };
                 if self.trace { eprintln!("[leave f{}] {} from {}{}", fno, self.rel_text(&r), self.dict.describe(self.dict.get(fid).unwrap()), if nothing { " for nothing" } else { "" }); }
                 let one = rels.len() == 1;
-                self.leave(fid, &r, &mut changed, if nothing { "its last relation left for nothing" } else { "its last relation left for one of its own" });
-                if !nothing && !one {
+                let unpaid = !nothing && worst_unpaid;
+                if unpaid { self.left_unpaid += 1; }
+                // a relation that leaves because it does not pay there is held by no function (R54)
+                self.leave(fid, &r, &mut changed, if nothing { "its last relation left for nothing" } else if unpaid { "it does not pay there" } else { "its last relation left for one of its own" });
+                if !nothing && !one && !unpaid {
                     let g = self.dict.start(r);
                     changed.push(g);
                 }

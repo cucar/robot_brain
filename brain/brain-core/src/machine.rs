@@ -68,13 +68,10 @@ pub struct Switches {
     /// as it stands (the build); 1 (`round`) the candidate over the function's interneuron's rows: it joins where
     /// the rows that hold it, less one, is above zero, nothing else read
     pub closing: u8,
-    /// Test only (off by default): a relation no function holds joins at a loss as it did before, its gain against its
-    /// worth in a function of its own even where that is below zero; off, it joins only where its gain is above zero
-    pub join_at_a_loss: bool,
 }
 
 impl Default for Switches {
-    fn default() -> Self { Switches { s15_uncovered_relations: true, cross_charge: false, closing: 0, join_at_a_loss: false } }
+    fn default() -> Self { Switches { s15_uncovered_relations: true, cross_charge: false, closing: 0 } }
 }
 
 pub struct Machine {
@@ -230,17 +227,12 @@ pub struct Machine {
     pub closing_no_end: u64,
     /// For the count only: closing joins that took the relation out of a function holding other relations
     pub closing_from_multi: u64,
-    /// For the count only: joins of a relation no function held that were refused because the gain was not above zero, and the lowest gain
-    /// it refused
-    pub help_refused: u64,
-    pub help_refused_min: Option<f64>,
-    /// Test only (`join_log`): every join (frame, relation, function, the function before it), every join
-    /// refused that way (frame, relation, function, the function, gain, what it was compared against with the
-    /// flag off, the count at each end, the node it would attach at, the count there), and each function's calls by
-    /// frame
+    /// For the count only: relations that left a function because they did not pay there (R54)
+    pub left_unpaid: u64,
+    /// Test only (`join_log`): every join (frame, relation, function, the function before it), and each function's
+    /// calls by frame
     pub join_log: bool,
     pub joins_seen: Vec<(Frame, String, FuncId, String)>,
-    pub refused_seen: Vec<(Frame, String, FuncId, String, f64, f64, u32, u32, String, u32)>,
     pub func_calls: FxHashMap<FuncId, Vec<Frame>>,
     /// For the count only: closing weighs where one lap on cannot be worked out, the lap having a part in space
     pub closing_no_lap: u64,
@@ -372,7 +364,7 @@ impl Machine {
             last_winners: Vec::new(),
             tie_join: false,
             trace_joins: true,
-            trace_closing: false, watch_rels: FxHashSet::default(), closing_weighed: 0, closing_joined: 0, closing_refused: [0; 2], closing_max: None, closing_beyond: 0, closing_no_end: 0, closing_from_multi: 0, help_refused: 0, help_refused_min: None, join_log: false, joins_seen: Vec::new(), refused_seen: Vec::new(), func_calls: FxHashMap::default(), closing_no_lap: 0,
+            trace_closing: false, watch_rels: FxHashSet::default(), closing_weighed: 0, closing_joined: 0, closing_refused: [0; 2], closing_max: None, closing_beyond: 0, closing_no_end: 0, closing_from_multi: 0, left_unpaid: 0, join_log: false, joins_seen: Vec::new(), func_calls: FxHashMap::default(), closing_no_lap: 0,
             closed_cycles: Vec::new(), cycle_laps: FxHashMap::default(), cycle_counted: FxHashMap::default(),
             joined_ever: Default::default(),
             sw: Switches::default(),

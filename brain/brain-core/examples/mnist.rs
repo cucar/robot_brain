@@ -26,13 +26,16 @@ fn labels(path: &str) -> Vec<u32> { read(path)[8..].iter().map(|&x| x as u32).co
 fn main() {
     // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
     let s15_off = std::env::args().any(|a| a == "--s15-off");
-    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && !a.starts_with("--closing=") && a != "--trace-closing" && a != "--list-cycles" && a != "--join-at-a-loss" && a != "--landed" && a != "--cycles" && !a.starts_with("--only=") && !a.starts_with("--changes-from=") && a != "--apex-all" && !a.starts_with("--test-per-class=") && !a.starts_with("--watch=") && !a.starts_with("--neurons=")).collect();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && !a.starts_with("--closing=") && a != "--trace-closing" && a != "--list-cycles" && !a.starts_with("--stop-settled=") && a != "--landed" && a != "--cycles" && !a.starts_with("--only=") && !a.starts_with("--changes-from=") && a != "--apex-all" && !a.starts_with("--test-per-class=") && !a.starts_with("--watch=") && !a.starts_with("--neurons=")).collect();
     // --only=i: train on image i of the file alone
     let only: Option<usize> = std::env::args().find_map(|a| a.strip_prefix("--only=").map(|s| s.parse().unwrap()));
     // --changes-from=k: report every change to the dictionary from episode k on (default: the last 5 episodes)
     // --watch=TEXT: from the episode --changes-from names, every relation whose text holds TEXT, after every image
     let watch: Option<String> = std::env::args().find_map(|a| a.strip_prefix("--watch=").map(|s| s.to_string()));
     let changes_from: Option<usize> = std::env::args().find_map(|a| a.strip_prefix("--changes-from=").map(|s| s.parse().unwrap()));
+    // test only, --stop-settled=k: stop once k episodes in a row leave the dictionary as it was, and report it
+    let stop_settled: Option<usize> = std::env::args().find_map(|a| a.strip_prefix("--stop-settled=").map(|s| s.parse().unwrap()));
+    let mut same_run = 0usize;
     // --apex-all: the apex of every showing of a single image; --neurons=a,b: those neurons after every showing
     let apex_all = std::env::args().any(|a| a == "--apex-all");
     let show_neurons: Vec<usize> = std::env::args().find_map(|a| a.strip_prefix("--neurons=").map(|s| s.split(',').map(|x| x.parse().unwrap()).collect())).unwrap_or_default();
@@ -78,7 +81,6 @@ fn main() {
     m.print_cycles = std::env::args().any(|a| a == "--cycles");
     m.sw.closing = std::env::args().find_map(|a| a.strip_prefix("--closing=").map(|v| match v { "cycle" => 0, "round" => 1, _ => panic!("--closing=cycle|round") })).unwrap_or(0);
     m.trace_closing = std::env::args().any(|a| a == "--trace-closing");
-    m.sw.join_at_a_loss = std::env::args().any(|a| a == "--join-at-a-loss");
     // test only, --list-cycles: record each function's calls (the join log only records) and list the cycles at the end
     let list_cycles = std::env::args().any(|a| a == "--list-cycles");
     if list_cycles { m.join_log = true; }
@@ -137,6 +139,7 @@ fn main() {
         let (mut e_right, mut e_spoke, mut e_levels, mut e_ms) = (0usize, 0usize, 0usize, 0.0f64);
         let mut said_list = Vec::new();
         let (mut e_added, mut e_retired) = (0usize, 0usize);
+        let mut e_apex = 0usize;
         let mut apex_note = String::new();
         for &i in &order {
             k += 1;
@@ -148,6 +151,7 @@ fn main() {
             m.trace_cover = tracing;
             let before = if changes_from.map_or(ep + 5 >= episodes, |c| ep + 1 >= c) { Some((dict_map(&m), m.joins_by, m.moves_by)) } else { None };
             let (said, t) = run(&mut m, &train_imgs[i]);
+            if let Some(fr) = m.frames.back() { e_apex += fr.acts.iter().filter(|a| a.on_apex() && a.kind == Kind::Inter).count(); }
             if ep + 1 == episodes {
                 let fr = m.frames.back().unwrap();
                 let calls = fr.acts.iter().filter(|a| a.on_apex() && a.kind == Kind::Inter).count();
@@ -211,7 +215,9 @@ fn main() {
         let now = dict_map(&m);
         let dict_changed = now != ep_dict;
         ep_dict = now;
-        println!("EPISODE {} | dictionary {} | functions {}", ep + 1, if dict_changed { "changed" } else { "same" }, m.dict.len());
+        println!("EPISODE {} | dictionary {} | functions {} | right {}/{} | calls on the apex per image {:.1}", ep + 1, if dict_changed { "changed" } else { "same" }, m.dict.len(), e_right, order.len(), e_apex as f64 / order.len().max(1) as f64);
+        if dict_changed { same_run = 0; } else { same_run += 1; }
+        if let Some(kk) = stop_settled { if same_run >= kk { println!("SETTLED after episode {} | the last change at episode {}", ep + 1, ep + 1 - kk); break; } }
         if episodes > 1 {
             println!("  episode {:2}: added {} retired {} | right {}/{} (spoke {}) | max levels {} | neurons {} functions {} | {:.0} ms/image | digit:said {}{}",
                 ep + 1, e_added, e_retired, e_right, order.len(), e_spoke, e_levels, m.alive, m.dict.len(), e_ms / order.len().max(1) as f64, said_list.join(" "), apex_note);
@@ -219,7 +225,7 @@ fn main() {
     }
     println!("NEVERCALLED {} of {}", m.funcs_never_called(), m.dict.len());
     println!("CLOSING weighed {} joined {} (from a function of more relations {}) | cycles at the end {} of {} | build joins the calls count would refuse {} | largest such gain as a cycle {} | weighs beyond every offset the rows hold {} | weighs with neither end where the call stands {} | weighs where one lap on cannot be worked out {}", m.closing_weighed, m.closing_joined, m.closing_from_multi, m.dict.funcs.values().filter(|f| f.has_cycle()).count(), m.dict.len(), m.closing_refused[0], m.closing_max.map_or("-".to_string(), |(c, lo, _)| format!("{:.1} (on the calls {:.1})", c, lo)), m.closing_beyond, m.closing_no_end, m.closing_no_lap);
-    println!("JOINREFUSED held by no function, gain not above zero {} | lowest gain refused {}", m.help_refused, m.help_refused_min.map_or("-".to_string(), |x| format!("{:.1}", x)));
+    println!("UNPAID {} relations left a function because they did not pay there", m.left_unpaid);
     { let (t, s) = m.twice_counts(); println!("TWICE frames with an interneuron called more than once {} | of those, a row holds another call of the same interneuron {}", t, s); }
     for l in m.cycle_lap_lines() { println!("{}", l); }
     if list_cycles {
