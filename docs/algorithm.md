@@ -1444,7 +1444,7 @@ The six steps, each run over one kind of relation (D34):
 | find       | Read every returned relation in the index, as it is and with either end open, and fit every function it reaches on the board wherever its relations match, one fit per position (R53, D31). |
 | elect      | Take the fits, the largest coverage less price each round, stopping when no fit pays (R24). The dictionary as it stands covers what it knows before anything in it changes. |
 | count      | Hand each neuron every function it stands in, fit at this level or not, with the candidates of the ones that fit, and call `count` on it: it returns with and without for each relation and each candidate (R50, D47). |
-| group      | Over those counts, move each relation where the dictionary's worth rises most, to a function it is a candidate of, one that closes a cycle before one that adds a node, the nearest on a tie, to its own function or to none (R50, R54, R18). |
+| group      | Over those counts, move each relation where the dictionary's worth rises most, to a function it is a candidate of, one that closes a cycle before one that adds a node, the nearest on a tie, or out of a function it does not pay in (R50, R54, R18). |
 | elect      | Fit every function that changed in group on what the first election left, and elect again over those fits the same way (R24). |
 | start      | One function at a time. Of the relations no function holds that are worth a function and still stand on the board, start a function from the one with the most instances standing, elect its fits, and look again at what stands. Stop when none is left (R50). |
 
@@ -1626,13 +1626,19 @@ argument.
 > cycle from then on are counted at every occurrence,
 > their strength less one: the cycle's call covers them wherever they hold, and a lap's end is not a failure
 > (D57, D54). A candidate joins the function where its
-> gain is highest, the function's worth with it less without it, where that is higher than its worth alone
-> and higher than its contribution in the function it is in (R54). A candidate no function holds joins only
-> where that gain is also above zero. Its worth alone is the worth of a function it has not started, so a
-> gain below zero lowers the dictionary's worth whatever that worth alone is. Among the candidates of one function
+> gain is highest, the function's worth with it less without it. A candidate no function holds joins where
+> that gain is above zero, and nothing else is asked of it. It is not weighed against a function of its own:
+> it has none, and the rows where it is missing already count against it. A candidate a function holds joins
+> where that gain is higher than its contribution in the function it is in (R54). Among the candidates of one function
 > that pay, one that leads back to a node the function has, closing its cycle, joins before one that would add
-> a node (D15). Where two functions tie, it joins the one it is nearest to (D57, R54). A relation of a function
-> leaves it for one of its own where its worth alone is higher than its contribution, and for nothing once it
+> a node (D15). Where two functions tie, it joins the one it is nearest to (D57, R54). A relation in a
+> function of more than one relation leaves it where it does not pay there: where its own worth in the
+> function, its `with` less its `without` less one, read at the node it is attached at, is not above zero.
+> It is not weighed against a function of its own. Where several relations of one function do not pay, the
+> one worth least leaves first, and the function is priced again. A relation that leaves this way is held by
+> no function: it joins where its gain is above zero, or starts a function as any such relation may. A
+> relation of a cycle is not read this way, since it has no `without`: it leaves for a function of its own
+> where its worth alone is higher than its contribution to the cycle. A relation leaves for nothing once it
 > is worth nothing: the neurons return it with strength below 2, or below 3 where it is its function's only
 > relation and the entry is its to pay (R54, R18). That asks whether it recurs at all, so it is read over
 > every row that holds it (D47), where a worth is read over the rows that have taken what followed. A relation
@@ -1680,12 +1686,14 @@ argument.
 > election, with its relations as they now stand, on what the first election left. A function that starts is
 > fit as it starts, on what the elections before it left.
 
-> **R54 — Moving.** A function changes by relations moving, one at a time, and by nothing else. There are three
-> moves, and each is the same decision, whether the dictionary's worth rises (D57), read from the neurons the
+> **R54 — Moving.** A function changes by relations moving, one at a time, and by nothing else. Each
+> move is the same decision, whether the dictionary's worth rises (D57), read from the neurons the
 > functions stand in (R50). A relation's **gain** in a function is that function's worth with it less without
 > it; its **contribution** where it stands is the same for the function it is in, and alone its strength less
 > two, its relation and its entry. A relation no function holds contributes nothing where it stands, so it
-> joins only where its gain is above zero, and above its worth alone where that is above zero. Where the relation is its function's last, its contribution there is that
+> joins where its gain is above zero. A relation in a function of more than one relation stays while its own
+> worth there is above zero, and leaves where it is not. Neither is weighed against a function of its own
+> that it does not have. Where the relation is its function's last, its contribution there is that
 > function's worth and the worth of every function in its subtree, since all of them leave with it (R38).
 > The subtree is read from the dictionary as it stands, the function the relation would join included.
 > Nothing the move would change is read.
@@ -1695,8 +1703,9 @@ argument.
 >
 > | Move | When |
 > |---|---|
-> | a relation joins | its gain in the function is higher than its contribution where it stands, alone or in a function, and above zero where no function holds it; and higher than its gain in any other function it is a candidate of, the nearest on a tie (R50) |
-> | a relation leaves for a function of its own | its worth alone is higher than its contribution to its function, and higher than its gain in any function it is a candidate of |
+> | a relation joins | no function holds it and its gain in the function is above zero; or a function holds it and its gain is higher than its contribution there; and in either case higher than its gain in any other function it is a candidate of, the nearest on a tie (R50) |
+> | a relation leaves its function | the function holds more than one relation and no cycle, and the relation's own worth there, its `with` less its `without` less one at its node, is not above zero; it is then held by no function |
+> | a relation leaves a cycle for a function of its own | its worth alone is higher than its contribution to the cycle, and higher than its gain in any function it is a candidate of |
 > | a relation leaves for nothing | the neurons return it with strength below 2, or below 3 where it is its function's only relation, over every row that holds it (R18) |
 > | two functions merge | a relation of one is a candidate of the other and joins it, and the rest follow one at a time, each where its gain is higher; the last gains the entry its function no longer pays, and is weighed against the worth of every function that leaves with it (R38) |
 
@@ -1721,8 +1730,8 @@ argument.
 > and the two are one from then on, the older interneuron standing for both (R43). A moved function is read
 > against the functions of the same shape, and compared with them for a general function (R52).
 
-> **R18 — Prune.** A relation leaves its function where its contribution there is lower than its gain
-> elsewhere, in a function of its own or in another (R54), and leaves for nothing once the neurons return it
+> **R18 — Prune.** A relation leaves its function where it does not pay there, or where its contribution
+> there is lower than its gain in another function (R54), and leaves for nothing once the neurons return it
 > with strength below 2, or below 3 where it is its function's only relation and worth nothing there, over
 > every row that holds it (D47, D57), read at every level a neuron standing in the function fires at, fit or
 > not (R50). A relation that leaves for
