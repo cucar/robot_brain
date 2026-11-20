@@ -494,6 +494,8 @@ fn main() {
         for id in ids { println!("CALLS f{} | {}", id, m.func_calls[&id].iter().map(|x| x.to_string()).collect::<Vec<_>>().join(" ")); }
     }
     println!("UNPAID {} relations left a function because they did not pay there", m.left_unpaid);
+    println!("LIFTED TO THE STANDING CALL {} relations went to other calls than their direct coverers", m.lift_redirected);
+    println!("LIFT PASSED OVER {} dropped weak calls, {} calls aged off the board", m.lift_passed_gone, m.lift_passed_aged);
     for l in m.cycle_lap_lines() { println!("{}", l); }
     if let Some(b) = before {
         let a = fingerprint(&m);

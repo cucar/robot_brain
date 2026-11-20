@@ -10,11 +10,14 @@ use brain_core::types::*;
 fn main() {
     // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
     let s15_off = std::env::args().any(|a| a == "--s15-off");
-    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off").collect();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && !a.starts_with("--")).collect();
     let frames: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(30);
     let trace_to: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
     let mut m = Machine::new(64, Policy::all_on(), 1);
     if s15_off { m.sw.s15_uncovered_relations = false; }
+    m.print_cycles = std::env::args().any(|a| a == "--cycles");
+    m.sw.closing = std::env::args().find_map(|a| a.strip_prefix("--closing=").map(|v| match v { "cycle" => 0, "round" => 1, _ => panic!("--closing=cycle|round") })).unwrap_or(0);
+    let (mut wrong_at, mut last_change): (Vec<usize>, usize) = (Vec::new(), 0);
     let ch = m.declare_channel("letters", Some(("letter", 26)), None, &[]);
     let dim = m.channels[ch as usize].event.unwrap();
     let letter = |n: u32| (b'a' + n as u8) as char;
@@ -31,7 +34,7 @@ fn main() {
     let mut last_dict = String::new();
     for (k, &b) in stream.iter().enumerate().take(frames) {
         m.trace = k < trace_to;
-        if let (Some(s), Some(b)) = (said, b) { asked += 1; if s == b { right += 1; } }
+        if let (Some(s), Some(b)) = (said, b) { asked += 1; if s == b { right += 1; } else { wrong_at.push(k + 1); } }
         let inputs: Vec<Input> = b.map(|b| Input { dim, bucket: b, pos: [0; MAX_DIMS] }).into_iter().collect();
         let w = m.process_frame(&inputs, vec![]);
         let fr = m.frames.back().unwrap();
@@ -44,8 +47,10 @@ fn main() {
         let mut d: Vec<String> = m.dict.funcs.values().map(|f| m.dict.describe(f)).collect();
         d.sort();
         let d = d.join("; ");
-        if d != last_dict { println!("      dictionary: {}", if d.is_empty() { "(empty)".into() } else { d.clone() }); last_dict = d; }
+        if d != last_dict { println!("      dictionary: {}", if d.is_empty() { "(empty)".into() } else { d.clone() }); last_dict = d; last_change = k + 1; }
         said = next;
     }
     println!("right {}/{} | neurons {} | functions {}", right, asked, m.alive, m.dict.len());
+    println!("alternation inference {}/{} | wrong at frames {:?}", right, asked, wrong_at);
+    println!("recognition: {} function(s): {} | the dictionary last changed at frame {}", m.dict.len(), last_dict, last_change);
 }

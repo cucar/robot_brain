@@ -229,6 +229,8 @@ fn train(m: &mut Machine, e: &Env, i: &Img, n: usize, label: &str) -> usize {
     println!("NEVERCALLED {} {} of {}", label, m.funcs_never_called(), m.dict.len());
     println!("CLOSING weighed {} joined {} (from a function of more relations {}) | cycles at the end {} of {} | build joins the calls count would refuse {} | largest such gain as a cycle {} | weighs beyond every offset the rows hold {} | weighs with neither end where the call stands {} | weighs where one lap on cannot be worked out {}", m.closing_weighed, m.closing_joined, m.closing_from_multi, m.dict.funcs.values().filter(|f| f.has_cycle()).count(), m.dict.len(), m.closing_refused[0], m.closing_max.map_or("-".to_string(), |(c, lo, _)| format!("{:.1} (on the calls {:.1})", c, lo)), m.closing_beyond, m.closing_no_end, m.closing_no_lap);
     println!("UNPAID {} relations left a function because they did not pay there", m.left_unpaid);
+    println!("LIFTED TO THE STANDING CALL {} relations went to other calls than their direct coverers", m.lift_redirected);
+    println!("LIFT PASSED OVER {} dropped weak calls, {} calls aged off the board", m.lift_passed_gone, m.lift_passed_aged);
     { let (t, s) = m.twice_counts(); println!("TWICE frames with an interneuron called more than once {} | of those, a row holds another call of the same interneuron {}", t, s); }
     for l in m.cycle_lap_lines() { println!("{}", l); }
     println!("  {}: the dictionary last changed at showing {}{}", label, last_change, if last_change < n { format!(" (unchanged over the last {} showings)", n - last_change) } else { " (still changing at the last showing)".into() });

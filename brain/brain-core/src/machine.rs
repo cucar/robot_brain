@@ -213,6 +213,11 @@ pub struct Machine {
     pub trace_closing: bool,
     /// Test only: relations watched (`--watch`), each traced in detail where it is weighed, offered or priced
     pub watch_rels: FxHashSet<Rel>,
+    /// For the count only: relations lifted to the calls that stand where the direct coverers would have taken them
+    pub lift_redirected: u64,
+    /// For the count only: calls a lift passed over, dropped weak calls (D40) and calls aged off the board (D9)
+    pub lift_passed_gone: u64,
+    pub lift_passed_aged: u64,
     /// For the count only: candidates weighed for closing a cycle, those that joined; under the build, the joins
     /// that the reading as it stands would refuse, attached at the end of the smaller gain (0) or the larger (1),
     /// and of those the largest gain the build read, with the gains read as it stands (smaller, larger)
@@ -364,7 +369,7 @@ impl Machine {
             last_winners: Vec::new(),
             tie_join: false,
             trace_joins: true,
-            trace_closing: false, watch_rels: FxHashSet::default(), closing_weighed: 0, closing_joined: 0, closing_refused: [0; 2], closing_max: None, closing_beyond: 0, closing_no_end: 0, closing_from_multi: 0, left_unpaid: 0, join_log: false, joins_seen: Vec::new(), func_calls: FxHashMap::default(), closing_no_lap: 0,
+            trace_closing: false, watch_rels: FxHashSet::default(), lift_redirected: 0, lift_passed_gone: 0, lift_passed_aged: 0, closing_weighed: 0, closing_joined: 0, closing_refused: [0; 2], closing_max: None, closing_beyond: 0, closing_no_end: 0, closing_from_multi: 0, left_unpaid: 0, join_log: false, joins_seen: Vec::new(), func_calls: FxHashMap::default(), closing_no_lap: 0,
             closed_cycles: Vec::new(), cycle_laps: FxHashMap::default(), cycle_counted: FxHashMap::default(),
             joined_ever: Default::default(),
             sw: Switches::default(),
@@ -700,7 +705,10 @@ impl Machine {
         let Some(a) = self.act(me).cloned() else { return };
         let mut rels: Vec<(ActRef, u32)> = a.rels.iter().map(|br| (br.other, br.strength)).collect();
         for f in self.frames.iter() { for (j, b) in f.acts.iter().enumerate() { if b.gone { continue; } for br in &b.rels { if br.other == me { rels.push((ActRef { frame: f.no, index: j as u32 }, br.strength)); } } } }
-        let coverers: Vec<ActRef> = a.coverers.iter().map(|c| self.latest(*c)).collect();
+        // an end that is covered is the call that stands over it: the coverers followed upward to each call no call
+        // covers now (D55)
+        let coverers: Vec<ActRef> = self.standing_over(&a.coverers);
+        self.count_passed(&a.coverers);
         for (o, s) in rels {
             let e = edge(me, o);
             // covered by a call as it stands, or in any relation it was lifted to (D55, D24)
@@ -715,7 +723,16 @@ impl Machine {
             self.lifted.insert(e);
             self.up_count += 1;
             // where the other end is covered, it is lifted to the relation between the calls on the two
-            let others: Vec<ActRef> = if oa.covered_at.is_some() { oa.coverers.iter().map(|c| self.latest(*c)).collect() } else { vec![o] };
+            let others: Vec<ActRef> = if oa.covered_at.is_some() { self.standing_over(&oa.coverers) } else { vec![o] };
+            if oa.covered_at.is_some() { self.count_passed(&oa.coverers); }
+            // for the count only: a relation the calls that stand send to other calls than the direct coverers did
+            if oa.covered_at.is_some() || a.coverers.iter().any(|c| self.act(self.latest(*c)).map_or(false, |x| x.covered_at.is_some())) {
+                let mut was: Vec<ActRef> = if oa.covered_at.is_some() { oa.coverers.iter().map(|c| self.latest(*c)).collect() } else { vec![o] };
+                let mut was_c: Vec<ActRef> = a.coverers.iter().map(|c| self.latest(*c)).collect();
+                let (mut now, mut now_c) = (others.clone(), coverers.clone());
+                for v in [&mut was, &mut was_c, &mut now, &mut now_c] { v.sort(); v.dedup(); }
+                if was != now || was_c != now_c { self.lift_redirected += 1; }
+            }
             if oa.covered_at.is_some() { self.up_pair_count += 1; }
             for &c in &coverers {
                 for &x in &others {
@@ -748,6 +765,39 @@ impl Machine {
                 }
             }
         }
+    }
+
+    /// The calls that stand over these coverers: each followed upward through its own coverers to a call on the board
+    /// that no call covers now, one of each (D55). A call that has gone (D40) or no longer stands (D9) is passed over:
+    /// it is no end, and the climb goes on through what landed on it.
+    fn standing_over(&self, from: &[ActRef]) -> Vec<ActRef> { self.standing_over_n(from).0 }
+
+    /// `standing_over`, with how many calls it passed over: (dropped weak calls, calls aged off the board).
+    fn standing_over_n(&self, from: &[ActRef]) -> (Vec<ActRef>, u64, u64) {
+        let fno = self.frame_no;
+        let (mut out, mut gone, mut aged): (Vec<ActRef>, u64, u64) = (Vec::new(), 0, 0);
+        let mut seen: FxHashSet<ActRef> = FxHashSet::default();
+        let mut stack: Vec<ActRef> = from.iter().map(|c| self.latest(*c)).collect();
+        while let Some(c) = stack.pop() {
+            if !seen.insert(c) { continue; }
+            let Some(ca) = self.act(c) else { continue };
+            if ca.gone || !self.stands(ca, fno) {
+                if ca.gone { gone += 1; } else { aged += 1; }
+                stack.extend(ca.coverers.iter().map(|x| self.latest(*x)));
+                continue;
+            }
+            if ca.covered_at.is_none() || ca.coverers.is_empty() { if !out.contains(&c) { out.push(c); } continue; }
+            stack.extend(ca.coverers.iter().map(|x| self.latest(*x)));
+        }
+        out.sort();
+        (out, gone, aged)
+    }
+
+    /// For the count only: the calls the climb from these coverers passed over.
+    fn count_passed(&mut self, from: &[ActRef]) {
+        let (_, g, a) = self.standing_over_n(from);
+        self.lift_passed_gone += g;
+        self.lift_passed_aged += a;
     }
 
     /// Whether a call covers a relation as it stands or in any relation it was lifted to (D55, D24).

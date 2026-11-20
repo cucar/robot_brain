@@ -12,13 +12,19 @@ const PATTERN: [f64; 6] = [1.0, -2.0, -3.0, 2.0, 3.0, -1.0];
 fn main() {
     // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
     let s15_off = std::env::args().any(|a| a == "--s15-off");
-    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off").collect();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--s15-off" && !a.starts_with("--")).collect();
     let laps: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(150);
     let h: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(256);
     let trace_laps: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
     let n = PATTERN.len();
     let mut m = Machine::new(h, Policy::events_to_actions(), 1);
     if s15_off { m.sw.s15_uncovered_relations = false; }
+    m.print_cycles = std::env::args().any(|a| a == "--cycles");
+    m.sw.closing = std::env::args().find_map(|a| a.strip_prefix("--closing=").map(|v| match v { "cycle" => 0, "round" => 1, _ => panic!("--closing=cycle|round") })).unwrap_or(0);
+    // every inference the machine makes, the last frame's included, read against the bar it was made for; and the
+    // frame the dictionary's functions and relations last changed
+    let (mut inf_right, mut inf_all) = (0usize, 0usize);
+    let (mut last_dict, mut last_change) = (String::new(), 0u64);
     let ch = m.declare_channel("price", Some(("move", 2)), Some(("position", 2)), &[]);
     let (ev, ac) = (m.channels[ch as usize].event.unwrap(), m.channels[ch as usize].action.unwrap());
     let total = laps * n;
@@ -48,6 +54,11 @@ fn main() {
         let w = m.process_frame(&inputs, vec![Reward { reward, channels: vec![ch], frames: 1 }]);
         let said = w.iter().find(|w| w.dim == ac).cloned();
         pending = said.as_ref().map(|w| w.bucket);
+        if let Some(p) = pending { inf_all += 1; if p == (if PATTERN[(k + 1) % n] > 0.0 { 1 } else { 0 }) { inf_right += 1; } }
+        let mut dd: Vec<String> = m.dict.funcs.values().map(|f| m.dict.describe(f)).collect();
+        dd.sort();
+        let dd = dd.join("; ");
+        if dd != last_dict { last_change = k as u64 + 1; last_dict = dd; }
         if m.trace {
             let fr = m.frames.back().unwrap();
             let apex: Vec<String> = fr.acts.iter().filter(|a| a.on_apex() && a.kind != Kind::Action).map(|a| if a.kind == Kind::Inter { format!("#{}", a.neuron) } else { move_name(m.thalamus[a.neuron].bucket).to_string() }).collect();
@@ -69,4 +80,8 @@ fn main() {
     let mut d: Vec<String> = m.dict.funcs.values().map(|f| m.dict.describe(f)).collect();
     d.sort();
     if d.len() <= 40 { for s in d { println!("  {}", s); } }
+    println!("stocks inference {}/{}", inf_right, inf_all);
+    println!("recognition: {} functions at the end; the dictionary's functions and relations last changed at frame {}", m.dict.len(), last_change);
+    println!("LIFTED TO THE STANDING CALL {} relations went to other calls than their direct coverers", m.lift_redirected);
+    println!("LIFT PASSED OVER {} dropped weak calls, {} calls aged off the board", m.lift_passed_gone, m.lift_passed_aged);
 }
