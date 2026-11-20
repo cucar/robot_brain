@@ -550,6 +550,11 @@ what was done together.
 > no call has landed on, as itself, or, where that end was covered first, the call the relation already stood
 > lifted to there.
 >
+> **A lifted relation is between what stands.** Where the call that landed on a covered end is itself covered,
+> the relation goes on up, to the call that stands over it: from the covered activation, call above call, to
+> each call that no call covers. This holds at both ends, and whichever end is covered first. So a relation is
+> never lifted to a call that has left the board, and no relation stands between a covered call and anything.
+>
 > ```
 >   ( p ) ──── ( q ) ──── ( r )      the call A covers p–q and q–r, so q is covered
 >                │
@@ -1664,7 +1669,7 @@ argument.
 >
 > **Which relation it is, and where none is built.** A relation has one reading. Where its far end stands on
 > the board, it is the relation to that activation as itself, whatever calls have landed on it. Where its far
-> end is covered, it is the relation to each call that landed on it (D24, D5). It is counted in the rows that hold it (D47) and may start a function at its own strength of 3 where it
+> end is covered, it is the relation to each call that stands over it, the call no call covers (D24, D5, D55). It is counted in the rows that hold it (D47) and may start a function at its own strength of 3 where it
 > still stands. So one pattern has one form, and nothing is built on a call while the activation under it can
 > still be read (R18). A relation to
 > a call that is the call's own function going round its cycle starts nothing: it is a lap of that call (D53),
@@ -1850,8 +1855,9 @@ machine works out itself (R22).
 > Until an activation is
 > covered it stands on the board, whatever calls have landed on it, and a neighbor reads it as itself. Once
 > covered it has left the apex and the graph (D55). A relation of its own that no call covers is not lost:
-> it is **lifted** (D55). It leaves the board, and a relation to each call that landed on the activation
-> stands there instead, at the offset from that call's position (D10, D5). A blocked relation is lifted the
+> it is **lifted** (D55). It leaves the board, and a relation to each call that stands over the activation
+> stands there instead, at the offset from that call's position (D10, D5). Where the call that landed on the
+> activation is itself covered, that is the call standing above it, never the covered one (D55). A blocked relation is lifted the
 > same way. A refused relation is never lifted.
 >
 > An activation is **inhibited** when one relation of its own is covered. That is sooner than it is covered,
