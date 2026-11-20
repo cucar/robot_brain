@@ -23,6 +23,38 @@ fn images(path: &str) -> Vec<Vec<u8>> {
 
 fn labels(path: &str) -> Vec<u32> { read(path)[8..].iter().map(|&x| x as u32).collect() }
 
+/// Brings `desc` up to the dictionary as it stands.
+fn sync_desc(m: &Machine, desc: &mut std::collections::BTreeMap<u64, (Vec<u32>, Vec<brain_core::function::Rel>, Option<u32>, String)>) {
+    desc.retain(|id, _| m.dict.funcs.contains_key(&(*id as u32)));
+    for (id, f) in &m.dict.funcs {
+        let same = desc.get(&(*id as u64)).map_or(false, |(n, r, i, _)| *n == f.nodes && *r == f.rels && *i == f.inter);
+        if !same { desc.insert(*id as u64, (f.nodes.clone(), f.rels.clone(), f.inter, m.dict.describe(f))); }
+    }
+}
+
+/// What started, left and changed in the dictionary since `desc` was brought up to it, each as `f<id> <text>`, in
+/// the order of the functions' ids; `desc` is brought up to the dictionary as it stands.
+fn desc_changes(m: &Machine, desc: &mut std::collections::BTreeMap<u64, (Vec<u32>, Vec<brain_core::function::Rel>, Option<u32>, String)>) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let mut ids: Vec<u64> = m.dict.funcs.keys().map(|k| *k as u64).collect();
+    ids.sort_unstable();
+    let (mut started, mut changed) = (Vec::new(), Vec::new());
+    for id in ids {
+        let f = &m.dict.funcs[&(id as u32)];
+        match desc.get(&id) {
+            None => { let d = m.dict.describe(f); started.push(format!("f{} {}", id, d)); desc.insert(id, (f.nodes.clone(), f.rels.clone(), f.inter, d)); }
+            Some((n, r, i, old)) => {
+                if *n == f.nodes && *r == f.rels && *i == f.inter { continue; }
+                let d = m.dict.describe(f);
+                if d != *old { changed.push(format!("f{} {}", id, d)); }
+                desc.insert(id, (f.nodes.clone(), f.rels.clone(), f.inter, d));
+            }
+        }
+    }
+    let gone: Vec<u64> = desc.keys().copied().filter(|id| !m.dict.funcs.contains_key(&(*id as u32))).collect();
+    let left: Vec<String> = gone.iter().map(|id| format!("f{} {}", id, desc.remove(id).unwrap().3)).collect();
+    (started, left, changed)
+}
+
 fn main() {
     // `--s15-off` runs the build with switch 15 off, the one choice it leaves open
     let s15_off = std::env::args().any(|a| a == "--s15-off");
@@ -73,6 +105,9 @@ fn main() {
     // what the dictionary holds, function by function, for seeing what changes
     let dict_map = |m: &Machine| -> std::collections::BTreeMap<u64, String> { m.dict.funcs.iter().map(|(id, f)| (*id as u64, m.dict.describe(f))).collect() };
     let mut ep_dict = dict_map(&Machine::new(1, Policy::events_to_actions(), 1));
+    // the dictionary as last read, function by function: what each was made of and how it reads; a function is read
+    // again only where what it is made of changed
+    let mut desc: std::collections::BTreeMap<u64, (Vec<u32>, Vec<brain_core::function::Rel>, Option<u32>, String)> = Default::default();
     let shown = order.len() * episodes;
     assert!(28 % size == 0, "size must divide 28");
     let f = 28 / size;
@@ -149,7 +184,7 @@ fn main() {
             if tracing { m.stop_after_level = None; }
             m.trace = tracing;
             m.trace_cover = tracing;
-            let before = if changes_from.map_or(ep + 5 >= episodes, |c| ep + 1 >= c) { Some((dict_map(&m), m.joins_by, m.moves_by)) } else { None };
+            let before = if changes_from.map_or(ep + 5 >= episodes, |c| ep + 1 >= c) { sync_desc(&m, &mut desc); Some((m.joins_by, m.moves_by)) } else { None };
             let (said, t) = run(&mut m, &train_imgs[i]);
             if let Some(fr) = m.frames.back() { e_apex += fr.acts.iter().filter(|a| a.on_apex() && a.kind == Kind::Inter).count(); }
             if ep + 1 == episodes {
@@ -186,11 +221,8 @@ fn main() {
             let ran = if lesson { label } else { said.unwrap() };
             ms += answer(&mut m, Some(ran), Some(if ran == label { 1.0 } else { -1.0 }));
             if let (Some(pat), Some(c)) = (watch.as_ref(), changes_from) { if ep + 1 >= c { for l in m.watch_lines(pat) { println!("WATCH episode {} image {} | {}", ep + 1, i, l); } } }
-            if let Some((b, j0, v0)) = before {
-                let a = dict_map(&m);
-                let started: Vec<String> = a.iter().filter(|(k, _)| !b.contains_key(k)).map(|(k, d)| format!("f{} {}", k, d)).collect();
-                let left: Vec<String> = b.iter().filter(|(k, _)| !a.contains_key(k)).map(|(k, d)| format!("f{} {}", k, d)).collect();
-                let changed: Vec<String> = a.iter().filter(|(k, d)| b.get(k).map_or(false, |x| x != *d)).map(|(k, d)| format!("f{} {}", k, d)).collect();
+            if let Some((j0, v0)) = before {
+                let (started, left, changed) = desc_changes(&m, &mut desc);
                 let (jn, mv) = ((m.joins_by[0] + m.joins_by[1]) - (j0[0] + j0[1]), (m.moves_by[0] + m.moves_by[1]) - (v0[0] + v0[1]));
                 if !started.is_empty() || !left.is_empty() || !changed.is_empty() || jn > 0 || mv > 0 {
                     println!("CHANGE episode {} image {} | started {} | left {} | changed {} | joins {} | moves {}", ep + 1, i, started.len(), left.len(), changed.len(), jn, mv);

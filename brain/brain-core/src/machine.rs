@@ -201,6 +201,8 @@ pub struct Machine {
     /// Whether two activations stand over a shared one, remembered for one grouping step while nothing on the board
     /// changes (a speed-up only).
     pub(crate) share_memo: std::cell::RefCell<Option<FxHashMap<(ActRef, ActRef), bool>>>,
+    /// Each function's reach in time with the nodes and relations it was read from, for S (D9)
+    pub(crate) reach_memo: std::cell::RefCell<FxHashMap<FuncId, (Vec<Sym>, Vec<Rel>, i32)>>,
     pub last_stats: FrameStats,
     pub last_winners: Vec<Winner>,
     pub trace: bool,
@@ -365,6 +367,7 @@ impl Machine {
             end_counts_memo: std::cell::RefCell::new(None),
             answer_memo: std::cell::RefCell::new(None),
             share_memo: std::cell::RefCell::new(None),
+            reach_memo: std::cell::RefCell::new(FxHashMap::default()),
             last_stats: FrameStats::default(),
             last_winners: Vec::new(),
             tie_join: false,
@@ -582,7 +585,18 @@ impl Machine {
 
     /// S (D9): one beyond the farthest node any function has from its origin in time, and at least the base reach.
     pub(crate) fn board_span(&self) -> i32 {
-        self.dict.funcs.values().map(|f| f.reach(1)[0]).max().unwrap_or(1).max(1)
+        // a function's reach in time depends on its nodes and relations alone: it is read again only where they changed
+        let mut memo = self.reach_memo.borrow_mut();
+        let mut best = 1;
+        for f in self.dict.funcs.values() {
+            let r = match memo.get(&f.id) {
+                Some((n, rs, r)) if *n == f.nodes && *rs == f.rels => *r,
+                _ => { let r = f.reach(1)[0]; memo.insert(f.id, (f.nodes.clone(), f.rels.clone(), r)); r }
+            };
+            best = best.max(r);
+        }
+        if memo.len() > 2 * self.dict.funcs.len() + 64 { memo.retain(|id, _| self.dict.funcs.contains_key(id)); }
+        best.max(1)
     }
 
     /// The cover check after a level (D24): each activation a call has landed on whose covered relations of one kind
