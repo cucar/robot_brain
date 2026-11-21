@@ -1,0 +1,4 @@
+[join-count f15] gain
+[join-left f15] #104→#116[-1, 0, 0] | its last relation joined another function
+[join-count f17] gain
+[join-left f17] #32→#101[-1, 0, 0] | its last relation joined another function

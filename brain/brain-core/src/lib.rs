@@ -1,27 +1,25 @@
-/// Core brain computation engine.
+/// Core brain computation engine: the machine of docs/algorithm.md.
 ///
-/// This crate implements the hierarchical prediction system:
-/// neurons, contexts, connections, pattern recognition, and voting.
-///
-/// Architecture (single-threaded, Phase 1):
-/// - Brain: orchestrator — frame loop, learning, inference
-/// - Thalamus: neuron registry, channel management, routing
-/// - Memory: temporal sliding window of active neurons
-/// - Column: neuron partition, batch operations
-/// - Region: column partition, deterministic routing
-/// - Neuron: connections, children, voting, learning, decay
-/// - Context: pattern context matching & merging
-/// - Quantizer: scalar-to-bucket discretization
-/// - Diagnostics: accuracy tracking
+/// Architecture:
+/// - Brain: orchestrator — the frame, its levels, recognition, the election, covering, connect, infer, selection
+/// - Thalamus: the registry, the dictionary, the board, routing, the batch calls
+/// - Region: column partition, parallel fan-out
+/// - Column: neuron partition
+/// - Neuron: its history of rows, its relation index, its connections
+pub mod board;
 pub mod brain;
+pub mod dictionary;
+pub mod neuron;
+pub mod thalamus;
 pub mod types;
 
 mod backup;
 mod column;
-mod context;
-mod diagnostics;
-mod memory;
-mod neuron;
-mod quantizer;
+mod connect;
+mod cover;
+mod death;
+mod election;
+mod expansion;
+mod recognize;
 mod region;
-mod thalamus;
+mod selection;

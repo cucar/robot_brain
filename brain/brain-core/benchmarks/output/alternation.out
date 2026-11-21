@@ -1,0 +1,39 @@
+f  1 x had -    | apex now [x] open before [] | says next -
+f  2 y had -    | apex now [y] open before [x@1] | says next -
+f  3 x had -    | apex now [x] open before [y@2] | says next y
+f  4 y had y ok | apex now [y] open before [x@3] | says next x
+f  5 x had x ok | apex now [x] open before [y@4] | says next y
+f  6 y had y ok | apex now [y #26] open before [x@5] | says next x
+      dictionary: f0 origin #24 [#24→#23[-1, 0, 0]] -> #26
+f  7 x had x ok | apex now [x #27] open before [#26@6] | says next y
+      dictionary: f0 origin #24 [#24→#23[-1, 0, 0]] -> #26; f1 origin #23 [#23→#24[-1, 0, 0]] -> #27
+f  8 y had y ok | apex now [y #26] open before [#26@6 #27@7] | says next x
+      dictionary: f0 no origin [#24→#23[-1, 0, 0] #23→#24[-1, 0, 0]] cycle -> #26
+f  9 x had x ok | apex now [x #26] open before [#27@7] | says next y
+f 10 y had y ok | apex now [y #26] open before [] | says next x
+f 11 x had x ok | apex now [x #26] open before [] | says next y
+f 12 y had y ok | apex now [y #26] open before [] | says next x
+f 13 x had x ok | apex now [x #26] open before [] | says next y
+f 14 y had y ok | apex now [y #26] open before [] | says next x
+f 15 x had x ok | apex now [x #26] open before [] | says next y
+f 16 y had y ok | apex now [y #26] open before [] | says next x
+f 17 x had x ok | apex now [x #26] open before [] | says next y
+f 18 y had y ok | apex now [y #26] open before [] | says next x
+f 19 x had x ok | apex now [x #26] open before [] | says next y
+f 20 y had y ok | apex now [y #26] open before [] | says next x
+f 21 x had x ok | apex now [x #26] open before [] | says next y
+f 22 y had y ok | apex now [y #26] open before [] | says next x
+f 23 x had x ok | apex now [x #26] open before [] | says next y
+f 24 y had y ok | apex now [y #26] open before [] | says next x
+f 25 x had x ok | apex now [x #26] open before [] | says next y
+f 26 y had y ok | apex now [y #26] open before [] | says next x
+f 27 x had x ok | apex now [x #26] open before [] | says next y
+f 28 y had y ok | apex now [y #26] open before [] | says next x
+f 29 x had x ok | apex now [x #26] open before [] | says next y
+f 30 y had y ok | apex now [y #26] open before [] | says next x
+f 31 x had x ok | apex now [x #26] open before [] | says next y
+f 32 y had y ok | apex now [y #26] open before [] | says next x
+f 33 x had x ok | apex now [x #26] open before [] | says next y
+right 30/30 | neurons 27 | functions 1
+alternation inference 30/30 | wrong at frames []
+recognition: 1 function(s): f0 no origin [#24→#23[-1, 0, 0] #23→#24[-1, 0, 0]] cycle -> #26 | the dictionary last changed at frame 8

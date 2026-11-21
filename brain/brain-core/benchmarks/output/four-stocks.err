@@ -1,0 +1,23 @@
+[join-count f18] gain closing a cycle
+[join-count f20] gain
+[join-count f49] gain
+[join-count f61] gain closing a cycle
+[join-count f76] gain
+[join-left f76] #39<#17<#0..#0x0>..#17<#0..#0x0>x0>→#32<#19<#1..#1x0>..#19<#1..#1x0>x0>[-1, 0, 0] | its last relation joined another function
+[join-count f78] gain
+[join-left f78] #41<#17<#0..#0x0>..#17<#0..#0x0>x0>→#40<#19<#1..#1x0>..#19<#1..#1x0>x0>[-1, 0, 0] | its last relation joined another function
+[join-count f80] gain
+[join-left f80] #36<#19<#1..#1x0>..#19<#1..#1x0>x0>→#42<#19<#1..#1x0>..#19<#1..#1x0>x0>[-1, 0, 0] | its last relation joined another function
+[join-count f82] gain
+[join-left f82] #32<#19<#1..#1x0>..#19<#1..#1x0>x0>→#43<#0..#0x0>[-1, 0, 0] | its last relation joined another function
+[join-count f134] gain
+[join-left f134] #59<#34<#5..#13x0>..#34<#5..#13x0>x0>→#46<#38<#1..#1x0>..#38<#1..#1x0>x1>[-1, 0, 0] | its last relation joined another function
+[join-count f151] gain
+[join-left f151] #61<#50<#41<#17<#0..#0x0>..#17<#0..#0x0>x0>..#40<#19<#1..#1x0>..#19<#1..#1x0>x0>x0>..#48<#40<#19<#1..#1x0>..#19<#1..#1x0>x0>..#32<#19<#1..#1x0>..#19<#1..#1x0>x0>x0>x0>→#60<#48<#39<#17<#0..#0x0>..#17<#0..#0x0>x0>..#32<#19<#1..#1x0>..#19<#1..#1x0>x0>x0>..#57<#32<#19<#1..#1x0>..#19<#1..#1x0>x0>..#17<#0..#0x0>x0>x0>[-2, 0, 0] | its last relation joined another function
+[join-count f155] gain
+[join-left f155] #63<#54<#32<#19<#1..#1x0>..#19<#1..#1x0>x0>..#43<#0..#0x0>x0>..#52<#43<#0..#0x0>..#42<#19<#1..#1x0>..#19<#1..#1x0>x0>x0>x0>→#62<#52<#36<#19<#1..#1x0>..#19<#1..#1x0>x0>..#42<#19<#1..#1x0>..#19<#1..#1x0>x0>x0>..#50<#42<#19<#1..#1x0>..#19<#1..#1x0>x0>..#40<#19<#1..#1x0>..#19<#1..#1x0>x0>x0>x0>[-2, 0, 0] | its last relation joined another function
+[join-count f177] gain
+[join-left f177] #62<#52<#36<#19<#1..#1x0>..#19<#1..#1x0>x0>..#42<#19<#1..#1x0>..#19<#1..#1x0>x0>x0>..#50<#42<#19<#1..#1x0>..#19<#1..#1x0>x0>..#40<#19<#1..#1x0>..#19<#1..#1x0>x0>x0>x0>→#61<#50<#41<#17<#0..#0x0>..#17<#0..#0x0>x0>..#40<#19<#1..#1x0>..#19<#1..#1x0>x0>x0>..#48<#40<#19<#1..#1x0>..#19<#1..#1x0>x0>..#32<#19<#1..#1x0>..#19<#1..#1x0>x0>x0>x0>[-2, 0, 0] | its last relation joined another function
+[join-count f206] gain
+[join-left f206] #72<#66<#59<#34<#5..#13x0>..#34<#5..#13x0>x0>..#46<#38<#1..#1x0>..#38<#1..#1x0>x1>x0>..#58<#46<#38<#1..#1x0>..#38<#1..#1x0>x1>..#55<#38<#1..#1x0>..#44<#22<#0..#0x0>..#22<#0..#0x0>x0>x0>x0>x0>→#71<#58<#46<#38<#1..#1x0>..#38<#1..#1x0>x1>..#55<#38<#1..#1x0>..#44<#22<#0..#0x0>..#22<#0..#0x0>x0>x0>x0>..#64<#55<#38<#1..#1x0>..#44<#22<#0..#0x0>..#22<#0..#0x0>x0>x0>..#54<#44<#22<#0..#0x0>..#22<#0..#0x0>x0>..#43<#0..#0x0>x0>x0>x0>[-1, 0, 0] | its last relation joined another function
+[join-left f1045] #17<#0..#0x0>→#19<#1..#1x0>[-1, 0, 0] | its last relation left for nothing
