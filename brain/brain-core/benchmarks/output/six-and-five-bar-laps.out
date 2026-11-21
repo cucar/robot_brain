@@ -1,0 +1,124 @@
+lap65: 12 cycles of 30 bars
+CYCLE 1 | neurons 15 | functions 7 | highest call level in the cycle 2 | the dictionary last changed at frame 30 | right A 51.72%, B 68.97%
+CYCLE 2 | neurons 20 | functions 12 | highest call level in the cycle 2 | the dictionary last changed at frame 59 | right A 53.33%, B 73.33%
+CYCLE 3 | neurons 25 | functions 17 | highest call level in the cycle 3 | the dictionary last changed at frame 89 | right A 66.67%, B 60.00%
+CYCLE 4 | neurons 28 | functions 20 | highest call level in the cycle 3 | the dictionary last changed at frame 120 | right A 90.00%, B 80.00%
+CYCLE 5 | neurons 42 | functions 34 | highest call level in the cycle 3 | the dictionary last changed at frame 148 | right A 100.00%, B 86.67%
+CYCLE 6 | neurons 38 | functions 29 | highest call level in the cycle 4 | the dictionary last changed at frame 180 | right A 100.00%, B 83.33%
+CYCLE 7 | neurons 38 | functions 30 | highest call level in the cycle 3 | the dictionary last changed at frame 196 | right A 100.00%, B 96.67%
+CYCLE 8 | neurons 39 | functions 31 | highest call level in the cycle 4 | the dictionary last changed at frame 234 | right A 100.00%, B 96.67%
+CYCLE 9 | neurons 49 | functions 41 | highest call level in the cycle 4 | the dictionary last changed at frame 270 | right A 100.00%, B 100.00%
+CYCLE 10 | neurons 51 | functions 42 | highest call level in the cycle 5 | the dictionary last changed at frame 300 | right A 100.00%, B 100.00%
+CYCLE 11 | neurons 59 | functions 51 | highest call level in the cycle 5 | the dictionary last changed at frame 327 | right A 100.00%, B 100.00%
+CYCLE 12 | neurons 58 | functions 50 | highest call level in the cycle 5 | the dictionary last changed at frame 347 | right A 100.00%, B 100.00%
+inference A: right 318 of 359 | every bar right from cycle 5
+  A cycle  1: -RWWWWRRWWRRWWWWRRRWRWRRRWRWRR
+  A cycle  2: RWRWRWWWWRRRWRRRRWWWRRWWWRRRWR
+  A cycle  3: WWRRRWWWRRRRWWRRRWRRRRRWRRRRRW
+  A cycle  4: RRRRRRRRRRRWRRRRRRRRRRRRRRWRRW
+  A cycle  5: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  A cycle  6: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  A cycle  7: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  A cycle  8: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  A cycle  9: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  A cycle 10: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  A cycle 11: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  A cycle 12: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+inference B: right 313 of 359 | every bar right from cycle 9
+  B cycle  1: -WWWRRWRWRWRRRRWRRRRWRRRRWRRRR
+  B cycle  2: WRRWRRRRRRWRRWRRWRRRWRRWRRWRRR
+  B cycle  3: WRRWRWRRWRWWRRRWWRWRWWRRRWRRRR
+  B cycle  4: RRRWRRWRRRWWRRRRRRWRWRRRRRRRRR
+  B cycle  5: RRRWRRRRRRWRRRRRRRWRWRRRRRRRRR
+  B cycle  6: RRRRRWWRRRRWRRRWWRRRRRRRRRRRRR
+  B cycle  7: RRRRRRRRRRWRRRRRRRRRRRRRRRRRRR
+  B cycle  8: RRRRRRRRRRWRRRRRRRRRRRRRRRRRRR
+  B cycle  9: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  B cycle 10: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  B cycle 11: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  B cycle 12: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+recognition: 50 functions | the dictionary last changed at frame 347
+NEVERCALLED 0 of 50
+CLOSING weighed 3 joined 3 (from a function of more relations 0) | cycles at the end 5 of 50 | build joins the calls count would refuse 2 | largest such gain as a cycle 10.0 (on the calls 0.0) | weighs beyond every offset the rows hold 0 | weighs with neither end where the call stands 0 | weighs where one lap on cannot be worked out 0
+UNPAID 0 relations left a function because they did not pay there
+LIFTED TO THE STANDING CALL 0 relations went to other calls than their direct coverers
+LIFT PASSED OVER 0 dropped weak calls, 0 calls aged off the board
+CYCLELAPS f4 | closed at frame 44 | closing strength 5 | held [5] | calls under one lap 31 | one lap or more 21 | most laps 1 | now f4 no origin [#9<#0..#0x0>→#10<#1..#1x0>[-1, 0, 0] #10<#1..#1x0>→#9<#0..#0x0>[-1, 0, 0]] cycle -> #12
+CYCLELAPS f7 | closed at frame 49 | closing strength 5 | held [6] | calls under one lap 31 | one lap or more 21 | most laps 1 | now f7 no origin [#8<#1..#1x0>→#11<#0..#0x0>[-1, 0, 0] #11<#0..#0x0>→#8<#1..#1x0>[-1, 0, 0]] cycle -> #15
+CYCLELAPS f30 | closed at frame 192 | closing strength 10 | held [4, 5] | calls under one lap 6 | one lap or more 6 | most laps 1 | now f30 no origin [#12<#10<#1..#1x0>..#9<#0..#0x0>x0>→#16<#9<#0..#0x0>..#8<#1..#1x0>x0>[-1, 0, 0] #16<#9<#0..#0x0>..#8<#1..#1x0>x0>→#21<#8<#1..#1x0>..#10<#1..#1x0>x0>[-1, 0, 0] #21<#8<#1..#1x0>..#10<#1..#1x0>x0>→#12<#10<#1..#1x0>..#9<#0..#0x0>x0>[-1, 0, 0]] cycle -> #38
+JOINSMOVES joins frame 0 time 0 | moves frame 0 time 15
+  combination calls per frame, per cycle: 1:000000101011111111111111111111 2:111111111111111111111111111111 3:111111111111111111111111111111 4:111111111111111111111111111111 5:111111111111111111111111111111 6:111111111111111111111111111111 7:111111111111111111111111111111 8:111111111111111111111111111111 9:111111111111111111111111111111 10:111111111111111111111111111111 11:111111111111111111111111111111 12:111111111111111111111111111111
+  one call on the apex stands for A's six bars of a lap: from lap 11 (2 of 12 laps)
+  one call on the apex stands for B's six bars of a lap: from lap 11 (2 of 12 laps)
+  one call on the apex stands for every channel's six bars of a lap: from lap 11 (2 of 12 laps)
+  A: bar 6 of cycle 11 (frame 330) first comes under a level-3 call at frame 330
+  B: bar 6 of cycle 11 (frame 330) first comes under a level-3 call at frame 330
+  dictionary: level 1 | association between bars | 4 | with a call in the last cycle 4
+  dictionary: level 2 | over the combination calls | 10 | with a call in the last cycle 10
+  dictionary: level 3 | across the channels in time | 13 | with a call in the last cycle 13
+  dictionary: level 4 | across the channels in time | 14 | with a call in the last cycle 14
+  dictionary: level 5 | across the channels in time | 9 | with a call in the last cycle 9
+  function f0 | level 1 | nodes A↑, B↑ | relations A↑ → B↑ at t0 | a call in the last cycle
+  function f1 | level 1 | nodes A↓, B↑ | relations A↓ → B↑ at t0 | a call in the last cycle
+  function f2 | level 1 | nodes A↑, B↓ | relations A↑ → B↓ at t0 | a call in the last cycle
+  function f3 | level 1 | nodes A↓, B↓ | relations A↓ → B↓ at t0 | a call in the last cycle
+  function f4 | level 2 | nodes call(f1), call(f2) | relations call(f1) → call(f2) at t-1; call(f2) → call(f1) at t-1 | a cycle | a call in the last cycle
+  function f7 | level 2 | nodes call(f0), call(f3) | relations call(f0) → call(f3) at t-1; call(f3) → call(f0) at t-1 | a cycle | a call in the last cycle
+  function f8 | level 2 | nodes call(f1), call(f0) | relations call(f1) → call(f0) at t-1 | a call in the last cycle
+  function f9 | level 2 | nodes call(f3), call(f1) | relations call(f3) → call(f1) at t-1 | a call in the last cycle
+  function f10 | level 2 | nodes call(f1), call(f3) | relations call(f1) → call(f3) at t-1 | a call in the last cycle
+  function f11 | level 2 | nodes call(f0), call(f1) | relations call(f0) → call(f1) at t-1 | a call in the last cycle
+  function f12 | level 2 | nodes call(f2), call(f0) | relations call(f2) → call(f0) at t-1 | a call in the last cycle
+  function f13 | level 2 | nodes call(f0), call(f2) | relations call(f0) → call(f2) at t-1 | a call in the last cycle
+  function f15 | level 2 | nodes call(f0) | relations call(f0) → call(f0) at t-1 | a cycle | a call in the last cycle
+  function f17 | level 2 | nodes call(f1) | relations call(f1) → call(f1) at t-1 | a cycle | a call in the last cycle
+  function f14 | level 3 | nodes call(f7), call(f9) | relations call(f7) → call(f9) at t-1 | a call in the last cycle
+  function f16 | level 3 | nodes call(f4), call(f12) | relations call(f4) → call(f12) at t-1 | a call in the last cycle
+  function f20 | level 3 | nodes call(f12), call(f11), call(f10) | relations call(f12) → call(f11) at t-1; call(f11) → call(f10) at t-1 | a call in the last cycle
+  function f21 | level 3 | nodes call(f7), call(f13) | relations call(f7) → call(f13) at t-1 | a call in the last cycle
+  function f23 | level 3 | nodes call(f9), call(f8), call(f7) | relations call(f9) → call(f8) at t-1; call(f8) → call(f7) at t-1 | a call in the last cycle
+  function f24 | level 3 | nodes call(f12), call(f7) | relations call(f12) → call(f7) at t-1 | a call in the last cycle
+  function f26 | level 3 | nodes call(f7), call(f11), call(f4) | relations call(f7) → call(f11) at t-1; call(f11) → call(f4) at t-1 | a call in the last cycle
+  function f28 | level 3 | nodes call(f4), call(f10), call(f7) | relations call(f4) → call(f10) at t-1; call(f10) → call(f7) at t-1 | a call in the last cycle
+  function f30 | level 3 | nodes call(f4), call(f8), call(f13) | relations call(f4) → call(f8) at t-1; call(f8) → call(f13) at t-1; call(f13) → call(f4) at t-1 | a cycle | a call in the last cycle
+  function f31 | level 3 | nodes call(f9), call(f4) | relations call(f9) → call(f4) at t-1 | a call in the last cycle
+  function f33 | level 3 | nodes call(f7), call(f15), call(f7) | relations call(f7) → call(f15) at t-1; call(f15) → call(f7) at t-1 | a call in the last cycle
+  function f34 | level 3 | nodes call(f10), call(f7) | relations call(f10) → call(f7) at t-1 | a call in the last cycle
+  function f36 | level 3 | nodes call(f4), call(f17), call(f4) | relations call(f4) → call(f17) at t-1; call(f17) → call(f4) at t-1 | a call in the last cycle
+  function f39 | level 4 | nodes call(f16), call(f24), call(f14) | relations call(f16) → call(f24) at t-1; call(f24) → call(f14) at t-1 | a call in the last cycle
+  function f40 | level 4 | nodes call(f14), call(f31) | relations call(f14) → call(f31) at t-1 | a call in the last cycle
+  function f41 | level 4 | nodes call(f20), call(f34) | relations call(f20) → call(f34) at t-1 | a call in the last cycle
+  function f42 | level 4 | nodes call(f16), call(f20) | relations call(f16) → call(f20) at t-1 | a call in the last cycle
+  function f43 | level 4 | nodes call(f23), call(f21) | relations call(f23) → call(f21) at t-2 | a call in the last cycle
+  function f44 | level 4 | nodes call(f14), call(f23) | relations call(f14) → call(f23) at t-1 | a call in the last cycle
+  function f45 | level 4 | nodes call(f26), call(f16) | relations call(f26) → call(f16) at t-1 | a call in the last cycle
+  function f46 | level 4 | nodes call(f28), call(f26) | relations call(f28) → call(f26) at t-1 | a call in the last cycle
+  function f47 | level 4 | nodes call(f31), call(f30) | relations call(f31) → call(f30) at t-2 | a call in the last cycle
+  function f48 | level 4 | nodes call(f33), call(f14) | relations call(f33) → call(f14) at t-1 | a call in the last cycle
+  function f49 | level 4 | nodes call(f34), call(f33) | relations call(f34) → call(f33) at t-3 | a call in the last cycle
+  function f50 | level 4 | nodes call(f36), call(f16) | relations call(f36) → call(f16) at t-3 | a call in the last cycle
+  function f52 | level 4 | nodes call(f21), call(f30), call(f36) | relations call(f21) → call(f30) at t-1; call(f30) → call(f36) at t-1 | a call in the last cycle
+  function f53 | level 4 | nodes call(f30), call(f28) | relations call(f30) → call(f28) at t-1 | a call in the last cycle
+  function f54 | level 5 | nodes call(f42), call(f41) | relations call(f42) → call(f41) at t-2 | a call in the last cycle
+  function f56 | level 5 | nodes call(f39), call(f44), call(f43) | relations call(f39) → call(f44) at t-1; call(f44) → call(f43) at t-2 | a call in the last cycle
+  function f58 | level 5 | nodes call(f46), call(f45), call(f39) | relations call(f46) → call(f45) at t-2; call(f45) → call(f39) at t-1 | a call in the last cycle
+  function f60 | level 5 | nodes call(f48), call(f40), call(f47) | relations call(f48) → call(f40) at t-1; call(f40) → call(f47) at t-1 | a call in the last cycle
+  function f61 | level 5 | nodes call(f49), call(f48) | relations call(f49) → call(f48) at t-4 | a call in the last cycle
+  function f62 | level 5 | nodes call(f41), call(f49) | relations call(f41) → call(f49) at t-1 | a call in the last cycle
+  function f63 | level 5 | nodes call(f50), call(f42) | relations call(f50) → call(f42) at t-3 | a call in the last cycle
+  function f64 | level 5 | nodes call(f53), call(f46) | relations call(f53) → call(f46) at t-2 | a call in the last cycle
+  function f65 | level 5 | nodes call(f47), call(f53) | relations call(f47) → call(f53) at t-4 | a call in the last cycle
+  calls on the apex at the last frame: 12 | reaching frames 355-360: 8
+  apex: call of f61 | level 5 | frames {351} | channels 2
+  apex: call of f62 | level 5 | frames {351, 352} | channels 2
+  apex: call of f20 | level 3 | frames {351, 352, 353} | channels 2
+  apex: call of f54 | level 5 | frames {351, 352, 353, 354} | channels 2
+  apex: call of f4 | level 2 | frames {353, 354, 355, 356} | channels 2
+  apex: call of f50 | level 4 | frames {352, 353, 354, 355, 356, 357} | channels 2
+  apex: call of f63 | level 5 | frames {351, 352, 353, 354, 355, 356, 357} | channels 2
+  apex: call of f36 | level 3 | frames {353, 354, 355, 356, 357, 358} | channels 2
+  apex: call of f3 | level 1 | frames {360} | channels 2
+  apex: call of f7 | level 2 | frames {359, 360} | channels 2
+  apex: call of f21 | level 3 | frames {358, 359, 360} | channels 2
+  apex: call of f52 | level 4 | frames {353, 354, 355, 356, 357, 358, 359, 360} | channels 2
+

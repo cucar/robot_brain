@@ -1,0 +1,85 @@
+two: 10 cycles of 12 bars
+  KGC moves per cycle: DUDUDUUDUDUU
+  GLD moves per cycle: UDDDDDDUDDUU
+CYCLE 1 | neurons 12 | functions 4 | highest call level in the cycle 1 | the dictionary last changed at frame 12 | right KGC 60.00%, GLD 70.00%
+CYCLE 2 | neurons 15 | functions 7 | highest call level in the cycle 2 | the dictionary last changed at frame 23 | right KGC 75.00%, GLD 58.33%
+CYCLE 3 | neurons 17 | functions 9 | highest call level in the cycle 2 | the dictionary last changed at frame 33 | right KGC 83.33%, GLD 75.00%
+CYCLE 4 | neurons 20 | functions 12 | highest call level in the cycle 2 | the dictionary last changed at frame 48 | right KGC 83.33%, GLD 91.67%
+CYCLE 5 | neurons 21 | functions 13 | highest call level in the cycle 2 | the dictionary last changed at frame 49 | right KGC 100.00%, GLD 100.00%
+CYCLE 6 | neurons 26 | functions 18 | highest call level in the cycle 3 | the dictionary last changed at frame 72 | right KGC 100.00%, GLD 100.00%
+CYCLE 7 | neurons 27 | functions 18 | highest call level in the cycle 3 | the dictionary last changed at frame 83 | right KGC 100.00%, GLD 100.00%
+CYCLE 8 | neurons 25 | functions 17 | highest call level in the cycle 3 | the dictionary last changed at frame 85 | right KGC 100.00%, GLD 100.00%
+CYCLE 9 | neurons 26 | functions 18 | highest call level in the cycle 3 | the dictionary last changed at frame 99 | right KGC 100.00%, GLD 100.00%
+CYCLE 10 | neurons 28 | functions 20 | highest call level in the cycle 4 | the dictionary last changed at frame 120 | right KGC 100.00%, GLD 100.00%
+inference KGC: right 107 of 118 | every bar right from cycle 5
+  KGC cycle  1: --WRRRWRRRWW
+  KGC cycle  2: RRRRRWRRRRWW
+  KGC cycle  3: RRRRRWRRRRWR
+  KGC cycle  4: RRRWRRRRRRWR
+  KGC cycle  5: RRRRRRRRRRRR
+  KGC cycle  6: RRRRRRRRRRRR
+  KGC cycle  7: RRRRRRRRRRRR
+  KGC cycle  8: RRRRRRRRRRRR
+  KGC cycle  9: RRRRRRRRRRRR
+  KGC cycle 10: RRRRRRRRRRRR
+inference GLD: right 106 of 118 | every bar right from cycle 5
+  GLD cycle  1: --RRRRWRRWWR
+  GLD cycle  2: WRWRWRWRRWRR
+  GLD cycle  3: RRRWRRWRRWRR
+  GLD cycle  4: RRRRRRRRRWRR
+  GLD cycle  5: RRRRRRRRRRRR
+  GLD cycle  6: RRRRRRRRRRRR
+  GLD cycle  7: RRRRRRRRRRRR
+  GLD cycle  8: RRRRRRRRRRRR
+  GLD cycle  9: RRRRRRRRRRRR
+  GLD cycle 10: RRRRRRRRRRRR
+recognition: 20 functions | the dictionary last changed at frame 120
+NEVERCALLED 0 of 20
+CLOSING weighed 2 joined 2 (from a function of more relations 0) | cycles at the end 5 of 20 | build joins the calls count would refuse 1 | largest such gain as a cycle 1.0 (on the calls -1.0) | weighs beyond every offset the rows hold 0 | weighs with neither end where the call stands 0 | weighs where one lap on cannot be worked out 0
+UNPAID 0 relations left a function because they did not pay there
+LIFTED TO THE STANDING CALL 0 relations went to other calls than their direct coverers
+LIFT PASSED OVER 0 dropped weak calls, 0 calls aged off the board
+CYCLELAPS f5 | closed at frame 29 | closing strength 3 | held [6] | calls under one lap 8 | one lap or more 8 | most laps 2 | now f5 no origin [#10<#0..#0x0>→#9<#1..#1x0>[-1, 0, 0] #9<#1..#1x0>→#10<#0..#0x0>[-1, 0, 0]] cycle -> #13
+CYCLELAPS f7 | closed at frame 33 | closing strength 2 | held [4] | calls under one lap 7 | one lap or more 7 | most laps 1 | now f7 no origin [#9<#1..#1x0>→#12<#0..#0x0>[-1, 0, 0] #12<#0..#0x0>→#9<#1..#1x0>[-1, 0, 0]] cycle -> #15
+JOINSMOVES joins frame 0 time 1 | moves frame 0 time 4
+  combination calls per frame, per cycle: 1:000001101100 2:111111111111 3:111111111111 4:111111111111 5:111111111111 6:111111111111 7:111111111111 8:111111111111 9:111111111111 10:111111111111
+  dictionary: level 1 | GLD only | 1 | with a call in the last cycle 0
+  dictionary: level 1 | across the channels in time | 1 | with a call in the last cycle 0
+  dictionary: level 1 | association between bars | 4 | with a call in the last cycle 4
+  dictionary: level 2 | over the combination calls | 6 | with a call in the last cycle 6
+  dictionary: level 3 | across the channels in time | 5 | with a call in the last cycle 5
+  dictionary: level 4 | across the channels in time | 3 | with a call in the last cycle 3
+  function f0 | level 1 | nodes GLD↓ | relations GLD↓ → GLD↓ at t-1 | a cycle
+  function f1 | level 1 | nodes KGC↑, GLD↓ | relations KGC↑ → GLD↓ at t0 | a call in the last cycle
+  function f2 | level 1 | nodes KGC↓, GLD↓ | relations KGC↓ → GLD↓ at t0 | a call in the last cycle
+  function f3 | level 1 | nodes KGC↑, GLD↑ | relations KGC↑ → GLD↑ at t-1
+  function f4 | level 1 | nodes KGC↓, GLD↑ | relations KGC↓ → GLD↑ at t0 | a call in the last cycle
+  function f6 | level 1 | nodes KGC↑, GLD↑ | relations KGC↑ → GLD↑ at t0 | a call in the last cycle
+  function f5 | level 2 | nodes call(f2), call(f1) | relations call(f2) → call(f1) at t-1; call(f1) → call(f2) at t-1 | a cycle | a call in the last cycle
+  function f7 | level 2 | nodes call(f1), call(f4) | relations call(f1) → call(f4) at t-1; call(f4) → call(f1) at t-1 | a cycle | a call in the last cycle
+  function f9 | level 2 | nodes call(f1) | relations call(f1) → call(f1) at t-1 | a cycle | a call in the last cycle
+  function f11 | level 2 | nodes call(f6), call(f2) | relations call(f6) → call(f2) at t-1 | a call in the last cycle
+  function f12 | level 2 | nodes call(f6) | relations call(f6) → call(f6) at t-1 | a cycle | a call in the last cycle
+  function f13 | level 2 | nodes call(f4), call(f6) | relations call(f4) → call(f6) at t-1 | a call in the last cycle
+  function f10 | level 3 | nodes call(f5), call(f7) | relations call(f5) → call(f7) at t-1 | a call in the last cycle
+  function f15 | level 3 | nodes call(f7), call(f9), call(f5) | relations call(f7) → call(f9) at t-1; call(f9) → call(f5) at t-1 | a call in the last cycle
+  function f17 | level 3 | nodes call(f11), call(f5), call(f7) | relations call(f11) → call(f5) at t-1; call(f5) → call(f7) at t-1 | a call in the last cycle
+  function f19 | level 3 | nodes call(f13), call(f12), call(f11) | relations call(f13) → call(f12) at t-1; call(f12) → call(f11) at t-1 | a call in the last cycle
+  function f20 | level 3 | nodes call(f7), call(f13) | relations call(f7) → call(f13) at t-1 | a call in the last cycle
+  function f21 | level 4 | nodes call(f10), call(f20) | relations call(f10) → call(f20) at t-1 | a call in the last cycle
+  function f22 | level 4 | nodes call(f17), call(f15) | relations call(f17) → call(f15) at t-2 | a call in the last cycle
+  function f23 | level 4 | nodes call(f19), call(f17) | relations call(f19) → call(f17) at t-1 | a call in the last cycle
+  calls on the apex at the last frame: 12 | reaching frames 115-120: 8
+  apex: call of f20 | level 3 | frames {110} | channels 2
+  apex: call of f10 | level 3 | frames {110, 111} | channels 2
+  apex: call of f21 | level 4 | frames {110, 111} | channels 2
+  apex: call of f5 | level 2 | frames {110, 111, 112, 113, 114} | channels 2
+  apex: call of f15 | level 3 | frames {110, 111, 112, 113, 114, 115, 116} | channels 2
+  apex: call of f7 | level 2 | frames {115, 116, 117} | channels 2
+  apex: call of f22 | level 4 | frames {110, 111, 112, 113, 114, 115, 116, 117, 118} | channels 2
+  apex: call of f17 | level 3 | frames {115, 116, 117, 118, 119} | channels 2
+  apex: call of f6 | level 1 | frames {120} | channels 2
+  apex: call of f12 | level 2 | frames {119, 120} | channels 2
+  apex: call of f19 | level 3 | frames {118, 119, 120} | channels 2
+  apex: call of f23 | level 4 | frames {115, 116, 117, 118, 119, 120} | channels 2
+

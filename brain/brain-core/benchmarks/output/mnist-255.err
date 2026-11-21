@@ -1,0 +1,84 @@
+[join-count f9] gain
+[join-count f39] gain
+[join-count f39] gain
+[retire f43] f65 origin #12<#0..#0x7> [] -> #77 | its last relation left for nothing
+[join-left f47] #12<#0..#0x13>→#56<#0..#0x2>[0, 7, -3] | it does not pay there
+[retire f51] f70 origin #18<#1..#1x2> [] -> #82 | its last relation left for nothing
+[retire f55] f52 origin #32<#1..#1x4> [] -> #64 | its last relation left for nothing
+[retire f55] f78 origin #0 [] -> #90 | its last relation left for nothing
+[retire f67] f67 origin #12<#0..#0x3> [] -> #79 | its last relation left for nothing
+[retire f67] f93 origin #32<#1..#1x2> [] -> #105 | its last relation left for nothing
+[retire f71] f37 origin #12<#0..#0x7> [] -> #49 | its last relation left for nothing
+[retire f73] f50 origin #12<#0..#0x2> [] -> #62 | its last relation left for nothing
+[retire f79] f80 origin #0 [] -> #92 | its last relation left for nothing
+[retire f89] f98 origin #0 [] -> #110 | its last relation left for nothing
+[retire f89] f108 origin #18<#1..#1x4> [] -> #120 | its last relation left for nothing
+[retire f93] f102 origin #18<#1..#1x2> [] -> #114 | its last relation left for nothing
+[retire f129] f164 origin #18<#1..#1x3> [] -> #175 | its last relation left for nothing
+[retire f137] f162 origin #13<#1..#1x4> [] -> #173 | its last relation left for nothing
+[join-count f143] gain
+[retire f149] f204 origin #18<#1..#1x5> [] -> #215 | its last relation left for nothing
+[retire f153] f216 origin #0 [] -> #227 | its last relation left for nothing
+[join-left f155] #18<#1..#1x2>→#26<#12<#0..#0x4>..#12<#0..#0x4>x1>[0, 1, 1] | it does not pay there
+[retire f157] f174 origin #32<#1..#1x2> [] -> #185 | its last relation left for nothing
+[retire f159] f227 origin #0 [] -> #237 | its last relation left for nothing
+[join-count f167] gain
+[retire f173] f215 origin #56<#0..#0x7> [] -> #226 | its last relation left for nothing
+[join-left f175] #12<#0..#0x13>→#14<#1..#0x0>[0, 5, -1] | it does not pay there
+[join-count f177] gain
+[join-count f177] gain
+[retire f189] f278 origin #0 [] -> #287 | its last relation left for nothing
+  image 100/255 | last 100: spoke 99 right 19 (19.2% of spoken) , functions added 309 retired 20 | neurons 297 functions 289 | apex/image 16.5 |  so far
+[retire f201] f291 origin #1 [] -> #300 | its last relation left for nothing
+[join-count f201] gain
+[retire f231] f218 origin #32<#1..#1x5> [] -> #229 | its last relation left for nothing
+[retire f235] f101 origin #1 [] -> #113 | its last relation left for nothing
+[retire f235] f118 origin #1 [] -> #130 | its last relation left for nothing
+[retire f259] f310 origin #1 [] -> #318 | its last relation left for nothing
+[retire f277] f180 origin #32<#1..#1x6> [] -> #191 | its last relation left for nothing
+[retire f281] f110 origin #18<#1..#1x5> [] -> #122 | its last relation left for nothing
+[retire f285] f403 origin #0 [] -> #407 | its last relation left for nothing
+[retire f287] f252 origin #32<#1..#1x3> [] -> #261 | its last relation left for nothing
+[retire f297] f372 origin #18<#1..#1x5> [] -> #378 | its last relation left for nothing
+[retire f299] f254 origin #70<#0..#0x3> [] -> #263 | its last relation left for nothing
+[retire f303] f383 origin #56<#0..#0x6> [] -> #388 | its last relation left for nothing
+[join-count f321] gain
+[join-count f323] gain
+[retire f325] f487 origin #32<#1..#1x3> [] -> #486 | its last relation left for nothing
+[retire f335] f198 origin #12<#0..#0x3> [] -> #209 | its last relation left for nothing
+[join-count f335] gain
+[retire f343] f199 origin #12<#0..#0x3> [] -> #210 | its last relation left for nothing
+[retire f343] f438 origin #12<#0..#0x6> [] -> #441 | its last relation left for nothing
+[retire f351] f272 origin #32<#1..#1x5> [] -> #281 | its last relation left for nothing
+[retire f357] f471 origin #56<#0..#0x7> [] -> #472 | its last relation left for nothing
+[retire f365] f282 origin #12<#0..#0x3> [] -> #291 | its last relation left for nothing
+[retire f377] f268 origin #12<#0..#0x9> [] -> #277 | its last relation left for nothing
+[retire f389] f530 origin #0 [] -> #528 | its last relation left for nothing
+[join-left f391] #15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#13<#1..#1x3>[0, 7, 3] | it does not pay there
+[retire f399] f43 origin #12<#0..#0x5> [] -> #55 | its last relation left for nothing
+  image 200/255 | last 100: spoke 100 right 47 (47.0% of spoken) , functions added 264 retired 22 | neurons 526 functions 531 | apex/image 15.0 |  so far
+[retire f403] f305 origin #12<#0..#0x7> [] -> #313 | its last relation left for nothing
+[retire f407] f576 origin #32<#1..#1x7> [] -> #570 | its last relation left for nothing
+[retire f407] f325 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x2> [] -> #333 | its last relation left for nothing
+[retire f409] f349 origin #12<#0..#0x3> [] -> #355 | its last relation left for nothing
+[join-count f411] gain
+[retire f425] f592 origin #0 [] -> #585 | its last relation left for nothing
+[retire f429] f71 origin #12<#0..#0x13> [] -> #83 | its last relation left for nothing
+[retire f441] f122 origin #12<#0..#0x9> [] -> #134 | its last relation left for nothing
+[retire f457] f612 origin #56<#0..#0x6> [] -> #604 | its last relation left for nothing
+[retire f457] f312 origin #12<#0..#0x5> [] -> #320 | its last relation left for nothing
+[retire f459] f442 origin #32<#1..#1x3> [] -> #445 | its last relation left for nothing
+[retire f459] f454 origin #12<#0..#0x7> [] -> #457 | its last relation left for nothing
+[join-count f459] gain
+[retire f463] f99 origin #13<#1..#1x4> [] -> #111 | its last relation left for nothing
+[retire f463] f625 origin #56<#0..#0x7> [] -> #616 | its last relation left for nothing
+[retire f467] f428 origin #56<#0..#0x4> [] -> #432 | its last relation left for nothing
+[retire f469] f420 origin #56<#0..#0x2> [] -> #424 | its last relation left for nothing
+[retire f477] f125 origin #12<#0..#0x7> [] -> #137 | its last relation left for nothing
+[join-count f477] gain
+[retire f479] f404 origin #56<#0..#0x6> [] -> #408 | its last relation left for nothing
+[retire f479] f606 origin #56<#0..#0x7> [] -> #598 | its last relation left for nothing
+[retire f479] f658 origin #56<#0..#0x1> [] -> #648 | its last relation left for nothing
+[retire f501] f634 origin #1 [] -> #625 | its last relation left for nothing
+[retire f503] f690 origin #12<#0..#0x3> [] -> #675 | its last relation left for nothing
+[retire f507] f106 origin #12<#0..#0x5> [] -> #118 | its last relation left for nothing

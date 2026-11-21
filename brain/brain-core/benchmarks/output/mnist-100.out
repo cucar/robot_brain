@@ -1,0 +1,554 @@
+mnist: 14x14, black and white pixels, 100 training images x 1 episodes (all taught), test 0, H=2048
+LASTEP image 0 (digit 5) | calls on the apex 28 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 0 | started 6 | left 0 | changed 0 | joins 0 | moves 0
+    + f0 f0 no origin [#0→#0[0, 1, 0]] cycle -> #12
+    + f1 f1 no origin [#1→#1[0, 1, 0]] cycle -> #13
+    + f2 f2 origin #1 [#1→#0[0, 1, -1]] -> #14
+    + f3 f3 no origin [#12<#0..#0x13>→#12<#0..#0x13>[0, 0, 1]] cycle -> #15
+    + f4 f4 origin #1 [#1→#12<#0..#0x4>[0, 1, 0]] -> #16
+    + f5 f5 origin #1 [#1→#12<#0..#0x6>[0, 1, 0]] -> #17
+LASTEP image 1 (digit 0) | calls on the apex 28 | bare pixels on the apex 1 | levels 3
+CHANGE episode 1 image 1 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f6 f6 no origin [#1→#1[0, 0, 1]] cycle -> #18
+    + f7 f7 no origin [#12<#0..#0x2>→#12<#0..#0x2>[0, 0, 1]] cycle -> #19
+    + f8 f8 origin #13<#1..#1x1> [#13<#1..#1x1>→#12<#0..#0x3>[0, 2, 0]] -> #20
+    + f9 f9 origin #12<#0..#0x6> [#12<#0..#0x6>→#12<#0..#0x4>[0, 2, -1]] -> #21
+LASTEP image 2 (digit 4) | calls on the apex 15 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 2 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f10 f10 no origin [#12<#0..#0x3>→#12<#0..#0x3>[0, 0, 1]] cycle -> #22
+    + f11 f11 no origin [#12<#0..#0x8>→#12<#0..#0x8>[0, 0, 1]] cycle -> #23
+    + f12 f12 no origin [#12<#0..#0x1>→#12<#0..#0x1>[0, 0, 1]] cycle -> #24
+    + f13 f13 origin #13<#1..#1x2> [#13<#1..#1x2>→#0[0, 3, 0]] -> #25
+LASTEP image 3 (digit 1) | calls on the apex 20 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 3 | started 6 | left 0 | changed 0 | joins 0 | moves 0
+    + f14 f14 no origin [#12<#0..#0x4>→#12<#0..#0x4>[0, 0, 1]] cycle -> #26
+    + f15 f15 origin #12<#0..#0x8> [#12<#0..#0x8>→#1[0, 9, 1]] -> #27
+    + f16 f16 origin #12<#0..#0x3> [#12<#0..#0x3>→#1[0, 4, 0]] -> #28
+    + f17 f17 origin #12<#0..#0x7> [#12<#0..#0x7>→#12<#0..#0x6>[0, 0, 1]] -> #29
+    + f18 f18 no origin [#12<#0..#0x6>→#12<#0..#0x6>[0, 0, 1]] cycle -> #30
+    + f19 f19 origin #12<#0..#0x3> [#12<#0..#0x3>→#12<#0..#0x2>[0, 1, -1]] -> #31
+LASTEP image 4 (digit 9) | calls on the apex 17 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 4 | started 4 | left 0 | changed 0 | joins 1 | moves 0
+    + f20 f20 no origin [#1→#1[0, 1, -1]] cycle -> #32
+    + f21 f21 no origin [#12<#0..#0x5>→#12<#0..#0x5>[0, 0, 1]] cycle -> #33
+    + f22 f22 origin #18<#1..#1x2> [#18<#1..#1x2>→#1[0, 1, 0] #18<#1..#1x2>→#26<#12<#0..#0x4>..#12<#0..#0x4>x1>[0, 1, 1]] -> #34
+    + f23 f23 origin #12<#0..#0x5> [#12<#0..#0x5>→#12<#0..#0x4>[0, 0, 1]] -> #35
+LASTEP image 5 (digit 2) | calls on the apex 22 | bare pixels on the apex 1 | levels 3
+CHANGE episode 1 image 5 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f24 f24 no origin [#1→#1[0, 1, 1]] cycle -> #36
+    + f25 f25 origin #1 [#1→#12<#0..#0x2>[0, 1, 0]] -> #37
+    + f26 f26 origin #12<#0..#0x3> [#12<#0..#0x3>→#1[0, 3, 1]] -> #38
+    + f27 f27 origin #12<#0..#0x4> [#12<#0..#0x4>→#13<#1..#1x1>[0, 4, 1]] -> #39
+    + f28 f28 origin #13<#1..#1x1> [#13<#1..#1x1>→#12<#0..#0x2>[0, 2, 0]] -> #40
+LASTEP image 6 (digit 1) | calls on the apex 9 | bare pixels on the apex 0 | levels 3
+LASTEP image 7 (digit 3) | calls on the apex 22 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 7 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f29 f29 origin #12<#0..#0x7> [#12<#0..#0x7>→#1[0, 7, 1]] -> #41
+    + f30 f30 origin #12<#0..#0x6> [#12<#0..#0x6>→#13<#1..#1x2>[0, 7, 0]] -> #42
+    + f31 f31 origin #12<#0..#0x5> [#12<#0..#0x5>→#12<#0..#0x4>[0, 1, -1]] -> #43
+    + f32 f32 origin #12<#0..#0x4> [#12<#0..#0x4>→#12<#0..#0x3>[0, 1, -1]] -> #44
+LASTEP image 8 (digit 1) | calls on the apex 7 | bare pixels on the apex 0 | levels 3
+LASTEP image 9 (digit 4) | calls on the apex 26 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 9 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f33 f33 origin #1 [#1→#0[0, 1, 0]] -> #45
+    + f34 f34 origin #12<#0..#0x4> [#12<#0..#0x4>→#12<#0..#0x3>[0, 0, 1]] -> #46
+    + f35 f35 origin #12<#0..#0x5> [#12<#0..#0x5>→#26<#12<#0..#0x4>..#12<#0..#0x4>x1>[0, 1, -2]] -> #47
+LASTEP image 10 (digit 3) | calls on the apex 17 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 10 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f36 f36 origin #12<#0..#0x5> [#12<#0..#0x5>→#1[0, 6, 0]] -> #48
+    + f37 f37 origin #12<#0..#0x7> [#12<#0..#0x7>→#0[0, 5, 1]] -> #49
+    + f38 f38 origin #12<#0..#0x6> [#12<#0..#0x6>→#12<#0..#0x4>[0, 0, 1]] -> #50
+    + f39 f39 origin #12<#0..#0x2> [#12<#0..#0x2>→#13<#1..#1x1>[0, 3, 0]] -> #51
+    + f40 f40 origin #13<#1..#1x2> [#13<#1..#1x2>→#13<#1..#1x1>[0, 1, -1]] -> #52
+LASTEP image 11 (digit 5) | calls on the apex 13 | bare pixels on the apex 1 | levels 3
+CHANGE episode 1 image 11 | started 2 | left 0 | changed 0 | joins 0 | moves 0
+    + f41 f41 origin #1 [#1→#12<#0..#0x6>[0, 0, 1]] -> #53
+    + f42 f42 origin #12<#0..#0x6> [#12<#0..#0x6>→#13<#1..#1x1>[0, 7, 0]] -> #54
+LASTEP image 12 (digit 3) | calls on the apex 20 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 12 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f43 f43 origin #12<#0..#0x5> [#12<#0..#0x5>→#12<#0..#0x4>[0, 1, 1]] -> #55
+LASTEP image 13 (digit 6) | calls on the apex 22 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 13 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f44 f44 no origin [#0→#0[0, 0, 1]] cycle -> #56
+    + f45 f45 origin #1 [#1→#12<#0..#0x1>[0, 1, 0]] -> #57
+    + f46 f46 origin #13<#1..#1x1> [#13<#1..#1x1>→#0[0, 2, 0]] -> #58
+    + f47 f47 origin #1 [#1→#18<#1..#1x2>[0, 1, -2]] -> #59
+    + f48 f48 origin #12<#0..#0x7> [#12<#0..#0x7>→#12<#0..#0x6>[0, 1, -1]] -> #60
+LASTEP image 14 (digit 1) | calls on the apex 8 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 14 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f49 f49 no origin [#56<#0..#0x8>→#56<#0..#0x8>[0, 1, 0]] cycle -> #61
+LASTEP image 15 (digit 7) | calls on the apex 20 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 15 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f50 f50 origin #12<#0..#0x2> [#12<#0..#0x2>→#0[0, 0, 1]] -> #62
+    + f51 f51 origin #12<#0..#0x2> [#12<#0..#0x2>→#1[0, 3, -1]] -> #63
+    + f52 f52 origin #32<#1..#1x4> [#32<#1..#1x4>→#0[0, 2, -4]] -> #64
+    + f53 f53 origin #12<#0..#0x13> [#12<#0..#0x13>→#0[0, 6, -1]] -> #65
+    + f54 f54 origin #13<#1..#1x1> [#13<#1..#1x1>→#13<#1..#1x2>[0, 1, -1]] -> #66
+LASTEP image 16 (digit 2) | calls on the apex 24 | bare pixels on the apex 1 | levels 3
+CHANGE episode 1 image 16 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f55 f55 origin #1 [#1→#0[0, 1, 1]] -> #67
+    + f56 f56 origin #12<#0..#0x2> [#12<#0..#0x2>→#12<#0..#0x1>[0, 1, -1]] -> #68
+    + f57 f57 origin #12<#0..#0x1> [#12<#0..#0x1>→#13<#1..#1x1>[0, 2, 0]] -> #69
+LASTEP image 17 (digit 8) | calls on the apex 21 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 17 | started 2 | left 0 | changed 0 | joins 0 | moves 0
+    + f58 f58 no origin [#0→#0[0, 1, -1]] cycle -> #70
+    + f59 f59 origin #0 [#0→#1[0, 0, 1]] -> #71
+LASTEP image 18 (digit 6) | calls on the apex 15 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 18 | started 2 | left 0 | changed 0 | joins 0 | moves 0
+    + f60 f60 origin #12<#0..#0x13> [#12<#0..#0x13>→#12<#0..#0x6>[0, 7, -1]] -> #72
+    + f61 f61 origin #29<#12<#0..#0x7>..#12<#0..#0x6>x0> [#29<#12<#0..#0x7>..#12<#0..#0x6>x0>→#12<#0..#0x5>[0, 0, 2]] -> #73
+LASTEP image 19 (digit 9) | calls on the apex 15 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 19 | started 3 | left 0 | changed 1 | joins 2 | moves 0
+    + f62 f62 origin #12<#0..#0x1> [#12<#0..#0x1>→#0[0, 0, 1]] -> #74
+    + f63 f63 origin #32<#1..#1x3> [#32<#1..#1x3>→#1[0, 3, -4]] -> #75
+    + f64 f64 origin #56<#0..#0x5> [#56<#0..#0x5>→#56<#0..#0x6>[0, 1, -1]] -> #76
+    ~ f53 f53 origin #12<#0..#0x13> [#12<#0..#0x13>→#0[0, 6, -1] #12<#0..#0x13>→#14<#1..#0x0>[0, 5, -1] #12<#0..#0x13>→#56<#0..#0x2>[0, 7, -3]] -> #65
+LASTEP image 20 (digit 4) | calls on the apex 24 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 20 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f65 f65 origin #12<#0..#0x7> [#12<#0..#0x7>→#0[0, 7, -1]] -> #77
+LASTEP image 21 (digit 0) | calls on the apex 20 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 21 | started 4 | left 1 | changed 0 | joins 0 | moves 0
+    + f66 f66 no origin [#56<#0..#0x9>→#56<#0..#0x9>[0, 1, 0]] cycle -> #78
+    + f67 f67 origin #12<#0..#0x3> [#12<#0..#0x3>→#0[0, 3, -1]] -> #79
+    + f68 f68 origin #12<#0..#0x3> [#12<#0..#0x3>→#12<#0..#0x2>[0, 0, 1]] -> #80
+    + f69 f69 origin #33<#12<#0..#0x5>..#12<#0..#0x5>x1> [#33<#12<#0..#0x5>..#12<#0..#0x5>x1>→#12<#0..#0x4>[0, 0, 2]] -> #81
+    - f65 f65 origin #12<#0..#0x7> [#12<#0..#0x7>→#0[0, 7, -1]] -> #77
+LASTEP image 22 (digit 9) | calls on the apex 18 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 22 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f70 f70 origin #18<#1..#1x2> [#18<#1..#1x2>→#0[0, 1, 0]] -> #82
+    + f71 f71 origin #12<#0..#0x13> [#12<#0..#0x13>→#12<#0..#0x5>[0, 8, -1]] -> #83
+    + f72 f72 origin #12<#0..#0x13> [#12<#0..#0x13>→#12<#0..#0x7>[0, 6, -1]] -> #84
+    + f73 f73 origin #12<#0..#0x7> [#12<#0..#0x7>→#13<#1..#1x1>[0, 8, 0]] -> #85
+    + f74 f74 origin #12<#0..#0x5> [#12<#0..#0x5>→#26<#12<#0..#0x4>..#12<#0..#0x4>x1>[0, 0, 1]] -> #86
+LASTEP image 23 (digit 1) | calls on the apex 16 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 23 | started 3 | left 0 | changed 1 | joins 0 | moves 0
+    + f75 f75 origin #14<#1..#0x0> [#14<#1..#0x0>→#0[0, 1, 0]] -> #87
+    + f76 f76 origin #12<#0..#0x8> [#12<#0..#0x8>→#12<#0..#0x7>[0, 0, 1]] -> #88
+    + f77 f77 origin #12<#0..#0x3> [#12<#0..#0x3>→#15<#12<#0..#0x13>..#12<#0..#0x13>x1>[0, 0, 1]] -> #89
+    ~ f53 f53 origin #12<#0..#0x13> [#12<#0..#0x13>→#0[0, 6, -1] #12<#0..#0x13>→#14<#1..#0x0>[0, 5, -1]] -> #65
+LASTEP image 24 (digit 1) | calls on the apex 18 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 24 | started 2 | left 0 | changed 0 | joins 0 | moves 0
+    + f78 f78 origin #0 [#0→#13<#1..#1x2>[0, 1, 0]] -> #90
+    + f79 f79 origin #13<#1..#1x1> [#13<#1..#1x1>→#12<#0..#0x1>[0, 0, 1]] -> #91
+LASTEP image 25 (digit 2) | calls on the apex 20 | bare pixels on the apex 1 | levels 3
+CHANGE episode 1 image 25 | started 4 | left 1 | changed 0 | joins 0 | moves 0
+    + f80 f80 origin #0 [#0→#56<#0..#0x6>[0, 1, -4]] -> #92
+    + f81 f81 origin #12<#0..#0x4> [#12<#0..#0x4>→#12<#0..#0x2>[0, 2, -1]] -> #93
+    + f82 f82 origin #12<#0..#0x3> [#12<#0..#0x3>→#13<#1..#1x2>[0, 4, 0]] -> #94
+    + f83 f83 origin #12<#0..#0x1> [#12<#0..#0x1>→#13<#1..#1x2>[0, 2, 0]] -> #95
+    - f70 f70 origin #18<#1..#1x2> [#18<#1..#1x2>→#0[0, 1, 0]] -> #82
+LASTEP image 26 (digit 4) | calls on the apex 17 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 26 | started 2 | left 0 | changed 0 | joins 0 | moves 0
+    + f84 f84 no origin [#56<#0..#0x5>→#56<#0..#0x5>[0, 1, 0]] cycle -> #96
+    + f85 f85 origin #12<#0..#0x8> [#12<#0..#0x8>→#1[0, 9, 0]] -> #97
+LASTEP image 27 (digit 3) | calls on the apex 22 | bare pixels on the apex 1 | levels 3
+CHANGE episode 1 image 27 | started 3 | left 2 | changed 0 | joins 0 | moves 0
+    + f86 f86 origin #1 [#1→#56<#0..#0x6>[0, 1, 0]] -> #98
+    + f87 f87 origin #1 [#1→#56<#0..#0x2>[0, 0, 1]] -> #99
+    + f88 f88 no origin [#13<#1..#1x1>→#13<#1..#1x1>[0, 0, 1]] cycle -> #100
+    - f52 f52 origin #32<#1..#1x4> [#32<#1..#1x4>→#0[0, 2, -4]] -> #64
+    - f78 f78 origin #0 [#0→#13<#1..#1x2>[0, 1, 0]] -> #90
+LASTEP image 28 (digit 2) | calls on the apex 17 | bare pixels on the apex 2 | levels 3
+LASTEP image 29 (digit 7) | calls on the apex 13 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 29 | started 2 | left 0 | changed 0 | joins 0 | moves 0
+    + f89 f89 origin #0 [#0→#1[0, 1, -1]] -> #101
+    + f90 f90 origin #12<#0..#0x8> [#12<#0..#0x8>→#12<#0..#0x4>[0, 0, 1]] -> #102
+LASTEP image 30 (digit 3) | calls on the apex 15 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 30 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f91 f91 no origin [#56<#0..#0x6>→#56<#0..#0x6>[0, 1, 0]] cycle -> #103
+LASTEP image 31 (digit 8) | calls on the apex 18 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 31 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f92 f92 no origin [#56<#0..#0x4>→#56<#0..#0x4>[0, 1, 0]] cycle -> #104
+    + f93 f93 origin #32<#1..#1x2> [#32<#1..#1x2>→#0[0, 2, -1]] -> #105
+    + f94 f94 origin #13<#1..#1x2> [#13<#1..#1x2>→#12<#0..#0x1>[0, 1, -1]] -> #106
+    + f95 f95 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x2> [#15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#61<#56<#0..#0x8>..#56<#0..#0x8>x1>[0, 12, 3]] -> #107
+LASTEP image 32 (digit 6) | calls on the apex 17 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 32 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f96 f96 origin #18<#1..#1x4> [#18<#1..#1x4>→#1[0, 1, -1]] -> #108
+    + f97 f97 origin #12<#0..#0x1> [#12<#0..#0x1>→#0[0, 1, -1]] -> #109
+    + f98 f98 origin #0 [#0→#56<#0..#0x4>[0, 1, -5]] -> #110
+LASTEP image 33 (digit 9) | calls on the apex 15 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 33 | started 2 | left 2 | changed 0 | joins 0 | moves 0
+    + f99 f99 origin #13<#1..#1x4> [#13<#1..#1x4>→#1[0, 3, 1]] -> #111
+    + f100 f100 origin #61<#56<#0..#0x8>..#56<#0..#0x8>x3> [#61<#56<#0..#0x8>..#56<#0..#0x8>x3>→#12<#0..#0x13>[0, 0, 9]] -> #112
+    - f67 f67 origin #12<#0..#0x3> [#12<#0..#0x3>→#0[0, 3, -1]] -> #79
+    - f93 f93 origin #32<#1..#1x2> [#32<#1..#1x2>→#0[0, 2, -1]] -> #105
+LASTEP image 34 (digit 0) | calls on the apex 19 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 34 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f101 f101 origin #1 [#1→#18<#1..#1x6>[0, 1, -5]] -> #113
+    + f102 f102 origin #18<#1..#1x2> [#18<#1..#1x2>→#0[0, 0, 3]] -> #114
+    + f103 f103 origin #13<#1..#1x1> [#13<#1..#1x1>→#12<#0..#0x1>[0, 2, 0]] -> #115
+    + f104 f104 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x2> [#15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#61<#56<#0..#0x8>..#56<#0..#0x8>x2>[0, 11, 3]] -> #116
+LASTEP image 35 (digit 5) | calls on the apex 17 | bare pixels on the apex 1 | levels 3
+CHANGE episode 1 image 35 | started 3 | left 1 | changed 0 | joins 0 | moves 0
+    + f105 f105 origin #1 [#1→#56<#0..#0x5>[0, 1, 0]] -> #117
+    + f106 f106 origin #12<#0..#0x5> [#12<#0..#0x5>→#12<#0..#0x7>[0, 6, 1]] -> #118
+    + f107 f107 origin #12<#0..#0x6> [#12<#0..#0x6>→#32<#1..#1x3>[0, 5, 2]] -> #119
+    - f37 f37 origin #12<#0..#0x7> [#12<#0..#0x7>→#0[0, 5, 1]] -> #49
+LASTEP image 36 (digit 6) | calls on the apex 16 | bare pixels on the apex 1 | levels 3
+CHANGE episode 1 image 36 | started 2 | left 1 | changed 0 | joins 0 | moves 0
+    + f108 f108 origin #18<#1..#1x4> [#18<#1..#1x4>→#0[0, 0, 5]] -> #120
+    + f109 f109 origin #18<#1..#1x2> [#18<#1..#1x2>→#18<#1..#1x1>[0, 1, 0]] -> #121
+    - f50 f50 origin #12<#0..#0x2> [#12<#0..#0x2>→#0[0, 0, 1]] -> #62
+LASTEP image 37 (digit 0) | calls on the apex 18 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 37 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f110 f110 origin #18<#1..#1x5> [#18<#1..#1x5>→#1[0, 1, 5]] -> #122
+    + f111 f111 origin #18<#1..#1x6> [#18<#1..#1x6>→#56<#0..#0x1>[0, 0, 7]] -> #123
+    + f112 f112 origin #56<#0..#0x2> [#56<#0..#0x2>→#56<#0..#0x3>[0, 1, -1]] -> #124
+    + f113 f113 origin #13<#1..#1x2> [#13<#1..#1x2>→#13<#1..#1x1>[0, 0, 1]] -> #125
+LASTEP image 38 (digit 7) | calls on the apex 15 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 38 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f114 f114 no origin [#12<#0..#0x7>→#12<#0..#0x7>[0, 0, 1]] cycle -> #126
+    + f115 f115 origin #12<#0..#0x2> [#12<#0..#0x2>→#13<#1..#1x4>[0, 3, 0]] -> #127
+    + f116 f116 origin #56<#0..#0x2> [#56<#0..#0x2>→#13<#1..#1x1>[0, 0, 3]] -> #128
+LASTEP image 39 (digit 6) | calls on the apex 20 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 39 | started 3 | left 1 | changed 0 | joins 0 | moves 0
+    + f117 f117 origin #13<#1..#1x1> [#13<#1..#1x1>→#1[0, 1, -1]] -> #129
+    + f118 f118 origin #1 [#1→#18<#1..#1x6>[0, 1, -4]] -> #130
+    + f119 f119 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x2> [#15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#61<#56<#0..#0x8>..#56<#0..#0x8>x2>[0, 11, -9]] -> #131
+    - f80 f80 origin #0 [#0→#56<#0..#0x6>[0, 1, -4]] -> #92
+LASTEP image 40 (digit 1) | calls on the apex 6 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 40 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f120 f120 origin #56<#0..#0x3> [#56<#0..#0x3>→#18<#1..#1x4>[0, 0, 4]] -> #132
+LASTEP image 41 (digit 8) | calls on the apex 20 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 41 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f121 f121 origin #0 [#0→#18<#1..#1x1>[0, 0, 1]] -> #133
+    + f122 f122 origin #12<#0..#0x9> [#12<#0..#0x9>→#1[0, 7, 1]] -> #134
+    + f123 f123 origin #61<#56<#0..#0x8>..#56<#0..#0x8>x3> [#61<#56<#0..#0x8>..#56<#0..#0x8>x3>→#15<#12<#0..#0x13>..#12<#0..#0x13>x1>[0, 0, 9]] -> #135
+    + f124 f124 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [#15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#78<#56<#0..#0x9>..#56<#0..#0x9>x2>[0, 11, 2]] -> #136
+LASTEP image 42 (digit 7) | calls on the apex 12 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 42 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f125 f125 origin #12<#0..#0x7> [#12<#0..#0x7>→#12<#0..#0x13>[0, 0, 1]] -> #137
+    + f126 f126 origin #12<#0..#0x2> [#12<#0..#0x2>→#18<#1..#1x1>[0, 3, 0]] -> #138
+    + f127 f127 origin #12<#0..#0x5> [#12<#0..#0x5>→#17<#1..#12<#0..#0x6>x0>[0, 6, 0]] -> #139
+LASTEP image 43 (digit 9) | calls on the apex 15 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 43 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f128 f128 origin #1 [#1→#56<#0..#0x7>[0, 0, 1]] -> #140
+    + f129 f129 origin #12<#0..#0x13> [#12<#0..#0x13>→#56<#0..#0x4>[0, 8, -5]] -> #141
+    + f130 f130 origin #13<#1..#1x2> [#13<#1..#1x2>→#12<#0..#0x1>[0, 0, 1]] -> #142
+    + f131 f131 origin #12<#0..#0x1> [#12<#0..#0x1>→#18<#1..#1x2>[0, 2, 0]] -> #143
+LASTEP image 44 (digit 3) | calls on the apex 16 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 44 | started 2 | left 2 | changed 0 | joins 0 | moves 0
+    + f132 f132 origin #13<#1..#1x2> [#13<#1..#1x2>→#56<#0..#0x4>[0, 2, -5]] -> #144
+    + f133 f133 origin #32<#1..#1x3> [#32<#1..#1x3>→#87<#14<#1..#0x0>..#0x0>[0, 2, -1]] -> #145
+    - f98 f98 origin #0 [#0→#56<#0..#0x4>[0, 1, -5]] -> #110
+    - f108 f108 origin #18<#1..#1x4> [#18<#1..#1x4>→#0[0, 0, 5]] -> #120
+LASTEP image 45 (digit 9) | calls on the apex 16 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 45 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f134 f134 origin #12<#0..#0x1> [#12<#0..#0x1>→#1[0, 1, -1]] -> #146
+    + f135 f135 origin #12<#0..#0x1> [#12<#0..#0x1>→#1[0, 0, 1]] -> #147
+    + f136 f136 origin #1 [#1→#56<#0..#0x1>[0, 0, 1]] -> #148
+    + f137 f137 origin #12<#0..#0x13> [#12<#0..#0x13>→#56<#0..#0x5>[0, 9, -6]] -> #149
+    + f138 f138 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x3> [#15<#12<#0..#0x13>..#12<#0..#0x13>x3>→#61<#56<#0..#0x8>..#56<#0..#0x8>x3>[0, 0, 4]] -> #56
+LASTEP image 46 (digit 8) | calls on the apex 15 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 46 | started 2 | left 1 | changed 0 | joins 0 | moves 0
+    + f139 f139 origin #12<#0..#0x2> [#12<#0..#0x2>→#13<#1..#1x2>[0, 3, 0]] -> #150
+    + f140 f140 origin #18<#1..#1x1> [#18<#1..#1x1>→#56<#0..#0x2>[0, 1, 0]] -> #151
+    - f102 f102 origin #18<#1..#1x2> [#18<#1..#1x2>→#0[0, 0, 3]] -> #114
+LASTEP image 47 (digit 5) | calls on the apex 16 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 47 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f141 f141 origin #13<#1..#1x3> [#13<#1..#1x3>→#0[0, 4, 0]] -> #152
+    + f142 f142 origin #12<#0..#0x13> [#12<#0..#0x13>→#1[0, 5, 1]] -> #153
+    + f143 f143 origin #13<#1..#1x2> [#13<#1..#1x2>→#12<#0..#0x2>[0, 3, 0]] -> #154
+    + f144 f144 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [#15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#12<#0..#0x7>[0, 6, -1]] -> #155
+LASTEP image 48 (digit 9) | calls on the apex 12 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 48 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f145 f145 no origin [#56<#0..#0x3>→#56<#0..#0x3>[0, 1, 0]] cycle -> #156
+LASTEP image 49 (digit 3) | calls on the apex 18 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 49 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f146 f146 origin #13<#1..#1x2> [#13<#1..#1x2>→#12<#0..#0x1>[0, 3, 0]] -> #157
+LASTEP image 50 (digit 3) | calls on the apex 19 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 50 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f147 f147 origin #12<#0..#0x2> [#12<#0..#0x2>→#12<#0..#0x1>[0, 0, 1]] -> #158
+    + f148 f148 origin #45<#1..#0x0> [#45<#1..#0x0>→#18<#1..#1x1>[0, 1, -2]] -> #159
+    + f149 f149 origin #13<#1..#1x2> [#13<#1..#1x2>→#74<#12<#0..#0x1>..#0x0>[0, 0, 1]] -> #160
+LASTEP image 51 (digit 0) | calls on the apex 17 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 51 | started 2 | left 0 | changed 0 | joins 0 | moves 0
+    + f150 f150 origin #18<#1..#1x1> [#18<#1..#1x1>→#12<#0..#0x4>[0, 1, 1]] -> #161
+    + f151 f151 origin #61<#56<#0..#0x8>..#56<#0..#0x8>x2> [#61<#56<#0..#0x8>..#56<#0..#0x8>x2>→#15<#12<#0..#0x13>..#12<#0..#0x13>x1>[0, 0, 9]] -> #162
+LASTEP image 52 (digit 7) | calls on the apex 17 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 52 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f152 f152 origin #12<#0..#0x13> [#12<#0..#0x13>→#56<#0..#0x5>[0, 10, -6]] -> #163
+LASTEP image 53 (digit 4) | calls on the apex 16 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 53 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f153 f153 origin #12<#0..#0x6> [#12<#0..#0x6>→#1[0, 7, 0]] -> #164
+    + f154 f154 origin #1 [#1→#12<#0..#0x7>[0, 1, 0]] -> #165
+    + f155 f155 origin #13<#1..#1x4> [#13<#1..#1x4>→#12<#0..#0x2>[0, 5, 0]] -> #166
+LASTEP image 54 (digit 9) | calls on the apex 19 | bare pixels on the apex 3 | levels 3
+CHANGE episode 1 image 54 | started 2 | left 0 | changed 0 | joins 0 | moves 0
+    + f156 f156 origin #32<#1..#1x3> [#32<#1..#1x3>→#1[0, 0, 1]] -> #167
+    + f157 f157 origin #12<#0..#0x13> [#12<#0..#0x13>→#56<#0..#0x3>[0, 8, -4]] -> #168
+LASTEP image 55 (digit 8) | calls on the apex 18 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 55 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f158 f158 origin #1 [#1→#0[0, 0, 1]] -> #169
+    + f159 f159 origin #56<#0..#0x2> [#56<#0..#0x2>→#0[0, 1, 0]] -> #170
+    + f160 f160 origin #18<#1..#1x2> [#18<#1..#1x2>→#56<#0..#0x1>[0, 0, 3]] -> #171
+    + f161 f161 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x2> [#15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#12<#0..#0x1>[0, 5, 3]] -> #172
+LASTEP image 56 (digit 0) | calls on the apex 17 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 56 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f162 f162 origin #13<#1..#1x4> [#13<#1..#1x4>→#0[0, 5, 0]] -> #173
+    + f163 f163 origin #13<#1..#1x1> [#13<#1..#1x1>→#1[0, 0, 1]] -> #174
+    + f164 f164 origin #18<#1..#1x3> [#18<#1..#1x3>→#0[0, 0, 4]] -> #175
+    + f165 f165 origin #18<#1..#1x1> [#18<#1..#1x1>→#18<#1..#1x3>[0, 1, -3]] -> #176
+LASTEP image 57 (digit 9) | calls on the apex 14 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 57 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f166 f166 origin #1 [#1→#18<#1..#1x4>[0, 1, -4]] -> #177
+    + f167 f167 origin #32<#1..#1x1> [#32<#1..#1x1>→#0[0, 1, 0]] -> #178
+    + f168 f168 origin #12<#0..#0x13> [#12<#0..#0x13>→#56<#0..#0x6>[0, 9, -7]] -> #179
+    + f169 f169 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x3> [#15<#12<#0..#0x13>..#12<#0..#0x13>x3>→#61<#56<#0..#0x8>..#56<#0..#0x8>x3>[0, 10, 4]] -> #180
+LASTEP image 58 (digit 4) | calls on the apex 12 | bare pixels on the apex 0 | levels 4
+LASTEP image 59 (digit 1) | calls on the apex 14 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 59 | started 2 | left 0 | changed 0 | joins 0 | moves 0
+    + f170 f170 origin #56<#0..#0x4> [#56<#0..#0x4>→#1[0, 1, 5]] -> #181
+    + f171 f171 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [#15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#18<#1..#1x2>[0, 5, -3]] -> #182
+LASTEP image 60 (digit 4) | calls on the apex 17 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 60 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f172 f172 origin #12<#0..#0x9> [#12<#0..#0x9>→#18<#1..#1x1>[0, 10, 0]] -> #183
+LASTEP image 61 (digit 4) | calls on the apex 12 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 61 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f173 f173 origin #32<#1..#1x4> [#32<#1..#1x4>→#1[0, 3, -4]] -> #184
+    + f174 f174 origin #32<#1..#1x2> [#32<#1..#1x2>→#0[0, 1, -3]] -> #185
+    + f175 f175 origin #32<#1..#1x2> [#32<#1..#1x2>→#14<#1..#0x0>[0, 1, 0]] -> #186
+    + f176 f176 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x2> [#15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#12<#0..#0x7>[0, 6, -1]] -> #187
+    + f177 f177 origin #35<#12<#0..#0x5>..#12<#0..#0x4>x0> [#35<#12<#0..#0x5>..#12<#0..#0x4>x0>→#12<#0..#0x3>[0, 0, 2]] -> #188
+LASTEP image 62 (digit 6) | calls on the apex 16 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 62 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f178 f178 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [#15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#78<#56<#0..#0x9>..#56<#0..#0x9>x3>[0, 10, 2]] -> #189
+LASTEP image 63 (digit 0) | calls on the apex 19 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 63 | started 6 | left 0 | changed 0 | joins 0 | moves 0
+    + f179 f179 origin #0 [#0→#18<#1..#1x5>[0, 0, 1]] -> #190
+    + f180 f180 origin #32<#1..#1x6> [#32<#1..#1x6>→#1[0, 3, -1]] -> #191
+    + f181 f181 origin #12<#0..#0x4> [#12<#0..#0x4>→#1[0, 5, 0]] -> #192
+    + f182 f182 origin #56<#0..#0x2> [#56<#0..#0x2>→#18<#1..#1x1>[0, 0, 3]] -> #193
+    + f183 f183 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [#15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#13<#1..#1x4>[0, 3, -1]] -> #194
+    + f184 f184 origin #170<#56<#0..#0x2>..#0x0> [#170<#56<#0..#0x2>..#0x0>→#32<#1..#1x1>[0, 1, 1]] -> #195
+LASTEP image 64 (digit 4) | calls on the apex 18 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 64 | started 1 | left 1 | changed 0 | joins 0 | moves 0
+    + f185 f185 origin #56<#0..#0x2> [#56<#0..#0x2>→#56<#0..#0x4>[0, 1, -2]] -> #196
+    - f164 f164 origin #18<#1..#1x3> [#18<#1..#1x3>→#0[0, 0, 4]] -> #175
+LASTEP image 65 (digit 5) | calls on the apex 11 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 65 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f186 f186 origin #13<#1..#1x2> [#13<#1..#1x2>→#12<#0..#0x7>[0, 3, 0]] -> #197
+    + f187 f187 origin #12<#0..#0x5> [#12<#0..#0x5>→#18<#1..#1x1>[0, 5, 1]] -> #198
+    + f188 f188 origin #12<#0..#0x5> [#12<#0..#0x5>→#18<#1..#1x4>[0, 6, -3]] -> #199
+    + f189 f189 origin #13<#1..#1x1> [#13<#1..#1x1>→#12<#0..#0x4>[0, 2, 0]] -> #200
+    + f190 f190 origin #19<#12<#0..#0x2>..#12<#0..#0x2>x1> [#19<#12<#0..#0x2>..#12<#0..#0x2>x1>→#15<#12<#0..#0x13>..#12<#0..#0x13>x2>[0, 0, 2]] -> #201
+LASTEP image 66 (digit 6) | calls on the apex 20 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 66 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f191 f191 origin #1 [#1→#56<#0..#0x5>[0, 1, -6]] -> #202
+    + f192 f192 origin #1 [#1→#32<#1..#1x3>[0, 0, 1]] -> #203
+    + f193 f193 origin #12<#0..#0x13> [#12<#0..#0x13>→#56<#0..#0x5>[0, 4, 1]] -> #204
+    + f194 f194 origin #32<#1..#1x2> [#32<#1..#1x2>→#56<#0..#0x3>[0, 3, -3]] -> #205
+LASTEP image 67 (digit 1) | calls on the apex 10 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 67 | started 2 | left 0 | changed 0 | joins 0 | moves 0
+    + f195 f195 no origin [#56<#0..#0x7>→#56<#0..#0x7>[0, 1, 0]] cycle -> #206
+    + f196 f196 origin #56<#0..#0x2> [#56<#0..#0x2>→#18<#1..#1x3>[0, 0, 3]] -> #207
+LASTEP image 68 (digit 0) | calls on the apex 24 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 68 | started 4 | left 1 | changed 0 | joins 0 | moves 0
+    + f197 f197 origin #12<#0..#0x5> [#12<#0..#0x5>→#12<#0..#0x3>[0, 0, 1]] -> #208
+    + f198 f198 origin #12<#0..#0x3> [#12<#0..#0x3>→#12<#0..#0x5>[0, 0, 1]] -> #209
+    + f199 f199 origin #12<#0..#0x3> [#12<#0..#0x3>→#12<#0..#0x2>[0, 1, 1]] -> #210
+    + f200 f200 origin #13<#1..#1x3> [#13<#1..#1x3>→#12<#0..#0x3>[0, 4, 0]] -> #211
+    - f162 f162 origin #13<#1..#1x4> [#13<#1..#1x4>→#0[0, 5, 0]] -> #173
+LASTEP image 69 (digit 0) | calls on the apex 15 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 69 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f201 f201 origin #0 [#0→#18<#1..#1x3>[0, 1, 0]] -> #212
+    + f202 f202 origin #18<#1..#1x3> [#18<#1..#1x3>→#56<#0..#0x2>[0, 0, 4]] -> #213
+    + f203 f203 origin #12<#0..#0x3> [#12<#0..#0x3>→#19<#12<#0..#0x2>..#12<#0..#0x2>x1>[0, 1, -2]] -> #214
+LASTEP image 70 (digit 1) | calls on the apex 12 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 70 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f204 f204 origin #18<#1..#1x5> [#18<#1..#1x5>→#0[0, 0, 6]] -> #215
+LASTEP image 71 (digit 7) | calls on the apex 16 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 71 | started 4 | left 0 | changed 0 | joins 1 | moves 0
+    + f205 f205 origin #56<#0..#0x8> [#56<#0..#0x8>→#0[0, 1, 1]] -> #216
+    + f206 f206 origin #32<#1..#1x5> [#32<#1..#1x5>→#1[0, 4, -5] #32<#1..#1x5>→#12<#0..#0x7>[0, 1, 1]] -> #217
+    + f207 f207 origin #12<#0..#0x2> [#12<#0..#0x2>→#13<#1..#1x3>[0, 3, 0]] -> #218
+    + f208 f208 origin #12<#0..#0x7> [#12<#0..#0x7>→#30<#12<#0..#0x6>..#12<#0..#0x6>x1>[0, 1, -2]] -> #219
+LASTEP image 72 (digit 1) | calls on the apex 8 | bare pixels on the apex 0 | levels 3
+LASTEP image 73 (digit 6) | calls on the apex 19 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 73 | started 6 | left 0 | changed 0 | joins 0 | moves 0
+    + f209 f209 origin #0 [#0→#1[0, 1, 0]] -> #220
+    + f210 f210 origin #12<#0..#0x13> [#12<#0..#0x13>→#1[0, 8, 1]] -> #221
+    + f211 f211 origin #32<#1..#1x2> [#32<#1..#1x2>→#0[0, 2, -1]] -> #222
+    + f212 f212 origin #13<#1..#1x3> [#13<#1..#1x3>→#1[0, 2, -1]] -> #223
+    + f213 f213 origin #56<#0..#0x1> [#56<#0..#0x1>→#56<#0..#0x2>[0, 1, 2]] -> #224
+    + f214 f214 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x2> [#15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#78<#56<#0..#0x9>..#56<#0..#0x9>x2>[0, 11, -10]] -> #225
+LASTEP image 74 (digit 3) | calls on the apex 12 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 74 | started 3 | left 1 | changed 0 | joins 0 | moves 0
+    + f215 f215 origin #56<#0..#0x7> [#56<#0..#0x7>→#0[0, 1, 1]] -> #226
+    + f216 f216 origin #0 [#0→#56<#0..#0x4>[0, 1, -2]] -> #227
+    + f217 f217 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x2> [#15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#61<#56<#0..#0x8>..#56<#0..#0x8>x3>[0, 10, 3]] -> #228
+    - f204 f204 origin #18<#1..#1x5> [#18<#1..#1x5>→#0[0, 0, 6]] -> #215
+LASTEP image 75 (digit 0) | calls on the apex 15 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 75 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f218 f218 origin #32<#1..#1x5> [#32<#1..#1x5>→#1[0, 5, -4]] -> #229
+    + f219 f219 origin #18<#1..#1x2> [#18<#1..#1x2>→#0[0, 0, 3]] -> #230
+    + f220 f220 origin #0 [#0→#13<#1..#1x3>[0, 1, 0]] -> #231
+    + f221 f221 origin #32<#1..#1x4> [#32<#1..#1x4>→#32<#1..#1x1>[0, 2, -3]] -> #232
+    + f222 f222 origin #56<#0..#0x3> [#56<#0..#0x3>→#170<#56<#0..#0x2>..#0x0>[0, 1, 0]] -> #233
+LASTEP image 76 (digit 2) | calls on the apex 17 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 76 | started 4 | left 1 | changed 0 | joins 0 | moves 0
+    + f223 f223 origin #0 [#0→#56<#0..#0x8>[0, 1, 0]] -> #234
+    + f224 f224 origin #1 [#1→#56<#0..#0x7>[0, 1, 0]] -> #235
+    + f225 f225 origin #32<#1..#1x3> [#32<#1..#1x3>→#32<#1..#1x1>[0, 2, -3]] -> #236
+    + f226 f226 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [#15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#78<#56<#0..#0x9>..#56<#0..#0x9>x2>[0, 0, 2]] -> #56
+    - f216 f216 origin #0 [#0→#56<#0..#0x4>[0, 1, -2]] -> #227
+LASTEP image 77 (digit 1) | calls on the apex 9 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 77 | started 3 | left 0 | changed 1 | joins 0 | moves 0
+    + f227 f227 origin #0 [#0→#18<#1..#1x3>[0, 0, 1]] -> #237
+    + f228 f228 origin #56<#0..#0x5> [#56<#0..#0x5>→#56<#0..#0x3>[0, 1, 0]] -> #238
+    + f229 f229 origin #56<#0..#0x3> [#56<#0..#0x3>→#56<#0..#0x5>[0, 1, -2]] -> #239
+    ~ f22 f22 origin #18<#1..#1x2> [#18<#1..#1x2>→#1[0, 1, 0]] -> #34
+LASTEP image 78 (digit 1) | calls on the apex 12 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 78 | started 3 | left 1 | changed 0 | joins 0 | moves 0
+    + f230 f230 origin #56<#0..#0x8> [#56<#0..#0x8>→#56<#0..#0x6>[0, 1, 0]] -> #240
+    + f231 f231 origin #56<#0..#0x5> [#56<#0..#0x5>→#18<#1..#1x2>[0, 0, 6]] -> #241
+    + f232 f232 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [#15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#56<#0..#0x6>[0, 9, -7]] -> #242
+    - f174 f174 origin #32<#1..#1x2> [#32<#1..#1x2>→#0[0, 1, -3]] -> #185
+LASTEP image 79 (digit 7) | calls on the apex 15 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 79 | started 4 | left 1 | changed 0 | joins 0 | moves 0
+    + f233 f233 origin #12<#0..#0x8> [#12<#0..#0x8>→#12<#0..#0x7>[0, 1, -1]] -> #243
+    + f234 f234 origin #13<#1..#1x3> [#13<#1..#1x3>→#12<#0..#0x2>[0, 4, 0]] -> #244
+    + f235 f235 origin #32<#1..#1x2> [#32<#1..#1x2>→#56<#0..#0x2>[0, 1, -5]] -> #245
+    + f236 f236 origin #61<#56<#0..#0x8>..#56<#0..#0x8>x2> [#61<#56<#0..#0x8>..#56<#0..#0x8>x2>→#12<#0..#0x13>[0, 0, 9]] -> #246
+    - f227 f227 origin #0 [#0→#18<#1..#1x3>[0, 0, 1]] -> #237
+LASTEP image 80 (digit 9) | calls on the apex 19 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 80 | started 6 | left 0 | changed 0 | joins 0 | moves 0
+    + f237 f237 origin #12<#0..#0x13> [#12<#0..#0x13>→#12<#0..#0x2>[0, 11, 1]] -> #247
+    + f238 f238 origin #12<#0..#0x4> [#12<#0..#0x4>→#12<#0..#0x5>[0, 0, 1]] -> #248
+    + f239 f239 origin #13<#1..#1x2> [#13<#1..#1x2>→#12<#0..#0x4>[0, 3, 0]] -> #249
+    + f240 f240 origin #36<#1..#1x2> [#36<#1..#1x2>→#12<#0..#0x3>[0, 1, 0]] -> #250
+    + f241 f241 origin #18<#1..#1x2> [#18<#1..#1x2>→#12<#0..#0x2>[0, 1, 1]] -> #251
+    + f242 f242 origin #12<#0..#0x4> [#12<#0..#0x4>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 1, -2]] -> #252
+LASTEP image 81 (digit 0) | calls on the apex 18 | bare pixels on the apex 0 | levels 5
+CHANGE episode 1 image 81 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f243 f243 origin #56<#0..#0x3> [#56<#0..#0x3>→#0[0, 1, 0]] -> #253
+    + f244 f244 origin #56<#0..#0x6> [#56<#0..#0x6>→#1[0, 1, 6]] -> #254
+    + f245 f245 origin #116<#15<#12<#0..#0x13>..#12<#0..#0x13>x2>..#61<#56<#0..#0x8>..#56<#0..#0x8>x2>x0> [#116<#15<#12<#0..#0x13>..#12<#0..#0x13>x2>..#61<#56<#0..#0x8>..#56<#0..#0x8>x2>x0>→#162<#61<#56<#0..#0x8>..#56<#0..#0x8>x2>..#15<#12<#0..#0x13>..#12<#0..#0x13>x1>x0>[0, 0, 3]] -> #56
+LASTEP image 82 (digit 2) | calls on the apex 17 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 82 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f246 f246 origin #12<#0..#0x8> [#12<#0..#0x8>→#1[0, 9, -1]] -> #255
+    + f247 f247 origin #12<#0..#0x9> [#12<#0..#0x9>→#1[0, 10, 0]] -> #256
+    + f248 f248 origin #13<#1..#1x2> [#13<#1..#1x2>→#0[0, 2, 1]] -> #257
+LASTEP image 83 (digit 6) | calls on the apex 15 | bare pixels on the apex 1 | levels 5
+CHANGE episode 1 image 83 | started 3 | left 0 | changed 1 | joins 1 | moves 0
+    + f249 f249 origin #0 [#0→#18<#1..#1x3>[0, 0, 1]] -> #258
+    + f250 f250 origin #32<#1..#1x2> [#32<#1..#1x2>→#56<#0..#0x2>[0, 2, -1]] -> #259
+    + f251 f251 origin #56<#0..#0x3> [#56<#0..#0x3>→#195<#170<#56<#0..#0x2>..#0x0>..#32<#1..#1x1>x0>[0, 1, 0]] -> #260
+    ~ f159 f159 origin #56<#0..#0x2> [#56<#0..#0x2>→#0[0, 1, 0] #56<#0..#0x2>→#32<#1..#1x1>[0, 1, 1]] -> #170
+LASTEP image 84 (digit 7) | calls on the apex 12 | bare pixels on the apex 0 | levels 4
+LASTEP image 85 (digit 8) | calls on the apex 13 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 85 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f252 f252 origin #32<#1..#1x3> [#32<#1..#1x3>→#1[0, 2, -4]] -> #261
+    + f253 f253 origin #14<#1..#0x0> [#14<#1..#0x0>→#0[0, 2, -2]] -> #262
+    + f254 f254 origin #70<#0..#0x3> [#70<#0..#0x3>→#1[0, 3, -2]] -> #263
+    + f255 f255 origin #56<#0..#0x5> [#56<#0..#0x5>→#32<#1..#1x6>[0, 0, 6]] -> #264
+    + f256 f256 origin #32<#1..#1x2> [#32<#1..#1x2>→#87<#14<#1..#0x0>..#0x0>[0, 1, 0]] -> #265
+LASTEP image 86 (digit 3) | calls on the apex 18 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 86 | started 4 | left 1 | changed 0 | joins 0 | moves 0
+    + f257 f257 no origin [#12<#0..#0x9>→#12<#0..#0x9>[0, 0, 1]] cycle -> #266
+    + f258 f258 origin #0 [#0→#56<#0..#0x2>[0, 1, 0]] -> #267
+    + f259 f259 origin #12<#0..#0x6> [#12<#0..#0x6>→#12<#0..#0x13>[0, 0, 1]] -> #268
+    + f260 f260 origin #12<#0..#0x5> [#12<#0..#0x5>→#13<#1..#1x1>[0, 6, 0]] -> #269
+    - f215 f215 origin #56<#0..#0x7> [#56<#0..#0x7>→#0[0, 1, 1]] -> #226
+LASTEP image 87 (digit 9) | calls on the apex 14 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 87 | started 3 | left 0 | changed 1 | joins 0 | moves 0
+    + f261 f261 origin #56<#0..#0x4> [#56<#0..#0x4>→#32<#1..#1x2>[0, 1, 3]] -> #270
+    + f262 f262 origin #56<#0..#0x1> [#56<#0..#0x1>→#18<#1..#1x1>[0, 0, 2]] -> #271
+    + f263 f263 origin #12<#0..#0x13> [#12<#0..#0x13>→#61<#56<#0..#0x8>..#56<#0..#0x8>x2>[0, 11, -9]] -> #272
+    ~ f53 f53 origin #12<#0..#0x13> [#12<#0..#0x13>→#0[0, 6, -1]] -> #65
+LASTEP image 88 (digit 0) | calls on the apex 18 | bare pixels on the apex 1 | levels 4
+CHANGE episode 1 image 88 | started 3 | left 0 | changed 0 | joins 2 | moves 0
+    + f264 f264 origin #18<#1..#1x4> [#18<#1..#1x4>→#0[0, 1, 4] #18<#1..#1x4>→#18<#1..#1x1>[0, 1, 2] #18<#1..#1x4>→#56<#0..#0x4>[0, 1, -3]] -> #273
+    + f265 f265 origin #18<#1..#1x2> [#18<#1..#1x2>→#56<#0..#0x2>[0, 0, 3]] -> #274
+    + f266 f266 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [#15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#78<#56<#0..#0x9>..#56<#0..#0x9>x1>[0, 12, -10]] -> #275
+LASTEP image 89 (digit 4) | calls on the apex 20 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 89 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f267 f267 origin #0 [#0→#1[0, 1, 1]] -> #276
+    + f268 f268 origin #12<#0..#0x9> [#12<#0..#0x9>→#12<#0..#0x2>[0, 7, 1]] -> #277
+    + f269 f269 origin #56<#0..#0x5> [#56<#0..#0x5>→#56<#0..#0x7>[0, 1, -2]] -> #278
+    + f270 f270 origin #18<#1..#1x2> [#18<#1..#1x2>→#56<#0..#0x4>[0, 0, 3]] -> #279
+    + f271 f271 origin #32<#1..#1x2> [#32<#1..#1x2>→#14<#1..#0x0>[0, 0, 1]] -> #280
+LASTEP image 90 (digit 6) | calls on the apex 18 | bare pixels on the apex 0 | levels 5
+CHANGE episode 1 image 90 | started 6 | left 0 | changed 0 | joins 0 | moves 0
+    + f272 f272 origin #32<#1..#1x5> [#32<#1..#1x5>→#1[0, 1, 0]] -> #281
+    + f273 f273 origin #56<#0..#0x5> [#56<#0..#0x5>→#1[0, 0, 6]] -> #282
+    + f274 f274 origin #12<#0..#0x13> [#12<#0..#0x13>→#56<#0..#0x4>[0, 10, 1]] -> #283
+    + f275 f275 origin #12<#0..#0x4> [#12<#0..#0x4>→#12<#0..#0x2>[0, 0, 1]] -> #284
+    + f276 f276 no origin [#56<#0..#0x2>→#56<#0..#0x2>[0, 1, -1]] cycle -> #285
+    + f277 f277 origin #78<#56<#0..#0x9>..#56<#0..#0x9>x3> [#78<#56<#0..#0x9>..#56<#0..#0x9>x3>→#225<#15<#12<#0..#0x13>..#12<#0..#0x13>x2>..#78<#56<#0..#0x9>..#56<#0..#0x9>x2>x0>[0, 0, 10]] -> #286
+LASTEP image 91 (digit 7) | calls on the apex 14 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 91 | started 5 | left 0 | changed 0 | joins 0 | moves 0
+    + f278 f278 origin #0 [#0→#13<#1..#1x6>[0, 1, 0]] -> #287
+    + f279 f279 origin #56<#0..#0x5> [#56<#0..#0x5>→#56<#0..#0x4>[0, 1, 0]] -> #288
+    + f280 f280 origin #12<#0..#0x3> [#12<#0..#0x3>→#13<#1..#1x3>[0, 4, 0]] -> #289
+    + f281 f281 origin #13<#1..#1x2> [#13<#1..#1x2>→#56<#0..#0x3>[0, 2, 1]] -> #290
+    + f282 f282 origin #12<#0..#0x3> [#12<#0..#0x3>→#19<#12<#0..#0x2>..#12<#0..#0x2>x2>[0, 1, -3]] -> #291
+LASTEP image 92 (digit 4) | calls on the apex 14 | bare pixels on the apex 0 | levels 3
+CHANGE episode 1 image 92 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f283 f283 origin #1 [#1→#13<#1..#1x4>[0, 0, 1]] -> #292
+LASTEP image 93 (digit 6) | calls on the apex 15 | bare pixels on the apex 0 | levels 5
+CHANGE episode 1 image 93 | started 6 | left 0 | changed 0 | joins 0 | moves 0
+    + f284 f284 origin #32<#1..#1x3> [#32<#1..#1x3>→#1[0, 2, -3]] -> #293
+    + f285 f285 origin #13<#1..#1x4> [#13<#1..#1x4>→#12<#0..#0x1>[0, 5, 0]] -> #294
+    + f286 f286 origin #56<#0..#0x4> [#56<#0..#0x4>→#56<#0..#0x2>[0, 1, 0]] -> #295
+    + f287 f287 origin #56<#0..#0x4> [#56<#0..#0x4>→#18<#1..#1x1>[0, 0, 5]] -> #296
+    + f288 f288 origin #56<#0..#0x1> [#56<#0..#0x1>→#13<#1..#1x2>[0, 0, 2]] -> #297
+    + f289 f289 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [#15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#131<#15<#12<#0..#0x13>..#12<#0..#0x13>x2>..#61<#56<#0..#0x8>..#56<#0..#0x8>x2>x0>[0, 0, 11]] -> #298
+LASTEP image 94 (digit 8) | calls on the apex 13 | bare pixels on the apex 0 | levels 5
+CHANGE episode 1 image 94 | started 4 | left 1 | changed 0 | joins 0 | moves 0
+    + f290 f290 no origin [#0→#0[0, 1, 1]] cycle -> #299
+    + f291 f291 origin #1 [#1→#14<#1..#0x0>[0, 0, 1]] -> #300
+    + f292 f292 origin #32<#1..#1x4> [#32<#1..#1x4>→#56<#0..#0x3>[0, 4, -3]] -> #301
+    + f293 f293 origin #116<#15<#12<#0..#0x13>..#12<#0..#0x13>x2>..#61<#56<#0..#0x8>..#56<#0..#0x8>x2>x0> [#116<#15<#12<#0..#0x13>..#12<#0..#0x13>x2>..#61<#56<#0..#0x8>..#56<#0..#0x8>x2>x0>→#135<#61<#56<#0..#0x8>..#56<#0..#0x8>x3>..#15<#12<#0..#0x13>..#12<#0..#0x13>x1>x0>[0, 0, 3]] -> #56
+    - f278 f278 origin #0 [#0→#13<#1..#1x6>[0, 1, 0]] -> #287
+LASTEP image 95 (digit 0) | calls on the apex 14 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 95 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f294 f294 origin #0 [#0→#18<#1..#1x6>[0, 0, 1]] -> #302
+    + f295 f295 origin #56<#0..#0x4> [#56<#0..#0x4>→#56<#0..#0x3>[0, 1, 0]] -> #303
+    + f296 f296 origin #56<#0..#0x1> [#56<#0..#0x1>→#56<#0..#0x3>[0, 1, -2]] -> #304
+    + f297 f297 origin #78<#56<#0..#0x9>..#56<#0..#0x9>x3> [#78<#56<#0..#0x9>..#56<#0..#0x9>x3>→#15<#12<#0..#0x13>..#12<#0..#0x13>x1>[0, 0, 10]] -> #305
+LASTEP image 96 (digit 7) | calls on the apex 10 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 96 | started 4 | left 0 | changed 0 | joins 0 | moves 0
+    + f298 f298 origin #0 [#0→#13<#1..#1x1>[0, 0, 1]] -> #306
+    + f299 f299 origin #56<#0..#0x4> [#56<#0..#0x4>→#18<#1..#1x2>[0, 0, 5]] -> #307
+    + f300 f300 origin #56<#0..#0x1> [#56<#0..#0x1>→#18<#1..#1x3>[0, 0, 2]] -> #308
+    + f301 f301 origin #56<#0..#0x6> [#56<#0..#0x6>→#61<#56<#0..#0x8>..#56<#0..#0x8>x3>[0, 1, -2]] -> #309
+LASTEP image 97 (digit 8) | calls on the apex 14 | bare pixels on the apex 0 | levels 5
+CHANGE episode 1 image 97 | started 1 | left 0 | changed 0 | joins 0 | moves 0
+    + f302 f302 origin #56<#0..#0x4> [#56<#0..#0x4>→#76<#56<#0..#0x5>..#56<#0..#0x6>x0>[0, 1, -1]] -> #310
+LASTEP image 98 (digit 3) | calls on the apex 13 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 98 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f303 f303 origin #12<#0..#0x4> [#12<#0..#0x4>→#13<#1..#1x3>[0, 5, 0]] -> #311
+    + f304 f304 origin #12<#0..#0x7> [#12<#0..#0x7>→#12<#0..#0x8>[0, 0, 1]] -> #312
+    + f305 f305 origin #12<#0..#0x7> [#12<#0..#0x7>→#12<#0..#0x4>[0, 0, 1]] -> #313
+LASTEP image 99 (digit 1) | calls on the apex 9 | bare pixels on the apex 0 | levels 4
+CHANGE episode 1 image 99 | started 3 | left 0 | changed 0 | joins 0 | moves 0
+    + f306 f306 origin #56<#0..#0x5> [#56<#0..#0x5>→#56<#0..#0x2>[0, 1, 0]] -> #314
+    + f307 f307 origin #18<#1..#1x2> [#18<#1..#1x2>→#18<#1..#1x3>[0, 1, -3]] -> #315
+    + f308 f308 origin #61<#56<#0..#0x8>..#56<#0..#0x8>x4> [#61<#56<#0..#0x8>..#56<#0..#0x8>x4>→#15<#12<#0..#0x13>..#12<#0..#0x13>x1>[0, 0, 9]] -> #316
+EPISODE 1 | dictionary changed | functions 289 | right 19/100 | calls on the apex per image 16.3
+NEVERCALLED 0 of 289
+CLOSING weighed 0 joined 0 (from a function of more relations 0) | cycles at the end 27 of 289 | build joins the calls count would refuse 0 | largest such gain as a cycle - | weighs beyond every offset the rows hold 0 | weighs with neither end where the call stands 0 | weighs where one lap on cannot be worked out 0
+UNPAID 3 relations left a function because they did not pay there
+LIFTED TO THE STANDING CALL 2770 relations went to other calls than their direct coverers
+LIFT PASSED OVER 0 dropped weak calls, 0 calls aged off the board
+TWICE frames with an interneuron called more than once 514 | of those, a row holds another call of the same interneuron 327
+JOINSMOVES joins frame 7 time 0 | moves frame 0 time 0
+  train: 100 images | spoke 99 | right 19 (19.0% of all, 19.2% of spoken) | lessons 100 | apex/image 16.5 | neurons 297 functions 289
+  dictionary by (relations, nodes, cycle, has interneuron): {(1, 1, true, true): 27, (1, 2, false, true): 259, (2, 3, false, true): 2, (3, 4, false, true): 1}
+    f264 origin #18<#1..#1x4> [#18<#1..#1x4>→#0[0, 1, 4] #18<#1..#1x4>→#18<#1..#1x1>[0, 1, 2] #18<#1..#1x4>→#56<#0..#0x4>[0, 1, -3]] -> #273
+    f159 origin #56<#0..#0x2> [#56<#0..#0x2>→#0[0, 1, 0] #56<#0..#0x2>→#32<#1..#1x1>[0, 1, 1]] -> #170
+    f206 origin #32<#1..#1x5> [#32<#1..#1x5>→#1[0, 4, -5] #32<#1..#1x5>→#12<#0..#0x7>[0, 1, 1]] -> #217
+  test: 0 images | spoke 0 | right 0 (0.0%) | apex/image 0.0 | neurons 297 functions 289
+  confusion (row = digit, column = said):
+    0 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    1 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    2 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    3 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    4 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    5 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    6 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    7 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    8 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    9 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

@@ -1,0 +1,62 @@
+hollow:
+    BBBBB
+    B...B
+    B...B
+    B...B
+    BBBBB
+  hollow showing  1: said - | levels 2 | on the apex 4 | functions 2 | dictionary changed
+BARE showing 1: none
+  hollow showing  2: said 0 | levels 2 | on the apex 4 | functions 2 | dictionary same
+BARE showing 2: none
+  hollow showing  3: said 0 | levels 3 | on the apex 2 | functions 4 | dictionary changed
+  hollow showing  4: said 0 | levels 3 | on the apex 2 | functions 4 | dictionary same
+  hollow showing  5: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary changed
+  hollow showing  6: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing  7: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing  8: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing  9: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 10: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 11: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 12: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 13: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 14: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 15: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 16: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 17: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 18: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 19: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 20: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 21: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 22: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 23: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 24: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 25: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 26: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 27: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 28: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 29: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  hollow showing 30: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+BARE showing 30: none
+  on the apex: 1 calls, 0 bare pixels
+    level 3: 1 calls
+      #13<#14<#12<#0..#0x4>..#13<#0..#0x2>x0>..#15<#12<#0..#0x4>..#13<#0..#0x2>x0>x0> at (0, 0) | the call #13 of f1,f4 (from #14<#12<#0..#0x4>..#13<#0..#0x2>x0> to #15<#12<#0..#0x4>..#13<#0..#0x2>x0>, 0 laps) | f4 | covers [#14<#12<#0..#0x4>..#13<#0..#0x2>x0>@0,0 #15<#12<#0..#0x4>..#13<#0..#0x2>x0>@0,4] | stands for 16 pixels
+    relations between what stands on the apex: 0
+NEVERCALLED hollow 0 of 5
+CLOSING weighed 0 joined 0 (from a function of more relations 0) | cycles at the end 2 of 5 | build joins the calls count would refuse 0 | largest such gain as a cycle - | weighs beyond every offset the rows hold 0 | weighs with neither end where the call stands 0 | weighs where one lap on cannot be worked out 0
+UNPAID 0 relations left a function because they did not pay there
+LIFTED TO THE STANDING CALL 28 relations went to other calls than their direct coverers
+LIFT PASSED OVER 0 dropped weak calls, 0 calls aged off the board
+TWICE frames with an interneuron called more than once 60 | of those, a row holds another call of the same interneuron 0
+  hollow: the dictionary last changed at showing 5 (unchanged over the last 25 showings)
+  dictionary: 5 functions
+    f0: a cycle, no origin, interneuron #12
+      black sees black at (+1, +0)   [#0→#0[0, 1, 0]]
+    f1: a cycle, no origin, interneuron #13
+      black sees black at (+0, +1)   [#0→#0[0, 0, 1]]
+    f2: origin the call #12 of f0 (from black to black, 4 laps), interneuron #14
+      the call #12 of f0 (from black to black, 4 laps) sees the call #13 of f1,f4 (from black to black, 2 laps) at (+0, +1)   [#12<#0..#0x4>→#13<#0..#0x2>[0, 0, 1]]
+    f3: origin the call #12 of f0 (from black to black, 4 laps), interneuron #15
+      the call #12 of f0 (from black to black, 4 laps) sees the call #13 of f1,f4 (from black to black, 2 laps) at (+4, -3)   [#12<#0..#0x4>→#13<#0..#0x2>[0, 4, -3]]
+    f4: origin the call #14 of f2 (from #12<#0..#0x4> to #13<#0..#0x2>, 0 laps), interneuron #13
+      the call #14 of f2 (from #12<#0..#0x4> to #13<#0..#0x2>, 0 laps) sees the call #15 of f3 (from #12<#0..#0x4> to #13<#0..#0x2>, 0 laps) at (+0, +4)   [#14<#12<#0..#0x4>..#13<#0..#0x2>x0>→#15<#12<#0..#0x4>..#13<#0..#0x2>x0>[0, 0, 4]]
+dictionary: 5 functions, 5 edges | not at an end, would have left: 0 (strength below the threshold 0, worth alone above its contribution 0, to join another function 0) | relation at the origin left 0 (ties for the latest node 0)
