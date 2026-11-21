@@ -3,23 +3,28 @@
 # the timings from what it printed, keeps its result lines and compares them with the result lines of the output saved
 # in output/: "same" or "different" per benchmark, and the run time. Exits non-zero where any benchmark differs.
 # Only stdout is compared: stderr holds traces, which are no part of the results.
-# usage: benchmarks/run.sh [--record] [--only <name>] [--regions <R>] [--columns <C>] [mnist-data-dir]
+# usage: benchmarks/run.sh [--record] [--only <name>] [--regions <R>] [--columns <C>] [--flag <flag>]... [--out <dir>]
+#        [mnist-data-dir]
 #   mnist-data-dir  the four raw (gunzipped) MNIST idx files; default apps/mnist/data in this repository, where
 #                   they are downloaded from the mirror apps/mnist/jobs/download.js uses if they are not there
 #   --record        write each run's stripped output as the saved output instead of comparing
 #   --only <name>   run that benchmark alone
 #   --regions <R> --columns <C>   lay out each benchmark's dispatch so; one region of one column by default
+#   --flag <flag>   pass that flag to every benchmark, as `--flag --end-check=join`
+#   --out <dir>     write each run's output there instead of beside this script, in got/
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 core="$(cd "$here/.." && pwd)"
 repo="$(cd "$core/../.." && pwd)"
-record=0; only=""; layout=(); mn="$repo/apps/mnist/data"
+record=0; only=""; layout=(); out=""; mn="$repo/apps/mnist/data"
 while [ $# -gt 0 ]; do
   case "$1" in
     --record) record=1;;
     --only) only="$2"; shift;;
     --regions) layout+=("--regions=$2"); shift;;
     --columns) layout+=("--columns=$2"); shift;;
+    --flag) layout+=("$2"); shift;;
+    --out) out="$2"; shift;;
     *) mn="$1";;
   esac
   shift
@@ -35,7 +40,7 @@ done
 echo "building the examples"
 (cd "$core" && cargo build --release --examples 2>&1 | grep -E "^error" -A8) && exit 2
 bin="$core/../target/release/examples"
-exp="$here/output"; got="$here/got"
+exp="$here/output"; got="${out:-$here/got}"
 mkdir -p "$exp" "$got"
 
 # the timings a run prints, taken out: milliseconds, seconds at the end of a line, a line that is a time alone

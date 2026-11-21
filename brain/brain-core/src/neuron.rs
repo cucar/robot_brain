@@ -285,14 +285,23 @@ impl Neuron {
     /// counts it.
     pub fn add_followed(&mut self, viewer: ActRef, nbs: &[Nb]) -> bool {
         let Some(pos) = self.history.iter().rposition(|r| r.act == viewer) else { return false };
-        let before = read_keys(&self.history[pos]);
-        let row = &mut self.history[pos];
-        for nb in nbs { if !row.nbs.iter().any(|x| x.act == nb.act) { row.nbs.push(*nb); } }
-        let after = read_keys(&self.history[pos]);
-        let came: Vec<RelKey> = after.iter().filter(|k| !before.contains(k)).copied().collect();
-        let fr = self.history[pos].act.frame;
-        self.add_keys(&came, fr);
+        self.push_neighbors(pos, nbs);
         true
+    }
+
+    /// The row at `pos` takes each neighbor whose activation it does not hold yet, and the index counts each relation
+    /// the row did not hold before.
+    fn push_neighbors(&mut self, pos: usize, nbs: &[Nb]) {
+        let row = &mut self.history[pos];
+        let mut came: Vec<RelKey> = Vec::new();
+        for nb in nbs {
+            if row.nbs.iter().any(|x| x.act == nb.act) { continue; }
+            let key = (row.own, nb.sym, nb.off);
+            if !row.nbs.iter().any(|x| x.sym == nb.sym && x.off == nb.off) && !came.contains(&key) { came.push(key); }
+            row.nbs.push(*nb);
+        }
+        let fr = row.act.frame;
+        self.add_keys(&came, fr);
     }
 
     /// Write the frame's connections in order (R31, R33, R37).

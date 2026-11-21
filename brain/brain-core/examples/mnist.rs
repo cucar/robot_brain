@@ -242,12 +242,13 @@ fn main() {
     }
     // test: on a copy loaded with learning off, the machine's own answer runs, unrewarded, and nothing is taught
     if test_n > 0 {
-        let job = std::path::PathBuf::from(format!("{}/../target/mnist-test", env!("CARGO_MANIFEST_DIR")));
+        let job = std::path::PathBuf::from(format!("{}/../target/mnist-test-{}", env!("CARGO_MANIFEST_DIR"), std::process::id()));
         m.save(&job, "trained").unwrap();
         m.save_context(&job, "trained").unwrap();
         let mut t = Brain::new(h, Policy::events_to_actions(), regions, columns, false);
         t.load(&job, "trained").unwrap();
         t.load_context(&job, "trained").unwrap();
+        std::fs::remove_dir_all(&job).unwrap();
         m = t;
     }
     let t1 = Instant::now();

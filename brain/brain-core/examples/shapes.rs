@@ -201,12 +201,13 @@ fn main() {
             println!("  the dictionary last changed at round {}", last_change);
             report_dict(&m);
             // the test runs on a copy with learning off: the brain and its context saved, and loaded into a new brain
-            let job = std::path::PathBuf::from(format!("{}/../target/shapes-teach23", env!("CARGO_MANIFEST_DIR")));
+            let job = std::path::PathBuf::from(format!("{}/../target/shapes-teach23-{}", env!("CARGO_MANIFEST_DIR"), std::process::id()));
             m.save(&job, "trained").unwrap();
             m.save_context(&job, "trained").unwrap();
             let mut t = Brain::new(2048, Policy::events_to_actions(), regions, columns, false);
             t.load(&job, "trained").unwrap();
             t.load_context(&job, "trained").unwrap();
+            std::fs::remove_dir_all(&job).unwrap();
             for (name, i) in [("2", &two), ("3", &three)] {
                 let w = t.process_frame(&make_inputs(&e, i), vec![]);
                 let said = w.iter().find(|w| w.dim == e.dig).map(|w| w.bucket);
