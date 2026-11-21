@@ -42,29 +42,21 @@ Long-term plan, listed in implementation order.
 - During response phase: rewards based on matching the expected response
 
 ### Key architectural insight
-- Actions must behave exactly like events — they need to form patterns and infer what comes next
-- Executed actions get fed back as events (feedback loop): when I output character X, I should see it as input Y
-- This creates connections from action X to event Y — the foundation of action sequences
+- Actions are neurons like events: what ran is reported each frame, joins functions with the events around it, and
+  is chosen by connections and their estimates
+- Executed actions come back as what ran: when the brain says character X, the frame reports X as having run, and
+  what follows it is recorded on its connections — the foundation of action sequences
 - Actions are rewarded based on the sequences they produce
 
-### Migration: event-only text app → action-based
-- **Current state:** the text app (`apps/text`) is event-only — a single `text_char` *input* dim,
-  passthrough resolution 256, no actions, no rewards, no `learn()`. It predicts the next character
-  via the brain's *event* consensus (probability = strength-weighted voter share over the char dim).
-- **Target state:** add a `text_char_out` *action* dim alongside the `text_char_in` event dim, and
-  train with `learn()` (mirrors MNIST/stocks supervised wiring) so each voter→char connection carries
-  a smoothed posterior.
+### From the text app to a chatbot
+- **Now:** the text app (`apps/text`) is event-only: one channel with a `letter` event dimension of 256 values, no
+  actions, no rewards. Each frame the brain infers the next letter as the event the most inferences name.
+- **Next:** give the text channel an action dimension (`say`) beside its letter event, and reward what it says.
 - **The two inferences become distinct and both useful:**
-  - **Event inference** = "what am I *expected* to say at this moment" — the predicted next character
-    from the stream (passive expectation).
-  - **Action inference** = "what do I *want* to say at this moment" — the character the brain chooses
-    to emit (active intent). Executed actions feed back as events per the feedback loop above.
-- **Consensus:** the action side wants **democratic** consensus (strength-weighted mean expected
-  reward, argmax) — the natural fit for picking a single best character. **NB does not apply** until
-  this reframing lands (it needs per-voter posteriors that only the action/reward path produces), and
-  even then it is a poor fit for correlated temporal voters except on near-deterministic text.
-- **Until the reframing lands, the text app is unaffected by the `--consensus` brain option** — that
-  flag only switches the action path, and event-only text has no action votes.
+  - **Event inference** = "what am I *expected* to say at this moment": the next character the most inferences name
+    (passive expectation).
+  - **Action inference** = "what do I *want* to say at this moment": the character with the largest estimate (active
+    intent). The character it says comes back as what ran.
 
 ### Math as text
 - Same text channel handles arithmetic
@@ -97,8 +89,8 @@ Long-term plan, listed in implementation order.
 - Different data streams may have conflicting patterns that shouldn't interfere
 
 ### Relationship to existing architecture
-- Current multi-channel (e.g., 30 stocks) already runs in parallel but shares pattern space
-- This extends to true isolation where needed — separate pattern spaces for separate data streams
+- Current multi-channel (e.g., 10 stocks) already runs in one brain but shares one dictionary
+- This extends to true isolation where needed — separate dictionaries for separate data streams
 - Merge/transfer between isolated memories as a deliberate operation
 
 ---
@@ -107,11 +99,12 @@ Long-term plan, listed in implementation order.
 
 ### Core approach
 - Reference: https://claude.ai/share/5ac65464-6293-4cad-9683-07f0bd135644
-- Under the single-dimension-per-base-neuron rule, each (x, y) screen position becomes its own dimension (e.g. `pixel_12_5`), and the base neuron carries `{dimension: pixel_x_y, value: brightness}`
-- Color (grayscale 0–256 to start) is the value; for RGB, each channel becomes its own dimension family (`pixel_x_y_r`, `_g`, `_b`)
-- 100×100 grayscale camera = 10,000 dimensions × 256 values = ~2.5M possible base neurons
-- No explicit relationships between inputs — the brain forms them via temporal prediction models
-- Starts with MNIST-like approach and scales from there
+- A camera is one channel laid out over two spatial axes, x and y, as MNIST is now; each pixel reports its value in the
+  channel's event dimension, at its position
+- Color (grayscale to start) is the value; for RGB, one event dimension per color, or one channel per color
+- The brain relates pixels by their offsets in space and time; a base neuron sees its neighbors one position away, and
+  each level of functions sees one position beyond what its function covers
+- Starts with the MNIST approach and scales from there
 
 ### Biological reference
 - Inputs: 130M cells in retina + optic nerve
@@ -129,16 +122,6 @@ Long-term plan, listed in implementation order.
 - How to build a complete picture from small frames
 - How to build depth perception from 2 eyes
 
-### Spatial processing (spatio-temporal pooling)
-- Channel emits one base neuron per pixel as `{dimension: pixel_x_y, value: brightness}` (or per-color-channel variant for RGB)
-- Brain activates neurons corresponding to differences between these per-pixel dimensions
-- Position is encoded structurally in the dimension name; brightness is the value — no multi-dim packing
-- This is done BEFORE temporal recognition — spatial level processing within same frame and age
-- Two-level processing: spatial levels and temporal levels
-- For spatial pooling, add x and y distances to connections table alongside temporal distance
-- Each neuron has 8 spatial connections (neighborhood)
-- Apply peak/pattern detection recursively based on spatial distances
-
 ### Value encoding (applies to all channels)
 - Channels should NOT do encoding like slope categorization or discretization
 - Brain should automatically convert:
@@ -150,7 +133,6 @@ Long-term plan, listed in implementation order.
 - Open question: rounding/bucketing/discretization of differences — maybe a hyperparameter (difference match threshold)
 - Consider: absolute neurons (with coordinates) vs relative neurons (representing connections between absolute neurons)
 - Dynamic discretization using mean and variance matching
-- Associative pooling — may not be used for temporal pooling (distance=0 not used) but likely useful for spatial pooling
 
 ### Training
 - Video data: teach to focus on moving objects (evolutionary priority — watch out for moving things)
@@ -183,32 +165,31 @@ Long-term plan, listed in implementation order.
 
 Distribute across multiple machines for large-scale workloads.
 
-### Add MPI layer for inter-column communication
-- Each MPI rank runs one `Region`
-- MPI messages: vote broadcasts, neuron migration, consensus sync
+### Add MPI layer for inter-region communication
+- Each MPI rank runs one `Region` and its columns
+- Every access to a neuron is already a batch call the thalamus fans out over the regions, with the results back in
+  the order the tasks came (activate, write lifts, count relations, connect, infer, decommission): over MPI each batch
+  becomes one message out and one back per rank
 - Use `rsmpi` crate for Rust MPI bindings
 
-### Neuron metadata storage for MPI
-- Each MPI rank's Region holds full metadata for its own neurons
-- Read-only cache of metadata for foreign neurons it has connections to
-- Cache populated on creation — when a new neuron is created, the creating rank broadcasts its metadata once via MPI
-- No ongoing synchronization needed since all metadata is immutable after creation
-- Lookup interface unchanged (`get_channel(neuron_id)`, etc.) — only backing storage is distributed
+### Neuron facts for MPI
+- The thalamus holds the registry of each neuron's fixed facts (kind, dimension, value, channel, axes), the dictionary
+  and the board; these stay on rank 0
+- Each rank holds the neurons themselves: their histories, relation indexes and connections
+- The facts never change after a neuron is created, so nothing needs synchronizing beyond the batches
 
-### Global consensus protocol
-- Each column produces local vote aggregation
-- MPI AllReduce or custom gather for global consensus
-- Actions executed by rank 0 (or designated I/O rank)
+### Selection
+- Each rank returns its neurons' inferences in the infer batch
+- Expansion and resolution run on rank 0, which outputs the actions and the events inferred
 
 ### Neuron partitioning and migration
-- Sensory neurons assigned to columns by channel/dimension hash
-- Pattern neurons live on same column as parent
+- Neurons assigned to columns by id
 - Migration protocol for rebalancing load across columns
 
 ### MPI transport optimization
-- levelContext is passed to every neuron.processFrame call in dispatchFrame. In-process that's a free reference; over MPI it serializes N times
-- The transport layer should broadcast it once per (level, frame) and let workers reference by handle
-- This belongs in the MPI shim, not the core files — current code is correct for that future
+- What a batch hands every neuron alike should be broadcast once per batch and referenced by handle, not serialized
+  once per neuron
+- This belongs in the MPI shim, not the core files
 
 ---
 
@@ -221,9 +202,9 @@ Expose the Rust core to Python for broader adoption.
 - Pythonic API matching the Node.js wrapper patterns
 - Build and publish to PyPI via maturin
 
-### Python channel interface
-- Python equivalent of Channel base class
-- Example: stock channel in Python
+### Python job interface
+- Python equivalent of the Job class (`robot-brain`): declare channels, run frames, save and load
+- Example: the stock trading job in Python
 
 ---
 
@@ -232,22 +213,6 @@ Expose the Rust core to Python for broader adoption.
 The largest remaining architectural component. A second organ — the **executor** — that operates on cortical neurons in parallel with the cortex's own perception/action loop. Implements long-term memory, thinking-as-action, and offline policy improvement.
 
 See: [Hippocampus Design and Implementation Plan](./hippocampus.md)
-
-### Summary
-
-Robot Brain is a dual-system architecture. **Cortex splits reality into patterns; hippocampus groups patterns to generalize.**
-
-* **One substrate, two operators.** Storage is always cortical. The hippocampus is the executor — it does not hold moments, it mints them.
-* **Moment and class neurons live in cortical columns** alongside sensory and pattern neurons, addressed via the same thalamic id↔property bus. A moment is a tight-tolerance cortical pattern neuron minted in one shot from a salient frame; a class is a looser-tolerance neuron grouping similar moments.
-* **Thinkability = reachability by the executor.** A neuron is thinkable iff the hippocampus can reach it — not a property of the neuron's location or kind.
-* **Selective minting** via z-scored reward and prediction error — only salient frames produce moments. Novelty is not an input.
-* **Hippocampus runs at a faster clock** than the cortex, executing many experiment frames per cortex frame.
-* **Decided actions, not probabilistic ones.** Sensory and pattern neurons accumulate statistical action votes. Moment and class neurons carry *decided* actions written by the hippocampus after experimentation. When activated, a decided vote dominates probabilistic votes for the same action slot.
-* **Action writeback closes the loop.** Experiment conclusions are written directly onto the moment (or class) neuron whose context they apply to. From then on, that neuron fires reflexively on context match and votes its decided action into cortex's action selection. **System 2 outputs become System 1 reflexes.** This is the architectural substrate for expertise development.
-* **Recall is by context, not by handle.** The executor's primitive is "drive a partial context and let cortex pattern-complete."
-* **Heterarchy at the moment layer** — one cortical neuron can be inside many moments and many classes; one moment can be a child of many classes.
-* **Single-track experiments first; parallel later.** Phase 1 uses a stack (branching = push, terminate = pop, higher-priority think-actions interrupt). Concurrent experiment pools are deferred to Phase 9.
-* **Same death ledger, different aging.** Moment and class neurons decay on their own timelines (classes slower than moments), but use one shared ledger.
 
 ### Generalized replay and thinking
 
@@ -269,19 +234,8 @@ This is the architectural commitment that separates Robot Brain from sequence-mo
 
 Built on hippocampal indexing theory (Teyler & DiScenna 1986; Teyler & Rudy 2007), complementary learning systems (McClelland et al. 1995), Mattar & Daw's expected-value-of-backup model (2018), and Kahneman dual-process theory implemented as architecture rather than metaphor.
 
-### Implementation phases
-
-1. Hippocampus skeleton with parallel-clock plumbing — moment and class neuron kinds wired into existing columns, decided-action writeback verified end-to-end
-2. Salience module and selective minting (z-scored reward and prediction error)
-3. Class formation (online agglomerative weighted Jaccard, multi-level hierarchy)
-4. Temporal moment graph and basic replay
-5. Counterfactual experiments via class siblings, decided-action writeback to moment/class neurons
-6. Involuntary forecast pass (per-frame context-driven recall)
-7. Voluntary think-actions and metacognitive reward learning (when to think)
-8. Sleep/idle consolidation
-9. (Deferred) Parallel experiment pool
-
-Full details, neuron-kind specifications, executor operations, decided-vs-probabilistic vote semantics, testing strategy, and open questions in the [design document](./hippocampus.md).
+The design, its neuron kinds, the executor's operations and its implementation phases are in the
+[design document](./hippocampus.md).
 
 ---
 
@@ -313,14 +267,14 @@ References:
 ## Debugging Tools
 
 ### Problem
-- When printing a pattern, we should show it with its ancestors (which need to be active)
-- Each node carries exponentially more sensory neurons as you go up the levels, representing different branches
+- When printing a call, we should show what it covers, down to the base activations
+- Each call covers more base activations as you go up the levels, along different branches
 - Not clear how to present this concisely
 
 ### Ideas
-- Tree visualization of active pattern chains (sensory → level 1 → level 2)
-- Collapse branches that share common sensory roots
-- Highlight which dimensions each level added to the prediction
+- Tree visualization of the calls on the apex and what each covers (base → level 1 → level 2)
+- Collapse branches that share common base activations
+- Highlight which relations each level added
 
 Reference: https://claude.ai/share/e319c25b-5323-4313-adf2-d1720e068b16
 

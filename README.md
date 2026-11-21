@@ -1,43 +1,53 @@
 # Robot Brain
 
-A hierarchical temporal neural network that learns patterns from raw sequential data, builds its own neuron hierarchy on demand, and makes predictions through a voting mechanism inspired by how neurons reach consensus.
+A machine that detects patterns in space and time and gives each pattern that keeps recurring a neuron of its own.
+Those neurons are symbols too, so the patterns they form get neurons in turn, level by level, and what the machine
+sees comes to be stated more and more briefly. Every neuron also remembers what followed it and what reward that
+earned; each frame, the neurons that describe the present say what usually comes next and how well it paid, and the
+machine acts on the best estimate.
 
-No training epochs. No backpropagation. No labeled data.
+No backpropagation, no gradients, no training epochs: it learns online, one frame at a time, from what it observes,
+what ran and what it earned.
 
-You feed it streams of events — stock prices, text characters, sensor data — and it self-organizes. Neurons form, compete, decay, and die. The ones that make good predictions survive.
-
-The brain core is implemented in Rust (with Rayon multi-threading) and exposed to Node.js via N-API. Python bindings are planned.
+The algorithm is **Universal Compression with Actions and Rewards (UCAR)**, specified in
+[docs/algorithm.md](docs/algorithm.md). The brain core is implemented in Rust (with Rayon multi-threading) and exposed
+to Node.js via N-API.
 
 ## How It Works
 
-The brain is a **prediction machine**. Every neuron exists to predict what fires alongside it (in space) and what comes next (in time). Learning happens when predictions fail.
+**The world** reports, each frame, a value for each dimension that fires: events (what is observed) and actions (what
+ran), grouped into channels, at positions in time and, for images, in space. Rewards arrive with a frame and are scoped
+to the action channels and the span of frames they pay.
 
-Processing is **spatio-temporal**. Each frame runs two phases: **spatial processing** over inputs that co-fire in the same frame (distance 0 — e.g. neighboring pixels, co-moving stocks), and **temporal processing** over sequences across frames (distance ≥ 1 — what predicts what N frames later). Each builds its own hierarchy of patterns.
+**Every symbol is a neuron.** Every activation of a neuron is a node of a graph, and every relation between two
+activations, one at an offset from the other in time and space together, is an edge. The graph holds offsets, never
+coordinates, so a pattern learned at one position is known everywhere.
 
-### The Core Loop
+**Compression names what recurs.** The machine groups edges that keep recurring into **functions**, graphs over
+neurons, and names each with an **interneuron**. From then on the name stands where the graph recurs: a **call**, one
+activation of the interneuron. Interneurons are nodes like any other, so the next level groups them in turn, and the
+**dictionary** is a hierarchy of named graphs. A function is taken where it saves more than it costs; costs are counted
+in edges.
 
-Each frame, the brain:
+**The apex is the situation.** What no call covers stands on the apex: the machine's state at a frame.
 
-1. **Observes** — receives events from input channels (prices, characters, pixels, etc.)
-2. **Activates** — finds or creates neurons for the observations
-3. **Recognizes** — checks if learned patterns match: **spatial** patterns (inputs co-firing this frame) and **temporal** patterns (sequences across frames)
-4. **Learns connections** — strengthens links between neurons that co-fire (spatial, distance 0) and that follow one another (temporal, distance ≥ 1)
-5. **Learns from errors** — when a confident prediction fails, creates a correction pattern to remember the context — in the spatial or temporal hierarchy, whichever erred
-6. **Votes** — all active neurons vote on what happens next, weighted by level and recency
-7. **Acts** — executes the winning action predictions through output channels
-8. **Decays** — unused connections and patterns weaken over time
+### The frame step
 
-### What Makes It Different
+Each frame, the machine:
 
-**Hierarchy emerges from failure.** When a neuron's prediction fails, a correction pattern is created one level up; when that pattern's prediction fails, another level forms above it. This happens independently in two hierarchies — a **spatial** one (same-frame co-activation) and a **temporal** one (cross-frame sequences). Abstraction isn't designed — it's earned.
+1. **Activates** the base neurons of what was observed and what ran; each refreshes its history and reports the
+   relations it holds to its neighbors.
+2. **Recognizes**, level by level: finds the functions the relations fit, elects the calls to keep, allocates
+   interneurons for new functions, and activates the calls, which cover what they stand for.
+3. **Connects**: each activation on the apex records what followed it, with the reward that earned, as connections.
+4. **Infers**: each neuron on the apex infers from its connections what follows it, each with an estimate (the
+   average reward per time seen).
+5. **Expands** inferred calls down to the base neurons they stand for, and **resolves** one winner per dimension: in an
+   action dimension the action with the largest estimate, in an event dimension the event the most inferences name.
+6. **Outputs** the actions and events it infers for the frame ahead. The world executes the actions and reports what
+   ran, what was observed and what it earned.
 
-**Voting enables consensus.** There's no central controller. Every active neuron contributes its prediction, weighted by its level in the hierarchy and how recently it was activated. Higher-level patterns carry more weight because they represent more context.
-
-**Patterns override connections.** When a pattern activates on a parent neuron, it suppresses the parent's raw connection predictions. This is how the brain corrects itself — patterns exist specifically to fix prediction errors.
-
-**Space and time are structural.** Every connection carries a distance. **Distance 0 is spatial** — inputs that fire together in the same frame (neighboring pixels, co-moving stocks), which the brain composes into a spatial feature hierarchy (the basis of the MNIST vision result). **Distance ≥ 1 is temporal** — a connection says "A predicts B at distance 3" (three frames later), making sequences first-class. The same machinery learns both: co-activation in space and prediction in time.
-
-**Multiple channels converge.** One data stream is mediocre. Many streams together is where it gets powerful — cross-modal patterns emerge naturally when multiple channels feed into the same brain.
+Interneurons whose last function has left the dictionary are decommissioned.
 
 ## Quick Start
 
@@ -72,18 +82,34 @@ cd brain
 
 ## Demos
 
-The brain is a general architecture; these demos apply it to three different domains. Each lives in its
-own document with runnable commands and expected output.
+The brain is a general architecture; these demos apply it to different domains. Each lives in its own document with
+runnable commands, expected output, and the benchmarks it holds.
 
-- **[MNIST Demos](docs/mnist-demos.md)** — vision and continual learning. A sensory-only digit
-  classifier reaching **96.44%** on the held-out test set with no backpropagation and no labels for
-  feature learning, plus class-incremental **Split-MNIST** where naive backprop nets collapse to ~20%.
-- **[Text Demos](docs/text-demos.md)** — character-sequence prediction, memorizing a text to ~99.96%
-  accuracy in two passes.
-- **[Stock & Time-Series Demos](docs/stock-demos.md)** — synthetic cycles, trading on ~21 years of real
-  price/volume data, and sequence memorization on market data.
+- **[Stock & Time-Series Demos](docs/stock-demos.md)** — laps that repeat, trading on ~21 years of real daily
+  history, and memorizing that history over several passes; with a random baseline to compare against.
+- **[Text Demos](docs/text-demos.md)** — character-sequence prediction on a text file and short texts.
+- **[MNIST Demos](docs/mnist-demos.md)** — handwritten digits: training, frozen evaluation, and class-incremental
+  Split-MNIST.
+- **[Shape Demos](docs/shape-demos.md)** — lines, squares, and a 2 and a 3 on a grid of pixels.
+- **[Tap Demos](docs/tap-demos.md)** — tap while go, then done: an action taught with rewards.
 
 Every demo runs on included data with no API key.
+
+## Benchmarks
+
+23 runs of the demos with fixed settings check that a change to the brain leaves its behavior the same. Each run's
+output is saved in [docs/benchmarks/output](docs/benchmarks/output), and each demo document describes its benchmarks.
+
+```bash
+node apps/benchmarks/run.js [--only <name>] [--record] [--regions <R>] [--columns <C>] [--flag <flag>]... [--out <folder>] [--data <folder>]
+```
+
+The runner builds the Node addon, runs each benchmark's job (listed in `apps/benchmarks/list.js`), strips the timings
+from what it printed, and compares its result lines with the saved stdout: `same` or `different` per benchmark, with
+its run time; it exits non-zero where any differs. `--record` saves each run's output as the expected one; `--flag`
+passes a flag to every job. The MNIST benchmarks read the data from `apps/mnist/data`, downloading it there if it is
+missing. Every benchmark gives the same output on every run: nothing in the brain reads the clock or a random number
+into a result.
 
 ## Architecture
 
@@ -91,106 +117,88 @@ Every demo runs on included data with no API key.
 graph TB
     subgraph Brain["🧠 Brain"]
         direction TB
-        subgraph Components[" "]
+        TH["<b>Thalamus</b><br/>registry of neurons<br/>dictionary<br/>board"]
+        subgraph Regions["Regions"]
             direction LR
-            TH["<b>Thalamus</b><br/>neuron registry<br/>channel mgmt<br/>fast lookup"]
-            MEM["<b>Memory</b><br/>active neurons<br/>inferred neurons<br/>sliding window"]
-            NEU["<b>Neuron</b><br/>connections<br/>children (patterns)<br/>voting & learning<br/>lazy decay"]
-            CTX["<b>Context</b><br/>pattern entries<br/>threshold matching<br/>merge logic"]
+            C1["<b>Column</b><br/>neurons:<br/>history, relations,<br/>connections"]
+            C2["<b>Column</b><br/>..."]
         end
-        subgraph Pipeline["Frame Processing Pipeline"]
+        TH -- "batch calls" --> Regions
+        subgraph Step["Frame step"]
             direction LR
-            P1["getFrame"] --> P2["age"] --> P3["activate"] --> P4["recognize<br/>patterns"]
-            P4 --> P5["learn<br/>connections"] --> P6["learn from<br/>errors"] --> P7["vote &<br/>infer"]
-            P7 --> P8["execute<br/>actions"] --> P9["decay"]
+            P1["activate"] --> P2["recognize<br/>(find, fit, elect,<br/>allocate, activate)"] --> P3["connect"] --> P4["infer"] --> P5["expand &<br/>resolve"] --> P6["output"]
         end
     end
-    CH1["📈 Stock"] -- "events →" --> Brain
+    CH1["📈 Stocks"] -- "events, actions, rewards →" --> Brain
     CH2["📝 Text"] -- "events →" --> Brain
-    CH3["👁 Vision"] -- "events →" --> Brain
-    CH4["🔊 Audio"] -- "events →" --> Brain
-    Brain -- "→ actions" --> CH1
-    Brain -- "→ actions" --> CH2
-    Brain -- "→ actions" --> CH3
-    Brain -- "→ actions" --> CH4
+    CH3["👁 Images"] -- "events →" --> Brain
+    Brain -- "→ actions and events inferred" --> CH1
+    Brain -- "→ events inferred" --> CH2
+    Brain -- "→ actions inferred" --> CH3
 ```
 
-### How Hierarchy Emerges
-
-```mermaid
-graph BT
-    subgraph L0["Level 0 — Base Neurons"]
-        A["A (event)"]
-        B["B (event)"]
-        C["C (event)"]
-        E["E (event)"]
-    end
-    subgraph L1["Level 1 — Patterns correct base errors"]
-        P1["Pattern₁<br/>parent: B<br/>context: A@2, D@1<br/>predicts: E"]
-    end
-    subgraph L2["Level 2 — Patterns correct pattern errors"]
-        P2["Pattern₂<br/>parent: Pattern₁<br/>context: Pattern₀@3<br/>predicts: C"]
-    end
-    A -- "dist=2" --> B
-    B -- "dist=1" --> C
-    B -- "dist=1" --> E
-    B -. "predicted C, got E → create" .-> P1
-    P1 -. "predicted E, got C → create" .-> P2
-```
+Every access to a neuron is a batch call the thalamus fans out over the columns, in parallel, with the results back in
+the order the tasks came.
 
 ### Core Components
 
-The brain core is a Rust workspace (`brain/`) with two crates:
+The brain core is a Rust workspace (`brain/`) with two crates, `brain-core` (the machine of
+[docs/algorithm.md](docs/algorithm.md)) and `brain-napi` (its Node.js addon):
 
-| Crate / File | Role | Description |
-|------|------|-------------|
-| `brain-core/src/brain.rs` | Orchestrator | Frame processing loop, pattern recognition, learning, inference |
-| `brain-core/src/thalamus.rs` | Relay station | Neuron registry, channel management, dimension mappings, quantizer |
-| `brain-core/src/region.rs` | Parallelism | Column partitioner, Rayon-based multi-threaded dispatch |
-| `brain-core/src/column.rs` | Worker | Owns a neuron partition, batch operations (becomes a thread in multi-column mode) |
-| `brain-core/src/memory.rs` | Short-term memory | Temporal sliding window of active neurons indexed by age |
-| `brain-core/src/neuron.rs` | Neuron | Connections, routing table, voting, learning, lazy decay |
-| `brain-core/src/context.rs` | Pattern context | Context representation, threshold-based matching, merge logic |
-| `brain-core/src/quantizer.rs` | Quantization | Scalar-to-bucket discretization (static, dynamic, passthrough) |
-| `brain-core/src/backup.rs` | Persistence | File-based backup/restore (CSVs under `<jobDir>/backups/<label>/`) |
-| `brain-core/src/diagnostics.rs` | Metrics | Accuracy tracking and continuous error measurement |
-| `brain-napi/` | N-API bridge | Exposes Rust Brain as a native Node.js addon |
-| `libs/node` | Node bindings | Re-exports the native addon + Job runner; published to npm as `robot-brain` |
+| Crate / File | Role |
+|------|------|
+| `brain-core/src/brain.rs` | The machine: frames, the levels of recognition, the frame step |
+| `brain-core/src/thalamus.rs` | The relay between the brain and its neurons: the registry of each neuron's fixed facts, the dictionary, the board, and every batch call fanned out over the columns |
+| `brain-core/src/region.rs` | Wraps the columns and fans their work out in parallel with Rayon |
+| `brain-core/src/column.rs` | Owns a partition of the neurons and runs the per-neuron work of a batch on them |
+| `brain-core/src/neuron.rs` | One neuron: its history of activations, a relation index over it, and its connections |
+| `brain-core/src/board.rs` | The board: the open activations, what fired them, and the relations their neurons returned at them |
+| `brain-core/src/dictionary.rs` | Functions and the dictionary |
+| `brain-core/src/recognize.rs` | Recognition: finding and fitting calls |
+| `brain-core/src/election.rs` | The election and allocation of the calls a level keeps |
+| `brain-core/src/cover.rs` | Covering: what a call has landed on |
+| `brain-core/src/connect.rs` | The connect and infer calls |
+| `brain-core/src/expansion.rs` | Expansion of an inferred call through its function |
+| `brain-core/src/selection.rs` | Selection: the output for the frame ahead |
+| `brain-core/src/death.rs` | Decommissioning neurons |
+| `brain-core/src/backup.rs` | Backups and contexts as folders of CSV files |
+| `brain-core/src/types.rs` | Shared types |
+| `brain-napi/` | The Node.js addon: the brain's options, channels, frames and reads |
+| `libs/node` | Re-exports the addon with the `Job` class and runner, as the `robot-brain` package |
 
 ### Apps
 
-Each app owns an encoder (and optionally a trader) that describes its channels to the brain via a spec (`registerChannelSpec`). The spec lists the channel's dimensions, their bucket resolutions, and whether each dim is an input (event) or output (action). Base neurons carry exactly one `(dimId, bucketId)` pair — multi-dim observations emit multiple base neurons per frame.
+Each job declares its channels with the brain: a channel has a name, an event dimension (what the world reports), an
+action dimension (what the brain can do), or both, each with its number of values, and the spatial axes it is laid out
+over. A frame reports one value per dimension the world fires, and rewards are scoped to channels.
 
-| App | Inputs (Events) | Outputs (Actions) | Reward Signal |
-|-----|-----------------|-------------------|---------------|
-| `apps/stocks` | One neuron per dim: price change, volume change | One neuron: position (own/out) | Profit/loss |
-| `apps/text`   | One neuron: character code | — | — |
-| `apps/db`     | MySQL utilities (import/export) — not a brain channel; loads/exports backup folders for analysis | — | — |
+| App | Events | Actions | Reward |
+|-----|--------|---------|--------|
+| `apps/stocks` | a stock's price move, up or down (and with `--volume`, its volume's move, as a channel of its own) | own or out | the move, signed by the action |
+| `apps/text` | a character | — | — |
+| `apps/mnist` | a pixel's value, over x and y | a digit | +1 for the image's digit |
+| `apps/shapes` | a pixel, black or white, over x and y | a digit | +1 for the digit taught |
+| `apps/tap` | a cue, go or stop | tap or done | +1 for the right action, −1 for a wrong one |
+| `apps/benchmarks` | runs every benchmark job and compares it with its saved output | | |
+| `apps/db` | MySQL utilities (import/export of backup folders) — not a brain channel | | |
 
 ### Jobs
 
-Jobs define learning scenarios — which encoders to register, how to configure them, and how to run episodes:
-
 | Job | Description |
 |-----|-------------|
-| `apps/stocks/jobs/test.js` | Multi-stock trading with historical data |
-| `apps/stocks/jobs/multi-channel-test.js` | Multi-symbol trading across shared brain |
-| `apps/stocks/jobs/synthetic-cycle-test.js` | Cycle-learning synthetic stress test |
-| `apps/stocks/jobs/synthetic-extended-test.js` | Extended cycle synthetic with optimality analysis |
-| `apps/text/jobs/test.js` | Character sequence memorization (default `data/test.txt`; override with `--file`) |
+| `apps/stocks/jobs/test.js` | Trading on real daily history, one channel per stock, with a trader |
+| `apps/stocks/jobs/multi-channel-test.js` | Several stocks on a lap that repeats (by default KGC, GLD and SPY, 12 bars, 20 laps) |
+| `apps/stocks/jobs/synthetic-extended-test.js` | One stock, KGC, on its 12-bar lap |
+| `apps/stocks/jobs/synthetic-cycle-test.js` | One stock on the six-bar lap +1 −2 −3 +2 +3 −1 |
+| `apps/text/jobs/test.js` | Character sequence prediction, from a file (`--file`) or the text given |
+| `apps/text/jobs/alternation.js` | A pair of letters alternating |
+| `apps/mnist/jobs/test.js` | MNIST training, and frozen evaluation of a saved brain |
+| `apps/mnist/jobs/download.js` | Downloads the MNIST files into `apps/mnist/data` |
+| `apps/shapes/jobs/shapes.js` | Lines, squares, and a 2 and a 3 |
+| `apps/tap/jobs/tap.js` | Tap while go, then done |
+| `apps/benchmarks/run.js` | Every benchmark, compared with its saved output |
 | `apps/db/import.js` | Bulk-load a backup folder into MySQL via `LOAD DATA LOCAL INFILE` |
 | `apps/db/export.js` | Dump current MySQL state to `./backups/<timestamp>/` in cwd |
-
-## Hyperparameters
-
-All hyperparameters are configured via the Brain constructor options and can be passed as command-line arguments:
-
-| Parameter | Default | Command Line Option | Description |
-|-----------|---------|---------------------|-------------|
-| `groupThreshold` | 0.5 | `--group-threshold` | The single grouping coefficient θ: recognition / reuse fires when context similarity ≥ θ, correction mints when error > 1 − θ. Shared by spatial and temporal. Under dynamic `groupMode`, this is the per-unit seed/fallback. |
-| `groupMode` | `'neutral'` | `--group-mode` | How the live grouping threshold adapts from each unit's error stats: `static` (pinned at the θ seed), `conservative` (mean + σ — generalize), `neutral` (mean), `aggressive` (mean − σ — memorize). Per-unit error rates tracked online via Welford's algorithm. |
-| `contextLength` | 10 | `--context-length` | Frames a neuron stays active in the sliding window |
-| `patternForgetRate` | 0.01 | `--forget-rate` | Pattern prediction decay rate per frame |
 
 ## Command Line Options
 
@@ -198,76 +206,65 @@ All hyperparameters are configured via the Brain constructor options and can be 
 node <path-to-job.js> [options]
 ```
 
+Every job takes:
+
 | Option | Description |
 |--------|-------------|
-| `--timeframe <tf>` | Data timeframe for stock jobs (e.g., `1D`, `1H`, `3H`, `1Min`) |
-| `--episodes <n>` | Number of training episodes |
-| `--holdout <n>` | Hold out last N rows from training |
-| `--offset <n>` | Skip first N rows |
+| `--save-brain <label>` | Save a CSV backup at the end (and on Ctrl+C) under `<jobDir>/backups/<label>/` |
+| `--load-brain <label>` | Load a labeled backup before the first frame; the backup carries the brain's channels |
+| `--save-context <label>` | Save the board (the open activations) at the end under `<jobDir>/contexts/<label>/` |
+| `--load-context <label>` | Load a saved board, into a brain loaded from the backup saved with it |
+| `--disable-learning` | Build the brain with learning off: it runs each frame as trained and changes nothing of itself |
+| `--regions <n>`, `--columns <n>` | The dispatch: regions, and columns per region (1 each by default) |
+
+The stock trading job (`apps/stocks/jobs/test.js`) also takes:
+
+| Option | Description |
+|--------|-------------|
 | `--symbols <list>` | Comma-separated list of stock tickers (e.g. `KGC,GLD,SPY`) |
-| `--max-positions <n>`| Maximum number of stock positions to hold at once |
-| `--max-price <n>` | Maximum price limit for stocks |
-| `--initial-capital <n>`| Starting capital for the portfolio |
-| `--transaction-cost <n>`| Simulated transaction cost per trade, as a percentage (e.g. `0.01` = 0.01%). Buys pay more, sells receive less. Reports total cost at end of run |
-| `--context-length <n>`| Sliding window size (frames) |
-| `--forget-rate <n>` | Pattern activation decay rate per frame |
-| `--group-threshold <n>`| Grouping coefficient θ (recognition ≥ θ, correction > 1 − θ); shared spatial + temporal |
-| `--group-mode <m>` | Grouping-threshold adaptation: `static`, `conservative`, `neutral`, `aggressive` |
-| `--debug` | Show detailed frame-by-frame processing |
-| `--diagnostic` | Show inference and conflict resolution details |
-| `--save-brain <label>` | Save a CSV backup on shutdown (incl. crash) under `<jobDir>/backups/<label>/` |
-| `--load-brain <label>` | Load a labeled backup before the first frame (errors if none exists) |
-| `--save-context <label>` | Save the memory context window on shutdown under `<jobDir>/contexts/<label>/` |
-| `--load-context <label>` | Restore the memory context window (active neurons, votes, rewards) |
-| `--save-session <label>` | Save trader/portfolio state on shutdown under `<jobDir>/sessions/<label>/` |
-| `--load-session <label>` | Restore trader/portfolio state (positions, cash, prices) |
-| `--no-summary` | Suppress per-frame summary output |
-| `--start <date>` | Start date for data (YYYY-MM-DD) |
-| `--end <date>` | End date for data (YYYY-MM-DD) |
-| `--random-baseline` | Skip the brain entirely; pick own/out + symbol uniformly at random (sanity-check baseline for stock test) |
+| `--episodes <n>` | Laps of the whole history (1 by default); the trader starts each lap with its starting capital |
+| `--max-positions <n>` | Maximum number of stocks owned at once (1 by default) |
+| `--transaction-cost <n>` | Cost per trade, as a percentage (e.g. `0.02` = 0.02%): buys pay more, sells receive less |
+| `--initial-capital <n>` | Starting cash of each lap (15000 by default) |
+| `--min-price <n>`, `--max-price <n>` | Where more stocks say own than there are positions, none priced outside these is bought (0 and 5000 by default) |
+| `--holdout <n>`, `--offset <n>` | Leave out the last N rows, or skip the first N |
+| `--max-frames <n>` | Use at most N bars |
+| `--timeframe <tf>` | Data timeframe folder (`1D` by default) |
+| `--volume` | Give each stock a second channel: its volume's move |
+| `--every <n>` | A progress line every N frames |
+
+The lap jobs (`multi-channel-test.js`, `synthetic-extended-test.js`) take `--laps <n>`, `--volume`, and for
+`multi-channel-test.js`, `--mode <one|two|three|three4|lap|lap65>` and `--all4`. The text job takes `--file <name>`,
+`--episodes <n>`, `--iterations <n>` and `--describe <letters>`; the MNIST job's options are in
+[docs/mnist-demos.md](docs/mnist-demos.md).
 
 ## Creating Custom Jobs
 
 ```javascript
 import { Job, runJob } from 'robot-brain';
-import { TextEncoder } from '../encoder.js';
 
-export default class MyJob extends Job {
+class MyJob extends Job {
 
-    constructor() {
-        super();
-        this.encoders = [];
+    // the brain's own options: history depth and neighborhood policy
+    getBrainOptions() {
+        return { h: 64, policy: 'allOn' };
     }
 
-    async initialize() {
-        const encoder = new TextEncoder('text');
-        const ids = this.brain.registerChannelSpec(encoder.getChannelSpec());
-        encoder.bindIds(ids);
-        this.encoders.push(encoder);
+    // declare the channels (skipped when a backup is loaded: it carries them)
+    declareChannels() {
+        this.brain.declareChannel({ name: 'text', event: { name: 'letter', resolution: 256 } });
     }
 
-    async configureChannels() {
-        for (const encoder of this.encoders) encoder.setData('hello world');
-    }
-
+    // run the frames: each reports what the world shows, and returns the brain's output for the frame ahead
     async executeJob() {
-        this.brain.resetContext();
-        while (true) {
-            const inputs = new Map();
-            let any = false;
-            for (const encoder of this.encoders) {
-                const frame = encoder.nextFrame();
-                if (!frame) continue;
-                any = true;
-                inputs.set(encoder.channelId, encoder.encode(frame));
-            }
-            if (!any) break;
-            this.brain.processFrame(inputs, new Map());
-        }
-    }
-
-    async showResults() {
-        console.log(this.brain.getEpisodeSummary());
+        const letter = this.channels.get('text').eventDim;
+        let right = 0;
+        const bytes = [...Buffer.from('hello world hello world', 'utf8')];
+        bytes.forEach((byte, i) => {
+            const winners = this.brain.processFrame([{ dim: letter, bucket: byte }], []);
+            if (winners.find(w => w.dim === letter)?.bucket === bytes[i + 1]) right++;
+        });
+        console.log(`right ${right}/${bytes.length - 1}`);
     }
 }
 
@@ -278,41 +275,41 @@ Save as `apps/text/jobs/my-job.js` and run with `node apps/text/jobs/my-job.js`.
 
 ## Documentation
 
-**Demos** (runnable, with expected output):
-
-- **[MNIST Demos](docs/mnist-demos.md)** — vision and class-incremental continual learning
-- **[Text Demos](docs/text-demos.md)** — character-sequence prediction
-- **[Stock & Time-Series Demos](docs/stock-demos.md)** — synthetic cycles, trading, sequence memorization
+**Demos** (runnable, with expected output): see [Demos](#demos) above.
 
 **Design**:
 
-- **[Architecture Design](docs/architecture.md)** — detailed design document covering voting, patterns, frame processing, and data structures
-- **[Error-Driven Learning](docs/error-driven-learning.md)** — deep dive on how patterns are created from prediction errors
-- **[Technical Foundations](docs/TECHNICAL_FOUNDATIONS.md)** — architectural ideas, biological inspirations, and comparison with conventional approaches
-- **[Hippocampus Design](docs/hippocampus.md)** — design and implementation plan for the hippocampal region (long-term memory, thinking, metacognition)
+- **[The Algorithm (UCAR)](docs/algorithm.md)** — the specification: definitions and rules of the machine
+- **[Architecture](docs/architecture.md)** — how the machine is built: the layers, the core's structure, the frame step, persistence
+- **Worked cases** — [the alternation](docs/algorithm-xy.md), [tap](docs/algorithm-loop.md),
+  [stocks](docs/algorithm-stocks.md), [MNIST](docs/algorithm-mnist.md), [text](docs/algorithm-text.md)
+- **[Remarks](docs/algorithm-remarks.md)** — the reasoning behind the rules
+- **[Hippocampus Design](docs/hippocampus.md)** — design for the hippocampal region (long-term memory, thinking,
+  metacognition)
 - **[Future Work](docs/future-work.md)** — Python bindings, MPI distribution, and other planned work
+- **[Prior Art](docs/prior-art.md)** — related work
 
 ## Persistence
 
-The brain runs entirely in-memory. Three labeled save/load pairs let you snapshot
-and resume across sessions:
+The brain runs entirely in-memory. Two labeled save/load pairs snapshot it and resume it across runs:
 
 | Pair | What it persists | Storage path |
 |------|-----------------|--------------|
-| `--save-brain` / `--load-brain` | Learned neurons and connections | `<jobDir>/backups/<label>/` |
-| `--save-context` / `--load-context` | Memory context window (active neurons, votes, rewards) | `<jobDir>/contexts/<label>/` |
-| `--save-session` / `--load-session` | Trader/portfolio state (positions, cash, prices) | `<jobDir>/sessions/<label>/` |
+| `--save-brain` / `--load-brain` | The neurons, their histories and connections, the dictionary, and the channels | `<jobDir>/backups/<label>/` |
+| `--save-context` / `--load-context` | The board: the open activations and what the brain keeps about them | `<jobDir>/contexts/<label>/` |
+
+`<jobDir>` is the job file's folder, then a folder named after the job file: for `apps/mnist/jobs/test.js`,
+`apps/mnist/jobs/test/`.
 
 ```bash
-# Run the first half and save everything
-node apps/stocks/jobs/test.js --episodes 1 --frames 1250 --save-brain day1 --save-context day1 --save-session day1
+# train on 14x14 images and save the brain
+node apps/mnist/jobs/test.js --image-size 14 --save-brain mnist14
 
-# Resume from where we left off
-node apps/stocks/jobs/test.js --episodes 1 --offset 1251 --load-brain day1 --load-context day1 --load-session day1
+# load it with learning off and evaluate it on the held-out test images
+node apps/mnist/jobs/test.js --image-size 14 --load-brain mnist14 --disable-learning --test-data
 ```
 
-Each save is a folder of CSVs under the label you choose. Brain backups are also
-written on crash (uncaught error / SIGINT) when `--save-brain` is set.
+Each save is a folder of CSVs under the label you choose.
 
 For MySQL-based analysis tooling — bulk-loading a backup into a queryable database
 or exporting MySQL state back to a backup folder — see the [`apps/db`](apps/db)

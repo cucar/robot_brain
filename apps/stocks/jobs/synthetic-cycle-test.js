@@ -1,223 +1,153 @@
-import { Job, runJob } from 'robot-brain';
-import { StockEncoder } from '../encoder.js';
-import { StockTrader } from '../trader.js';
+/**
+ * The six-bar lap (docs/algorithm-stocks.md §4): one instrument, `rise` and `fall`, the bars +1% −2% −3% +2% +3% −1%
+ * repeated, and the action `own` or `disown` for the bar ahead.
+ * Where the brain says nothing the world runs the right action.
+ * Each frame's reward is the bar's change signed by the action that stood over it, scoped to the channel and that one frame.
+ * Reports how often what the brain said was right, per bar of the lap, over the run and over the last ten laps,
+ * and the dictionary as it stands at the end.
+ *
+ * usage: node apps/stocks/jobs/synthetic-cycle-test.js [laps=150] [history depth=256] [--regions R] [--columns C]
+ */
+import { Job, runJob, readPositionals, formatFixed } from 'robot-brain';
+
+// the percent move of each bar of the lap
+const LAP = [1, -2, -3, 2, 3, -1];
+
+// the laps at the end whose score is kept apart
+const LAST_LAPS = 10;
 
 /**
- * Synthetic Cycle Test - Tests if brain can learn a perfectly repeating price pattern.
- * Uses the spec-based registration path: a single StockEncoder + StockTrader for the
- * synthetic TEST symbol, no Channel subclass. The cycle pattern is generated in memory
- * and handed to the encoder via setData() — no CSV is written.
+ * The move a bar's percent stands for: 1 up, 0 down.
  */
-export default class SyntheticCycleTest extends Job {
+function readMove(percent) {
+	return percent > 0 ? 1 : 0;
+}
+
+/**
+ * A share of a count as a percent with one decimal; nothing counted is 0%.
+ */
+function formatPercent(part, whole) {
+	return formatFixed(100 * part / Math.max(whole, 1), 1);
+}
+
+class SixBarLapJob extends Job {
 
 	constructor() {
 		super();
+		const [lapArg, depthArg] = readPositionals();
+		this.laps = lapArg ? parseInt(lapArg) : 150;
+		this.depth = depthArg ? parseInt(depthArg) : 256;
+		// per bar of the lap: right and wrong over the run, and over the last ten laps
+		this.right = Array(LAP.length).fill(0);
+		this.wrong = Array(LAP.length).fill(0);
+		this.rightLast = Array(LAP.length).fill(0);
+		this.wrongLast = Array(LAP.length).fill(0);
+		// the frames where the brain said nothing and the world ran the right action
+		this.lessons = 0;
+		// the first lap whose every bar the brain said right
+		this.firstLapAllRight = null;
+		// every inference the brain made, read against the bar it was made for
+		this.inferenceRight = 0;
+		this.inferences = 0;
+		// the dictionary's fingerprint as it last stood, read when the run starts, and the frame it last changed
+		this.lastDictionary = null;
+		this.lastChange = 0;
+	}
 
-		this.config = {
-			symbol: 'TEST',
-			// up (p7), down (p8), down, up, up (p5), down (p6)
-			cyclePattern: [0.009, -0.019, -0.029, 0.019, 0.029, -0.009], // +1%, -2%, -3%, +2%, +3%, -1%
-			cycleRepeats: 50,
-			startPrice: 100.00,
-			startVolume: 100000
-		};
+	getBrainOptions() {
+		return { h: this.depth, policy: 'eventsToActions' };
+	}
 
-		// Single-symbol arrays — kept as arrays to mirror the multi-symbol shape used by
-		// the other stocks jobs, so the runFrame loop is structurally identical.
-		this.encoders = [];
-		this.traders = [];
+	declareChannels() {
+		this.brain.declareChannel({ name: 'price', event: { name: 'move', resolution: 2 }, action: { name: 'position', resolution: 2 } });
 	}
 
 	/**
-	 * Create encoder + trader and register the encoder spec with the brain. The trader
-	 * borrows the same channelId so rewards/inputs/inferences key off a single number.
-	 */
-	async initialize() {
-		const encoder = new StockEncoder(this.config.symbol);
-		const trader = new StockTrader(this.config.symbol);
-		const { channelId, dimensionIds } = this.brain.registerChannelSpec(encoder.getChannelSpec());
-		encoder.bindIds({ channelId, dimensionIds });
-		trader.bindChannelId(channelId);
-		this.encoders.push(encoder);
-		this.traders.push(trader);
-	}
-
-	/**
-	 * Generate the cycled rows in memory and hand them to the encoder. One trailing row
-	 * is appended so the last cycle frame still has a "next" reading to compute change against.
-	 */
-	async configureChannels() {
-		const rows = [];
-		let currentPrice = this.config.startPrice;
-		let currentVolume = this.config.startVolume;
-		for (let cycle = 0; cycle < this.config.cycleRepeats; cycle++)
-			for (const priceChange of this.config.cyclePattern) {
-				rows.push({ price: currentPrice, volume: Math.round(currentVolume) });
-				currentPrice = currentPrice * (1 + priceChange);
-				currentVolume = currentVolume * (1 + priceChange);
-			}
-		rows.push({ price: currentPrice, volume: Math.round(currentVolume) });
-
-		for (const encoder of this.encoders) encoder.setData(rows);
-	}
-
-	async showStartupInfo() {
-		console.log(`🧪 Synthetic Cycle Test`);
-		console.log(`📊 Symbol: ${this.config.symbol}`);
-		console.log(`🔄 Pattern: ${this.config.cyclePattern.map(p => (p * 100).toFixed(0) + '%').join(' → ')}`);
-		console.log(`🔁 Cycles: ${this.config.cycleRepeats}`);
-		console.log(`📋 Total Frames: ${this.config.cycleRepeats * this.config.cyclePattern.length}`);
-		console.log('');
-	}
-
-	/**
-	 * Run a single continuous episode (no resetContext between cycles — the whole point
-	 * of this test is to verify learning across repeated patterns without episode boundaries).
+	 * Show every bar of every lap with the action that stands over it, and score what the brain said.
 	 */
 	async executeJob() {
-		console.log('🚀 Running single episode...\n');
-
-		StockTrader.resetPortfolio();
-		for (const trader of this.traders) trader.resetContext();
-		this.brain.resetAccuracyStats();
-
-		// Warmup: consume the first frame so the first processed frame has a full
-		// (previous, current) pair. Without this the first encoded frame is skipped
-		// (previousPrice=null) and the trader runs one frame behind the encoder.
-		for (let i = 0; i < this.encoders.length; i++) {
-			const frame = this.encoders[i].nextFrame();
-			if (frame) this.traders[i].setFrame(frame.price, frame.volume);
+		const price = this.channels.get('price');
+		this.lastDictionary = this.brain.readDictionaryFingerprint();
+		const total = this.laps * LAP.length;
+		let said = null;
+		let lapRight = 0;
+		for (let k = 0; k < total; k++) {
+			const bar = k % LAP.length;
+			const move = readMove(LAP[bar]);
+			const action = said ?? move;
+			if (bar === 0) lapRight = 0;
+			if (said === null) this.lessons++;
+			else lapRight += this.scoreBar(bar, action === move, k + LAST_LAPS * LAP.length >= total);
+			if (bar === LAP.length - 1 && lapRight === LAP.length && this.firstLapAllRight === null) this.firstLapAllRight = Math.floor(k / LAP.length) + 1;
+			said = this.runBar(price, move, action, LAP[bar]);
+			this.scoreInference(said, readMove(LAP[(k + 1) % LAP.length]));
+			this.noteDictionary(k + 1);
 		}
-
-		// One frame consumed by warmup, so main loop processes one fewer.
-		const expectedFrames = this.encoders[0].rows.length - 1;
-		const actions = [];
-		let frameCount = 0;
-
-		while (frameCount < expectedFrames) {
-
-			if (this.brain.debug) {
-				const cycleFrame = (frameCount % this.config.cyclePattern.length) + 1;
-				const expectedChange = this.config.cyclePattern[cycleFrame - 1];
-				console.log(`\n📍 Cycle Position: Frame ${cycleFrame}/${this.config.cyclePattern.length} (expecting ${(expectedChange * 100).toFixed(1)}% change)`);
-			}
-
-			const hasMore = await this.runFrame();
-			if (!hasMore) break;
-			frameCount++;
-
-			// Record the action the trader just took (if any). Captures the cycle-frame
-			// position so the results table can group actions by where they fell in the cycle.
-			const trader = this.traders[0];
-			if (trader.lastAction !== null) {
-				const actionName = trader.lastAction === 1 ? 'OWN' : 'OUT';
-				const priceChange = trader.previousPrice
-					? ((trader.currentPrice - trader.previousPrice) / trader.previousPrice * 100).toFixed(2) + '%'
-					: 'N/A';
-				const cycleFrame = (frameCount % this.config.cyclePattern.length) + 1;
-				actions.push({ frame: frameCount, cycleFrame, action: actionName, priceChange });
-			}
-
-			if (frameCount % 25 === 0) console.log(`\rFrame ${frameCount}/${expectedFrames}...`);
-			if (this.isShuttingDown) return;
-		}
-
-		console.log(`\r✅ Completed ${frameCount} frames\n`);
-		this.showTestResults(actions);
 	}
 
 	/**
-	 * One-frame pipeline: pull next frame per encoder, build inputs/rewards keyed by
-	 * channelId, ship to the brain, apply inferences back to traders, execute the
-	 * portfolio. Identical shape to the main stocks/jobs/test.js loop.
+	 * Count a bar the brain said, over the run and, near the end, over the last laps; 1 when it was right.
 	 */
-	async runFrame() {
-		const inputs = new Map();
-		const rewards = new Map();
-
-		// Pull next frame per encoder. Trader still gets price/volume even when the encoder
-		// produces no input, so reward/valuation math always sees the latest reading.
-		let anyFrames = false;
-		for (let i = 0; i < this.encoders.length; i++) {
-			const encoder = this.encoders[i];
-			const trader = this.traders[i];
-			const frame = encoder.nextFrame();
-			if (!frame) continue;
-			anyFrames = true;
-			trader.setFrame(frame.price, frame.volume);
-			const dimMap = encoder.encode(frame);
-			if (dimMap) inputs.set(encoder.channelId, dimMap);
+	scoreBar(bar, isRight, isInLastLaps) {
+		if (isRight) this.right[bar]++; else this.wrong[bar]++;
+		if (isInLastLaps) {
+			if (isRight) this.rightLast[bar]++; else this.wrongLast[bar]++;
 		}
-		if (!anyFrames) return false;
-
-		// Only report reward for traders that actually acted last frame — otherwise we'd
-		// credit/punish neurons that didn't drive the current state.
-		for (const trader of this.traders)
-			if (trader.lastAction !== null) rewards.set(trader.channelId, trader.getReward());
-
-		// Brain returns inferences keyed by channelId plus per-frame diagnostic data;
-		// `frame` flows straight to the renderer.
-		const frameResult = this.brain.processFrame(inputs, rewards);
-		for (const trader of this.traders)
-			trader.apply(frameResult.inferences.get(trader.channelId) ?? []);
-
-		// Coordinated portfolio execution: ranks OWN actions, sizes positions, runs
-		// sells-then-buys so cash is freed before it's spent.
-		await StockTrader.executePortfolio(this.traders);
-
-		// Host-side rendering happens here (after portfolio execution so the tail
-		// reflects the positions the traders just took).
-		this.renderFrame(frameResult);
-
-		// Step-debug pause between frames (no-op unless --wait is set).
-		await this.waitForUser('Press Enter to continue to next frame');
-
-		// Yield to the event loop so SIGINT can fire between frames.
-		await new Promise(resolve => setImmediate(resolve));
-		return true;
+		return isRight ? 1 : 0;
 	}
 
 	/**
-	 * Append per-symbol holdings + portfolio Cash/P&L to the base summary line.
-	 * The brain doesn't know about traders, so the tail lives here.
+	 * One frame: the move and the action that ran, rewarded by the bar's change; returns what the brain says next.
 	 */
-	getFrameSummaryTail() {
-		return StockTrader.getSummaryTail(this.traders);
+	runBar(price, move, action, percent) {
+		const inputs = [{ dim: price.eventDim, bucket: move }, { dim: price.actionDim, bucket: action }];
+		const reward = action === 1 ? percent : -percent;
+		const winners = this.brain.processFrame(inputs, [{ reward, channels: [price.channelId], frames: 1 }]);
+		return winners.find(w => w.dim === price.actionDim)?.bucket ?? null;
 	}
 
 	/**
-	 * Vote-dump formatters: encoders keyed by channelId. Each
-	 * StockEncoder provides formatActionLabel + formatCoordinates.
+	 * Count an inference against the move of the bar it was made for.
 	 */
-	getChannelFormatters() {
-		const map = new Map();
-		for (const encoder of this.encoders) map.set(encoder.channelId, encoder);
-		return map;
+	scoreInference(said, nextMove) {
+		if (said === null) return;
+		this.inferences++;
+		if (said === nextMove) this.inferenceRight++;
 	}
 
-	showTestResults(actions) {
-		console.log('='.repeat(60));
-		console.log('📊 Test Results');
-		console.log('='.repeat(60));
+	/**
+	 * Note the frame when the dictionary differs from how it last stood.
+	 */
+	noteDictionary(frame) {
+		const dictionary = this.brain.readDictionaryFingerprint();
+		if (dictionary === this.lastDictionary) return;
+		this.lastDictionary = dictionary;
+		this.lastChange = frame;
+	}
 
-		const summary = this.brain.getEpisodeSummary();
+	async showResults() {
+		console.log(`six-bar cycle: ${this.laps} laps, H=${this.depth}`);
+		this.printBars();
+		const descriptions = this.brain.getDictionary().map(f => f.description).sort();
+		console.log(`neurons ${this.brain.countLivingNeurons()} | functions ${descriptions.length}`);
+		if (descriptions.length <= 40) for (const description of descriptions) console.log(`  ${description}`);
+		console.log(`stocks inference ${this.inferenceRight}/${this.inferences}`);
+		console.log(`recognition: ${descriptions.length} functions at the end; the dictionary's functions and relations last changed at frame ${this.lastChange}`);
+	}
 
-		console.log(`\n🎯 Prediction Accuracy:`);
-		if (summary.accuracy.total > 0)
-			console.log(`   ${summary.accuracy.correct}/${summary.accuracy.total} = ${(summary.accuracy.correct / summary.accuracy.total * 100).toFixed(2)}%`);
-
-		const trader = this.traders[0];
-		const netProfit = StockTrader.getPortfolioProfit(this.traders);
-		console.log(`\n💰 Trading Performance:`);
-		console.log(`   Total Actions: ${actions.length}`);
-		console.log(`   Actual Trades: ${trader.totalTrades}`);
-		console.log(`   Net Profit: $${netProfit.toFixed(2)}`);
-		console.log(`   Position: ${trader.shares > 0 ? `OWN (${trader.shares} shares)` : 'OUT'}`);
-
-		console.log(`\n📋 Action History:`);
-		if (actions.length === 0) console.log('   No actions executed');
-		else for (const action of actions) console.log(`   Frame ${action.frame} (Cycle ${action.cycleFrame}): ${action.action} at ${action.priceChange}`);
+	/**
+	 * Each bar of the lap: right and wrong over the run and over the last laps; then the totals.
+	 */
+	printBars() {
+		console.log('bar | right | wrong | last 10 laps');
+		for (let i = 0; i < LAP.length; i++) {
+			console.log(`${String(i + 1).padStart(3)} | ${String(this.right[i]).padStart(5)} | ${String(this.wrong[i]).padStart(5)} | ${this.rightLast[i]}/${this.rightLast[i] + this.wrongLast[i]}`);
+		}
+		const sum = counts => counts.reduce((a, b) => a + b, 0);
+		const [right, wrong, rightLast, wrongLast] = [this.right, this.wrong, this.rightLast, this.wrongLast].map(sum);
+		const firstLap = this.firstLapAllRight ?? 'none';
+		console.log(`overall right ${right}/${right + wrong} = ${formatPercent(right, right + wrong)}% | last 10 laps ${rightLast}/${rightLast + wrongLast} = ${formatPercent(rightLast, rightLast + wrongLast)}% | lessons ${this.lessons} | first lap all right: ${firstLap}`);
 	}
 }
 
-await runJob(import.meta, SyntheticCycleTest);
+await runJob(import.meta, SixBarLapJob);

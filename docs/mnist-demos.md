@@ -1,17 +1,16 @@
 # MNIST Demos — Vision & Continual Learning
 
-A sensory-only MNIST classifier built on the brain's count-based voting. One channel per pixel position
-(retinotopic — 196 channels at 14×14, 784 at 28×28), all firing concurrently in a single frame per
-image. Supervision lands on a separate `digit` action channel via `brain.learn()`. With
-`patternForgetRate = 0` and a constant reward of 1, the per-voter consensus reduces to a Naive-Bayes
-posterior — every `learn()` call increments per-pixel-per-digit counts, and inference picks the argmax.
+Handwritten digits on the brain. The image is one channel laid out over x and y, with one event dimension: a
+pixel's value, black (0) or white (1) by default. Every pixel fires in every frame. A second channel, `digit`, holds
+ten digit actions. For the other demos see [stock-demos.md](stock-demos.md), [text-demos.md](text-demos.md),
+[shape-demos.md](shape-demos.md) and [tap-demos.md](tap-demos.md).
 
-**Why this matters.** The interesting result is not the raw accuracy — MNIST is solved by CNNs at
-99%+. It is *how* the accuracy is reached: **no backpropagation, no gradient-trained features, a single
-online pass, local/additive learning, and demand-driven conjunctive features** (the spatial hierarchy).
-Measured against same-preprocessing baselines, the architecture clears the jointly-trained linear model
-and approaches k-NN — with a fundamentally different mechanism — and then does **class-incremental
-continual learning** where naive backprop nets collapse.
+Each training image is two frames: the image, then the image's digit, run as a lesson and rewarded +1, scoped to the
+digit channel and that one frame. The context is reset after each image, so no image sees another. An evaluation
+loads a trained brain with learning off: each test image's answer runs, unrewarded, and nothing of the brain changes.
+
+There is no backpropagation and no gradient: the brain learns online, one image at a time, by naming the patterns
+of pixels that recur and recording which digit followed them.
 
 ---
 
@@ -23,231 +22,131 @@ Download the MNIST data first (one-time, ~11 MB into `apps/mnist/data/`):
 node apps/mnist/jobs/download.js
 ```
 
-This fetches the four standard IDX files (60k train, 10k test, gzipped) from Google's MNIST mirror.
-Files that already exist are skipped, so it's safe to re-run.
+This fetches the four standard IDX files (60k train, 10k test) from Google's MNIST mirror. Files that already exist
+are skipped, so it is safe to re-run.
 
 ### The train → evaluate workflow
 
-Training and evaluation are **separate runs**. First train and save the brain; the saved backup carries
-its own hyperparameters, so evaluation just loads it and turns learning off — no need to repeat the
-training flags. Evaluation is a true **frozen** pass: `--disable-learning` stops all weight updates *and*
-correction minting, and each test image is classified independently (no test-set adaptation, no leakage).
-
-The fastest meaningful run (~5–8 minutes, ~94.9% held-out) is 14×14:
+Training and evaluation are **separate runs**. First train and save the brain; then load it with learning off and
+evaluate it on the held-out test set. Each test image is classified on its own: no learning, no adaptation to the
+test set.
 
 ```bash
-# 1. Train one episode and save
-node apps/mnist/jobs/test.js --image-size 14 --buckets 2 --columns 20 --per-class 0 --episodes 1 --group-mode static --group-threshold 0.9 --save-brain mnist14
+# 1. Train on 500 images of each digit at 14x14, and save
+node apps/mnist/jobs/test.js --image-size 14 --per-class 500 --save-brain mnist14
 
-# 2. Evaluate on the held-out test set (frozen)
-node apps/mnist/jobs/test.js --image-size 14 --buckets 2 --columns 20 --per-class 0 --max-test-images 0 --load-brain mnist14 --disable-learning --test-data
+# 2. Evaluate on the 10,000 held-out test images, frozen
+node apps/mnist/jobs/test.js --image-size 14 --per-class 500 --load-brain mnist14 --disable-learning --test-data
 ```
 
-Drop `--test-data` to evaluate on the training set instead. The eval run prints
-`🧩 Restored brain config …` — confirmation that the matching thresholds were loaded from the backup
-rather than silently defaulting.
+The options:
 
----
-
-## The Naive-Bayes ladder
-
-The sensory-only app is Naive Bayes by construction, so the architecture must clear that floor *with a
-different mechanism* for the result to mean anything. Reference rungs on identical preprocessing:
-
-| Method | Held-out test |
-| --- | --- |
-| Naive Bayes (independent pixels) — the floor | ~83–84% |
-| Jointly-trained linear / logistic regression | ~92% |
-| **This architecture (28×28, radius 2)** | **96.44%** |
-| k-NN (pure template matching) | ~97% |
-| LeNet-5 (LeCun et al., 1998) | ~99.0% |
-| Modern CNN | ~99.7% |
-
-The interesting band is **matching/beating the jointly-trained linear model and approaching k-NN, with
-no joint training, no labels for feature learning, and no backprop.** The spatial hierarchy buying
-~13pp over pixel-only Naive Bayes is the evidence it is not "just NB with extra steps."
-
----
-
-## The accuracy ladder (joint training)
-
-Each rung is a single training episode, frozen held-out test on all 10k test images. Higher resolution
-and a real receptive field (`--radius 2`) drive the climb.
-
-| Config | Held-out test | Train pass | Model size |
-| --- | --- | --- | --- |
-| 14×14, radius 1 | 94.88% | ~5 min | 32K neurons |
-| 28×28, radius 1 | 94.93% | ~45 min | 112K neurons |
-| **28×28, radius 2** | **96.26%** (ep1) | ~1.5 hr | 2.16M neurons |
-
-The headline run (28×28, radius 2, merge 0.9):
-
-```bash
-node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --radius 2 --episodes 1 --group-mode static --group-threshold 0.9 --save-brain mnist28
-node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --radius 2 --max-test-images 0 --load-brain mnist28 --disable-learning --test-data
-```
+| option | |
+|---|---|
+| `--image-size <n>` | the image side: 28, 14, 7 or 4 (each block of the 28×28 image averaged); 7 by default |
+| `--buckets <n>` | a pixel's values; 2 by default (black and white: white where the block's mean reaches 128) |
+| `--per-class <n>` | train on the first n images of each digit, in the file's order; 0, by default, takes as many as the smallest digit has (5,421, so 54,210 images) |
+| `--train-images <n>` | train on the first n images instead, unbalanced |
+| `--no-balance` | train on the whole training set |
+| `--episodes <n>` | passes over the training images; 1 by default |
+| `--max-test-images <n>` | evaluate on at most n images; 0, by default, is all |
+| `--test-data` | evaluate on the held-out test set; without it, on the training images |
+| `--split` | Split-MNIST (below) |
 
 **Expected output of the evaluation run:**
 ```
-🧩 Restored brain config from backup 'mnist28': groupMode=static, groupThreshold=0.9
-  Episode 1/1: eval(test)=96.26% (9626/10000) | 0:96% 1:99% 2:93% 3:94% 4:95% 5:86% 6:96% 7:95% 8:87% 9:91%
-
-Results
-======================================================================
-  Final pass: 96.26% (9626/10000)
-  Confusion (rows = actual, cols = predicted):
-           0    1    2    3    4    5    6    7    8    9
-   0     963    0    1    1    0    3    7    1    4    0
-   1       0 1122    3    3    0    0    5    0    2    0
-   2       8    0  983    4    6    0    2    8   20    1
-   3       1    0    9  966    0    8    1   12    9    4
-   4       0    1    3    0  963    0    5    0    3    7
-   5       3    2    2    8    0  865    9    0    1    2
-   6       7    4    0    0    4   12  928    0    3    0
-   7       1   11   15    1    6    2    0  970    2   20
-   8      10    0    7   14    4    3    1    5  921    9
-   9      12    8    2   10   11    4    0   10    7  945
-======================================================================
+mnist: 14x14, black and white pixels, the brain loaded from mnist14 on 10000 test images, learning off
+  test: 10000 images | spoke 10000 | right 5667 (56.7%) | apex/image 10.9 | neurons 5670 functions 6595 | 121s
+  confusion (row = digit, column = said):
+    0 [688, 2, 40, 22, 18, 65, 45, 11, 77, 12]
+    1 [28, 865, 36, 11, 21, 58, 36, 31, 38, 11]
+    2 [144, 2, 391, 118, 21, 178, 72, 13, 83, 10]
+    3 [66, 3, 66, 502, 16, 193, 22, 7, 94, 41]
+    4 [81, 12, 29, 47, 459, 98, 47, 18, 85, 106]
+    5 [51, 2, 59, 125, 14, 499, 22, 12, 89, 19]
+    6 [78, 4, 63, 13, 18, 67, 641, 6, 58, 10]
+    7 [43, 15, 54, 41, 43, 85, 14, 492, 36, 205]
+    8 [93, 4, 33, 61, 31, 68, 44, 5, 576, 59]
+    9 [65, 7, 24, 29, 80, 77, 26, 64, 83, 554]
 ```
 
-**96.26% on the held-out test set from a single training pass** — a frozen, leakage-free evaluation
-(no learning, no minting, each image classified on its own). The spatial hierarchy reaches depth 3 at
-radius 2. Remaining confusion is between digits whose pixel marginals overlap (4/9, 7/9, 3/5).
+**56.7% on the held-out test set from 5,000 training images**, one pass. The 1s are read best (865 of 1,135); the 2s
+worst, often taken for 0, 3 or 5. Training takes about 3 minutes and the evaluation about 2.
 
-### Multiple episodes plateau
+---
 
-Resuming the saved brain to train further (`--load-brain mnist28 … --save-brain …`) moves the held-out
-number only marginally — the per-pixel counts saturate after one pass:
+## Results
 
-| Episode | Held-out test | Prequential train |
-| --- | --- | --- |
-| 1 | 96.26% | 92.85% |
-| **2** | **96.44%** | 98.52% |
-| 3 | 96.43% | 99.72% |
+Each row is one training pass, then a frozen evaluation on held-out test images. Training is kept to runs of a few
+minutes: the time per training image grows with the dictionary, at 14×14 from 24 ms an image at image 1,000 to 34 ms
+at image 5,000 and 61 ms at image 10,000.
 
-The training accuracy keeps climbing toward 100% (the model memorizing the training set harder), but the
-test number plateaus at **96.44%** — extra episodes do not generalize. Best joint result: **96.44%**.
+| image | training images | test images | held-out test | train pass | evaluation | functions |
+| --- | --- | --- | --- | --- | --- | --- |
+| 14×14 | 5,000 (500 per digit) | 10,000 | **56.7%** | 178 s | 121 s (12 ms an image) | 6,595 |
+| 28×28 | 1,000 (100 per digit) | 2,000 | **39.8%** | 144 s | 193 s (97 ms an image) | 2,582 |
 
-### Group threshold sweep (28×28, radius 2)
+```bash
+node apps/mnist/jobs/test.js --image-size 28 --per-class 100 --save-brain mnist28
+node apps/mnist/jobs/test.js --image-size 28 --per-class 100 --load-brain mnist28 --disable-learning --test-data --max-test-images 2000
+```
 
-Loosening the group threshold mints fewer corrections, trading a little accuracy for a much leaner model.
-The first four rows are each one **frozen, single-episode** train→eval pair at 28×28 radius 2 (recorded
-2026-06-22):
+The two rows differ in training size as well as in resolution, so they do not compare one to the other.
 
-| Group threshold | Held-out test | Neurons | Depth |
-|-----------------| --- | --- | --- |
-| 0.9             | 96.26% (ep1) | 2.16M | 3 |
-| 0.8             | 96.15% | 1.25M | 3 |
-| 0.7             | 95.68% | 0.61M | 3 |
-| 0.6             | 94.63% | 0.32M | 3 |
+Reference results on MNIST, for scale (each trained on the full 60,000 images):
 
-### Radius 3
-
-**Radius 3 at 28×28 — abandoned (2026-06-22).** 
-Two attempts at the radius-3 gate (group 0.9). 
-The model exhibits runaway growth: throughput fell from ~16 img/s to under 1 img/s (~0.85 img/s measured) 
-by the halfway point and kept decelerating, projecting a >12 hr single training pass. 
-Prequential accuracy was not pulling away from the radius-2 trajectory by anything close enough to justify the ~10× cost. 
-This is the runaway-depth behavior at high resolution.
-Planned to be revisited after neuron reuse project.  
-
-### Forget rate is not an accuracy lever here
-
-`patternForgetRate` (CLI: `--forget-rate`) decays the activation strength of **pattern neurons** — in
-MNIST, the **spatial corrections** — and reaps them when strength hits 0. It does **not** touch the
-Naive-Bayes counts, which live in reward-smoothed action connections on the base sensory neurons. So
-turning it up only erodes the spatial hierarchy that lifts accuracy above pixel-only NB. Measured at
-14×14 (`--per-class 200`):
-
-| `--forget-rate` | Surviving neurons | Minted (cum) | Train acc |
-| --- | --- | --- | --- |
-| 0 | 15,788 | 15,440 | 81.95% |
-| 0.05 | 1,790 | 79,906 | 68.85% |
-
-Rare corrections decay and die, then re-mint when their pixel pattern recurs (mint → die → re-mint
-**thrash** — 79,906 mints to end with 1,442 survivors), so accuracy drops and the model does not even
-compact usefully. **Keep `--forget-rate` at 0 for all joint runs.** Its real use is the
-continual-learning / capacity experiments — where controlled forgetting is the *subject*, and where it
-pairs with neuron-reuse (re-bind to the surviving neuron instead of re-minting) rather than running
-alone.
-
-### Inference cost (honest note)
-
-The architecture is *not* fast at inference, and cost grows with model size (not training-set size like
-k-NN). Measured single-threaded, current implementation:
-
-| Config | Per image | Model size |
-| --- | --- | --- |
-| 14×14 r1 | ~3.8 ms | 32K neurons |
-| 28×28 r1 | ~25 ms | 112K neurons |
-| 28×28 r2 | ~143 ms | 2.16M neurons |
-
-At MNIST scale k-NN is ~1–5 ms/query, so the brain is *slower* at the 96% config. The architectural
-differences from k-NN are that it does not store the dataset, learns online in a single pass, and learns
-continually — not that it infers faster.
+| Method | Held-out test |
+| --- | --- |
+| Naive Bayes (independent pixels) | ~83–84% |
+| Linear / logistic regression | ~92% |
+| k-NN (pure template matching) | ~97% |
+| LeNet-5 (LeCun et al., 1998) | ~99.0% |
+| Modern CNN | ~99.7% |
 
 ---
 
 ## Split-MNIST — class-incremental continual learning
 
-The **headline experiment for external positioning.** Standard 5 tasks × 2 classes
-(`{0,1} {2,3} {4,5} {6,7} {8,9}`, citing van de Ven & Tolias 2019 and Hsu et al. 2018), trained strictly
-sequentially — each task once, never revisited, **no task IDs**, the action space staying all 10 digits.
-After each task the brain is frozen and tested on the full 10-class test set to build a retention matrix.
-This is the hardest CL regime, where naive backprop nets and regularization methods (EWC) collapse to
-~20%.
+Five tasks of two digits each, `{0,1} {2,3} {4,5} {6,7} {8,9}` (citing van de Ven & Tolias 2019 and Hsu et al.
+2018), trained strictly in turn: each task once, never revisited, **no task given**, the answers always all ten
+digits. After each task a copy of the brain with learning off is tested on the test set, building a retention matrix:
+the share right on each task's test digits after each task.
 
 ```bash
-node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --radius 2 --split --group-mode static --group-threshold 0.9
+node apps/mnist/jobs/test.js --image-size 14 --split --per-class 1000 --max-test-images 2000
 ```
 
-A fast version (14×14, 200/class, 2k test) for a ~45-second illustration of the behavior:
-
-```
-Retention matrix  T0(01)   T1(23)   T2(45)   T3(67)   T4(89)
-  after T0        99.8%     0.0%     0.0%     0.0%     0.0%
-  after T1        97.3%    96.2%     0.0%     0.0%     0.0%
-  after T2        95.1%    89.9%    97.0%     0.0%     0.0%
-  after T3        93.4%    87.3%    95.2%    89.6%     0.0%
-  after T4        93.4%    84.0%    88.1%    84.3%    83.9%
-
-  Average accuracy after Task 4 (headline): 86.77%
-  Average forgetting: 6.52pp   (naive backprop floor ≈ ~20% avg acc)
-```
-
-The full 28×28 / radius-2 / full-data result:
+1,000 images of each digit (10,000 in all), 2,000 test images after each task:
 
 ```
 Retention matrix  T0(01)   T1(23)   T2(45)   T3(67)   T4(89)
-  after T0        99.9%     0.0%     0.0%     0.0%     0.0%
-  after T1        99.0%    98.6%     0.0%     0.0%     0.0%
-  after T2        98.9%    97.5%    99.0%     0.0%     0.0%
-  after T3        98.4%    96.5%    98.5%    96.7%     0.0%
-  after T4        98.1%    95.0%    97.2%    95.5%    95.0%
-
-  Average accuracy after Task 4 (headline): 96.15%
-  Forgetting per task (max-ever − final): T0:1.8pp T1:3.7pp T2:1.8pp T3:1.2pp T4:0.0pp
-  Average forgetting: 1.69pp  (naive backprop floor ≈ ~20% avg acc / heavy forgetting)
+  after T0        93.6%    0.0%     0.0%     0.0%     0.0%
+  after T1        66.0%    80.0%    0.0%     0.0%     0.0%
+  after T2        52.1%    50.0%    77.8%    0.0%     0.0%
+  after T3        43.8%    42.5%    51.8%    83.3%    0.0%
+  after T4        39.4%    29.1%    26.5%    50.7%    75.6%
+  Average accuracy after the last task: 44.26%
+  Forgetting per task (best less last): T0:54.3pp T1:50.9pp T2:51.3pp T3:32.6pp T4:0.0pp
+  Average forgetting: 37.82pp
 ```
 
-The behavior is textbook well-behaved class-incremental learning:
+- **The upper triangle is 0%**: the brain never answers a digit it has not yet been taught. No task-ID cheating.
+- **Each task is learned when it is taught**: 76–94% on its own digits right after its task.
+- **Earlier tasks fade as new ones arrive**: the first task falls from 93.6% to 39.4% after four more, and the average
+  forgetting is 37.82 points. After the last task the average is 44.26%: above the ~20% floor where naive backprop
+  nets land in this regime, well below joint training.
 
-- **Upper triangle is 0%** — the model never predicts a class it has not yet been trained on (10-way
-  action space, but no wiring to unseen digits). No task-ID cheating.
-- **Negligible forgetting** — 1.69pp average across tasks; task 0 drifts from 99.9% to 98.1% after
-  four more tasks arrive, rather than collapsing.
-- **96.15% average** — far above the ~20% floor where naive backprop lands in this regime, and
-  competitive with replay-based methods that store and replay old examples.
+The run takes about 9 minutes.
 
-**Literature baselines:** naive backprop ~20%, EWC / regularization methods
-~20–25%, replay-based methods 70–90% (but they store and replay old examples), joint-training upper
-bound ~98%. Citations: van de Ven & Tolias 2019; Hsu et al. 2018.
+**Literature baselines:** naive backprop ~20%, EWC / regularization methods ~20–25%, replay-based methods 70–90% (but
+they store and replay old examples), joint-training upper bound ~98%. Citations: van de Ven & Tolias 2019; Hsu et al.
+2018.
 
 ### Vanilla-MLP baseline — the contrast figure
 
-A plain 2-layer MLP run through the *identical* protocol makes the result concrete: standard SGD with no
-continual-learning machinery collapses, where the brain holds. It is a self-contained NumPy script (no
-torch, separate from the brain) reading the same gzipped IDX files:
+A plain 2-layer MLP run through the *identical* protocol shows the collapse standard SGD suffers with no
+continual-learning machinery. It is a self-contained NumPy script (no torch, separate from the brain) reading the same
+gzipped IDX files:
 
 ```bash
 python apps/mnist/jobs/split_mnist_mlp.py
@@ -268,18 +167,41 @@ Retention matrix  T0(0,1)   T1(2,3)   T2(4,5)   T3(6,7)   T4(8,9)
 The collapse: 94.5% (joint) -> 19.4% (sequential), a 75pp drop to the ~20% chance floor.
 ```
 
-The script trains the **same MLP twice** so the collapse has a ceiling to fall from: jointly on all 10
-classes shuffled together (**94.5%** — the upper bound), then class-incrementally two classes at a time.
-The diagonal tells the story — each task hits ~98–99% the moment it is trained (see the live value on its
-own diagonal), then drops to **0%** as the next task overwrites those weights. Only the most recent two
-classes survive, so the average sits at the ~20% chance floor. Place this next to the brain's matrix
-(96.15% average, 1.69pp forgetting): same protocol, same data, same 10-way output, *both architectures
-capable of ~95% jointly* — the only difference is the learning rule. That turns "we don't forget" into
-"we don't forget *where standard nets catastrophically do*."
+Each task hits ~98–99% the moment it is trained, then drops to **0%** as the next task overwrites those weights. The
+brain's earlier tasks fade too, but they do not drop to zero: after all five tasks its oldest task still stands at
+39.4%, where the MLP's stands at 0%.
 
-**Why it holds architecturally:** patterns formed for digits 0/1 have disjoint context fingerprints from
-2/3, so they don't fire — and aren't modified — during later tasks. The additive/local learning gives
-stability; the hierarchy gives accuracy. (The honest caveat for a paper: additive/instance-based learners
-sidestep catastrophic forgetting partly by construction, so the result should be baselined against k-NN
-and replay methods — not only against the naive-MLP collapse.)
+---
 
+## The MNIST benchmarks
+
+Six runs at 14×14 on the first training images in the file's order, each image taught, no test images. They are
+benchmarks (see [Benchmarks](../README.md#benchmarks)); their full outputs are saved in
+[benchmarks/output](benchmarks/output).
+
+```bash
+node apps/mnist/jobs/test.js --image-size 14 --train-images <n> --episodes <e>
+```
+
+| benchmark | training images × episodes | right | functions | the dictionary last changed | run time |
+|---|---|---|---|---|---|
+| `mnist-1x60` | 1 × 60 | 1/1 in the last episode; 59/60 over the run | 40 | episode 25 | 1.0 s |
+| `mnist-10x20` | 10 × 20 | 10/10 in the last episode; 187/200 over the run | 220 | episode 20 (still changing) | 3.4 s |
+| `mnist-10x300` | 10 × 300 | 10/10 in the last episode; 2,987/3,000 over the run | 229 | episode 298 | 56.7 s |
+| `mnist-100` | 100 × 1 | 19/100 | 289 | still changing | 1.8 s |
+| `mnist-255` | 255 × 1 | 96/255 | 641 | still changing | 5.2 s |
+| `mnist-1000` | 1,000 × 1 | 435/1,000 | 2,055 | still changing | 23.3 s |
+
+One image shown again and again is said right from the second episode on, and its dictionary settles at episode 25;
+ten images are all right from the third episode on. The saved outputs of all but `mnist-100` list the dictionary's largest functions with
+functions of equal size in another order than the job prints them (in `mnist-10x20` a different one of the tied
+functions takes the last place), so the runner reports them as `different` on those lines alone.
+
+The data are the four raw (gunzipped) idx files of the standard MNIST set; their MD5 sums:
+
+| file | MD5 |
+|---|---|
+| `train-images-idx3-ubyte` | `6bbc9ace898e44ae57da46a324031adb` |
+| `train-labels-idx1-ubyte` | `a25bea736e30d166cdddb491f175f624` |
+| `t10k-images-idx3-ubyte` | `2646ac647ad5339dbf082846283269ea` |
+| `t10k-labels-idx1-ubyte` | `27ae3e4e09519cfbb04c329615203637` |

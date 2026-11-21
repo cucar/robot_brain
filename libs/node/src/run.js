@@ -23,6 +23,21 @@ function readWholeNumber(argv, flag) {
 }
 
 /**
+ * A job's own flag: the value after it on the command line, or the fallback where it is absent.
+ */
+export function readFlag(flag, fallback = null) {
+	return readFlagValue(process.argv, flag) ?? fallback;
+}
+
+/**
+ * A job's own flag as a number, or the fallback where it is absent.
+ */
+export function readNumber(flag, fallback = null) {
+	const value = readFlagValue(process.argv, flag);
+	return value === null ? fallback : parseFloat(value);
+}
+
+/**
  * Read the flags every job takes into an options object.
  * `--regions R` and `--columns C` set the dispatch, `--disable-learning` builds the brain with learning off,
  * and `--save-brain`, `--load-brain`, `--save-context`, `--load-context` name a backup or a context by its label.

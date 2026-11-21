@@ -1,506 +1,159 @@
-# Brain Architecture Design Document
+# Architecture
 
-## Overview
-
-This document describes the architecture of an artificial intelligence system that learns cause and effect through prediction and error correction. The brain is fundamentally a **prediction machine** - every neuron and pattern exists to predict what fires alongside it (in space) and what comes next (in time).
-
-Processing is **spatio-temporal**. Each frame runs two phases over the active neurons: **spatial processing** over inputs that co-fire in the same frame (connection distance 0 — e.g. neighboring pixels, co-moving stocks), and **temporal processing** over sequences across frames (distance ≥ 1). Each builds its own hierarchy of correction patterns; the non-subsumed apex of spatial processing is handed off into temporal processing, so spatial features become tokens the temporal layer sequences over.
-
-## Core Principles
-
-### 1. Prediction is the Foundation
-The brain continuously predicts future events and actions. Learning occurs when predictions fail - these failures create structure that captures the context needed to make better predictions.
-
-### 2. Abstraction Emerges from Failure
-When a prediction fails, a **pattern** is created to remember the specific context where the failure occurred. Higher levels of abstraction don't exist by design - they emerge because lower levels made mistakes that needed correction.
-
-### 3. Parent Neurons are Decision Points
-A **parent neuron** is a neuron that has learned something. It encountered a situation where its simple connections weren't sufficient, so it created a pattern to remember "in THIS context, predict THAT instead."
-
-### 4. Cause and Effect Interweave
-Events predict events. Events predict actions. Patterns of events predict patterns. Actions feed back as observations. Two hierarchies dance together:
-- **Event hierarchy**: Learns what IS (passive, association-based)
-- **Action hierarchy**: Learns what to DO (active, trial-and-error)
-
-### 5. Distributed Cognition via Voting
-There's no central controller. Every active neuron and pattern contributes its vote. Intelligence emerges from consensus, weighted by level and temporal proximity.
-
-### 6. Space and Time are Structural
-Distance is built into every connection. **Distance 0 is spatial** — neurons that co-activate within the same frame (e.g. neighboring pixels). **Distance ≥ 1 is temporal** — neurons that follow one another across frames. Each frame the brain runs spatial processing (d=0 co-activation) and temporal processing (d>0 sequences), each maintaining its own hierarchy of correction patterns, with the spatial apex handed off into temporal processing. Space and time are first-class citizens, not afterthoughts.
+How the machine of [algorithm.md](algorithm.md) is built: the layers from the Rust core to the jobs, the structure the
+core runs on, where each part of the machine lives, and the step a frame goes through. The algorithm itself — what a
+function, a call, a relation or the apex is, and the rules that govern them — is in the specification; this document
+names the code that carries it out.
 
 ---
 
-## Implementation Architecture
+## The layers
 
-### Core Classes
+| Layer | Where | What it does |
+|---|---|---|
+| The core | `brain/brain-core` (Rust) | The machine: neurons, the dictionary, the board, the frame step |
+| The addon | `brain/brain-napi` (Rust, N-API) | Exposes the core to Node.js as the `Brain` class, with typed options, inputs, rewards and reads |
+| The library | `libs/node` (`robot-brain`) | Re-exports the addon, with the `Job` class and the runner every job uses |
+| The jobs | `apps/*/jobs` | Each declares its channels and runs its frames: stocks, text, MNIST, shapes, tap |
+| The benchmarks | `apps/benchmarks` | Runs 23 jobs with fixed settings and compares them with their saved outputs in `docs/benchmarks/output` |
 
-The system uses an **in-memory architecture** with CSV-based file persistence. The brain core is implemented in Rust with Rayon multi-threading:
-
-#### Brain (`brain-core/src/brain.rs`)
-Top-level orchestrator that coordinates all components:
-- Frame processing loop (`process_frame` is the single entry point per time step)
-- Voting consensus and inference
-- Context aging and activation
-- Delegates pattern recognition, connection learning, and error correction to Thalamus → Region → Column dispatch
-
-#### Thalamus (`brain-core/src/thalamus.rs`)
-Relay station for reference frame transfers (named after biological thalamus):
-- **Central metadata**: Neuron-to-coordinate, level, parent, and channel lookups
-- **Neuron lookup**: Fast coordinate-based lookup for sensory neurons
-- **Channel/dimension registries**: Manages channel specs and dimension-to-ID mappings
-- **Region tree**: Owns Region[R], each Region owns Column[C], each Column owns Neurons
-- **Death ledger**: Scheduled neuron deaths for lazy decay cleanup
-- **Quantizer**: Scalar-to-bucket discretization
-
-#### Region (`brain-core/src/region.rs`)
-Column partitioner and parallel dispatcher:
-- **Routing**: Partitions work items into per-column task lists by `neuron_id % C`
-- **Dispatch**: Hands each column its work and runs them in parallel via Rayon
-- **Collect**: Gathers results in column-index order
-
-#### Column (`brain-core/src/column.rs`)
-Owns a partition of Neuron instances:
-- **Batch operations**: Pattern recognition, connection learning, error correction, voting
-- **Exclusive ownership**: Each column owns its neurons — no locks needed during parallel dispatch
-
-#### Memory (`brain-core/src/memory.rs`)
-Temporal sliding window for short-term memory:
-- **Active neurons**: Keyed by activation frame number; age is derived as `frame_number - activation_frame`
-- **Inferred neurons**: Winning predictions from previous frame
-- **Level/age indexes**: Fast lookup by level and by age
-- **Aging**: Bumps frame counter and evicts expired entries (no per-neuron migration)
-
-#### Neuron (`brain-core/src/neuron.rs`)
-Unified struct for all neurons (sensory and pattern):
-- **Connections**: `Vec<FxHashMap<NeuronId, ConnectionData>>` indexed by distance — with lazy decay
-- **Routing table**: `FxHashMap<PatternId, RoutingEntry>` — child pattern contexts for context-specific predictions
-- **Voting**: Generates votes weighted by level and time
-- **Learning**: Creates connections and patterns from observations
-- **Lazy Decay**: Strengths decay continuously based on frames elapsed since last activation
-- **Note**: All neuron metadata (level, coordinates, channel, type, parent) is stored externally in Thalamus lookup tables. Neurons are pure data processors.
-
-#### Context (`brain-core/src/context/{spatial,temporal}.rs`)
-Pattern context representation and matching — one class per file (`SpatialContext`, `TemporalContext`):
-- **Entries**: `FxHashMap<NeuronId, FxHashMap<Distance, Strength>>` for O(1) lookup (spatial drops the distance dimension)
-- **Matching**: `match_observed` scores the Jaccard union `common / (common + missing + novel)`, identical for spatial and temporal; the caller passes the per-unit grouping threshold (see [error-driven-learning.md](./error-driven-learning.md))
-- **Merging**: Strengthens common, adds novel, weakens missing
-
-### Class Relationships
-
-```mermaid
-graph LR
-    Brain --> Thalamus
-    Brain --> Memory
-    Brain --> Diagnostics
-    Thalamus --> Region
-    Thalamus --> Quantizer
-    Region --> Column
-    Column --> Neuron
-    Neuron --> Context
-    Neuron -- "routing table" --> Neuron
-    Neuron -- "connections" --> Neuron
-```
+The addon is built with `brain/build.ps1` (or `build.sh`), which compiles `brain-napi` in release mode and copies the
+library to `brain/brain-napi/brain-napi.node`.
 
 ---
 
-## Events and Actions
+## The core's structure
 
-The brain uses a **single unified hierarchy** — events and actions share the same neuron types, the same pattern structure, and the same connection machinery. The differences are in how connections are updated and how winners are selected.
+```
+Brain
+ └── Thalamus ── registry, dictionary, board
+      └── Region × R ── Rayon, in parallel
+           └── Column × C
+                └── Neuron × n
+```
 
-### Connection Learning
+- **Brain** (`brain.rs`) runs the frame step. It holds the configuration (the history depth, the neighborhood and
+  action policies, whether it learns), the channels and dimensions, and the frame number.
+- **Thalamus** (`thalamus.rs`) is the relay between the brain and its neurons. It holds what the machine as a whole
+  keeps — the registry, the dictionary and the board — and every call that reaches a neuron.
+- **Region** (`region.rs`) wraps its columns and fans their work out in parallel with Rayon.
+- **Column** (`column.rs`) owns a partition of the neurons and runs the per-neuron work of a batch on them.
+- **Neuron** (`neuron.rs`) holds one neuron's history, relation index and connections.
 
-When a neuron is active at age > 0 and a new neuron appears at age 0:
-- Create or strengthen connection at distance = age
-- Reward updates via exponential smoothing (alpha = 1/strength)
+A neuron is routed by its id: to region `id % R`, then to column `id % C` within it. The layout is one region of one
+column by default; `--regions` and `--columns` set it.
 
-**Key difference**: Event connections are **weakened** when a predicted neuron doesn't appear (wrong prediction). Action connections are **never weakened** — the brain executes exactly one action per channel per frame, so any non-chosen action wasn't a wrong prediction, it just wasn't tried. Weakening it would collapse the brain onto whichever action it happened to try first and destroy exploration.
+### Batch calls
 
-### Error Correction (Pattern Creation)
+No code outside a neuron reaches into it. Every access is a **batch**: the thalamus groups the tasks by neuron, fans
+them out over the regions and columns, and returns the results in the order the tasks came. A neuron allotted since the
+last batch is created in its column before the next batch runs.
 
-Patterns are created only from **event prediction errors** — when a unit's Jaccard-union error over its predicted-vs-actual events exceeds its grouping correction threshold **E** (`= 1 − groupThreshold`, adapted per unit by `groupMode`; see [error-driven-learning.md](./error-driven-learning.md)). Recognition and correction are one operation read from opposite sides of the same threshold. Actions are filtered out of the error calculation entirely; they are judged by reward, not by hit/miss.
-
-When a pattern is created and the parent had action connections with **negative reward**, the brain injects an alternative action connection at neutral reward (0.0) — giving the brain something else to try next time without penalizing the original.
-
-### Winner Selection
-
-| Aspect | Events | Actions |
-|--------|--------|---------|
-| Scoring | Probability: strength / dimension total | Expected reward: weighted average |
-| Winner | Highest probability | Highest expected reward |
-| Connection weakening | Yes (wrong predictions) | Never |
-| Error correction trigger | Yes (Jaccard-union error > E) | No |
-| Negative reward handling | N/A | Inject alternative action at neutral reward |
-
-### Exploration
-
-When no action is inferred for a channel, the brain uses the channel's configured `defaultAction`. This builds connections between active neurons and the exploration action, enabling learning from exploration.
+| Call | What the neurons do |
+|---|---|
+| `activate_neurons` | write a row to their history for each activation, refresh the relation index, and return the relations they hold to their neighbors with their counts |
+| `write_lifts` | take relations lifted to a call onto the call's row |
+| `count_relations` | answer the counts grouping asks of them (how often a relation held, with and without another) |
+| `connect_neurons` | record what followed each activation, with the reward earned, on their connections |
+| `read_connections` | return their connections, for inference |
+| `decommission_neurons` | let a dead interneuron go, and forget what named it |
+| `inspect_neurons`, `export_neurons`, `import_neurons`, `count_connections` | reads for the jobs, and backup and restore |
 
 ---
 
-## Voting Architecture
+## Where the machine lives
 
-### Vote Collection
-
-All active neurons (at all levels) cast votes for what they predict will happen next.
-
-**Implementation** (inside `process_levels`, dispatched to each Column):
-1. Iterate through active neurons at ages 0 to contextLength-2
-2. Skip neurons with activated patterns (pattern override)
-3. Call `neuron.vote(age, timeDecay)` to get votes
-4. Save votes and context in memory for pattern learning
-5. Return all votes for consensus
-
-**Vote Generation** (`neuron.vote()`):
-- Get connections at distance = age + 1 (predicting next frame)
-- Weight each connection by level and time
-- Return array of {neuron, strength, reward, distance}
-
-### Pattern Override Rule
-
-When a pattern activates on a parent neuron, the parent's connection votes are suppressed.
-
-**Implementation**:
-- During pattern recognition, matched patterns are activated
-- `memory.activatePattern(pattern, parent, age)` sets `state.activatedPattern = pattern`
-- During vote collection, neurons with `state.activatedPattern !== null` are skipped
-- This prevents the parent from voting via its connections when a pattern is active
-
-**Why**: Patterns exist to correct connection predictions. When a pattern matches, it knows better than the raw connections.
-
-### Consensus Determination
-
-**Implementation** (`brain.determine_consensus()`):
-
-1. **Aggregate votes**: Sum effective strengths per target neuron
-2. **Calculate rewards**: Weighted average of vote rewards (for actions)
-3. **Select winners per dimension** (each base neuron has exactly one dimension):
-   - Events: highest total strength wins; probability = strength / total dimension strength
-   - Actions: highest weighted reward wins
-4. **Return winners**: One winner per dimension
-
-**Example**:
-```
-Votes: [
-  {neuron: price_up, strength: 10, reward: 0.5},
-  {neuron: price_up, strength: 5, reward: 0.3},
-  {neuron: price_down, strength: 8, reward: -0.2}
-]
-
-Aggregation:
-  price_up: strength=15, reward=(10*0.5 + 5*0.3)/15 = 0.43
-  price_down: strength=8, reward=-0.2
-
-Winner (event): price_up (highest strength)
-Winner (action): price_up (highest reward)
-```
+| Part | Where | What it holds |
+|---|---|---|
+| The registry | thalamus | each neuron's fixed facts: kind (event, action, interneuron), dimension, value, channel, the spatial axes it is laid out over, and whether it is alive |
+| The dictionary | thalamus (`dictionary.rs`) | every function — its nodes and its relations — with its interneuron, the poses (a neuron in a phase), and each interneuron's functions |
+| The board | thalamus (`board.rs`) | the frames still open, each with its activations: neuron, pose, position, reach, level, what it covers and what covers it, what fired it, and the relations its neuron returned at it |
+| A neuron's history | neuron | its most recent activations, as rows, at most `h` of them |
+| A neuron's relation index | neuron | every relation its rows hold, with how often it held — recounted from the rows when a backup is loaded |
+| A neuron's connections | neuron | per pose and offset, what followed: a strength (times seen) and earnings (reward paid); its estimate is earnings over strength |
 
 ---
 
-## Data Structures
+## The frame step
 
-### In-Memory Structures
+`Brain::process_frame` takes what the world reported — the events observed and the actions that ran, each a value of
+a dimension at a position — and the rewards, and returns the machine's output for the frame ahead.
 
-#### Neuron (stored in Column)
-```rust
-struct Neuron {
-    // Connections: predictions indexed by distance
-    connections: Vec<FxHashMap<NeuronId, ConnectionData>>,
-    // Routing table: child pattern contexts for context-specific predictions
-    routing_table: FxHashMap<NeuronId, RoutingEntry>,
-    // Reverse references: which patterns reference this neuron in their context
-    context_refs: FxHashMap<NeuronId, FxHashSet<Distance>>,
-    // Per-age error statistics for dynamic error correction thresholds
-    error_stats: FxHashMap<Distance, WelfordState>,
-    // Activation tracking for lazy decay
-    activation_strength: f64,
-    last_activation_frame: FrameNumber,
-}
-```
-
-All neuron metadata (id, level, coordinates, channel, type, parent) is stored externally in Thalamus lookup tables — neurons are pure data processors that operate on numeric IDs.
-
-#### Memory
-```rust
-struct Memory {
-    context_length: u32,
-    frame_number: FrameNumber,
-    // Active neuron states keyed by activation frame (age = frame_number - activation_frame)
-    neuron_states: FxHashMap<NeuronId, FxHashMap<FrameNumber, LevelAgeState>>,
-    // Fast age queries — frame → set of neuron ids activated at that frame
-    age_index: FxHashMap<FrameNumber, FxHashSet<NeuronId>>,
-    // Fast level queries — level → frame → set of neuron ids
-    level_index: FxHashMap<Level, FxHashMap<FrameNumber, FxHashSet<NeuronId>>>,
-    // Current frame winning inferences
-    inferred_neurons: Vec<InferredNeuron>,
-}
-```
-
-#### Context
-```rust
-struct Context {
-    // entries: neuronId → (distance → strength) for O(1) lookup
-    entries: FxHashMap<NeuronId, FxHashMap<Distance, Strength>>,
-}
-```
-
-### CSV-Based File Persistence
-
-Used for backup/restore between episodes, not during frame processing. Backup is a folder of CSVs under `<jobDir>/backups/<YYYY-MM-DD_HH-mm-ss>/`:
-
-- **`channels.csv`** — Channel registry (id, name)
-- **`dimensions.csv`** — Dimension names (id, name)
-- **`neurons.csv`** — All neurons (id, level)
-- **`base_neurons.csv`** — Sensory neuron metadata (neuron_id, channel_id, type, dimension_id, val)
-- **`connections.csv`** — Neuron connections (from_neuron_id, to_neuron_id, distance, strength, reward)
-- **`patterns.csv`** — Pattern-to-parent mappings (pattern_neuron_id, parent_neuron_id, strength)
-- **`contexts.csv`** — Pattern contexts (pattern_neuron_id, context_neuron_id, context_age, strength)
-- **`neuron_error_stats.csv`** — Per-(neuron, age) Welford stats (neuron_id, age, n, mean, m2)
-
-The CSV format is compatible with MySQL `LOAD DATA INFILE` — the `apps/db` tool can bulk-load backups into MySQL for analysis.
+1. **Base activations.** Each reported value activates its base neuron, strong; a value only the last frame's
+   inference named activates weak, where the report names nothing.
+2. **The levels** (`climb_levels`), from the base up, level by level:
+   - **activate** the level's rows (`activate_neurons`); the neurons return the relations they hold;
+   - **find** the functions those relations may fit, and **fit** them (`recognize.rs`);
+   - **count** what grouping needs (`count_relations`, read again until every count it asks is answered) and
+     **group**: take a new function, or grow or generalize one, where naming saves more edges than it costs;
+   - **elect** the calls to keep (`election.rs`), **allocate** interneurons for new functions, and **activate** the
+     calls;
+   - **cover** what the calls stand for, and **lift** to a call the relations of what it covers (`cover.rs`,
+     `write_lifts`).
+3. **Cover the board** once more after the last level.
+4. **Connect** (`connect.rs`): each activation on the apex records what now stands on the apex after it, and the reward
+   pays the connections written at the frames its span reaches.
+5. **Infer**: each neuron on the apex reads its connections and infers what follows it, each with an estimate.
+6. **Decommission** (`death.rs`) the interneurons whose last function has left the dictionary, once nothing can still
+   read them. A brain that does not learn skips this.
+7. **Select** (`selection.rs`): expand the inferred calls down to the base neurons they stand for (`expansion.rs`),
+   match them against what stands, and resolve one winner per dimension — in an action dimension the action with the
+   largest estimate, in an event dimension the event the most inferences name. The winners are the output.
 
 ---
 
-## Frame Processing Flow
+## Settings
 
-> **Note:** Code examples in this section are JavaScript-style pseudocode illustrating the algorithms. The actual implementation is in Rust — see `brain-core/src/` for the real code.
+The brain's options are fixed when it is built:
 
-```mermaid
-flowchart TD
-    A["1. get_frame_neurons()<br/>Quantize inputs + inferred actions"] --> B["2. create_new_sensory_neurons()<br/>Allocate base neurons for new observations"]
-    B --> C["3. cleanup_dead_patterns()<br/>Reap neurons scheduled to die"]
-    C --> D["4. age_context()<br/>Slide the temporal window"]
-    D --> E["5. activate_neurons()<br/>Push new neurons into age 0"]
-    E --> F["6. process_levels()<br/>Spatial processing (d=0): recognize co-active patterns,<br/>build spatial hierarchy, hand apex to temporal;<br/>Temporal processing (d≥1): recognize sequences,<br/>learn connections, create corrections, collect votes"]
-    F --> G["7. apply_level_results()<br/>Flush deferred neuron creation<br/>and context ref updates"]
-    G --> H["8. infer_neurons()<br/>Voting consensus →<br/>scalar-space inference output"]
-    H --> A
-```
+| Option | Default | |
+|---|---|---|
+| `h` | 256 | the depth of every neuron's history |
+| `policy` | `eventsToActions` | the neighborhood policy: which kinds of neuron may be each other's neighbors, and which may connect to which. `allOn` lets every kind do both; `eventsToActions` makes no action anyone's neighbor and lets only events and interneurons connect, and only to actions |
+| `actionPolicy` | `leastBad` | what an action dimension outputs when every candidate's estimate is negative: the least bad, or `nothing` |
+| `regions`, `columns` | 1, 1 | the layout |
+| `learning` | true | a brain built with learning off runs each frame as trained and changes nothing of itself |
 
-The brain processes each frame through `process_frame(inputs, rewards)`:
-
-### 1. get_frame_neurons()
-**Purpose**: Quantize raw scalars and build the frame
-
-```javascript
-// Quantize each dimension's scalar to a bucket ID
-for (channel of channels) {
-  for ([dimId, scalar] of inputs.get(channel)) {
-    quantizer.observe(dimId, scalar)
-    bucketId = quantizer.quantize(dimId, scalar)
-    frame.push({coordinate: {dimId, bucketId}, channel, type: 'event'})
-  }
-}
-
-// Append previously-inferred actions as sensory inputs
-for (action of memory.getInferredActions()) {
-  frame.push({coordinate: action.coordinate, channel, type: 'action'})
-}
-```
-
-### 2. create_new_sensory_neurons()
-**Purpose**: Allocate base neurons for first-seen coordinates
-
-### 3. cleanup_dead_patterns()
-**Purpose**: Reap neurons scheduled to die at this frame, then cascade-delete orphaned children
-
-### 4. age_context()
-**Purpose**: Slide the temporal window and push rewards
-
-```javascript
-// Push this frame's rewards onto the history
-rewards.insert(0, frameRewards)
-if (rewards.length > contextLength) rewards.pop()
-
-// Advance the frame counter; entries older than contextLength are evicted
-memory.age(frameNumber)
-```
-
-### 5. activate_neurons()
-**Purpose**: Push new neurons into age 0 and track inference accuracy
-
-```javascript
-for (neuronId of frameNeuronIds) {
-  level = thalamus.getNeuronLevel(neuronId)
-  memory.activateNeuron(neuronId, level)
-}
-
-// Compare what was inferred last frame against what actually appeared
-diagnostics.trackInferencePerformance(...)
-```
-
-### 6. process_levels() — spatial and temporal processing
-**Purpose**: The main learning step. The frame is processed in **two phases**, each walking its own
-hierarchy level by level, dispatched to Region → Column (parallel via Rayon). They share the same
-per-level machinery and differ only in the connection distance they operate on.
-
-**Spatial processing (distance 0 — co-activation).** Over the inputs that fired this frame, finds which
-neurons co-activate *together*, matches spatial patterns, and mints spatial corrections when the
-co-activation prediction errs. The non-subsumed survivors form the **apex set**, which is handed off
-into temporal processing — so a recognized spatial feature enters the temporal layer as one token rather
-than its raw constituents.
-
-**Temporal processing (distance ≥ 1 — sequence).** Over the apex set (plus carried-forward actions), walks
-levels bottom-up. Each active neuron at a level:
-
-- **Recognizes patterns**: matches child patterns against the observed context
-- **Learns connections**: strengthens co-occurrence links across frames
-- **Creates error corrections**: when prediction error exceeds threshold, mints a new temporal pattern
-- **Collects votes**: each neuron votes on what it predicts next
-
-```javascript
-// --- Spatial processing: distance-0 co-activation ---
-spatial = process_spatial(frameEvents)        // match spatial patterns, mint d=0 corrections
-apex    = spatial.fired \ spatial.subsumed    // non-subsumed survivors
-memory.handoffToTemporal(apex)                // spatial features become temporal tokens
-
-// --- Temporal processing: distance ≥ 1 sequences ---
-level = 0
-while (level <= maxActiveLevel) {
-  levelNeurons = memory.getTemporalLevelNeurons(level)
-  result = thalamus.processTemporalLevel(level, levelNeurons, sensoryNeurons, rewards, ...)
-  for (activation of result.activations) {
-    memory.activatePattern(activation.patternId, level + 1, activation.parentId, activation.age)
-  }
-  level++
-}
-```
-
-Each maintains an independent hierarchy: a neuron has a `spatial_level` and a `temporal_level`,
-which advance independently as corrections are minted on each axis.
-
-### 7. apply_level_results()
-**Purpose**: Flush deferred neuron creation and context reference updates in one batch
-
-### 8. infer_neurons()
-**Purpose**: Voting consensus → scalar-space inference output
-
-```javascript
-// Aggregate votes and determine winners per dimension
-inferences = determineConsensus(votes)
-
-// Ensure all channels have actions (explore if none inferred)
-ensureChannelActions(inferences)
-
-// Save inferences to memory for next frame
-memory.saveInferredNeurons(inferences)
-
-// Return per-channel scalar-space inference output to host
-return buildInferencesByChannel(candidates, dimBest)
-```
-
-### Action dispatch (host side)
-
-Inferred actions come back from `brain.processFrame(inputs, rewards)` as part of the per-channel inference map. The host (app-layer trader / encoder / whatever owns the channel) pulls the action and executes it — the brain itself does not dispatch.
-
-The system uses **lazy decay** instead of periodic forget cycles. Strengths are computed on-demand:
-
-```javascript
-effectiveStrength = strength - (frameNumber - lastActivationFrame) * decayRate
-```
-
-When a connection or pattern context entry's effective strength drops to zero or below, it is deleted. Patterns with no remaining content or references are recursively cleaned up.
-
-This eliminates the need for batch decay passes and provides smooth, continuous forgetting.
+A frozen evaluation is a separate brain: the trained one saved, loaded into a brain built with learning off.
 
 ---
 
-## Channel Interface
+## Persistence
 
-Channels live entirely on the host side — the brain knows nothing about I/O, sensors, or traders. Each app owns an encoder (and optionally a trader) that:
-  1. Describes its channel to the brain via a **channel spec** (`brain.registerChannelSpec(spec)`), which lists the channel's dimensions, their bucket resolutions, quantizer modes (`passthrough` / `static` / `dynamic`), and whether each dim is an input (event) or output (action). The brain allocates a channel ID and per-dimension IDs and returns them as `{ channelId, dimensionIds }` so the encoder can key its frame outputs off the allocated dim IDs.
-  2. Feeds raw per-dimension scalars to `brain.processFrame(inputs, rewards)` each frame. The brain quantizes, learns, and returns per-channel inferences; the host dispatches actions back to whatever the app drives.
+A **backup** is a folder of CSV files at `<jobDir>/backups/<label>/` (`backup.rs`):
 
-### Channel Spec Shape
+| File | Holds |
+|---|---|
+| `brain.csv` | the history depth, the policies, the frame number, the counts, the reaches |
+| `act_dims.csv`, `dims.csv`, `channels.csv` | the activation dimensions (time first), the neuron dimensions, the channels |
+| `neurons.csv` | the registry, and per neuron the latest frame a row was written for |
+| `rows.csv` | each neuron's history, oldest first |
+| `connections.csv` | each neuron's connections |
+| `functions.csv`, `retired.csv` | the dictionary, and the functions retired but still readable |
+| `poses.csv`, `interneurons.csv` | the pose table, and each interneuron's functions |
+| `ledger.csv`, `last_func.csv`, `reach_of.csv` | the decommissioning ledger, and per interneuron the function that fired it last and its reach |
 
-```javascript
-{
-  name: 'AAPL',             // channel name (string)
-  emitsReward: true,        // does the channel produce a reward signal each frame
-  learnActionSequences: false,  // should action neurons participate in pattern learning
-  dimensions: [
-    { name: 'AAPL_price_change',  kind: 'input',  resolution: 2,
-      mode: 'static', boundaries: [0] },
-    { name: 'AAPL_volume_change', kind: 'input',  resolution: 2,
-      mode: 'static', boundaries: [0] },
-    { name: 'AAPL_activity',      kind: 'action', resolution: 2,
-      mode: 'passthrough',
-      actions: [-1, 1], defaultAction: -1 }
-  ]
-}
-```
-
-### Example: Stock Encoder
-
-```javascript
-class StockEncoder {
-  constructor(symbol) {
-    this.symbol = symbol;
-    this.priceChangeDimName  = `${symbol}_price_change`;
-    this.volumeChangeDimName = `${symbol}_volume_change`;
-    this.activityDimName     = `${symbol}_activity`;
-    this.channelId = null;
-    this.priceChangeDimId = null;
-    this.volumeChangeDimId = null;
-    this.activityDimId = null;
-  }
-
-  // Raw scalars per dimension — the brain's quantizer bucketizes these.
-  encode(frame) {
-    const priceChange  = (frame.price - frame.previousPrice) / frame.previousPrice * 100;
-    const volumeChange = (frame.volume - frame.previousVolume) / frame.previousVolume * 100;
-    const dimMap = new Map();
-    dimMap.set(this.priceChangeDimId, priceChange);
-    dimMap.set(this.volumeChangeDimId, volumeChange);
-    return dimMap;
-  }
-
-  getChannelSpec() { /* … see shape above … */ }
-  bindIds({ channelId, dimensionIds }) {
-    this.channelId = channelId;
-    this.priceChangeDimId  = dimensionIds[this.priceChangeDimName];
-    this.volumeChangeDimId = dimensionIds[this.volumeChangeDimName];
-    this.activityDimId     = dimensionIds[this.activityDimName];
-  }
-}
-```
+The relation index is not written: it is recounted from the rows on load. A **context** — the board and what the
+machine keeps about it — is a folder at `<jobDir>/contexts/<label>/`, loaded into a brain loaded from the backup saved
+with it.
 
 ---
 
-## Key Hyperparameters
+## The Node addon and the jobs
 
-All passed to `Brain::new()` and propagated to Thalamus → Region → Column → Neuron:
+The addon's `Brain` class:
 
-| Parameter                | Default          | Location | Description                                                                                                                                  |
-|--------------------------|------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| groupThreshold           | 0.5              | Neuron   | Grouping coefficient θ: recognition ≥ θ, correction > 1 − θ; shared spatial + temporal. Under dynamic `groupMode`, the per-unit seed/fallback. |
-| groupMode                | `'neutral'`      | Neuron   | Grouping-threshold adaptation: `static`, `conservative` (mean+σ), `neutral` (mean), `aggressive` (mean−σ). See error-driven-learning.md.       |
-| contextLength            | 10               | Memory   | Frames a neuron stays active                                                                                                                 |
-| patternForgetRate        | 0.01             | Neuron   | Pattern prediction strength decay rate per frame                                                                                             |
+- **Building:** `new Brain({ h, policy, actionPolicy, regions, columns, learning })`, then `declareAxis(name)` and
+  `declareChannel({ name, event, action, axes })` — a channel has an event dimension, an action dimension, or both,
+  each with its number of values.
+- **Running:** `processFrame(inputs, rewards)`, where an input is `{ dim, bucket, position }` and a reward
+  `{ reward, channels, frames }`; it returns the winners for the frame ahead. `resetContext()` clears the board and
+  keeps everything learned.
+- **Reading:** stats, neurons, the dictionary (`getDictionary`, `readDictionaryFingerprint`, `readFunctionStamps`,
+  `describeFunctions`), poses, the board (`getBoard`, `getLastFrame`, `countApex`), and neuron descriptions.
+- **Saving:** `save`, `load`, `saveContext`, `loadContext`.
 
----
-
-## Summary
-
-This architecture implements a theory of how minds work:
-
-### Core Principles
-- **Prediction** drives all learning
-- **Failure** creates structure (patterns)
-- **Events** learn passively through association
-- **Actions** learn actively through trial-and-error
-- **Voting** enables distributed decision-making with level and time weighting
-- **Time** is built into the representation
-- **Patterns override connections** to correct prediction errors
-
-### Implementation Highlights
-- **Rust core with Rayon parallelism**: Brain → Thalamus → Region[R] → Column[C] → Neurons; columns run in parallel with no shared mutable state
-- **In-memory processing**: All learning in Rust data structures (no DB queries during frames)
-- **Unified neuron struct**: Sensory and pattern neurons share common functionality; metadata stored externally in Thalamus
-- **Thalamus relay**: Centralizes neuron metadata, channel/dimension registries, death ledger, and quantizer
-- **Temporal sliding window**: Memory manages active neurons keyed by activation frame (age is derived)
-- **Context matching**: Fast threshold-based pattern recognition via `FxHashMap` lookups
-- **Lazy decay**: Continuous strength decay computed on-demand (no periodic forget cycles)
-- **CSV file persistence**: Backup/restore between episodes; compatible with MySQL bulk-load for analysis
-
-The code is just the implementation. The architecture is a model of intelligence.
-
+The `Job` class (`libs/node/src/job.js`) runs a job: it builds the brain from the job's options and the command line,
+declares the job's channels or loads a backup that carries them, runs the job's frames, shows its results, and saves
+what the command line asked for. `runJob(import.meta, MyJob)` at the bottom of a job file runs it when the file is the
+entry point. The README lists the jobs and their options.

@@ -1,0 +1,8 @@
+{
+  "name": "benchmarks",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Runs every benchmark job and compares its result lines with the saved output in docs/benchmarks/output.",
+  "type": "module",
+  "license": "Apache-2.0"
+}

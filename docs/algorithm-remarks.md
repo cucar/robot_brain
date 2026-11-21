@@ -252,7 +252,7 @@ the reason the arithmetic is the arithmetic, and it is never a term in it.
 > **What the fixed-length code buys** is that nothing about frequency sets a cost: no estimator, no smoothing
 > and no boundary correction decides what structure exists, and every price is read off counts the neuron
 > already holds. Re-pricing the file by how often each value occurs gives that up — probabilities would set
-> costs — which is why [forgetting.md](forgetting.md) is a document of its own.
+> costs.
 
 **Why a neuron's history states nothing.** It is evidence, not an encoding: it records what was seen so the
 collapse can center on it (D27), and a decoder never reads it. The one place a price is needed — does this

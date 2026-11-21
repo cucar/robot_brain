@@ -6,3 +6,4 @@ target
 backups/
 apps/mnist/*.log
 *.node
+apps/benchmarks/got/

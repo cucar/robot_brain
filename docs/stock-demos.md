@@ -1,196 +1,193 @@
 # Stock & Time-Series Demos
 
-These demos apply the brain to financial time series — synthetic cycles, real historical price/volume
-data, and sequence memorization. Stock trading is **one application** of the architecture, not its
-focus; for the vision and language demos see [mnist-demos.md](mnist-demos.md) and
-[text-demos.md](text-demos.md).
+These demos apply the brain to financial time series: laps that repeat, real daily history with a trader, and
+sequence memorization. Stock trading is **one application** of the architecture, not its focus; for the other demos
+see [mnist-demos.md](mnist-demos.md), [text-demos.md](text-demos.md), [shape-demos.md](shape-demos.md) and
+[tap-demos.md](tap-demos.md).
 
-The included `1D` timeframe data is ready to use — **no API key needed** for these demos. To download
-fresh or different data, see [Downloading Fresh Stock Data](#downloading-fresh-stock-data) at the end.
+Each stock is one channel: the price's move from one bar to the next, up or down, is the event, and own or out is the
+action. The reward of a bar is the move, signed by the action that stood over it, scoped to that stock's channel and
+that one frame. Where the brain says nothing for a stock, the world runs the move itself as a lesson. With `--volume`,
+each stock also gets a channel of its own for its volume's move; it is off by default.
+
+The daily histories fill the days before a stock was listed, and the days it did not trade, with its price held and a
+volume of 0 (PLTR before its listing in September 2020, most of GOLD's early years, some of UUUU's). No trading
+happened on such a day, so the jobs skip it: the stock reports nothing that frame, runs nothing and earns nothing, and
+a prediction made for it is not graded.
+
+The included `1D` timeframe data is ready to use — **no API key needed** for these demos. To download fresh or
+different data, see [Downloading Fresh Stock Data](#downloading-fresh-stock-data) at the end.
 
 ---
 
-## Single-Channel Synthetic Cycle
+## One stock on a lap
 
-A single-stock variant of the cycle test: one channel, a repeating 12-frame price/volume pattern, 20
-repeats. Isolated to a single channel so you can see the brain converge on optimal actions without
-multi-channel reinforcement doing any of the work.
+KGC alone: the first 12 daily opens of its history, their 12 moves (the last to the first) shown 20 times over. With
+no other channel, the brain has nothing to lean on but the one stock's lap.
 
 ```bash
-node apps/stocks/jobs/synthetic-extended-test.js --group-mode static --group-threshold 0.9
+node apps/stocks/jobs/synthetic-extended-test.js
 ```
 
 **Expected output:**
 ```
-Overall Optimal Rate: 233/240 = 97.1%
+CYCLE 20 | neurons 11 | functions 7 | highest call level in the cycle 3 | the dictionary last changed at frame 73 | right KGC 100.00%
+inference KGC: right 227 of 238 | every bar right from cycle 8
 ```
 
-With the right thresholds the brain converges to 97%+ optimal action decisions on a single-channel
-cyclical pattern — confirming that hierarchy and action inference work without cross-channel consensus.
+227 of 238 bars right (95.4%), and every bar right from the eighth lap on.
 
----
+## The six-bar lap
 
-## Multi-Channel Synthetic Cycle
-
-The brain learns to trade 3 stocks simultaneously (KGC, GLD, SPY), each as a separate channel. A
-repeating 12-day price cycle is presented 20 times — the brain discovers cross-stock patterns and
-converges on optimal buy/sell timing.
+One stock on the bars +1% −2% −3% +2% +3% −1%, repeated for 30 laps.
 
 ```bash
-node apps/stocks/jobs/multi-channel-test.js --group-mode static --group-threshold 0.9
+node apps/stocks/jobs/synthetic-cycle-test.js 30
+```
+
+| | |
+|---|---|
+| right, every inference against the bar it was made for | 165/178 |
+| lessons (frames where the brain said nothing) | 3 |
+| first lap all right | 7 |
+| functions at the end | 11 |
+| the dictionary last changed | frame 96 |
+
+Every bar of the lap is right over the last 10 laps.
+
+## Three stocks on a lap
+
+KGC, GLD and SPY, each the first 12 daily opens of its history, shown 20 times over; one channel each.
+
+```bash
+node apps/stocks/jobs/multi-channel-test.js
 ```
 
 **Expected output:**
 ```
-🎯 Overall Optimal Rate: 695/720 = 96.5%
+CYCLE 20 | neurons 58 | functions 46 | highest call level in the cycle 7 | the dictionary last changed at frame 235 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+inference KGC: right 221 of 239 | every bar right from cycle 8
+inference GLD: right 228 of 239 | every bar right from cycle 8
+inference SPY: right 217 of 239 | every bar right from cycle 9
 ```
 
-The brain learns when to own vs. not own each stock based on upcoming price movements, achieving 96%+
-optimal trade decisions across all three channels. This demonstrates how multiple input streams
-converge to improve inference — one of the architecture's core strengths.
+666 of 717 bars right (92.9%) over the run, and every bar of every stock right from the ninth lap on.
+
+### More laps
+
+`multi-channel-test.js --mode <mode> --laps <n>` runs the other laps. Over 100 laps of the three stocks, and with a
+made-up fourth stock Q moving one percent a bar (U D D U U D U D D U D D), the brain gets 98–99% of the bars right;
+over the shorter runs, 87–99%:
+
+| command | right | of | every bar right from lap | functions |
+|---|---|---|---|---|
+| `--mode two --laps 10` (KGC, GLD) | KGC 107, GLD 106 | 118 each | 5, 5 | 20 |
+| `--mode lap --laps 30` (A +1 −2 −3 +2 +3 −1, B +2 +1 −1 −3 +3 −2) | A 177, B 166 | 179 each | 2, 9 | 13 |
+| `--mode lap65 --laps 12` (A on six bars, B on five: they repeat together every 30) | A 318, B 313 | 359 each | 5, 9 | 50 |
+| `--mode three --laps 100` | KGC 1181, GLD 1188, SPY 1177 | 1199 each | 8, 8, 9 | 43 |
+| `--mode three4 --laps 100 --all4` | KGC 1181, GLD 1190, SPY 1171, Q 1179 | 1199 each | 7, 5, 9, 8 | 50 |
 
 ---
 
 ## Stock Trading
 
-The brain learns to trade stocks from historical price and volume data. Each stock is a separate
-channel — the brain discovers cross-stock patterns and makes buy/sell/hold decisions optimized by
-reward feedback.
+Ten stocks over their whole daily history (5,373 bars, January 2005 to May 2026), one channel each, with a trader. At
+each bar the trader brings its holdings in line with what the brain last said: each stock is owned or out, at most
+three owned at once, the value split evenly among them, a cost of 0.02% on every trade. It starts with $15,000.
 
 ```bash
-node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL,AWR,GM,EQIX,RTX,KGC,ALB,AAPL,CVX,HD,WPM,BEP,AREC,JNJ,SLB,PLD,EXK,NVDA,CAT,WFC,RGLD,WEAT,OXY,CEG,LOW,PAAS,MP,LMT,GS,COST,AG,TECK,MRK,INTC,BIP,PSA,DVN,AVAV,PEP,CDE,TSM --context-length 3 --max-positions 3 --transaction-cost 0.02 --columns 20 --spatial
+node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL --max-positions 3 --transaction-cost 0.02
 ```
 
-**Expected output:**
+**Expected output** (the end of the lap):
 ```
-🎯 Final Training Results (1 episodes):
-============================================================
-📈 Overall Performance:
-   Starting Capital: $15000.00
-   Total Net Profit: $2562690.23
-   Average per Episode: $2562690.23
-   Average ROI: +17084.60%
-   Average Per-Frame ROI: +0.095832%
-   Average Sharpe Ratio: 0.42
-   Total Transaction Cost: $621143.23 (0.02% per trade)
-   Total Trades: 28811
-   Average Trades per Episode: 28811.0
-
-💰 Net Profit & ROI by Episode:
-   Episode 1: $2562690.23 | ROI: +17084.60%, +0.095832%/frame, Sharpe: 0.42 (28811 trades)
-
-📊 Base Level Accuracy by Episode:
-   Episode 1: 11.04%
+TRADER lap 1 | net profit $33001.33 | ROI +220.01% | +0.021651%/frame | Sharpe 0.01 | transaction cost $25904.65 | trades 24963
+CYCLE 1 | neurons 1833 | functions 1793 | highest call level in the cycle 4 | the dictionary last changed at frame 5373 | right SO 50.56%, VALE 50.63%, STLD 50.43%, GOOGL 51.04%, MU 49.94%, PLTR 49.79%, UUUU 50.18%, PFE 51.08%, CRM 49.07%, HAL 50.45% | net profit $33001.33, ROI 220.01% (24963 trades)
 ```
 
-The brain achieves only ~11% base-level prediction accuracy because it's predicting price movement groups.
-The **reward-weighted action selection** still turns a profit by learning which contexts produce better outcomes. 
-With spatial co-activation enabled (`--spatial`), the brain trades direction accuracy for far more aggressive,
-concentrated position sizing: it is wrong about direction more often than not, but sizes the contexts that pay off.
+**In one pass, the brain does not predict the next day's move.** Every stock is right on about half of its real bars
+(49–51%), and the trader's Sharpe ratio is 0.01: $15,000 becomes $48,001, about 5.6% a year, which is what holding a
+basket of risky stocks pays, with no skill in it. The run takes about 30 seconds.
 
-> **Reading this number honestly.** The *total* return over ~21 years of daily data (~5,370 frames) compounds to 
-> **roughly +28%/year**, strong but far less dramatic than the raw percentage looks. 
-> It is also measured on a *curated* 50-symbol universe of names that survived and performed well over the
-> period (a survivorship bias), with low simulated friction and hyperparameters tuned in-sample. The
-> base accuracy is **below 50%** and most of the edge comes from large, concentrated bets on a handful of volatile,
-> low-priced names — restrict the universe to stable, higher-priced names (e.g. via `--min-price 10`) and the
-> headline collapses to a far more sober ~+20%/year. The big number is a high-variance, in-sample artifact, not a
-> reliable forward return.
->
-> A more rigorous measurement uses a neutral, sector-diversified universe and a proper train/test split — train on
-> the first ~80% of history, then evaluate on the **held-out final ~4.3 years** the brain never trained on.
-> Out-of-sample performance peaks at **two training passes**, returning **~+20%/year at a real Sharpe of ~0.76**;
-> additional passes push in-sample return higher while held-out return decays (textbook overfitting). The execution
-> path has no look-ahead — the brain decides and trades at each day's close and is scored by the next day's move.
+The ride is rough. The portfolio holds three stocks on 82% of the bars, nearly always fully invested, with no cash
+cushion:
+
+| | |
+|---|---|
+| drawdowns deeper than 10% / 20% / 30% / 50% | 13 / 5 / 2 / 1 |
+| the deepest | −75.7%, from June 2008 ($25,830) to March 2020 ($6,285); back above the 2008 peak only in March 2024 |
+| daily volatility | 2.3% (37.2% a year) |
+| days moving more than 5% / 10% | 208 / 30 |
+| worst and best day | −31.6% (15 July 2019), +23.5% (5 January 2009) |
+| losing years | 2005, 2008, 2011, 2015, 2018, 2019 (the worst 2008, −39.2%) |
+
+What the brain does with these stocks is memorize their history, lap after lap: the next demos after the random
+baseline.
 
 ### Random Baseline Comparison
 
-A natural worry is that the result might come from a favorable data window rather than learned trading. To rule that
-out, the same job can be run with `--random-baseline`, which replaces the brain's action inference with a coin flip:
-50% chance to be fully out, 50% chance to own one stock chosen uniformly at random. Everything else — the same data,
-same portfolio sizing, same execution path — is unchanged.
+To see what the trader earns without the brain, the same job runs with `--random-baseline`: the brain is left out, and
+at each bar a coin says all out half the time and, the other half, own one of the stocks picked at random. The trader
+sizes and trades on that exactly as it does on the brain's actions. The coin is seeded (`--seed`, 1 by default), so a
+run repeats; different seeds are different draws.
 
 ```bash
-node apps/stocks/jobs/test.js --random-baseline
+node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL --random-baseline --seed 1
 ```
 
-`--random-baseline` skips encoding, reward collection, and `brain.processFrame()` entirely, so the run is purely the
-trading harness driven by random signals — no shared work with the brain path.
+Over seeds 1 to 10, against the brain's single pass over the same ten stocks with the same settings:
 
-**Example random-baseline run:**
+| settings | random: profit, seeds 1–10 | random: Sharpe | the brain, first pass | beats |
+|---|---|---|---|---|
+| one stock at a time, no cost | $7,819 to $2,625,508 (middle about $68,000) | −0.08 to 0.58 | $403,594, Sharpe 0.19 | 9 of 10 seeds |
+| three stocks, 0.02% cost | −$6,883 to $915,496 (middle about $15,000) | −0.22 to 0.44 | $33,001, Sharpe 0.01 | 7 of 10 seeds |
 
-![Random baseline run](../images/random_stocks.jpg)
-
-Random coin-flips don't just underperform the brain — they *lose money*. A representative run ends at **−$1,839.36
-(−12.26% ROI, Sharpe −0.19)** over the full 5,373 days: undirected exposure drifts up and down with whatever the
-basket does, pays transaction costs on every flip, and finishes underwater. Swap that random decision source for the
-brain — same data, same portfolio sizing, same execution path — and the result turns solidly positive. This is the
-simplest sanity check that the brain is doing real work: identical harness, identical data, only the decision source
-changes — and one bleeds capital while the other compounds.
-
----
+The coin owns at most one stock in either row; the settings are the brain's, and the cost is the coin's too. On its
+first pass the brain earns more than most coins but not more than a lucky one: with daily moves right half the
+time, its single-pass profit is within the range chance gives. Each random run takes under a second.
 
 ## Action Learning in Low Accuracy
 
-The brain learns the best actions to perform in each situation over repeated episodes, even when base prediction
-accuracy is low. Note that the spatial processing here has an outsized impact.
+The same ten stocks over five laps of their history, one stock owned at a time, no transaction cost. The brain keeps
+what it learned from lap to lap; the trader starts each lap from $15,000.
 
 ```bash
-node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL --context-length 3 --columns 20 --no-summary --episodes 5 --spatial
+node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL --episodes 5
 ```
 
-**Expected output:**
-```
-💰 Net Profit & ROI by Episode:
-   Episode 1: $830302.80 | ROI: +5535.35%, +0.075063%/frame, Sharpe: 0.22 (8479 trades)
-   Episode 2: $44566910.12 | ROI: +297112.73%, +0.148948%/frame, Sharpe: 0.49 (8747 trades)
-   Episode 3: $225986507.16 | ROI: +1506576.71%, +0.179208%/frame, Sharpe: 0.61 (8689 trades)
-   Episode 4: $2109464653.55 | ROI: +14063097.69%, +0.220863%/frame, Sharpe: 0.75 (8682 trades)
-   Episode 5: $29132233788.59 | ROI: +194214891.92%, +0.269846%/frame, Sharpe: 0.96 (8806 trades)
+| lap | right, average of the ten | Sharpe | per-frame return | trades |
+|---|---|---|---|---|
+| 1 | 50.32% | 0.19 | +0.062% | 9,050 |
+| 2 | 53.61% | 2.05 | +0.459% | 9,177 |
+| 3 | 58.44% | 3.75 | +0.826% | 9,150 |
+| 4 | 67.28% | 6.25 | +1.555% | 9,120 |
+| 5 | 77.61% | 8.78 | +2.295% | 9,144 |
 
-📊 Base Level Accuracy by Episode:
-   Episode 1: 10.97%
-   Episode 2: 8.63%
-   Episode 3: 8.23%
-   Episode 4: 8.29%
-   Episode 5: 8.29%
-```
-
-The astronomical ROI is compounding over many episodes of in-sample data — a stress test of action learning, not a
-forward return. The point is that even with single-digit base prediction accuracy, reward-weighted action selection
-keeps improving the *actions* taken episode over episode.
-
----
+All ten stocks climb together: in lap 5 every one is right on 76–79% of its bars. The trader's return per bar and its
+Sharpe ratio climb with them, and ahead of the share right: at 53.61% right in lap 2 the Sharpe ratio is already 2.05.
+The first lap's
+profit is $403,594 (ROI +2,691%); from there the profit compounds within each lap past any real figure, so the
+per-frame return and the Sharpe ratio are the numbers to read. This is memorization of the history the brain trades
+on, not a forward return. The run takes about 7 minutes.
 
 ## Stock Sequence Memorization
 
-The brain memorizes a repeating stock price sequence across 5 episodes, reaching 60% prediction accuracy on real
-market data. This demonstrates convergence on financial data — the same learning curve seen in text memorization.
+KGC, GOLD and SPY over their whole history (5,373 moves each), five laps, one stock owned at a time, no cost.
 
 ```bash
-node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY --context-length 3 --forget-rate 0.0005 --group-mode static --group-threshold 0.9
+node apps/stocks/jobs/test.js --symbols KGC,GOLD,SPY --episodes 5
 ```
 
-**Expected output:**
-```
-💰 Net Profit & ROI by Episode:
-   Episode 1: $500326.56 | ROI: +3335.51%, +0.065846%/frame, Sharpe: 0.29 (5600 trades)
-   Episode 2: $4824048976177885184.00 | ROI: +32160326507852568.00%, +0.623644%/frame, Sharpe: 3.79 (6038 trades)
-   Episode 3: $3.986340595240165e+21 | ROI: +26575603968267767808.00%, +0.749517%/frame, Sharpe: 4.44 (6096 trades)
-   Episode 4: $9.768420215418699e+22 | ROI: +651228014361246564352.00%, +0.809517%/frame, Sharpe: 4.78 (6101 trades)
-   Episode 5: $6.235109589369968e+23 | ROI: +4.156739726246645e+21%, +0.844301%/frame, Sharpe: 4.96 (6026 trades)
+| lap | right KGC | right GOLD | right SPY | Sharpe | functions |
+|---|---|---|---|---|---|
+| 1 | 50.19% | 50.00% | 50.06% | 0.02 | 484 |
+| 2 | 53.08% | 54.48% | 53.86% | 1.31 | 807 |
+| 3 | 57.38% | 61.67% | 57.58% | 2.79 | 1,270 |
+| 4 | 62.44% | 70.59% | 62.52% | 4.35 | 2,011 |
+| 5 | 67.04% | 79.85% | 68.10% | 5.47 | 2,265 |
 
-📊 Base Level Accuracy by Episode:
-   Episode 1: 51.61%
-   Episode 2: 62.41%
-   Episode 3: 65.13%
-   Episode 4: 66.00%
-   Episode 5: 66.59%
-```
-
-The brain goes from 50% accuracy (random) to 66% in 5 episodes on 3 stocks × ~5,300 frames of real market data. 
-The low forget rate allows patterns to survive the full sequence. 
-Short context (3 frames) is used because of computation limits.
+From a coin flip in the first lap to 67–80% in the fifth, on real market data. GOLD is graded only on its real bars, 15,232 over the five laps, against 26,864 for KGC and SPY. The run
+takes about 2½ minutes.
 
 ---
 
@@ -204,3 +201,6 @@ To download new data or different timeframes, you need a free [Alpaca](https://a
 4. Run the downloader for the symbols and timeframe you want
 
 The included `1D` data covers ~21 years and is enough to reproduce every demo above without an account.
+
+The six-bar lap, the laps of the table above, the trading run and the sequence memorization are also benchmarks (see
+[Benchmarks](../README.md#benchmarks)).

@@ -7,8 +7,8 @@ is one workstream; sub-bullets are the concrete steps inside it.
 
 ## 1. Wave-Front (foundation)
 
-Design in **[wavefront.md](./wavefront.md)**, migration plan in
-**[wavefront-implementation.md](./wavefront-implementation.md)**. Split out of the reuse project into its own
+Design in **wavefront.md**, migration plan in
+**wavefront-implementation.md**. Split out of the reuse project into its own
 foundation workstream — it is a large rearchitecture and reuse cannot be built without it. Keep the processing
 **structure** (spatial processing → apex handoff → temporal processing) but turn each stage into a **settling
 wave**, remove stored levels, make **all** corrections coordinate-less, and use **footprints** (the set of base
@@ -28,26 +28,24 @@ cross-stream **isolation** knob parallel-stream learning relied on — that now 
 
 ## 2. Neuron Re-use
 
-Theory in **[neuron-reuse.md](./neuron-reuse.md)**. Allocates capacity onto the error manifold
+Theory in **neuron-reuse.md**. Allocates capacity onto the error manifold
 (residual-fitting). On the wave-front foundation (§1), **reuse applies at all distances** (d=0 and d>0) — the
 spatial/temporal asymmetry is gone. The mechanism is **recognize → predict L0 → on misprediction,
 transitively-merge-cluster the requests by neighborhood → reuse/expand a matched pattern or mint one**, balanced
-by **merge** (clustering + reuse) vs **split** (refinement). **Built and validated in the reference simulation**
-([`wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js), spec
-[neuron-reuse-simulation.md](./neuron-reuse-simulation.md)) — the merge/split equilibrium is characterized and
+by **merge** (clustering + reuse) vs **split** (refinement). **Built and validated in a reference simulation** — the merge/split equilibrium is characterized and
 the mechanism ports faithfully — before the brain port below.
 
 Build order — each phase behind its own gate (theory §6):
 
-1. **[Phase A — Index](./neuron-reuse-index.md)**: **two** reverse connection indexes —
+1. **Phase A — Index**: **two** reverse connection indexes —
    `spatial_connection_index` (no distance) and `temporal_connection_index` (distance-keyed), mirroring the
    context-index split. Built, unit-tested, not yet consumed. Membership-only / strength-blind candidacy.
-2. **[Phase B — Frame](./neuron-reuse-frame.md)**: per-cluster mint at all distances (transitively merge
+2. **Phase B — Frame**: per-cluster mint at all distances (transitively merge
    neighbor-connected requests, mint one coordinate-less correction with union footprint) **+ the multi-parent
    machinery** (refcounted reaping, multi-parent serialization, shared-neuron activation). Heaviest reuse phase.
-3. **[Phase C — Final](./neuron-reuse-final.md)**: reuse lookup + expansion on top of B + cross-frame accrual,
+3. **Phase C — Final**: reuse lookup + expansion on top of B + cross-frame accrual,
    all distances. Light (reuse installs routing for next frame, so it needs no new same-frame tracking set).
-4. **[Validation](./neuron-reuse-validation.md)**: MNIST spatial reuse + transfer, stocks full-pipeline +
+4. **Validation**: MNIST spatial reuse + transfer, stocks full-pipeline +
    transfer, long-run.
 
 Design notes: reuse candidacy is **strength-blind** (the index is membership-only; strength governs
@@ -61,7 +59,7 @@ drains references to reap unreferenced ones (no separate decay/forgetting).
 
 ## 3. Context & connection refinement
 
-Design in **[refinement.md](./refinement.md)**. The missing abstraction/generalization step: on a matched
+Design in **refinement.md**. The missing abstraction/generalization step: on a matched
 pattern, consolidate both its **sources** (context) and its **targets** (connections) toward the common
 core of the configs it matches, instead of leaving it frozen at mint-time identity. This is what turns
 one-off corrections into general detectors and lets the hierarchy climb past depth 2. Removed in commit
@@ -91,10 +89,10 @@ Steps:
 
 ## 5. Action composition
 
-See **[action-composition.md](./action-composition.md)**.
+See **action-composition.md**.
 
 **Inference-scope gate resolved.** The inference-scope experiment that previously gated this has been
-concluded and removed (see [inference-level.md](./inference-level.md)): `base` is the ground-truth-anchored
+concluded and removed (see inference-level.md): `base` is the ground-truth-anchored
 default for *events*, and the compositional ambition relocates to the action side. Composition here does
 **not** depend on events predicting events — it rests on **action→action** backward composition plus
 **apex event ↔ apex action** coupling, anchored by reward and execution rather than by an event-side
@@ -115,7 +113,7 @@ sequence. Open questions and full dependencies are in the doc.
 
 ## 6. Global rewards
 
-See **[global-rewards.md](./global-rewards.md)**. **Independent** of action composition (§5) — the reward
+See **global-rewards.md**. **Independent** of action composition (§5) — the reward
 distribution policy holds with or without action composition, and can be decided separately. It meets
 composition at exactly one point: reward credits the **apex active action**, not base neurons.
 
@@ -161,7 +159,7 @@ Report directional accuracy (up vs down) independently to identify prediction bi
 ## 9. Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme in
-[experiment-temporal-binning.md](./experiment-temporal-binning.md).
+experiment-temporal-binning.md.
 
 Higher-level patterns currently store context at exact frame distances — meaningless precision at
 their timescale. Exponential bins give every level the same number of bins but scale bin width with

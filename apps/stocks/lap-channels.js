@@ -1,51 +1,68 @@
 /**
- * Several channels in one brain, no reset (docs/algorithm.md D34, D24).
+ * Several channels in one brain, no reset (docs/algorithm.md D34, D24): the job the stock jobs run, each with its own
+ * settings (multi-channel-test.js, synthetic-extended-test.js, test.js).
  * One channel per stock: the price's move up or down as the event, own or out as the action, the reward scoped to that
  * stock's channel and the frame; every stock fires in every frame.
+ * With volume on, each stock with volume data has a second channel, event only: the volume's move up or down.
  * Neighbors by kind (the eventsToActions policy): an event reads every event and call of any channel in its frame and
  * the one before; no action is anyone's neighbor.
  *
  * Modes:
- *   two    KGC and GLD, the first 12 daily opens of each (apps/stocks/data/1D), cycled
+ *   one    KGC alone, its first 12 daily opens (apps/stocks/data/1D), cycled
+ *   two    KGC and GLD, the same way
  *   three  KGC, GLD and SPY, the same way
  *   three4 KGC, GLD and SPY, the same way, and Q, made up, moving one percent a bar
  *   lap    two stocks on six-bar laps, each with its action: A +1 −2 −3 +2 +3 −1, and B +2 +1 −1 −3 +3 −2
  *   lap65  A on its six-bar lap and B on a five-bar lap +2 +1 −1 +3 −2: together they repeat every 30 frames
  *   seq    stocks over their whole daily history as the CSVs hold it, one lap the whole sequence, with a trader
- *
- * usage: node apps/stocks/jobs/channels.js <two|three|three4|lap|lap65|seq> [cycles] [data folder]
- *        [--all4] [--symbols A,B] [--max-positions N] [--cost PCT] [--every N] [--regions R] [--columns C]
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Job, runJob, readPositionals, formatFixed } from 'robot-brain';
-import { LapTrader } from '../lap-trader.js';
+import { Job, formatFixed } from 'robot-brain';
+import { LapTrader } from './lap-trader.js';
 
-const DATA_FOLDER = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', '1D');
-
-// the flags of this job that take no value
-const BARE_FLAGS = ['--disable-learning', '--all4'];
+// the folder of each timeframe's data
+export const DATA_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data');
 
 /* ---------- Reading the series ---------- */
 
 /**
- * The percent move of each of the first 12 daily opens of a symbol, the last wrapping to the first.
+ * The percent change from each value to the next; with `wraps`, the last to the first.
+ * A change from nothing counts as a rise of 1000%.
  */
-function readTwelveBarLap(folder, symbol) {
-	const bars = JSON.parse(fs.readFileSync(path.join(folder, `${symbol}.json`), 'utf8'));
-	const opens = bars.slice(0, 12).map(bar => bar.OpenPrice);
-	return opens.map((open, i) => (opens[(i + 1) % 12] - open) / open * 100);
+function readChanges(values, wraps) {
+	const count = wraps ? values.length : values.length - 1;
+	return Array.from({ length: count }, (_, i) => {
+		const next = values[(i + 1) % values.length];
+		return values[i] === 0 ? 1000 : (next - values[i]) / values[i] * 100;
+	});
 }
 
 /**
- * A symbol's whole daily history: its prices, and the percent move from each to the next.
+ * A stock's 12-bar lap: the percent move of each of its first 12 daily opens and of their volumes, the last wrapping
+ * to the first.
  */
-function readHistory(folder, symbol) {
+function readTwelveBarLap(folder, symbol) {
+	const bars = JSON.parse(fs.readFileSync(path.join(folder, `${symbol}.json`), 'utf8')).slice(0, 12);
+	return { name: symbol, moves: readChanges(bars.map(bar => bar.OpenPrice), true), volumes: readChanges(bars.map(bar => bar.Volume), true) };
+}
+
+/**
+ * A symbol's daily history: its prices, the percent move from each to the next, the same for its volume, and which
+ * moves are filled.
+ * A move is filled where the row it moves to has no price or no volume: the data fills the days before a stock was
+ * listed, and the days it did not trade, with the price held and a volume of 0. No trading happened on such a day.
+ * The rows kept are those after the first `offset` and before the last `holdout`, at most `maxFrames` moves of them.
+ */
+function readHistory(folder, symbol, { offset, holdout, maxFrames }) {
 	const text = fs.readFileSync(path.join(folder, `${symbol}.csv`), 'utf8');
-	const prices = text.split('\n').filter(line => line.trim() !== '').map(line => parseFloat(line.split(',')[0]));
-	const moves = prices.slice(0, -1).map((price, i) => (prices[i + 1] - price) / price * 100);
-	return { prices, moves };
+	let rows = text.split('\n').filter(line => line.trim() !== '').map(line => line.split(',').map(parseFloat));
+	rows = rows.slice(offset, rows.length - holdout);
+	if (maxFrames !== null) rows = rows.slice(0, maxFrames + 1);
+	const prices = rows.map(row => row[0]);
+	const filled = rows.slice(1).map(([price, volume]) => !price || !volume);
+	return { prices, moves: readChanges(prices, false), volumes: readChanges(rows.map(row => row[1]), false), filled };
 }
 
 /**
@@ -56,29 +73,31 @@ function makeLap(letters) {
 }
 
 /**
- * The series of a mode: each channel's name and the percent move of each bar of its lap, the length of the cycle,
- * the cycles run by default, and in seq mode each stock's prices for the trader.
+ * The series of a mode: each channel's name, the percent move of each bar of its lap and, where the data has it, of
+ * its volume; the length of the cycle; and in seq mode each stock's prices for the trader.
+ * Made-up stocks have no volume.
  */
-function readSeries(mode, folder, symbols) {
-	const lapOf = symbol => ({ name: symbol, moves: readTwelveBarLap(folder, symbol) });
-	switch (mode) {
-		case 'two': return { series: ['KGC', 'GLD'].map(lapOf), cycle: 12, defaultCycles: 10 };
-		case 'three': return { series: ['KGC', 'GLD', 'SPY'].map(lapOf), cycle: 12, defaultCycles: 10 };
-		case 'three4': return { series: [...['KGC', 'GLD', 'SPY'].map(lapOf), { name: 'Q', moves: makeLap('UDDUUDUDDUDD') }], cycle: 12, defaultCycles: 10 };
-		case 'lap': return { series: [{ name: 'A', moves: [1, -2, -3, 2, 3, -1] }, { name: 'B', moves: [2, 1, -1, -3, 3, -2] }], cycle: 6, defaultCycles: 30 };
-		case 'lap65': return { series: [{ name: 'A', moves: [1, -2, -3, 2, 3, -1] }, { name: 'B', moves: [2, 1, -1, 3, -2] }], cycle: 30, defaultCycles: 12 };
-		case 'seq': return readSequence(folder, symbols);
-		default: throw new Error('mode: two, three, three4, lap, lap65 or seq');
+function readSeries(settings) {
+	const lapOf = symbol => readTwelveBarLap(settings.folder, symbol);
+	switch (settings.mode) {
+		case 'one': return { series: ['KGC'].map(lapOf), cycle: 12 };
+		case 'two': return { series: ['KGC', 'GLD'].map(lapOf), cycle: 12 };
+		case 'three': return { series: ['KGC', 'GLD', 'SPY'].map(lapOf), cycle: 12 };
+		case 'three4': return { series: [...['KGC', 'GLD', 'SPY'].map(lapOf), { name: 'Q', moves: makeLap('UDDUUDUDDUDD') }], cycle: 12 };
+		case 'lap': return { series: [{ name: 'A', moves: [1, -2, -3, 2, 3, -1] }, { name: 'B', moves: [2, 1, -1, -3, 3, -2] }], cycle: 6 };
+		case 'lap65': return { series: [{ name: 'A', moves: [1, -2, -3, 2, 3, -1] }, { name: 'B', moves: [2, 1, -1, 3, -2] }], cycle: 30 };
+		case 'seq': return readSequence(settings);
+		default: throw new Error('mode: one, two, three, three4, lap, lap65 or seq');
 	}
 }
 
 /**
- * The seq mode's series: each stock's whole history, one cycle the whole sequence.
+ * The seq mode's series: each stock's history, one cycle the whole sequence.
  */
-function readSequence(folder, symbols) {
-	const histories = symbols.map(symbol => readHistory(folder, symbol));
-	const series = symbols.map((symbol, i) => ({ name: symbol, moves: histories[i].moves }));
-	return { series, prices: histories.map(h => h.prices), cycle: series[0].moves.length, defaultCycles: 5 };
+function readSequence(settings) {
+	const histories = settings.symbols.map(symbol => readHistory(settings.folder, symbol, settings));
+	const series = settings.symbols.map((symbol, i) => ({ name: symbol, moves: histories[i].moves, volumes: histories[i].volumes, filled: histories[i].filled }));
+	return { series, prices: histories.map(h => h.prices), cycle: series[0].moves.length };
 }
 
 /* ---------- Small helpers ---------- */
@@ -88,6 +107,27 @@ function readSequence(folder, symbols) {
  */
 function readMove(percent) {
 	return percent > 0 ? 1 : 0;
+}
+
+/**
+ * A source of random numbers in [0, 1) from a seed, the same numbers for the same seed (mulberry32).
+ */
+function makeRandom(seed) {
+	let state = seed >>> 0;
+	return () => {
+		state = (state + 0x6D2B79F5) >>> 0;
+		let t = state;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+/**
+ * Whether a stock's bar is filled: no trading happened on it. Only real histories have filled bars.
+ */
+function isFilled(stock, bar) {
+	return stock.filled?.[bar % stock.filled.length] ?? false;
 }
 
 /**
@@ -188,31 +228,32 @@ class NeuronFacts {
 
 /* ---------- The job ---------- */
 
-class ChannelsJob extends Job {
+/**
+ * The job: its settings come from the job file that runs it.
+ * The settings: `mode`, `cycles` (the laps), `folder` (the data), `symbols` (seq mode), `every` (a progress line every
+ * that many frames, 0 for none), `all4` (the ALL4 lines), `volume` (the volume channels), `offset`, `holdout` and
+ * `maxFrames` (the rows of seq mode), `trader` (the LapTrader's settings), and `randomBaseline` with its `seed`.
+ * The random baseline leaves the brain out: at each bar a coin, from the seed, says all out half the time, and the
+ * other half own one stock picked at random; the trader trades on that as it would on the brain's actions.
+ */
+export class LapChannelsJob extends Job {
 
-	constructor() {
+	constructor(settings) {
 		super();
-		const [mode, cycleArg, folderArg] = readPositionals(process.argv, BARE_FLAGS);
-		this.mode = mode ?? 'two';
+		this.mode = settings.mode;
 		this.isLapMode = this.mode.startsWith('lap');
-		this.showAllFour = process.argv.includes('--all4');
-		const symbols = (this.readFlag('--symbols') ?? 'KGC,GOLD,SPY').split(',');
-		const { series, prices, cycle, defaultCycles } = readSeries(this.mode, folderArg ?? DATA_FOLDER, symbols);
+		this.showAllFour = settings.all4;
+		const { series, prices, cycle } = readSeries(settings);
 		this.series = series;
 		this.prices = prices ?? [];
 		this.cycle = cycle;
-		this.cycles = cycleArg ? parseInt(cycleArg) : defaultCycles;
-		this.reportEvery = parseInt(this.readFlag('--every') ?? '0');
-		this.trader = new LapTrader(series.map(s => s.name), parseInt(this.readFlag('--max-positions') ?? '1'), parseFloat(this.readFlag('--cost') ?? '0'));
+		this.cycles = settings.cycles;
+		this.reportEvery = settings.every;
+		// the stocks given a volume channel: with volume on, those whose data has volume
+		this.volumeSeries = settings.volume ? series.filter(s => s.volumes) : [];
+		this.trader = new LapTrader(series.map(s => s.name), settings.trader);
+		this.random = settings.randomBaseline ? makeRandom(settings.seed ?? 1) : null;
 		this.prepareCounts();
-	}
-
-	/**
-	 * The value after one of this job's flags, or null.
-	 */
-	readFlag(flag) {
-		const at = process.argv.indexOf(flag);
-		return at !== -1 ? process.argv[at + 1] : null;
 	}
 
 	/**
@@ -249,6 +290,7 @@ class ChannelsJob extends Job {
 		for (const { name } of this.series) {
 			this.brain.declareChannel({ name, event: { name: 'move', resolution: 2 }, action: { name: 'position', resolution: 2 } });
 		}
+		for (const { name } of this.volumeSeries) this.brain.declareChannel({ name: `${name} volume`, event: { name: 'volume', resolution: 2 } });
 	}
 
 	/**
@@ -256,12 +298,17 @@ class ChannelsJob extends Job {
 	 */
 	async executeJob() {
 		this.channelList = this.series.map(s => this.channels.get(s.name));
+		this.volumeChannels = this.volumeSeries.map(s => this.channels.get(`${s.name} volume`));
 		this.neurons = new NeuronFacts(this.brain);
 		this.lastDictionary = this.brain.readDictionaryFingerprint();
 		this.printHeader();
 		const total = this.cycle * this.cycles;
 		for (let k = 0; k < total; k++) {
 			if (k % this.cycle === 0) this.trader.startLap();
+			if (this.random) {
+				this.runRandomBar(k);
+				continue;
+			}
 			const winners = this.runFrame(k);
 			const frameNumber = this.brain.getFrameNumber();
 			this.readWinners(k, winners);
@@ -271,11 +318,37 @@ class ChannelsJob extends Job {
 		}
 	}
 
+	/**
+	 * One bar of the random baseline: the brain sees nothing; the coin's actions are graded and traded on.
+	 */
+	runRandomBar(k) {
+		this.chooseRandomActions();
+		this.series.forEach((stock, i) => {
+			if (isFilled(stock, k + 1)) return;
+			const nextMove = readMove(stock.moves[(k + 1) % stock.moves.length]);
+			this.grid[i][Math.floor(k / this.cycle)][k % this.cycle] = this.pending[i] === nextMove ? 'R' : 'W';
+		});
+		if (this.prices.length > 0) this.runTrader(k);
+		if (k % this.cycle === this.cycle - 1) this.printCycle(k, k + 1, new BoardView([], this.neurons));
+	}
+
+	/**
+	 * The coin's actions: half the time every stock out, the other half one stock, picked at random, owned.
+	 */
+	chooseRandomActions() {
+		const owned = this.random() < 0.5 ? -1 : Math.floor(this.random() * this.series.length);
+		this.series.forEach((_, i) => {
+			this.pending[i] = i === owned ? 1 : 0;
+			this.estimates[i] = 0;
+		});
+	}
+
 	printHeader() {
 		console.log(`${this.mode}: ${this.cycles} cycles of ${this.cycle} bars`);
 		for (const { name, moves } of this.series) {
 			if (moves.length === this.cycle) console.log(`  ${name} moves per cycle: ${moves.map(p => p > 0 ? 'U' : 'D').join('')}`);
 		}
+		if (this.volumeSeries.length > 0) console.log(`  volume channels: ${this.volumeSeries.map(s => s.name).join(', ')}`);
 	}
 
 	/**
@@ -285,8 +358,10 @@ class ChannelsJob extends Job {
 	runFrame(k) {
 		const inputs = [];
 		const rewards = [];
-		this.series.forEach(({ moves }, i) => {
-			const percent = moves[k % moves.length];
+		this.series.forEach((stock, i) => {
+			// a filled bar is no trading: the stock reports nothing, runs nothing and earns nothing this frame
+			if (isFilled(stock, k)) return;
+			const percent = stock.moves[k % stock.moves.length];
 			const move = readMove(percent);
 			const channel = this.channelList[i];
 			const action = this.pending[i] ?? move;
@@ -294,19 +369,25 @@ class ChannelsJob extends Job {
 			inputs.push({ dim: channel.actionDim, bucket: action });
 			rewards.push({ reward: action === 1 ? percent : -percent, channels: [channel.channelId], frames: 1 });
 		});
+		this.volumeSeries.forEach((stock, i) => {
+			if (isFilled(stock, k)) return;
+			inputs.push({ dim: this.volumeChannels[i].eventDim, bucket: readMove(stock.volumes[k % stock.volumes.length]) });
+		});
 		return this.brain.processFrame(inputs, rewards);
 	}
 
 	/**
 	 * Read what the brain said for each stock, and mark it right or wrong against the next bar's move.
+	 * A filled next bar is not graded: there was no move to say.
 	 */
 	readWinners(k, winners) {
-		this.series.forEach(({ moves }, i) => {
+		this.series.forEach((stock, i) => {
 			const winner = winners.find(w => w.dim === this.channelList[i].actionDim);
 			this.pending[i] = winner?.bucket ?? null;
 			this.estimates[i] = winner?.estimate ?? 0;
-			const nextMove = readMove(moves[(k + 1) % moves.length]);
-			if (this.pending[i] !== null) this.grid[i][Math.floor(k / this.cycle)][k % this.cycle] = this.pending[i] === nextMove ? 'R' : 'W';
+			if (this.pending[i] === null || isFilled(stock, k + 1)) return;
+			const nextMove = readMove(stock.moves[(k + 1) % stock.moves.length]);
+			this.grid[i][Math.floor(k / this.cycle)][k % this.cycle] = this.pending[i] === nextMove ? 'R' : 'W';
 		});
 	}
 
@@ -319,7 +400,9 @@ class ChannelsJob extends Job {
 		const at = (k % this.cycle) + 1;
 		const prices = this.prices.map(p => p[at]);
 		if (this.lastActions.some(a => a !== null)) this.trader.trade(this.lastActions, this.estimates, prices);
+		this.trader.recordValue(prices);
 		if (this.reportEvery > 0 && at % this.reportEvery === 0) this.printProgress(k, prices);
+		if (at === this.cycle) this.printTraderLap(k, prices);
 	}
 
 	/**
@@ -343,6 +426,18 @@ class ChannelsJob extends Job {
 		}
 		const seconds = formatFixed((Date.now() - this.clockStart) / 1000, 0);
 		console.log(`EVERY100 frame ${k + 1} | neurons ${this.brain.countLivingNeurons()} | functions ${this.brain.countFunctions()} | right last 100 frames ${formatPercent(rightRecent, recent)}% | right so far ${formatPercent(rightSoFar, soFar)}% | net profit $${formatFixed(this.trader.readProfit(prices), 2)} | trades ${this.trader.trades} | ${seconds}s`);
+	}
+
+	/**
+	 * At the end of a lap, the trader's lap: profit, ROI, the per-frame return, the Sharpe ratio, the cost paid and the trades.
+	 */
+	printTraderLap(k, prices) {
+		const profit = this.trader.readProfit(prices);
+		const roi = profit / this.trader.initialCapital * 100;
+		const perFrame = this.trader.readPerBarReturn() * 100;
+		const sharpe = this.trader.readSharpe();
+		const signed = (value, decimals) => `${value >= 0 ? '+' : ''}${formatFixed(value, decimals)}`;
+		console.log(`TRADER lap ${Math.floor(k / this.cycle) + 1} | net profit $${formatFixed(profit, 2)} | ROI ${signed(roi, 2)}% | ${signed(perFrame, 6)}%/frame | Sharpe ${sharpe === null ? '-' : formatFixed(sharpe, 2)} | transaction cost $${formatFixed(this.trader.costPaid, 2)} | trades ${this.trader.trades}`);
 	}
 
 	/**
@@ -389,7 +484,7 @@ class ChannelsJob extends Job {
 		let profit = '';
 		if (this.prices.length > 0) {
 			const value = this.trader.readProfit(this.prices.map(p => p[(k % this.cycle) + 1]));
-			profit = ` | net profit $${formatFixed(value, 2)}, ROI ${formatFixed(value / 15000 * 100, 2)}% (${this.trader.trades} trades)`;
+			profit = ` | net profit $${formatFixed(value, 2)}, ROI ${formatFixed(value / this.trader.initialCapital * 100, 2)}% (${this.trader.trades} trades)`;
 		}
 		console.log(`CYCLE ${lap + 1} | neurons ${this.brain.countLivingNeurons()} | functions ${this.brain.countFunctions()} | highest call level in the cycle ${top} | the dictionary last changed at frame ${this.lastChange} | right ${shares.join(', ')}${profit}`);
 	}
@@ -460,7 +555,7 @@ class ChannelsJob extends Job {
 		console.log(`NEVERCALLED ${this.brain.countFunctionsNeverCalled()} of ${functions}`);
 		console.log(`  combination calls per frame, per cycle: ${this.combos.map((counts, c) => `${c + 1}:${counts.join('')}`).join(' ')}`);
 		if (this.isLapMode) this.printLaps();
-		new DictionaryReport(this.brain, this.neurons, this.series, this.channelList, this.calledLast).print();
+		new DictionaryReport(this.brain, this.neurons, this.series, this.channelList, this.volumeSeries, this.volumeChannels, this.calledLast).print();
 		this.printApex();
 		console.log(`  ${formatFixed((Date.now() - this.clockStart) / 1000, 1)} s`);
 	}
@@ -523,7 +618,7 @@ class ChannelsJob extends Job {
  */
 class DictionaryReport {
 
-	constructor(brain, neurons, series, channelList, calledLast) {
+	constructor(brain, neurons, series, channelList, volumeSeries, volumeChannels, calledLast) {
 		this.brain = brain;
 		this.neurons = neurons;
 		this.calledLast = calledLast;
@@ -535,6 +630,7 @@ class DictionaryReport {
 			this.channelNames.set(channel.eventDim, series[i].name);
 			this.channelNames.set(channel.actionDim, series[i].name);
 		});
+		volumeChannels.forEach((channel, i) => this.channelNames.set(channel.eventDim, `${volumeSeries[i].name} volume`));
 		// each function's level and channels, read once
 		this.info = new Map();
 	}
@@ -657,4 +753,3 @@ class DictionaryReport {
 	}
 }
 
-await runJob(import.meta, ChannelsJob);

@@ -9,6 +9,8 @@
  * A number lies exactly halfway at `decimals` decimals when it is an odd multiple of 2^-(decimals+1).
  */
 export function formatFixed(value, decimals) {
+	// from 10^21 up `toFixed` writes an exponent; a number that large is whole, so its exact digits are written out
+	if (Math.abs(value) >= 1e21 && Number.isFinite(value)) return `${BigInt(value)}${decimals > 0 ? '.' + '0'.repeat(decimals) : ''}`;
 	const halves = value * 2 ** (decimals + 1);
 	const isTie = Number.isInteger(halves) && halves % 2 !== 0;
 	if (!isTie) return value.toFixed(decimals);

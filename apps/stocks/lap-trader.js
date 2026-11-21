@@ -1,37 +1,47 @@
 /**
  * The trader of the stock laps: it holds cash and whole shares, and at each bar brings its holdings in line with the
  * actions the brain last said, at the price the bar ended at.
- * It trades as apps/stocks/trader.js does: each stock owned (action 1) or out, at most `maxPositions` owned, the value
- * split evenly among them, what cash is left swept into the cheapest owned stock, a cost in percent on each trade.
+ * Each stock is owned (action 1) or out, at most `maxPositions` owned, the value split evenly among them, what cash is
+ * left swept into the cheapest owned stock, a cost in percent on each trade.
+ * Over a lap it keeps the portfolio's value after every bar, for the Sharpe ratio, and the cost it paid.
  */
 
-// what the trader starts each lap with
-export const STARTING_CASH = 15000;
+// the trading bars in a year of daily data, for annualizing the Sharpe ratio
+const BARS_PER_YEAR = 252;
 
-// a stock priced at this or more is not bought where there are more owns than positions
-const PRICE_CAP = 5000;
+// the yearly return of a riskless investment, which the Sharpe ratio measures the excess over
+const RISK_FREE_RATE = 0.05;
 
 export class LapTrader {
 
 	/**
 	 * @param {string[]} symbols - the stocks, in channel order
-	 * @param {number} maxPositions - how many stocks it may own at once
-	 * @param {number} costPercent - the cost of a trade, in percent of its value
+	 * @param {object} settings
+	 * @param {number} settings.maxPositions - how many stocks it may own at once
+	 * @param {number} settings.costPercent - the cost of a trade, in percent of its value
+	 * @param {number} settings.initialCapital - the cash each lap starts with
+	 * @param {number} settings.minPrice - where more stocks say own than there are positions, none priced below this is bought
+	 * @param {number} settings.maxPrice - and none priced at this or above
 	 */
-	constructor(symbols, maxPositions, costPercent) {
+	constructor(symbols, { maxPositions, costPercent, initialCapital, minPrice, maxPrice }) {
 		this.symbols = symbols;
 		this.maxPositions = maxPositions;
 		this.costRate = costPercent / 100;
+		this.initialCapital = initialCapital;
+		this.minPrice = minPrice;
+		this.maxPrice = maxPrice;
 		this.startLap();
 	}
 
 	/**
-	 * Start a lap: all cash, no shares, no trades.
+	 * Start a lap: all cash, no shares, no trades, no cost paid, and the value so far only the starting cash.
 	 */
 	startLap() {
-		this.cash = STARTING_CASH;
+		this.cash = this.initialCapital;
 		this.shares = this.symbols.map(() => 0);
 		this.trades = 0;
+		this.costPaid = 0;
+		this.values = [this.initialCapital];
 	}
 
 	/**
@@ -45,7 +55,14 @@ export class LapTrader {
 	 * What the trader made since the lap started, at these prices.
 	 */
 	readProfit(prices) {
-		return this.readValue(prices) - STARTING_CASH;
+		return this.readValue(prices) - this.initialCapital;
+	}
+
+	/**
+	 * Note the portfolio's value at the end of a bar, at the bar's prices.
+	 */
+	recordValue(prices) {
+		this.values.push(this.readValue(prices));
 	}
 
 	/**
@@ -60,13 +77,14 @@ export class LapTrader {
 
 	/**
 	 * The stocks to own: those whose action is own, with a price.
-	 * With more than the positions allow, the best by estimate, then the higher price, then the symbol, under the cap.
+	 * With more than the positions allow: the best by estimate, then the higher price, then the symbol, within the
+	 * price limits.
 	 */
 	chooseOwned(actions, estimates, prices) {
 		let owned = this.symbols.map((_, i) => i).filter(i => actions[i] === 1 && prices[i] > 0);
 		if (owned.length <= this.maxPositions) return owned;
 		owned.sort((a, b) => Math.exp(estimates[b]) - Math.exp(estimates[a]) || prices[b] - prices[a] || compareText(this.symbols[a], this.symbols[b]));
-		owned = owned.filter(i => prices[i] < PRICE_CAP);
+		owned = owned.filter(i => prices[i] >= this.minPrice && prices[i] < this.maxPrice);
 		return owned.slice(0, this.maxPositions);
 	}
 
@@ -129,8 +147,16 @@ export class LapTrader {
 		return price * (1 + this.costRate);
 	}
 
+	/**
+	 * The cost of trading shares at a price: the cost rate on their value.
+	 */
+	readCost(count, price) {
+		return count * price * this.costRate;
+	}
+
 	sell(i, count, price) {
 		this.cash += this.readProceeds(count, price);
+		this.costPaid += this.readCost(count, price);
 		this.shares[i] -= count;
 		this.trades++;
 	}
@@ -142,8 +168,45 @@ export class LapTrader {
 		const affordable = Math.min(count, Math.floor(this.cash / this.readBuyPrice(price)));
 		if (affordable <= 0) return;
 		this.cash -= affordable * this.readBuyPrice(price);
+		this.costPaid += this.readCost(affordable, price);
 		this.shares[i] += affordable;
 		this.trades++;
+	}
+
+	/* ---------- The lap's statistics ---------- */
+
+	/**
+	 * The return per bar that, compounded over the lap's bars, gives the lap's whole return.
+	 */
+	readPerBarReturn() {
+		const bars = this.values.length - 1;
+		const final = this.values[bars];
+		return bars > 0 ? Math.pow(final / this.initialCapital, 1 / bars) - 1 : 0;
+	}
+
+	/**
+	 * The Sharpe ratio of the lap: the yearly mean of the per-bar log returns, less the riskless rate, over their
+	 * yearly standard deviation; null where there are too few bars or no spread.
+	 */
+	readSharpe() {
+		const returns = this.listLogReturns();
+		if (returns.length < 2) return null;
+		const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+		const variance = returns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (returns.length - 1);
+		const spread = Math.sqrt(variance);
+		if (spread === 0) return null;
+		return (mean * BARS_PER_YEAR - RISK_FREE_RATE) / (spread * Math.sqrt(BARS_PER_YEAR));
+	}
+
+	/**
+	 * The log return of each bar, from the value before it to the value after; a bar after a value of nothing is left out.
+	 */
+	listLogReturns() {
+		const returns = [];
+		for (let i = 1; i < this.values.length; i++) {
+			if (this.values[i - 1] > 0) returns.push(Math.log(this.values[i] / this.values[i - 1]));
+		}
+		return returns;
 	}
 }
 

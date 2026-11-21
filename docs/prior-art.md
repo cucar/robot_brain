@@ -6,16 +6,29 @@
 
 ## 1. The mechanism being positioned
 
-The claimed contribution, stated in its own terms (independent of any single prior lineage):
+The claimed contribution, stated in its own terms (independent of any single prior lineage), as specified in
+[algorithm.md](algorithm.md):
 
-A unit that detects an **ordered temporal pattern** of inputs — input *x*, then *y*, then *z*, with specific inter-event time distances — and on a match, **routes** activation to specific successors (event inference, action inference, or a delegation signal that promotes a higher-level unit and withdraws the lower unit's own vote). The system **mints structure on demand** (units and connections created at runtime via content-hash addressing, reused via a reverse connection index, pruned via the Death Ledger), forms **hierarchy depth as needed** rather than at a fixed designed depth, processes across **multiple channels** with controlled cross-connection (neighbor channels limiting connection minting), and treats **spatial co-activation as the distance-zero case** of the same sequence mechanism (moment neurons).
+Every symbol is a neuron, every activation a node of a graph, and every relation between two activations — one at an
+exact offset from the other, in time and space together — an edge. The machine names the graphs that keep recurring:
+a **function**, named by an **interneuron**, is taken online wherever naming it saves more edges than it costs. A
+function in time is recognized as it unfolds, and its **call** — one activation of the interneuron — stands for what it
+covers. Interneurons are nodes like any other, so functions over functions form level by level, as deep as the data
+needs. Structure is created and removed at runtime: interneurons are allocated for new functions and decommissioned
+when their last function leaves the dictionary. Every neuron also records what followed it and what that earned, as
+**connections** (a count and a reward total); each frame the calls and neurons standing on the apex infer what comes
+next, and the machine acts on the best estimate. Many channels feed one brain and one dictionary; which kinds of
+neuron are each other's neighbors, and which connect, is set by a machine-wide **neighborhood policy**.
 
 The key architectural commitments that distinguish it from a conventional neural network:
 
-- **Structure, not weights, is the unit of learning.** Discrete, identity-bearing units are minted/reused/pruned. There is no weight tensor adjusted by gradient.
-- **Routing, not integration.** A matched pattern selects a path; it is not a weighted magnitude compared to a threshold.
+- **Structure, not weights, is the unit of learning.** Discrete, identity-bearing functions and interneurons are
+  named and decommissioned; a connection holds counts, not a weight. There is no weight tensor adjusted by gradient.
+- **Fitting, not integration.** A call is a graph fitted to the relations that hold at exact offsets; it is not a
+  weighted magnitude compared to a threshold.
 - **Demand-driven hierarchy.** Depth grows to fit the data, rather than being fixed by an architect.
-- **Unified spatial/temporal substrate.** Spatial processing is the same mechanism applied at distance zero.
+- **One graph for space and time.** An offset holds time and every spatial dimension together, so a pattern learned
+  at one position is known everywhere, in space as in time.
 
 Each of these has *partial* analogs in prior work. None of the prior lineages combines all of them. The sections below establish that honestly, lineage by lineage.
 
@@ -41,9 +54,9 @@ Each of these has *partial* analogs in prior work. None of the prior lineages co
 **The carve-out against the structure-growing wave.** These systems mint/prune structure, but:
 1. They still **train weights by gradient/eProp** — learning is fundamentally weight adjustment, with structure change as an auxiliary. Robot Brain has no gradient anywhere.
 2. They grow by **rewiring or expanding a graph at fixed conceptual level** — they do not form *demand-driven hierarchical depth* (new levels of abstraction created because the data required them).
-3. They are demonstrated on standard supervised benchmarks, **not online class-incremental learning without replay** — the regime where Robot Brain's headline result lives.
+3. They are demonstrated on standard supervised benchmarks, **not online class-incremental learning without replay** — a regime Robot Brain is measured in (Split-MNIST, §4).
 4. They have **no native spatial mechanism** beyond imported convolution, and **no unified spatial/temporal primitive**.
-5. Representation remains **distributed and weight-borne**, not discrete/content-addressed.
+5. Representation remains **distributed and weight-borne**, not discrete named graphs.
 
 ### B. Dendritic sequence detection (biological-plausibility foundation, not an architecture competitor)
 
@@ -68,13 +81,13 @@ Each of these has *partial* analogs in prior work. None of the prior lineages co
 - **Khalfaoui-Hassani & Masquelier (2023, learnable delays via dilated convolutions with learnable spacings)** — makes axonal delay a *trainable* parameter; turns polychronization from a 2006 curiosity into a modern, trainable mechanism. Lead with this for an ML-literate audience.
 - **Graphical Neural Activity Threads / GNATs (2023)** — generalize and subsume polychronous groups with a more efficient extraction algorithm than Izhikevich's brute-force search. Relevant if the O(n²) concern extends to *detecting* which groups exist.
 
-**Relationship to Robot Brain.** Closest *temporal-coding* relative. Shares: timing-as-code, capacity in relationships. Diverges: polychronous groups emerge over a **fixed neuron pool and (largely) fixed connectivity** — dynamic activity, static structure — and the lineage stays weight/STDP-based. No demand-driven structure minting, no spatial unification, no symbolic addressing.
+**Relationship to Robot Brain.** Closest *temporal-coding* relative. Shares: timing-as-code, capacity in relationships. Diverges: polychronous groups emerge over a **fixed neuron pool and (largely) fixed connectivity** — dynamic activity, static structure — and the lineage stays weight/STDP-based. No demand-driven structure, no one graph for space and time, no named symbols.
 
 ### D. Hierarchical Temporal Memory (HTM / Numenta)
 
 **What it is.** A structure-and-sequence-learning system using neural vocabulary: dendritic segments as pattern detectors that put a cell into a *predictive* state, sparse distributed representations, sequence memory.
 
-**Relationship to Robot Brain.** Shares the most *philosophy* — pattern detection over summation, prediction over classification, biological framing. Critically, even HTM implements its dendritic segments as a **thresholded coincidence count** (~15–20 active synapses). So if Robot Brain uses pure timing-coincidence with no magnitude integration, it is making a *stronger* claim than HTM. Diverges: HTM's columnar structure and SDR dimensions are largely fixed; it does not mint hierarchical depth on demand or unify spatial/temporal via distance-zero. **Cautionary precedent:** HTM has spent a decade mis-shelved as "a kind of neural net" because it borrowed biological words; the lesson is to name the paradigm divergence *before* others benchmark you on the wrong axis.
+**Relationship to Robot Brain.** Shares the most *philosophy* — pattern detection over summation, prediction over classification, biological framing. Critically, even HTM implements its dendritic segments as a **thresholded coincidence count** (~15–20 active synapses). So if Robot Brain uses pure timing-coincidence with no magnitude integration, it is making a *stronger* claim than HTM. Diverges: HTM's columnar structure and SDR dimensions are largely fixed; it does not form hierarchical depth on demand or hold space and time in one graph of offsets. **Cautionary precedent:** HTM has spent a decade mis-shelved as "a kind of neural net" because it borrowed biological words; the lesson is to name the paradigm divergence *before* others benchmark you on the wrong axis.
 
 ### E. Symbolic pattern-matching: Rete & discrimination trees
 
@@ -85,12 +98,12 @@ This is the lineage that turned out to be the closest *computational* relative �
 - *Multi-channel?* No. *Spatial?* No.
 
 **Rete algorithm (Forgy, 1974/82; production-rule engines — OPS5, CLIPS, Drools, Jess).** Compiles many patterns into a dataflow network. An *alpha* sub-network does single-item tests; a *beta* sub-network does joins across items. Two properties map almost one-to-one onto Robot Brain concerns:
-1. **Node sharing** — patterns sharing conditions share nodes; common sub-patterns computed once. (≈ neuron reuse / neighbor channels: don't re-mint a detector that exists.)
-2. **State retention / incrementality** — partial matches are held in node memories between cycles; a new input does work proportional to *what changed*, not to network size. (≈ the architectural answer to O(n²); ≈ batched mint + content-hash addressing amortizing matching across time.)
+1. **Node sharing** — patterns sharing conditions share nodes; common sub-patterns computed once. (≈ one dictionary: a function is named once and its call stands wherever it recurs.)
+2. **State retention / incrementality** — partial matches are held in node memories between cycles; a new input does work proportional to *what changed*, not to network size. (≈ each neuron's relation index over its own history, and a function in time recognized as it unfolds, frame by frame.)
 
-A Rete node fires when its specific pattern (including cross-time joins) is satisfied and **routes** activation to specific successors — it does not integrate a weighted magnitude. That is the Robot Brain unit, almost exactly. The "delegation — promote the higher unit, withdraw my own vote" is a beta-node join firing and retracting the lower partial matches it subsumes.
+A Rete node fires when its specific pattern (including cross-time joins) is satisfied and **routes** activation to specific successors — it does not integrate a weighted magnitude. That is close to a Robot Brain call. Covering — a call standing for the activations it covers, which then no longer stand on the apex — is a beta-node join firing and retracting the lower partial matches it subsumes.
 - *Dynamic hierarchy?* No — the network is compiled from **human-authored rules**; depth = conditions written, never discovered from data. **Exception: Soar's chunking** dynamically creates new productions from impasses — the closest symbolic precedent for demand-driven hierarchy. Cite it as precedent *and* as something you exceed: Soar chunks problem-solving traces; Robot Brain chunks perceptual/temporal sequences learned online.
-- *Multi-channel?* No analog to neighbor channels. *Spatial?* No — purely symbolic; order matters, topology does not.
+- *Multi-channel?* No analog to channels feeding one dictionary. *Spatial?* No — purely symbolic; order matters, topology does not.
 
 ---
 
@@ -102,9 +115,9 @@ Because the plateau-potential work is the tightest biological fit, its scope mus
 
 **Does NOT found (output side):** The plateau neuron still collapses to one axon and one all-or-none output. Compartmentalization buys multiple *input-side* states, not multiple *output lines* selected by which sequence matched. "Different sequences fire different axon branches carrying distinct meanings" remains a Robot Brain abstraction, not something biology implements at the single-cell level.
 
-**The move the paper hands you:** its headline result is a *two-layer* network — layer-1 units detect sub-sequences, layer-2 units detect sequences-of-sequences. That hierarchical chunking *is* delegation — supported as a **two-unit** phenomenon, not a within-one-neuron branch-routing phenomenon.
+**The move the paper hands you:** its headline result is a *two-layer* network — layer-1 units detect sub-sequences, layer-2 units detect sequences-of-sequences. That hierarchical chunking *is* a call over calls — supported as a **two-unit** phenomenon, not a within-one-neuron branch-routing phenomenon.
 
-**Recommended framing:** model the multi-output unit as a **small plateau-detector cluster** — each "branch meaning" (event / action / delegation) is its own single-output unit, routing becomes inter-unit wiring, and the delegation hierarchy falls straight out of the two-layer result. Implement the compressed single-unit version if desired, but describe it as a *learned approximation of the plateau microcircuit*, with this paper as the biological referent. Defensible sentence: "dendritic plateau dynamics provide a biophysical substrate for compartmentalized, timing-invariant sequence detection within a single neuron, which Robot Brain abstracts into [unit]." Not defensible: "neurons route different sequences to different axonal outputs."
+**Recommended framing:** model the multi-output unit as a **small plateau-detector cluster** — each "branch meaning" (event / action / call) is its own single-output unit, routing becomes inter-unit wiring, and the hierarchy of calls falls straight out of the two-layer result. Implement the compressed single-unit version if desired, but describe it as a *learned approximation of the plateau microcircuit*, with this paper as the biological referent. Defensible sentence: "dendritic plateau dynamics provide a biophysical substrate for compartmentalized, timing-invariant sequence detection within a single neuron, which Robot Brain abstracts into [unit]." Not defensible: "neurons route different sequences to different axonal outputs."
 
 ---
 
@@ -112,14 +125,14 @@ Because the plateau-potential work is the tightest biological fit, its scope mus
 
 | Dimension | Deep SNN (standard) | Structure-growing SNN (CogniSNN/MorphSNN/DEEP R) | Polychronization | HTM | Rete / discrimination tree | **Robot Brain** |
 |---|---|---|---|---|---|---|
-| Runtime structure creation | No | Yes (rewire/expand) | No (groups emerge on fixed substrate) | Limited | Tree grows on insert; Soar chunks | **Yes (mint/reuse/prune)** |
+| Runtime structure creation | No | Yes (rewire/expand) | No (groups emerge on fixed substrate) | Limited | Tree grows on insert; Soar chunks | **Yes (functions named where they save; interneurons allocated and decommissioned)** |
 | Hierarchy depth | Fixed by architect | Fixed conceptual level | Fixed | Largely fixed | Author-specified (Soar: dynamic) | **Demand-driven** |
-| Learning mechanism | Surrogate gradient / STDP | Gradient/eProp + rewiring | STDP + delays | Hebbian-ish thresholded | Rule compilation | **Structural minting (no gradient)** |
-| Core primitive | Integrate + threshold | Integrate + threshold | Coincidence via delays | Thresholded coincidence count | Match + route | **Match + route (timing-coded)** |
-| Multi-channel | Via designed layers | Via graph | No | Columns | No | **Neighbor channels** |
-| Spatial processing | Imported convolution | Imported convolution | No | Spatial pooler (designed) | No | **Native (distance-zero)** |
-| Online class-incremental, no replay | No | Not demonstrated | No | Partial | N/A | **Yes (headline result)** |
-| Representation | Distributed weights | Distributed weights | Distributed | SDR | Discrete symbolic | **Discrete, content-addressed** |
+| Learning mechanism | Surrogate gradient / STDP | Gradient/eProp + rewiring | STDP + delays | Hebbian-ish thresholded | Rule compilation | **Compression by naming (no gradient)** |
+| Core primitive | Integrate + threshold | Integrate + threshold | Coincidence via delays | Thresholded coincidence count | Match + route | **Fit a graph of exact offsets; name it** |
+| Multi-channel | Via designed layers | Via graph | No | Columns | No | **One dictionary; neighborhood policy** |
+| Spatial processing | Imported convolution | Imported convolution | No | Spatial pooler (designed) | No | **Native (offsets in space and time in one graph)** |
+| Online class-incremental, no replay | No | Not demonstrated | No | Partial | N/A | **Partial: Split-MNIST 44.26% after five tasks, no unseen class ever named (14×14, 10,000 images; [mnist-demos.md](mnist-demos.md))** |
+| Representation | Distributed weights | Distributed weights | Distributed | SDR | Discrete symbolic | **Discrete named graphs** |
 
 ---
 
@@ -127,15 +140,15 @@ Because the plateau-potential work is the tightest biological fit, its scope mus
 
 No single prior lineage holds the combination. The defensible positioning is **not** "a new kind of neural net" (which invites benchmarking against surrogate-gradient SNNs on accuracy-per-energy — the wrong axis). It is:
 
-> An **online structure-learning architecture with spike-timed, sequence-coded representations** — computationally descended from symbolic pattern-matching (Rete / discrimination-tree lineage), made biologically plausible by the dendritic-sequence-detection and polychronization literatures, and distinguished from SNNs precisely by **minting structure instead of training weights**, forming **hierarchy depth on demand**, and unifying **spatial processing as the distance-zero case** of sequence detection.
+> An **online structure-learning architecture with timing-coded, sequence-coded representations** — computationally descended from symbolic pattern-matching (Rete / discrimination-tree lineage), made biologically plausible by the dendritic-sequence-detection and polychronization literatures, and distinguished from SNNs precisely by **naming structure instead of training weights**, forming **hierarchy depth on demand**, and holding **space and time in one graph of exact offsets**.
 
-This sits in the gap between symbolic production systems (which don't learn online or degrade gracefully) and SNNs (which use timing but still threshold-integrate over a fixed graph). The eval that follows from this framing is forgetting curves and capacity-over-time — where the class-incremental-without-replay result differentiates — not accuracy-per-energy, where a trained SNN wins and the comparison is meaningless.
+This sits in the gap between symbolic production systems (which don't learn online or degrade gracefully) and SNNs (which use timing but still threshold-integrate over a fixed graph). The eval that follows from this framing is forgetting curves and capacity-over-time — where class-incremental learning without replay is measured — not accuracy-per-energy, where a trained SNN wins and the comparison is meaningless.
 
 ---
 
 ## 6. Risks to pre-empt
 
-1. **CogniSNN / MorphSNN (closest named art).** Both mint structure at runtime. Distinguish on: no-gradient learning, demand-driven *depth* (not graph rewiring at fixed level), online class-incremental without replay, and native spatial unification. Name them before an examiner or reviewer does.
+1. **CogniSNN / MorphSNN (closest named art).** Both mint structure at runtime. Distinguish on: no-gradient learning, demand-driven *depth* (not graph rewiring at fixed level), online class-incremental learning without replay, and space and time in one graph. Name them before an examiner or reviewer does.
 2. **The no-summation / pure-timing claim.** Stronger than even HTM. The standard objection is noise robustness — integration is how biology tolerates unreliable synapses and jitter. The answer must be graceful degradation under partial/jittered sequences; lean on Somashekar/Bhalla/Naud (2025) and the metaplasticity result as evidence the biological version *can* be made noise-tolerant. This is the load-bearing empirical question.
 3. **Single-neuron multi-output routing.** Biology does not route distinct sequences to distinct axonal outputs in one cell. Frame as a learned approximation of a plateau-detector microcircuit (see §3), not as biological fact.
 4. **Soar chunking as prior art for demand-driven hierarchy.** Acknowledge it; distinguish on domain (perceptual/temporal sequences learned online vs. problem-solving impasse traces) and on the spatial/temporal unification it lacks.
@@ -144,8 +157,9 @@ This sits in the gap between symbolic production systems (which don't learn onli
 
 ## 7. Compression as code — neighbors of the function model
 
-The function model (algorithm.md D37–D47: patterns as functions, classes and parameters as variables, value neurons,
-expected events) has neighbors in these fields. None combines them; each has solved a piece. Citations gathered
+The function model ([algorithm.md](algorithm.md) §3.6 Functions, §3.9–3.11 Costs, Savings and Generalizing: recurring
+graphs named as functions, general functions with variables, priced by the edges they save) has neighbors in these
+fields. None combines them; each has solved a piece. Citations gathered
 2026-09-17 and not yet read in full.
 
 | Field | Nearest work | What it has that the model uses | What it lacks |
@@ -162,9 +176,10 @@ expected events) has neighbors in these fields. None combines them; each has sol
 | Attention and in-context learning | Transformers (Vaswani et al. 2017); induction heads (Olsson et al. 2022); transformer circuits (Elhage et al. 2021); relative position encodings (Shaw et al. 2018; RoPE, Su et al. 2021); MLPs as key–value memories (Geva et al. 2021) | Query, key and value as slot, class and bound value; an induction head as a variable named at two offsets with a value read at a third, the primitive behind in-context learning; relative offsets as the address | Content-addressed at any distance where this design is place-addressed within reach; soft binding by weighted sum where a variable holds one neuron; learned by gradient over a corpus, not by counts over a sliding history |
 | Human abstraction learning | Prospective compression (2026) | Evidence that people choose abstractions for tasks they expect, not only for tasks they have had; the sliding history here is retrospective | — |
 
-What is not found combined: one majority-vote operator, online and greedy, per neuron over a sliding history,
-with a fixed-length file as the only objective, applied to perception and to action with opposite readings of
-disagreement (a varying neighbor is dropped, a varying call is a slot).
+What is not found combined: an online, greedy compression that names a recurring graph of relations, at exact
+offsets in time and space together, wherever naming it saves more edges than it costs, over each neuron's recent
+history; general functions with variables standing in for the specific ones they cover; and the same names carrying
+the connections whose average reward chooses the actions.
 
 ## Status & caveats
 
