@@ -18,6 +18,11 @@ not compared. The result lines are every line of stdout but those a benchmark na
 lines of diagnostics the build no longer prints. It exits non-zero where any benchmark differs. `--only <name>` runs
 one benchmark; `--record` saves each run's output as the expected one.
 
+With `--js` the script runs each benchmark's JS job in `apps/` instead of its Rust example: it builds the Node addon
+(`cargo build --release -p brain-napi`, copied to `brain/brain-napi/brain-napi.node`), runs each job with `node` from
+the repository's root, and compares its stdout the same way. The script's `js` table names each benchmark's job and
+its arguments.
+
 The timings stripped (the same rule for the saved and the new output): any number followed by `ms` or `ms/image`;
 a number of seconds (`590s`, `| 56.9 s`) at the end of a line; a line that is a number of seconds alone. Nothing
 else is changed.

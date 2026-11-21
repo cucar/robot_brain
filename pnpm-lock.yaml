@@ -21,6 +21,12 @@ importers:
         specifier: workspace:*
         version: link:../../libs/node
 
+  apps/shapes:
+    dependencies:
+      robot-brain:
+        specifier: workspace:*
+        version: link:../../libs/node
+
   apps/stocks:
     dependencies:
       '@alpacahq/alpaca-trade-api':
@@ -29,6 +35,12 @@ importers:
       dotenv:
         specifier: ^17.3.1
         version: 17.4.2
+      robot-brain:
+        specifier: workspace:*
+        version: link:../../libs/node
+
+  apps/tap:
+    dependencies:
       robot-brain:
         specifier: workspace:*
         version: link:../../libs/node
