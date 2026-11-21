@@ -1246,9 +1246,7 @@ one winner per dimension.
 > where the row's relation to that activation is lifted to the call (D55), the row takes the call as well, at
 > the call's offset. The lifted relation is a relation of the row's own activation, so its row holds it, as
 > the call's row does. Where the row is not yet written when the relation is lifted, it holds the call when it
-> is written. Every earlier row of the same pose that holds the covered activation's pose at the same offset
-> takes the call too, at the call's offset. So a relation lifted now is counted over the rows written before
-> the call existed. A row takes one neighbor for a call, however many relations were lifted to it. The row that
+> is written. A row takes one neighbor for a call, however many relations were lifted to it. The row that
 > takes the call is the row of what stands at the relation's other end on the board. Where a call had already
 > landed on that end, the relation stood lifted to that call, so it is that call's row, and the row of the
 > activation under it takes nothing (D55). The row of the call the relation is lifted to takes nothing for
@@ -1680,9 +1678,7 @@ argument.
 > as any relation does.
 >
 > **Relations join only through a node, and a function grows toward its past.** A candidate is attached at the
-> node it shares, so every function stays connected (D15). A candidate that brings a new node joins only at an
-> end: a node that holds one relation of the function. So a function that is not a cycle is a chain, and it
-> grows at its ends. Where both its ends are nodes of the function it
+> node it shares, so every function stays connected (D15). Where both its ends are nodes of the function it
 > closes the cycle, and it is attached at no one node: it is counted at every occurrence (D57). From then on
 > the function is closed, and nothing joins it.
 > Nothing joins a function at a later frame than its
@@ -2645,5 +2641,4 @@ Each document is written in the terms of this specification and references its k
 |---|---|
 | [algorithm-remarks.md](algorithm-remarks.md) | The theorems, and the commentary on why the design is shaped this way, keyed by the same D and R numbers. |
 | [algorithm-evaluation.md](algorithm-evaluation.md) | The falsifiable claim, the risks with what would be done about each, and the open questions. |
-| [algorithm-implementation.md](algorithm-implementation.md) | The implementation plan: the per-neuron state and calls, the build stages, and what is cached. |
 | [hippocampus.md](hippocampus.md) | An addendum: the second organ, running beside this machine over the same neurons, with rules keyed **H**. |

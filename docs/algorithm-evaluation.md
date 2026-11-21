@@ -174,8 +174,7 @@ worse classifier, because a readout may be living on exactly the position-and-cl
 compression deletes — and D11 deletes them by construction rather than incidentally. The information is not
 lost: it moved into the activation coordinates the body states. But a readout reading bare symbol identity
 sees a translation-invariant bag and loses every bit of *where*, so it has to consume `(symbol, coordinate)`
-pairs. A regression here will look like the compression was wrong when it was the decode. The readout gate in
-[algorithm-implementation.md](algorithm-implementation.md) is the check.
+pairs. A regression here will look like the compression was wrong when it was the decode.
 
 **History size and reach sensitivity.** Every decision is exact with respect to the last `H` activations and blind
 beyond them. `H` too small and patterns form on coincidences and the stack deepens faster than the evidence
@@ -452,4 +451,3 @@ in the code, where D10 stops them the frame after they are covered; the code pla
 activation back at the frame its age names, where the spec places each child at the latest frame it covered
 and the center of its box in space, and each value neuron where its value stood (D53); and it
 shapes no reward (above).
-[algorithm-implementation.md](algorithm-implementation.md) lists the changes.

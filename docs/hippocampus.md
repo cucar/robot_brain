@@ -898,8 +898,7 @@ loop:
 
 ## Implementation phases
 
-Built on the substrate [algorithm-implementation.md](algorithm-implementation.md) describes, after its Stage 2
-— actions and rewards — has landed, since every phase below reads action connections.
+Built on the machine [algorithm.md](algorithm.md) specifies, since every phase below reads action connections.
 
 ### Phase 1 — Skeleton and parallel clocks
 
