@@ -46,7 +46,7 @@ says is what runs.
 **Reward.** Every frame, for every instrument, the environment reports the change in price since the last
 frame, signed by the action that stood over it, positive for `own` where the price rose and for `disown` where
 it fell, as a reward scoped to that channel and to that one frame, `{ reward, channels: [this one], frames: 1 }`
-(D35). It arrives with the next frame's prices and with the report of the action that ran, so the connection to
+(D35). It arrives with the next frame's prices and with the action that ran, so the connection to
 the action is strengthened and takes the reward in one write (R29, R31).
 
 # 2. What forms over frames

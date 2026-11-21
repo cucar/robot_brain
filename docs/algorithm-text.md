@@ -159,5 +159,5 @@ it in; the letters nothing covered; and the spaces, which are letters like any o
 them. The apex is what the next letter sees (D5), and what connects to what follows (D25): every uncovered
 activation open at the next frame connects to the letter that stood there (R31), a call under its pose like a
 letter. It is also what votes (R27): each activation that fired at the present proposes at the frame ahead the
-letters its connections name, and the letter the most voters name is output, weakly, for the report to
+letters its connections name, and the letter the most voters name is output, weakly, for the input to
 replace (R47, R40, D9).

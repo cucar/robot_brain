@@ -102,7 +102,7 @@ that proposed it stops proposing it (R47), and where every candidate is negative
 
 **An inferred action enters no history.** An action the machine infers stands weakly in its frame (D40). No
 action is anyone's neighbor (D50), so it is in no neighborhood and no relation is counted from it, whether it
-ran or not. Where the world reports another action in that frame, the report stands and the inferred one is
+ran or not. Where the world reports another action in that frame, the input stands and the inferred one is
 dropped (R40): in teaching, a tap inferred for the frame after `stop` gives way to the `done` the world ran.
 
 **No cue is ever predicted.** Nothing connects to an event (D50), so no inference names a cue and none fires

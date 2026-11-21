@@ -170,7 +170,7 @@ that it ran.
 At most one symbol is reported per dimension per point of the layout in a frame (D8): one event observed, one
 action run. The machine outputs what it infers for the frame ahead, one symbol per dimension per point, an
 event in each event dimension and an action in each action dimension (R47). The actions run in the world. The
-next frame reports what was observed and what ran, and a symbol has happened when the report names it.
+next frame reports what was observed and what ran, and a symbol has happened when the input names it.
 
 ## 2.4 Reward
 
@@ -316,7 +316,7 @@ assumes for anything no node states.
 
 > **D40 — Strength of an activation.** An activation is **strong** when the environment reported it, and
 > **weak** when an inference named it (§8.5). That holds for events and actions alike: an event and an action
-> the machine infers are both weak, and the environment's report replaces both. The neuron is the same either
+> the machine infers are both weak, and the input replaces both. The neuron is the same either
 > way: a weak activation is an activation of the neuron the environment would have reported.
 >
 > **A weak activation is an input of its frame like a strong one.** It is in the neighborhood of everything that
@@ -324,10 +324,15 @@ assumes for anything no node states.
 > any neighbor; its neuron is called with it, it may be covered, and it may stand on the apex and vote once
 > (R46), with the connections its neuron's strong activations strengthened. **It differs in one thing: it lasts
 > its one frame.** It is not open afterward: it writes no connection, nothing connects to it, and no reward
-> reaches it (R31). **It covers nothing** (R40). **The report replaces it**: where a strong activation of the
-> same neuron stands at the same position, the weak one is dropped. Where nothing reports, the inference peeks
-> through: an inferred action nothing reports as run, and an inferred event nothing reports as seen, are what
-> the machine had in that frame.
+> reaches it (R31). **It covers nothing** (R40).
+>
+> **The input is checked first**, and an inferred base symbol has one of three outcomes. Where the input has
+> that symbol at that position, it is strong. Where the input has nothing in its dimension at that position,
+> it is weak, and the inference peeks through: an inferred action that did not run, and an inferred event
+> that was not seen, are what the machine had in that frame. Where the input has another symbol in its
+> dimension at that position, it is **overridden**. A dimension holds one symbol at a position (D8), and the
+> input's symbol has it, so the inferred one does not fire. An inferred interneuron is checked the same way,
+> through what it expands to (R40).
 >
 > **An interneuron is as strong as what it covers.** An accepted function's interneuron is strong when any
 > activation it covers or binds is strong, and weak when every one of them is: a situation made entirely of
@@ -343,14 +348,14 @@ assumes for anything no node states.
 > its arguments are what stood in the variables. **Inferred**: a
 > connection names the call neuron in a phase at an offset, and an expansion reads the call there, at its
 > completion, weakly (R36), its nodes at the frames back from it; the part that lies ahead is what it proposes,
-> for the report to make strong what it inferred (R30), and its arguments are bound from what has happened where
+> for the input to make strong what it inferred (R30), and its arguments are bound from what has happened where
 > a variable's node has happened, and expanded where it has not (D44, R28). A call carries its pose and nothing
 > else: what it is stands in its function, and what its arguments are stands on the apex beside it. What it
 > records is what expansion needs (D9).
 
 **A function is recognized or inferred, and both kinds of member take part in both.** Recognized, a function
 says that its events stood and its actions ran. Inferred, it is expanded (R28): its actions stand inferred as the
-machine's output and its events beside them, both weakly, and the report makes strong what ran and what was
+machine's output and its events beside them, both weakly, and the input makes strong what ran and what was
 seen. What follows any activation is held on its neuron as connections (D25), one kind, and an inference is a
 connection read.
 
@@ -2135,7 +2140,7 @@ inferences of every activation is the machine's, and is selection.
 > | Frame | | |
 > |---|---|---|
 > | `f` | infer | the frame's events are recognized, `infer` returns the inferences, the inference resolves (R47), and an action is output for the frame ahead |
-> | `f + 1` | execute | the report names what ran, and its neuron fires strong in this frame's column |
+> | `f + 1` | execute | the input names what ran, and its neuron fires strong in this frame's column |
 > | `f + 1` | reward | alongside this frame's events, every uncovered activation open connects to the apex; what the action earned arrives as this frame's input, and the connection it strengthens takes the reward in the same write (R31) |
 >
 > **The reward is part of the frame the action ran in.** The environment reports what it observed and what the
@@ -2162,7 +2167,7 @@ activation was uncovered then (D9). The activation keeps nothing of it. **Nothin
 here**, and no test is waiting on any of it.
 
 > **R31 — A connection carries an estimate.** What stands on the apex at `f + 1` is not known at `f`: the action
-> is settled only when the report names what ran, and the events only when the environment reports them (D40).
+> is settled only when the input names what ran, and the events only when the environment reports them (D40).
 > So at `f + 1`, once the frame's last level has run, **every uncovered activation open at that frame connects to
 > every strong activation standing on the apex of that frame within its reach that the policy admits** (R27,
 > D25, D50) at its own age (§7.1), and the reward of that frame's actions goes into
@@ -2335,7 +2340,7 @@ there down to the base alphabet, in this order and no other:
 | expand   | Expand of every standing inference what comes due: the base symbols it expands to at the frame ahead are what it proposes (R28).                   |
 | match    | Read each standing inference's function against the frames it reaches back into; propose it where the function would pay there, strike it where it would not (R49). |
 | resolve  | One winner per dimension at the frame ahead: in each action dimension by estimate, in each event dimension by share of voters (R47).           |
-| activate | The winner of every dimension fires weakly at the frame ahead (D40), action and event alike, and both are output; the world's report replaces them, in part or in whole, and what ran arrives with its reward (R40). |
+| activate | The winner of every dimension fires weakly at the frame ahead (D40), action and event alike, and both are output; the input replaces them, in part or in whole, and what ran arrives with its reward (R40). |
 
 No neuron takes part in any of it. What an activation returned is kept, fit, expanded, matched, resolved and
 fired by the machine alone, as the election is the machine's alone (R24), and a neuron learns of the outcome only what
@@ -2423,7 +2428,7 @@ happened (R32).
 > **R30 — Execution is an expansion**, of the selected function (R47) through its nodes and relations in the
 > dictionary (R28). A high function becomes its nodes at the offsets it records, down to base symbols. Its base
 > actions are output, each in the frame its expansion reads it in, the nearest being `+1` (R29); its base
-> events stand in theirs. Both fire weakly (D40), and the report replaces them: the actions it names as run
+> events stand in theirs. Both fire weakly (D40), and the input replaces them: the actions it names as run
 > and the events it names as seen become strong, and the rest last their frame. Execution is not a second
 > mechanism; it is this expansion read as a program. A weak function's expansion reads no action: what is
 > output is chosen by estimate, never by a function that was itself inferred.
@@ -2432,9 +2437,11 @@ happened (R32).
 > R47 selected it, and an interneuron the expansion passed through fires weakly when its expansion completes, at
 > its position, the last frame of what it covers, which is the position recognition would have given it, provided the
 > standing inference that named it still stands (R45) and what it named at that frame was selected (R47). An
-> inference that lost its dimensions, or whose match failed on the way, fires nothing. Where the report makes
+> inference that lost its dimensions, or whose match failed on the way, fires nothing. Where the input makes
 > its actions strong, recognition builds the strong activation of the same function at the same position, and it
-> replaces the weak one (D40). An executed function is therefore in its frame's levels like a bought one: it is
+> replaces the weak one (D40). Where a base symbol it expands to in that frame is overridden, it is
+> overridden with it, and it does not fire (R40). An executed function is therefore in its frame's levels
+> like a bought one: it is
 > activated, may be covered (§6.1), and every uncovered activation open at that frame connects to it (D25).
 > While its program runs, what stands on the apex at each frame is the base action it named there, or a lower
 > function as it completes; the whole stands on the apex only in the frame it completes, and what the program
@@ -2602,17 +2609,34 @@ happened (R32).
 
 ## 8.5 Activation
 
-> **R40 — An inference is weak until the report makes it strong.** Resolution leaves one winner per dimension,
-> action and event alike (R47), and each fires weakly in the frame it was named in (D40), the action to run and
-> the event to come, and both are the machine's output. Where the report names that dimension at that position, the
-> report stands and the weak activation is dropped; an action nothing reports as run, or an event nothing
-> reports as seen, lasts its frame and is gone. Where the expansion reaches a parameter, what fires is its value,
+> **R40 — An inference is weak until the input makes it strong.** Resolution leaves one winner per dimension,
+> action and event alike (R47), and each fires in the frame it was named in (D40), the action to run and the
+> event to come, and both are the machine's output. The input is checked first. Where the input has the
+> winner at that position, the winner is strong. Where the input has nothing in that dimension at that
+> position, the winner is weak: an action that did not run, or an event that was not seen, lasts its frame
+> and is gone. Where the input has another symbol in that dimension at that position, that symbol stands
+> and the winner is overridden: it does not fire (D40). Where the expansion reaches a parameter, what fires
+> is its value,
 > bound from what has happened (D44). An inferred event above the base is expanded in turn, one frame at a time
 > as its nodes come due, so the events a plan infers reach the base as inputs exactly as its actions reach the
 > base as output. A weak activation is an input of its frame: it is recognized as a neighbor, it may be covered
 > or stand on the apex and vote once, and then it is gone. **It covers nothing**: inference does not inhibit,
 > and only a recognized call covers the present (D10). It carries no reward, connects to nothing, and is
 > connected to by nothing (R31).
+>
+> **An inferred interneuron fires the same way.** An interneuron the expansion passed through fires in the
+> frame its expansion completes, at the position recognition would give it (R30). It fires once. Where
+> recognition builds its call at that position, that call is its activation, as strong as what it covers
+> (D40). Where recognition does not, it is weak. A weak call lasts its one frame. It expands (R28), and every
+> symbol it expands to in that frame fires too. Each is checked as a winner is: strong where the input has
+> it, weak where the input has nothing there.
+>
+> **A weak call is overridden through its expansion.** A call has no dimension, so the input never has
+> another call in its position. Where a base symbol the call expands to in that frame is overridden, the
+> call is overridden with it, and it does not fire. So a weak call is taken much as a fit is, on
+> its expansion (D31): each symbol it expands to in that frame stands or is overridden, as each relation of
+> a fit comes true or does not. Where recognition takes its function there all the same, with that relation a
+> failure, the call is recognized, and it is strong by the ordinary rule (R24, D40).
 
 # Part VI — Beyond the specification
 

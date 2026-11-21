@@ -1017,14 +1017,14 @@ the world is the situation recurring and being dispatched again until it stops r
 **On D40 — weak and strong, and why both kinds have the distinction.** An inferred pattern outputs its actions
 and expects its events (R30); what ran and what was seen is what the world reports back, and the machine holds
 both halves. The boundary with the world is the same for each kind: the machine proposes, and the world
-reports. So an action the machine inferred is a different thing from one the report names as run, exactly as an
+reports. So an action the machine inferred is a different thing from one the input names as run, exactly as an
 event it expected is a different thing from one the environment reported. A weak activation is placed by an
-expansion and read by recognition like anything else, and it is the same neuron as the one the report would
+expansion and read by recognition like anything else, and it is the same neuron as the one the input would
 name, so what a pattern learned on the real thing holds for the proposed one, and what the neuron learned to do
 after the real thing it votes for after the proposed one. It learns nothing itself and nothing connects to it:
 an expected `7` that wrote exposures would mix what followed imagining a `7` into what followed seeing one, and
 an inferred action that was connected to would be learned as having run when it did not. What keeps a proposal
-from being mistaken for the world is that it does not persist, and that the world's report replaces it. An
+from being mistaken for the world is that it does not persist, and that the input replaces it. An
 inferred action the world does not report as run is a phantom limb; an expected event the world does not report
 as seen is a hallucination; both last one frame. The literature's oldest answer has the same shape: a motor
 command sends a copy of itself to a predictor, the prediction is compared with what comes back rather than mixed
