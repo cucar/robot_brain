@@ -1,0 +1,11 @@
+{
+  "name": "shapes",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Simple images on a grid of pixels: lines, squares, and a 2 and a 3 taught with their digits.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "robot-brain": "workspace:*"
+  }
+}

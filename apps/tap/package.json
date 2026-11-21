@@ -1,0 +1,11 @@
+{
+  "name": "tap",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tap while go, then done: one channel with a cue and an action, taught with rewards.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "robot-brain": "workspace:*"
+  }
+}

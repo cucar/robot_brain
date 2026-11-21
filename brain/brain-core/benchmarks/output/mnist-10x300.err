@@ -1,0 +1,320 @@
+[join-count f9] gain
+[join-count f21] gain
+[join-count f29] gain closing a cycle
+[join-count f31] gain
+[join-count f31] gain
+[join-count f31] gain
+[join-count f35] gain
+[join-count f35] gain
+[join-count f39] gain
+[join-count f39] gain
+[join-count f41] gain
+[join-count f41] gain
+[join-count f41] gain
+[join-left f41] #15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#13<#1..#1x6>[0, 4, 3] | it does not pay there
+[join-count f45] gain
+[join-count f45] gain
+[join-count f45] gain
+[join-count f45] gain
+[join-count f45] gain
+[join-count f45] gain
+[join-count f49] gain
+[join-count f49] gain
+[join-count f51] gain
+[join-count f53] gain
+[join-count f55] gain
+[join-count f55] gain
+[join-count f57] gain
+[join-count f59] gain
+[join-count f59] gain
+[join-count f59] gain
+[join-count f61] gain
+[join-count f61] gain
+[join-count f61] gain
+[join-count f63] gain
+[join-count f63] gain
+[join-count f63] gain
+[join-count f63] gain
+[join-count f63] gain
+[join-count f63] gain
+[join-count f67] gain
+[join-count f69] gain closing a cycle
+[join-count f69] gain
+[join-count f71] gain closing a cycle
+[join-count f71] gain
+[join-count f75] gain closing a cycle
+[join-count f75] gain closing a cycle
+[join-count f75] gain
+[join-count f75] gain
+[join-count f75] gain
+[join-count f75] gain
+[join-count f75] gain
+[join-count f79] gain
+[join-count f81] gain closing a cycle
+[join-left f81] #12<#0..#0x4>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 1, 1] | its last relation joined another function
+[retire f81] f60 origin #12<#0..#0x4> [] -> #69 | its last relation joined another function
+[join-count f81] gain
+[join-count f81] gain
+[join-count f81] gain
+[join-count f81] gain
+[join-count f81] gain
+[join-count f81] gain
+[join-left f81] #13<#1..#1x6>→#16<#1..#12<#0..#0x4>x0>[0, 4, 1] | it does not pay there
+[join-count f83] gain
+[join-count f83] gain
+[join-count f83] gain
+[join-left f83] #32<#1..#1x1>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 2, -2] | its last relation joined another function
+[retire f83] f110 origin #32<#1..#1x1> [] -> #104 | its last relation joined another function
+[join-count f83] gain
+[join-count f87] gain closing a cycle
+[join-left f87] #12<#0..#0x7>→#30<#12<#0..#0x6>..#12<#0..#0x6>x1>[0, 1, -2] | its last relation joined another function
+[retire f87] f69 origin #12<#0..#0x7> [] -> #78 | its last relation joined another function
+[join-count f87] gain
+[join-count f89] gain
+[join-count f91] gain closing a cycle
+[join-count f91] gain
+[join-count f91] gain
+[join-count f93] gain
+[join-count f95] gain
+[join-count f95] gain
+[join-count f95] gain
+[join-count f95] gain
+[join-count f97] gain
+[join-count f101] gain
+[join-count f103] gain
+[join-count f103] gain
+[join-count f103] gain
+[join-count f103] gain
+[join-count f103] gain
+[join-count f105] gain
+[join-count f105] gain
+[join-count f105] gain
+[join-count f105] gain
+[join-count f107] gain
+[join-count f107] gain
+[join-count f107] gain
+[join-count f109] gain closing a cycle
+[join-count f115] gain
+[join-count f115] gain
+[join-left f115] #44<#12<#0..#0x4>..#12<#0..#0x3>x0>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 1, 1] | its last relation joined another function
+[retire f115] f90 origin #44<#12<#0..#0x4>..#12<#0..#0x3>x0> [] -> #12 | its last relation joined another function
+[join-count f115] gain
+[join-count f119] gain
+[join-count f119] gain
+[join-left f121] #29<#12<#0..#0x7>..#12<#0..#0x6>x0>→#36<#1..#1x1>[0, 8, -1] | it does not pay there
+[join-left f121] #30<#12<#0..#0x6>..#12<#0..#0x6>x1>→#12<#0..#0x4>[0, 2, 2] | it does not pay there
+[join-count f123] gain
+[join-count f125] gain
+[join-count f129] gain
+[join-count f129] gain
+[join-count f135] gain
+[join-count f135] gain
+[join-count f139] gain
+[join-count f139] gain closing a cycle
+[join-count f139] gain
+[join-count f143] gain
+[join-count f143] gain
+[join-count f143] gain
+[join-count f145] gain
+[join-count f145] gain
+[join-left f145] #18<#1..#1x2>→#22<#12<#0..#0x3>..#12<#0..#0x3>x5>[0, 0, 3] | its last relation joined another function
+[retire f145] f66 origin #18<#1..#1x2> [] -> #75 | its last relation joined another function
+[join-count f145] gain
+[join-count f149] gain closing a cycle
+[join-count f151] gain
+[join-count f151] gain
+[join-count f151] gain
+[join-left f151] #38<#12<#0..#0x3>..#12<#0..#0x1>x0>→#58<#13<#1..#1x3>..#13<#1..#1x1>x0>[0, 5, -1] | its last relation joined another function
+[join-count f151] gain
+[join-count f153] gain
+[join-count f153] gain
+[join-count f153] gain
+[join-count f155] gain
+[join-left f155] #41<#12<#0..#0x7>..#37<#1..#12<#0..#0x2>x0>x0>→#12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#43<#12<#0..#0x5>..#12<#0..#0x4>x0>x0>[0, 0, 3] | it does not pay there
+[join-count f155] gain
+[join-count f159] gain
+[join-count f159] gain
+[join-count f159] gain
+[join-count f161] gain
+[join-count f163] gain
+[join-count f163] gain
+[join-count f163] gain
+[join-count f163] gain
+[join-count f163] gain
+[join-count f165] gain
+[join-count f171] gain
+[join-count f175] gain
+[join-count f179] gain closing a cycle
+[join-count f179] gain
+[join-count f179] gain
+[join-count f179] gain
+[join-count f183] gain
+[join-count f183] gain
+[join-count f187] gain
+[join-count f195] gain
+[join-count f195] gain
+[join-count f195] gain
+[join-count f195] gain
+[join-count f195] gain
+[join-count f197] gain
+[join-count f199] gain
+[join-count f199] gain
+  image 100/3000 | last 100: spoke 99 right 87 (87.9% of spoken) , functions added 194 retired 5 | neurons 150 functions 189 | apex/image 8.0 |  so far
+[join-count f201] gain
+[join-count f201] gain
+[join-count f203] gain
+[join-count f203] gain
+[join-count f207] gain closing a cycle
+[join-left f211] #12<#15<#12<#0..#0x13>..#12<#0..#0x13>x2>..#19<#12<#0..#0x2>..#12<#0..#0x2>x2>x0>→#12<#26<#12<#0..#0x4>..#12<#0..#0x4>x1>..#37<#1..#12<#0..#0x2>x0>x0>[0, 0, 3] | its last relation left for nothing
+[join-count f211] gain
+[join-count f215] gain
+[join-count f219] gain
+[join-count f219] gain
+[join-count f219] gain
+[join-count f221] gain
+[join-count f227] gain
+[retire f227] f147 origin #12<#33<#12<#0..#0x5>..#12<#0..#0x5>x1>..#26<#12<#0..#0x4>..#12<#0..#0x4>x1>x0> [] -> #125 | its last relation left for nothing
+[join-count f231] gain
+[join-count f231] gain
+[join-count f231] gain
+[join-count f235] gain
+[join-left f235] #42<#12<#0..#0x6>..#13<#1..#1x2>x0>→#90<#13<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x2>x0>[0, 5, -3] | its last relation joined another function
+[join-left f235] #15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#129<#26<#12<#0..#0x4>..#12<#0..#0x4>x1>..#12<#0..#0x8>x0>[0, 0, 3] | it does not pay there
+[join-count f239] gain
+[join-count f241] gain
+[join-left f241] #68<#13<#1..#1x6>..#12<#0..#0x2>x0>→#16<#1..#12<#0..#0x4>x0>[0, 4, 1] | its last relation joined another function
+[retire f241] f139 origin #68<#13<#1..#1x6>..#12<#0..#0x2>x0> [] -> #13 | its last relation joined another function
+[join-count f243] gain
+[join-count f243] gain
+[join-left f259] #13<#1..#1x1>→#95<#14<#1..#0x0>..#32<#1..#1x3>x0>[0, 1, 1] | it does not pay there
+[join-count f259] gain
+[join-count f265] gain
+[join-count f275] gain
+[join-left f275] #63<#12<#0..#0x7>..#18<#1..#1x2>x0>→#41<#12<#0..#0x7>..#37<#1..#12<#0..#0x2>x0>x0>[0, 0, 1] | it does not pay there
+[join-left f279] #12<#15<#12<#0..#0x13>..#12<#0..#0x13>x2>..#22<#12<#0..#0x3>..#12<#0..#0x3>x1>x0>→#13<#68<#13<#1..#1x6>..#12<#0..#0x2>x0>..#16<#1..#12<#0..#0x4>x0>x0>[0, 4, 3] | it does not pay there
+[join-left f293] #12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#33<#12<#0..#0x5>..#12<#0..#0x5>x3>x0>→#61<#30<#12<#0..#0x6>..#12<#0..#0x6>x5>..#15<#12<#0..#0x13>..#12<#0..#0x13>x1>x0>[0, 0, 6] | it does not pay there
+[join-count f295] gain
+[join-count f299] gain
+[join-count f299] gain
+[join-count f303] gain
+[join-count f303] gain
+[join-count f303] gain
+[join-count f315] gain
+[join-count f321] gain
+[join-count f323] gain
+[join-left f323] #13<#1..#1x5>→#46<#12<#0..#0x4>..#12<#0..#0x3>x0>[0, 1, -2] | its last relation joined another function
+[join-count f323] gain
+[join-count f329] gain
+[join-count f339] gain
+[join-count f341] gain closing a cycle
+[join-left f341] #33<#12<#0..#0x5>..#12<#0..#0x5>x1>→#12<#99<#12<#0..#0x6>..#22<#12<#0..#0x3>..#12<#0..#0x3>x1>x0>..#15<#12<#0..#0x13>..#12<#0..#0x13>x1>x0>[0, 0, 2] | its last relation joined another function
+[retire f341] f201 origin #33<#12<#0..#0x5>..#12<#0..#0x5>x1> [] -> #22 | its last relation joined another function
+[join-count f343] gain
+[join-count f355] gain
+[join-count f359] gain
+[join-count f363] gain
+[retire f365] f203 origin #12<#15<#12<#0..#0x13>..#12<#0..#0x13>x2>..#73<#12<#0..#0x9>..#19<#12<#0..#0x2>..#12<#0..#0x2>x2>x0>x0> [] -> #158 | its last relation left for nothing
+[join-count f371] gain
+[join-count f383] gain closing a cycle
+[join-count f387] gain
+  image 200/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 35 retired 4 | neurons 176 functions 220 | apex/image 5.0 |  so far
+[join-count f403] gain
+[join-count f407] gain closing a cycle
+[join-count f543] gain
+[join-left f543] #12<#0..#0x4>→#101<#1..#18<#1..#1x4>x0>[0, 4, 2] | its last relation joined another function
+[join-count f543] gain
+[join-left f543] #16<#1..#12<#0..#0x4>x0>→#101<#1..#18<#1..#1x4>x0>[0, 5, 1] | its last relation joined another function
+  image 300/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 176 functions 220 | apex/image 3.7 |  so far
+[join-count f641] gain
+[join-count f661] gain closing a cycle
+[join-count f663] gain
+[join-count f683] gain closing a cycle
+[join-count f703] gain
+[join-count f723] gain
+[join-left f723] #12<#0..#0x3>→#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>[0, 3, 1] | its last relation joined another function
+[retire f723] f221 origin #12<#0..#0x3> [] -> #174 | its last relation joined another function
+[join-count f723] gain
+[join-count f743] gain
+[join-left f743] #52<#12<#0..#0x3>..#13<#1..#1x2>x0>→#15<#12<#0..#0x13>..#12<#0..#0x13>x1>[0, 0, 1] | its last relation joined another function
+[join-count f763] gain
+[join-count f763] gain closing a cycle
+[join-left f763] #52<#12<#0..#0x3>..#13<#1..#1x2>x0>→#15<#12<#0..#0x13>..#12<#0..#0x13>x1>[0, 0, 1] | its last relation joined another function
+  image 400/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 3 retired 1 | neurons 178 functions 222 | apex/image 3.1 |  so far
+[join-count f883] gain
+  image 500/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 2 retired 0 | neurons 180 functions 224 | apex/image 2.7 |  so far
+[join-count f1003] gain
+[join-count f1063] gain
+[join-count f1083] gain closing a cycle
+[join-left f1135] #12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#35<#12<#0..#0x5>..#12<#0..#0x4>x0>x0>→#18<#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>..#13<#1..#1x5>x0>[0, 3, 7] | it does not pay there
+  image 600/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 2 retired 0 | neurons 182 functions 226 | apex/image 2.4 |  so far
+  image 700/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 182 functions 226 | apex/image 2.2 |  so far
+  image 800/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 182 functions 226 | apex/image 2.1 |  so far
+  image 900/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 182 functions 226 | apex/image 2.0 |  so far
+[retire f1801] f177 origin #12<#99<#12<#0..#0x6>..#22<#12<#0..#0x3>..#12<#0..#0x3>x1>x0>..#15<#12<#0..#0x13>..#12<#0..#0x13>x1>x0> [] -> #146 | its last relation left for nothing
+[join-count f1963] gain
+[join-left f1963] #13<#1..#1x5>→#21<#12<#0..#0x6>..#12<#0..#0x4>x0>[0, 4, 1] | its last relation joined another function
+  image 1000/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 1 retired 1 | neurons 181 functions 226 | apex/image 1.9 |  so far
+  image 1100/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 1 retired 0 | neurons 182 functions 227 | apex/image 1.8 |  so far
+[join-left f2275] #15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#12<#19<#12<#0..#0x2>..#12<#0..#0x2>x1>..#24<#12<#0..#0x1>..#12<#0..#0x1>x1>x0>[0, 11, 4] | its last relation left for nothing
+[join-left f2275] #94<#12<#0..#0x10>..#32<#1..#1x1>x0>→#12<#19<#12<#0..#0x2>..#12<#0..#0x2>x1>..#24<#12<#0..#0x1>..#12<#0..#0x1>x1>x0>[0, 11, 2] | it does not pay there
+  image 1200/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 182 functions 227 | apex/image 1.7 |  so far
+  image 1300/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 182 functions 227 | apex/image 1.7 |  so far
+  image 1400/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 182 functions 227 | apex/image 1.6 |  so far
+[join-left f2909] #12<#0..#0x3>→#18<#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>..#13<#1..#1x5>x0>[0, 3, 1] | its last relation left for nothing
+[retire f2909] f207 origin #12<#0..#0x3> [] -> #161 | its last relation left for nothing
+[retire f2909] f228 origin #161<#12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#35<#12<#0..#0x5>..#12<#0..#0x4>x0>x0>..#12<#0..#0x3>x0> [#161<#12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#35<#12<#0..#0x5>..#12<#0..#0x4>x0>x0>..#12<#0..#0x3>x0>→#170<#141<#105<#19<#12<#0..#0x2>..#12<#0..#0x2>x3>..#52<#12<#0..#0x3>..#13<#1..#1x2>x0>x0>..#15<#12<#0..#0x13>..#12<#0..#0x13>x1>x0>..#18<#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>..#13<#1..#1x5>x0>x0>[0, 0, 7]] -> #181 | it names #161, decommissioned
+[retire f2909] f233 origin #161<#12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#35<#12<#0..#0x5>..#12<#0..#0x4>x0>x0>..#12<#0..#0x3>x0> [#161<#12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#35<#12<#0..#0x5>..#12<#0..#0x4>x0>x0>..#12<#0..#0x3>x0>→#185<#105<#19<#12<#0..#0x2>..#12<#0..#0x2>x3>..#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>x0>..#18<#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>..#13<#1..#1x5>x0>x0>[0, 0, 7]] -> #186 | it names #161, decommissioned
+  image 1500/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 1 | neurons 179 functions 224 | apex/image 1.6 |  so far
+[join-left f3013] #15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#18<#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>..#13<#1..#1x5>x0>[0, 3, -5] | its last relation left for nothing
+[retire f3167] f97 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [] -> #98 | its last relation left for nothing
+  image 1600/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 1 | neurons 178 functions 223 | apex/image 1.5 |  so far
+[join-left f3307] #65<#32<#1..#1x4>..#12<#0..#0x3>x0>→#32<#1..#1x3>[0, 2, -3] | its last relation left for nothing
+  image 1700/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 178 functions 223 | apex/image 1.5 |  so far
+[retire f3499] f230 origin #12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#22<#12<#0..#0x3>..#12<#0..#0x3>x1>x0> [] -> #183 | its last relation left for nothing
+  image 1800/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 1 | neurons 177 functions 222 | apex/image 1.5 |  so far
+[join-count f3763] gain
+[join-left f3763] #32<#1..#1x3>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 4, -3] | its last relation joined another function
+[join-count f3763] gain
+[join-left f3763] #51<#12<#0..#0x2>..#0x0>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 3, -3] | its last relation joined another function
+[join-count f3763] gain
+[join-left f3763] #22<#12<#0..#0x3>..#12<#0..#0x3>x1>→#19<#12<#0..#0x2>..#12<#0..#0x2>x4>[0, 1, 2] | its last relation joined another function
+[join-count f3783] gain
+[join-left f3783] #32<#1..#1x1>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 2, -2] | its last relation joined another function
+[join-count f3783] gain
+[join-count f3783] gain
+  image 1900/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 1 retired 0 | neurons 177 functions 223 | apex/image 1.5 |  so far
+[join-left f3831] #12<#0..#0x3>→#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>[0, 3, 1] | it does not pay there
+[join-left f3851] #12<#0..#0x3>→#105<#19<#12<#0..#0x2>..#12<#0..#0x2>x3>..#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>x0>[0, 0, 1] | it does not pay there
+[join-left f3875] #12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>x0>→#187<#105<#19<#12<#0..#0x2>..#12<#0..#0x2>x3>..#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>x0>..#13<#1..#1x5>x0>[0, 0, 7] | it does not pay there
+[join-left f3875] #12<#0..#0x3>→#187<#105<#19<#12<#0..#0x2>..#12<#0..#0x2>x3>..#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>x0>..#13<#1..#1x5>x0>[0, 0, 1] | its last relation left for nothing
+[retire f3875] f235 origin #12<#0..#0x3> [] -> #188 | its last relation left for nothing
+[retire f3875] f237 origin #188<#12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>x0>..#12<#0..#0x3>x0> [#188<#12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>x0>..#12<#0..#0x3>x0>→#105<#19<#12<#0..#0x2>..#12<#0..#0x2>x3>..#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>x0>[0, 0, 7]] -> #189 | it names #188, decommissioned
+[join-count f3903] gain
+  image 2000/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 5 retired 1 | neurons 178 functions 226 | apex/image 1.4 |  so far
+  image 2100/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 178 functions 226 | apex/image 1.4 |  so far
+  image 2200/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 178 functions 226 | apex/image 1.4 |  so far
+  image 2300/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 178 functions 226 | apex/image 1.4 |  so far
+  image 2400/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 178 functions 226 | apex/image 1.4 |  so far
+[join-left f4823] #15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>[0, 3, 7] | it does not pay there
+[join-count f4843] gain
+[join-count f4883] gain
+[join-count f4903] gain closing a cycle
+[join-left f4963] #12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#71<#18<#1..#1x1>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>x0>→#12<#29<#12<#0..#0x7>..#12<#0..#0x6>x0>..#57<#35<#12<#0..#0x5>..#12<#0..#0x4>x0>..#32<#1..#1x5>x0>x0>[0, 0, 2] | its last relation left for nothing
+  image 2500/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 2 retired 0 | neurons 180 functions 228 | apex/image 1.4 |  so far
+  image 2600/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 180 functions 228 | apex/image 1.4 |  so far
+[retire f5321] f213 origin #12<#15<#12<#0..#0x13>..#12<#0..#0x13>x2>..#22<#12<#0..#0x3>..#12<#0..#0x3>x1>x0> [] -> #166 | its last relation left for nothing
+  image 2700/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 1 | neurons 179 functions 227 | apex/image 1.3 |  so far
+[join-count f5523] gain
+[join-left f5523] #51<#12<#0..#0x2>..#0x0>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 3, -3] | its last relation joined another function
+[join-count f5523] gain
+[join-left f5523] #35<#12<#0..#0x5>..#12<#0..#0x4>x0>→#12<#0..#0x3>[0, 0, 2] | its last relation joined another function
+[join-count f5543] gain
+[join-left f5543] #51<#12<#0..#0x2>..#0x0>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 3, -3] | its last relation joined another function
+  image 2800/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 2 retired 0 | neurons 180 functions 229 | apex/image 1.3 |  so far
+[join-left f5631] #12<#0..#0x3>→#190<#105<#19<#12<#0..#0x2>..#12<#0..#0x2>x3>..#102<#32<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>x0>..#21<#12<#0..#0x6>..#12<#0..#0x4>x0>x0>[0, 0, 1] | its last relation left for nothing
+  image 2900/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 0 retired 0 | neurons 180 functions 229 | apex/image 1.3 |  so far
+[join-count f5903] gain
+[join-left f5903] #15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#71<#18<#1..#1x1>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>[0, 3, 8] | its last relation joined another function
+[retire f5903] f239 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [] -> #12 | its last relation joined another function
+[join-count f5943] gain
+  image 3000/3000 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 1 retired 1 | neurons 181 functions 229 | apex/image 1.3 |  so far

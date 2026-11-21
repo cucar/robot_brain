@@ -1,57 +1,64 @@
 /**
- * Job runner entry point. A job file imports `runJob` from the lib, defines its
- * Job subclass, and ends with `await runJob(MyJob)` so running the file directly
- * (node path/to/job.js --flags) parses argv and executes the job.
+ * The job runner.
+ * A job file defines its Job subclass and ends with `await runJob(import.meta, MyJob)`, so running the file
+ * (node path/to/job.js --flags) reads the command line and runs the job.
  */
-
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
 /**
- * Parse the well-known brain CLI flags out of argv into a plain options object.
- * Unknown args are ignored; the job subclass can read `process.argv` itself if
- * it needs job-specific flags.
+ * The value after a flag on the command line, or null when the flag is absent.
+ */
+function readFlagValue(argv, flag) {
+	const at = argv.indexOf(flag);
+	return at !== -1 && argv[at + 1] !== undefined ? argv[at + 1] : null;
+}
+
+/**
+ * The value after a flag, as a whole number, or null when the flag is absent.
+ */
+function readWholeNumber(argv, flag) {
+	const value = readFlagValue(argv, flag);
+	return value === null ? null : parseInt(value);
+}
+
+/**
+ * Read the flags every job takes into an options object.
+ * `--regions R` and `--columns C` set the dispatch, `--disable-learning` builds the brain with learning off,
+ * and `--save-brain`, `--load-brain`, `--save-context`, `--load-context` name a backup or a context by its label.
+ * A job reads its own arguments from `process.argv` itself.
  */
 export function parseBrainArgs(argv = process.argv) {
-	const has = flag => argv.includes(flag);
-	const num = (flag, parser) => {
-		const i = argv.indexOf(flag);
-		return i !== -1 && argv[i + 1] !== undefined ? parser(argv[i + 1]) : null;
-	};
-	const str = flag => {
-		const i = argv.indexOf(flag);
-		return i !== -1 && argv[i + 1] !== undefined ? argv[i + 1] : null;
-	};
-
 	return {
-		diagnostic: has('--diagnostic'),
-		saveBrain: str('--save-brain'),
-		loadBrain: str('--load-brain'),
-		saveContext: str('--save-context'),
-		loadContext: str('--load-context'),
-		debug: has('--debug'),
-		wait: has('--wait'),
-		noSummary: has('--no-summary'),
-		reset: has('--reset'),
-		contextLength: num('--context-length', parseInt),
-		patternForgetRate: num('--forget-rate', parseFloat),
-		// The single grouping coefficient θ, shared by spatial and temporal. It seeds one adaptive per-unit
-		// threshold: recognition fires at similarity ≥ θ, correction at < θ, then both float together off the
-		// unit's error stats once it has history. groupMode picks how that adaptation works.
-		groupThreshold: num('--group-threshold', parseFloat),
-		groupMode: str('--group-mode'),
-		regions: num('--regions', parseInt),
-		columns: num('--columns', parseInt),
-		consensus: str('--consensus')
+		regions: readWholeNumber(argv, '--regions'),
+		columns: readWholeNumber(argv, '--columns'),
+		learning: argv.includes('--disable-learning') ? false : null,
+		saveBrain: readFlagValue(argv, '--save-brain'),
+		loadBrain: readFlagValue(argv, '--load-brain'),
+		saveContext: readFlagValue(argv, '--save-context'),
+		loadContext: readFlagValue(argv, '--load-context'),
 	};
 }
 
 /**
- * Unconditionally run a Job class to completion and exit the process. Used by
- * external runners that dynamic-import a job module and drive it themselves.
+ * The arguments that are not flags: everything left once each `--flag` and the value after it are taken out.
+ * A flag that takes no value (`--disable-learning`) is named in `bareFlags`, so the argument after it is kept.
+ */
+export function readPositionals(argv = process.argv, bareFlags = ['--disable-learning']) {
+	const args = argv.slice(2);
+	const positionals = [];
+	for (let i = 0; i < args.length; i++) {
+		if (!args[i].startsWith('--')) positionals.push(args[i]);
+		else if (!bareFlags.includes(args[i])) i++;
+	}
+	return positionals;
+}
+
+/**
+ * Run a Job class to its end and exit the process: 0 when it ends, 1 when it fails.
  *
- * @param {Function} JobClass - Job subclass constructor
- * @param {object} [options] - if omitted, parsed from process.argv
+ * @param {Function} JobClass - the Job subclass
+ * @param {object} [options] - read from the command line when absent
  */
 export async function executeJob(JobClass, options) {
 	try {
@@ -67,21 +74,15 @@ export async function executeJob(JobClass, options) {
 }
 
 /**
- * Run a Job class when its file is the program entry point. Meant to be called
- * at the bottom of a job file as `await runJob(import.meta, MyJob)`. If the
- * file was dynamic-imported by another module (e.g. run-setup.js), this is a
- * no-op so the caller can use the exported class without triggering a full run.
+ * Run a Job class when its file is the program's entry point; do nothing when the file is imported.
+ * The job file's URL is kept on the class, so the job finds its backups next to the file.
  *
- * @param {ImportMeta} meta - pass `import.meta` from the job file
- * @param {Function} JobClass - Job subclass constructor
- * @param {object} [options] - if omitted, parsed from process.argv
+ * @param {ImportMeta} meta - the job file's `import.meta`
+ * @param {Function} JobClass - the Job subclass
+ * @param {object} [options] - read from the command line when absent
  */
 export async function runJob(meta, JobClass, options) {
-
-	// only run when this file is the entry point - dynamic imports should not auto-execute
 	if (!meta || meta.url !== pathToFileURL(process.argv[1]).href) return;
-
-	// Stash the job module URL so Job.getJobDir() can resolve <jobDir>/backups/.
 	JobClass.moduleUrl = meta.url;
 	await executeJob(JobClass, options);
 }

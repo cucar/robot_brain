@@ -1,2194 +1,676 @@
-/// Brain — top-level orchestrator for the hierarchical prediction engine.
-///
-/// Owns the full frame pipeline: sensory input → quantization → pattern recognition
-/// → voting → inference. Coordinates Thalamus, Memory, Diagnostics, and Quantizer.
-///
-/// Architecture:
-///   processFrame is the single entry point per time step. It:
-///   1. Builds the frame from quantized inputs + previously inferred actions
-///   2. Creates any new sensory neurons (Op-1)
-///   3. Cleans up dead patterns (Op-2 — reap + cascade delete)
-///   4. Ages context (slides the temporal window)
-///   5. Activates new neurons at age 0
-///   6. Processes levels (Op-3 dispatch per level, deferred Op-4/Op-5)
-///   7. Runs voting consensus → scalar-space inference output
-///   8. Tracks continuous prediction error (MAPE)
-///
-/// The Brain is a pure compute function — no I/O, no rendering, no action dispatch.
-/// The host (N-API binding or CLI runner) feeds inputs and reads the return value.
+/// The machine (§2, §3, §6, §7, §8): frames, open activations, the dictionary, the levels with recognition
+/// and the election, the connect and infer calls, and selection.
 
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::fs;
-use std::path::PathBuf;
-use std::time::Instant;
+use std::collections::VecDeque;
 
-use crate::backup::{Backup, read_csv, write_csv};
-use crate::column::NeuronCreateSpec;
-use crate::diagnostics::{DimInference, Diagnostics, InferenceType};
-use crate::memory::{InferredNeuron, Memory};
-use crate::neuron::{ContextRefEntry, Vote};
-use crate::thalamus::{
-    FlatVote, LevelAgeState,
-    PointLookup, Thalamus,
-};
-use crate::types::{
-    ChannelId, ConsensusMode, Coordinate, DimensionId, Distance, GroupMode, FrameNumber,
-    Level, NeuronId, NeuronType, Reward,
-};
+use crate::dictionary::*;
+use crate::neuron::*;
+use crate::recognize::{edge, Fresh};
+use crate::thalamus::{NeuronFacts, Thalamus};
+use crate::types::*;
 
-/// Laplace-style floor added inside the Nb consensus log so a zero posterior (reward == 0) doesn't send a
-/// candidate to negative infinity. Out-of-range rewards (< 0 or > 1) are rejected upstream, not floored.
-const NB_EPS: f64 = 1e-3;
+pub use crate::board::*;
 
-// ── Re-exports for the N-API layer ──────────────────────────────────────────
-// These types live in crate-private modules but are part of Brain's public API.
-pub use crate::diagnostics::DiagnosticStats;
-pub use crate::thalamus::{ChannelRegistration, DimKind, DimSpecInput};
-
-// ── Supporting structs ──────────────────────────────────────────────────────
-
-/// A single frame point: quantized coordinate + channel + type.
-#[derive(Debug, Clone)]
-struct FramePoint {
-    coordinate: Coordinate,
-    channel_id: ChannelId,
-    neuron_type: NeuronType,
+#[derive(Clone, Debug)]
+pub struct Winner {
+    pub dim: DimensionId,
+    pub bucket: u32,
+    pub pos: Pos,
+    pub kind: Kind,
+    pub estimate: f64,
+    pub share: f64,
+    pub voters: usize,
 }
 
-/// Resolved frame neurons, split by role.
-///
-/// `events` are this frame's quantized observations from the input scalars.
-/// They drive the spatial co-activation sweep and are the only thing activated in spatial[0].
-///
-/// `actions` are the actions inferred by the previous frame's vote, carried forward.
-/// They bypass spatial entirely and get injected into temporal[0] alongside the spatial apex set,
-/// so the temporal sweep sees both "what just happened" (events through spatial) and
-/// "what the agent just did" (carry-forward actions).
-struct FrameNeurons {
-    events: Vec<PointLookup>,
-    actions: Vec<PointLookup>,
+#[derive(Clone, Debug, Default)]
+pub struct FrameStats {
+    pub frame: FrameNumber,
+    pub base_acts: usize,
+    pub apex_acts: usize,
+    pub apex_cost: f64,
+    pub levels: usize,
+    pub bids: usize,
+    pub accepted: usize,
+    pub minted: usize,
+    pub reused: usize,
+    pub retired: usize,
+    pub added: usize,
+    pub neurons: usize,
+    pub patterns: usize,
+    pub connections: usize,
+    pub voters: usize,
+    pub voters_above_base: usize,
+    pub elapsed_ms: f64,
+    /// Per level: the activations it ran, the relations they returned, the fits found, accepted, and functions added.
+    pub per_level: Vec<(usize, usize, usize, usize, usize, f64)>,
 }
 
-impl FrameNeurons {
-    fn is_empty(&self) -> bool {
-        self.events.is_empty() && self.actions.is_empty()
-    }
+#[derive(Clone, Debug)]
+pub struct Config {
+    pub h: usize,
+    pub policy: Policy,
+    /// The dispatch: regions, and columns per region, over which the neurons are partitioned by id.
+    pub regions: usize,
+    pub columns: usize,
 }
-
-/// Per-dimension inference output in scalar space.
-/// Winner is the best dequantized candidate; continuous is the
-/// score-weighted average across all candidates on that dimension.
-#[derive(Debug, Clone)]
-pub struct DimInferenceOutput {
-    pub dim_id: DimensionId,
-    pub kind: NeuronType,
-    pub winner: WinnerOutput,
-    pub continuous: Option<f64>,
-}
-
-/// The winning candidate on a dimension.
-#[derive(Debug, Clone)]
-pub struct WinnerOutput {
-    pub neuron_id: NeuronId,
-    pub value: Option<f64>,
-    pub strength: f64,
-    pub score: f64,
-}
-
-/// Return value from processFrame — inferences plus per-frame diagnostic byproducts.
-#[derive(Debug)]
-pub struct FrameResult {
-    /// Per-channel, per-dimension scalar-space inferences (the consensus).
-    pub inferences: FxHashMap<ChannelId, Vec<DimInferenceOutput>>,
-    /// Every vote cast this frame, with enough resolved metadata that callers
-    /// can run their own consensus or analysis without further round-trips.
-    /// Inferences are the summary; votes are the detail.
-    pub votes: Vec<FrameVote>,
-    /// Wall-clock elapsed time for this frame (seconds).
-    pub elapsed: f64,
-    /// Per-section wall-clock timings (seconds). Populated for profiling.
-    pub timings: FrameTimings,
-}
-
-/// One vote cast by a voter neuron toward a target (event or action) neuron.
-/// `voter_label` is the voter's root-sensory coordinate ("digit=5", "pixel_0=255")
-/// for human-readable debug output; pattern-neuron voters resolve to whichever
-/// sensory neuron sits at the root of their parent chain.
-#[derive(Debug, Clone)]
-pub struct FrameVote {
-    pub voter_id: NeuronId,
-    pub voter_label: String,
-    pub voter_temporal_level: Level,
-    pub target_id: NeuronId,
-    pub target_type: NeuronType,
-    pub channel_id: ChannelId,
-    pub dim_id: DimensionId,
-    pub value: i32,
-    pub distance: Distance,
-    pub strength: f64,
-    pub reward: f64,
-}
-
-/// Neuron inspection result — parent + level + stored context entries.
-#[derive(Debug, Clone)]
-pub struct InspectedNeuron {
-    pub neuron_id: NeuronId,
-    pub temporal_level: Level,
-    pub parent_id: Option<NeuronId>,
-    /// (context_neuron_id, distance, strength) tuples from the parent's
-    /// routing-table entry for this child pattern.
-    pub context: Vec<(NeuronId, Distance, f64)>,
-}
-
-/// Memory-op timings inside brain.process_levels, summed across levels.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct MemoryTimings {
-    pub get_level_neurons: f64,
-    pub write_back_level_neurons: f64,
-    pub activate_patterns: f64,
-}
-
-/**
- * Per-section timings inside a single frame, in seconds. The neuron/orch/mem
- * sub-buckets are summed across all neurons and all levels for this frame.
- * process_temporal/process_spatial include overhead beyond these (memory I/O, level dispatch)
- * so the sub-buckets won't sum to them exactly.
- */
-#[derive(Debug, Clone)]
-pub struct FrameTimings {
-    /// When the frame stopwatch started. Captured at FrameTimings::default() construction.
-    /// Used internally by finalize() to compute `total`; not exposed across the napi boundary.
-    start: Instant,
-    /// Wall-clock seconds the whole frame took, end-to-end. Set by finalize() at frame exit.
-    pub total: f64,
-    pub build_frame: f64,
-    pub create_sensory: f64,
-    pub cleanup_dead: f64,
-    pub age_context: f64,
-    pub activate: f64,
-    pub process_spatial: f64,
-    pub apex_handoff: f64,
-    pub process_temporal: f64,
-    pub apply_results: f64,
-    pub infer: f64,
-    pub track_error: f64,
-    pub neuron_learn_connections: f64,
-    pub neuron_recognize_patterns: f64,
-    pub neuron_correct_errors: f64,
-    pub neuron_generate_votes: f64,
-    pub recognize_candidate_search: f64,
-    pub recognize_candidate_eval: f64,
-    pub recognize_candidates_evaluated: u64,
-    pub orch_get_level_tasks: f64,
-    pub orch_dispatch_frame: f64,
-    pub orch_collect_activations: f64,
-    pub orch_collect_votes: f64,
-    pub mem_get_level_neurons: f64,
-    pub mem_write_back_level_neurons: f64,
-    pub mem_activate_patterns: f64,
-}
-
-impl Default for FrameTimings {
-    fn default() -> Self {
-        Self {
-            start: Instant::now(),
-            total: 0.0,
-            build_frame: 0.0,
-            create_sensory: 0.0,
-            cleanup_dead: 0.0,
-            age_context: 0.0,
-            activate: 0.0,
-            process_spatial: 0.0,
-            apex_handoff: 0.0,
-            process_temporal: 0.0,
-            apply_results: 0.0,
-            infer: 0.0,
-            track_error: 0.0,
-            neuron_learn_connections: 0.0,
-            neuron_recognize_patterns: 0.0,
-            neuron_correct_errors: 0.0,
-            neuron_generate_votes: 0.0,
-            recognize_candidate_search: 0.0,
-            recognize_candidate_eval: 0.0,
-            recognize_candidates_evaluated: 0,
-            orch_get_level_tasks: 0.0,
-            orch_dispatch_frame: 0.0,
-            orch_collect_activations: 0.0,
-            orch_collect_votes: 0.0,
-            mem_get_level_neurons: 0.0,
-            mem_write_back_level_neurons: 0.0,
-            mem_activate_patterns: 0.0,
-        }
-    }
-}
-
-impl FrameTimings {
-    /// Stop the per-frame stopwatch and record the total wall-clock under `total`.
-    /// Called once per frame, right before the FrameResult is built.
-    pub fn finalize(&mut self) {
-        self.total = self.start.elapsed().as_secs_f64();
-    }
-}
-
-/// Episode-level summary for host-side rendering.
-#[derive(Debug, Clone)]
-pub struct FrameSummary {
-    pub frame_number: FrameNumber,
-    pub neuron_count: usize,
-    /// Maximum active temporal level — depth of the temporal pattern hierarchy.
-    /// 0 = sensory only, 1+ = temporal patterns exist at that level.
-    pub max_temporal_level: Level,
-    /// Maximum active spatial level — depth of the spatial pattern hierarchy.
-    /// 0 = sensory only, 1+ = spatial-correction patterns exist at that level.
-    pub max_spatial_level: Level,
-    pub stats: DiagnosticStats,
-}
-
-/// Start-of-frame diagnostic snapshot (rewards, observations, dim names).
-#[derive(Debug, Clone)]
-pub struct StartFrameInfo {
-    pub frame_number: FrameNumber,
-    pub rewards: FxHashMap<ChannelId, Reward>,
-    pub frame: Vec<FramePointInfo>,
-    pub dimension_id_to_name: FxHashMap<DimensionId, String>,
-}
-
-/// A simplified frame point for diagnostic display.
-#[derive(Debug, Clone)]
-pub struct FramePointInfo {
-    pub coordinate: Coordinate,
-    pub channel_id: ChannelId,
-    pub neuron_type: NeuronType,
-}
-
-/// Episode summary with all diagnostic information.
-#[derive(Debug, Clone)]
-pub struct EpisodeSummary {
-    pub frame_number: FrameNumber,
-    pub stats: DiagnosticStats,
-}
-
-/// Candidate aggregation entry — intermediate state during vote aggregation.
-#[derive(Debug, Clone)]
-struct Candidate {
-    strength: f64,
-    weighted_total: f64,
-    reward: f64,
-    probability: f64,
-    /// Naive-Bayes log-score accumulator for action candidates: Σ_vote log(reward + NB_EPS), reward in [0, 1].
-    /// Filled only when consensus mode is Nb; one term per incoming vote (per connection),
-    /// matching the per-voter product rule. Ignored under Democratic consensus.
-    nb_log_score: f64,
-}
-
-/// Per-dimension winner tracking during consensus determination.
-#[derive(Debug, Clone)]
-struct DimBestEntry {
-    neuron_id: NeuronId,
-    score: f64,
-    strength: f64,
-}
-
-/// Output of a single phase's level-sweep. Spatial and temporal share the same shape; only
-/// `fired_set` / `subsumed_set` are consumed (by the apex handoff) and only on the spatial side.
-struct SweepResult {
-    votes: Vec<FlatVote>,
-    neuron_specs: Vec<NeuronCreateSpec>,
-    dispatch_results: Vec<Vec<crate::column::ColumnProcessResult>>,
-    fired_set: FxHashSet<NeuronId>,
-    subsumed_set: FxHashSet<NeuronId>,
-}
-
-// ── Brain ───────────────────────────────────────────────────────────────────
 
 pub struct Brain {
-    /// Number of frames a base neuron stays active.
-    context_length: u32,
-
-    /// Debug flag — when set, enables verbose logging and vote debug output.
-    debug: bool,
-
-    /// How per-voter action posteriors are combined into a dimension winner.
-    /// Democratic (default) is the strength-weighted mean; Nb is the Naive-Bayes log-product.
-    /// Only affects action scoring — event winners are always probability (voter share).
-    consensus_mode: ConsensusMode,
-
-    /// When true, infer_neurons resolves every cast vote into a FrameVote on
-    /// FrameResult.votes. Off by default since resolution allocates per-vote
-    /// (voter_label String, target metadata lookups) — only opt in when a
-    /// harness actually consumes the per-vote detail.
-    emit_votes: bool,
-
-    /// When true (default), process_frame mutates connections and learns error correction patterns.
-    /// When false, process_frame skips forget/decay and error-correction pattern neuron creation.
-    /// It also skips event→event connection strengthening, child-activation strengthening, and accuracy-stats tracking.
-    /// Sensory neuron creation (op-1) still runs because without it the frame cannot be processed at all.
-    /// Pattern activation and voting still run.
-    /// The harness still reads predictions out of FrameResult.inferences exactly as during training.
-    /// The supervised evaluation path is `set_learning(false)` followed by ordinary `process_frame` calls.
-    learning: bool,
-
-    /// Current frame data from all channels (rebuilt each frame).
-    frame: Vec<FramePoint>,
-
-    /// Channel rewards indexed by age — rewards[0] is this frame's rewards,
-    /// rewards[1] is last frame's, etc. Kept in sync with the context window.
-    rewards: Vec<FxHashMap<ChannelId, Reward>>,
-
-    /// Monotonically increasing frame counter. Used for death ledger scheduling,
-    /// diagnostics timestamps, and lazy decay materialization.
-    frame_number: FrameNumber,
-
-    /// Pure stats tracker — no presentation, no flags.
-    diagnostics: Diagnostics,
-
-    /// File-based snapshot save/load.
-    backup: Backup,
-
-    /// Relay station for neuron/channel/dimension mappings. Owns the Region tree.
-    thalamus: Thalamus,
-
-    /// Temporal sliding window of active and inferred neurons.
-    memory: Memory,
+    pub cfg: Config,
+    pub act_dims: Vec<ActDim>,
+    pub dims: Vec<NeuronDim>,
+    pub channels: Vec<Channel>,
+    /// The neurons, owned by the columns of the regions and reached by id.
+    pub(crate) thalamus: Thalamus,
+    pub alive: usize,
+    pub base_count: u32,
+    pub frame_no: FrameNumber,
+    pub(crate) pending_weak: Vec<(NeuronId, Pos)>,
+    pub max_reach_t: i32,
+    /// S (D9): how long an activation stands on the board, the longest reach in time among the neurons the machine
+    /// holds, one beyond the farthest node any function has from its origin. It moves with the dictionary.
+    pub span_s: i32,
+    /// Functions that left the dictionary, kept readable while what they fired is open (R38).
+    pub(crate) retired_funcs: FxHashMap<FuncId, (Func, FrameNumber)>,
+    /// Per interneuron, the function that fired it last, for inferring it (R28).
+    pub(crate) last_func: FxHashMap<NeuronId, FuncId>,
+    /// The same while frozen: what a frozen machine's calls would have written there, read before `last_func` and
+    /// dropped once the machine learns again, so a test leaves `last_func` as it found it
+    pub(crate) frozen_last_func: FxHashMap<NeuronId, FuncId>,
+    /// Interneurons whose last function has left, waiting for their windows to close (R38).
+    pub ledger: Vec<NeuronId>,
+    /// Per interneuron on the ledger, the frame before which its subtree still stands on the board: it is not
+    /// looked at again until then (R38).
+    pub(crate) ledger_due: FxHashMap<NeuronId, FrameNumber>,
+    pub(crate) stats_added: usize,
+    pub(crate) stats_reused: usize,
+    pub(crate) last_fits: usize,
+    /// Per interneuron, the farthest it has seen in each dimension, over its activations (D4).
+    pub(crate) reach_of: FxHashMap<NeuronId, Pos>,
+    pub(crate) stats_retired: usize,
+    /// The relations covered by the calls taken so far at one level of one frame, across every election of the
+    /// level, each with the call and its function, as adjacency, and the sets they join (D24); the frame and level
+    /// they are for
+    pub(crate) joined: FxHashMap<ActRef, Vec<(ActRef, ActRef, FuncId)>>,
+    pub(crate) jparent: FxHashMap<ActRef, ActRef>,
+    pub(crate) joined_at: Option<(FrameNumber, u32)>,
+    /// The relations refused because they would close a deadlock (D24, D55): refused for as long as their two
+    /// activations exist
+    pub(crate) refused: FxHashSet<(ActRef, ActRef)>,
+    /// For each edge a relation became at a call, the relations it stands for; and the edges that stood on the board
+    /// before any relation became them (D26, D24)
+    pub(crate) form_src: FxHashMap<(ActRef, ActRef), Vec<(ActRef, ActRef)>>,
+    pub(crate) form_pre: FxHashSet<(ActRef, ActRef)>,
+    /// The relations that may start a function in this half of the level, in the order grouping read them (R50)
+    pub(crate) start_queue: Vec<crate::dictionary::Rel>,
+    /// The kind of relation this grouping reads, true inside the frame (R24, D34); None reads both
+    pub(crate) half: Option<bool>,
+    /// How many functions the last start step started
+    pub(crate) last_start_rounds: usize,
+    /// What each level of this frame has joined, kept while the frame visits another level (D24, R24, R26)
+    pub(crate) joined_stash: FxHashMap<u32, (FxHashMap<ActRef, Vec<(ActRef, ActRef, FuncId)>>, FxHashMap<ActRef, ActRef>)>,
+    /// Relations of covered activations that no call covered, lifted to their calls (D24, D10, D55)
+    pub(crate) lifted: FxHashSet<(ActRef, ActRef)>,
+    /// The covered relations at each activation: the other end of each, kept as each fit is accepted (D24, D28)
+    pub(crate) cov_inc: FxHashMap<ActRef, Vec<ActRef>>,
+    /// Each relation that was lifted, and the relations it was lifted to (D55, D24): covered by a call in any of those,
+    /// it is covered, and is not lifted again
+    pub(crate) lift_forms: FxHashMap<(ActRef, ActRef), Vec<(ActRef, ActRef)>>,
+    /// The kind each activation's first covered relation decided (D24): true inside the frame, false in time
+    pub(crate) kind_of: FxHashMap<ActRef, bool>,
+    /// What each call took that way: the activations or calls at the other end of the relations lifted to it (D10, D26)
+    pub(crate) taken: FxHashMap<ActRef, Vec<ActRef>>,
+    /// Relations lifted inside the frame to a call whose other end's row is not written yet: per that activation, the
+    /// call and its offset from it, held by the row when it is written; dropped at the frame's end (D10)
+    pub(crate) lift_pending: FxHashMap<ActRef, Vec<(ActRef, Offset)>>,
+    /// Lifts collected since the last flush, each with the pending entry it leaves where its row is not written yet
+    pub(crate) lifts_due: Vec<(NeuronId, LiftTask, Option<(ActRef, ActRef, Offset)>)>,
+    /// Whether a grouping is running: counts are asked only then (R50)
+    pub(crate) counting: bool,
+    /// The counts this grouping has had answered, and those it asked that wait for the next batch (R50)
+    pub(crate) counts: std::cell::RefCell<FxHashMap<CountQuery, (u32, u32)>>,
+    pub(crate) missed: std::cell::RefCell<Vec<(NeuronId, CountQuery)>>,
+    /// The first frame of the run (D24), and every activation covered by one relation: the frame, and the activation
+    pub first_frame: Option<FrameNumber>,
+    /// A call that took a lap (D53): the record it grew from, to the record it stands as now.
+    pub grown: FxHashMap<ActRef, ActRef>,
+    /// Whether two activations stand over a shared one, remembered for one grouping step while nothing on the board
+    /// changes (a speed-up only).
+    /// Each function's reach in time with the nodes and relations it was read from, for S (D9)
+    pub(crate) reach_memo: std::cell::RefCell<FxHashMap<FuncId, (Vec<Sym>, Vec<Rel>, i32)>>,
+    pub last_stats: FrameStats,
+    pub last_winners: Vec<Winner>,
+    /// The coverage set per relation (D24): every board relation an accepted call covers, over the frames on the
+    /// board; nothing lands on one again (D28).
+    pub(crate) covered_rel: FxHashSet<(ActRef, ActRef)>,
+    /// Every call that fired, and what it covered, each at its offset from the call (R28): a call reads as
+    /// this whether or not its interneuron still has a function
+    pub(crate) covered_by: FxHashMap<ActRef, Vec<(Sym, Offset)>>,
+    /// The board relations each call's fit covered
+    pub(crate) call_edges: FxHashMap<ActRef, Vec<(ActRef, ActRef)>>,
+    /// Per accepted call, the calls its fit named or read a node through
+    pub(crate) call_thru: FxHashMap<ActRef, Vec<ActRef>>,
+    /// This frame's accepted fits, by their calls, so grouping reads what they landed on
+    pub(crate) call_fit: FxHashMap<ActRef, crate::recognize::Fit>,
+    /// The calls the election running now has taken (D28): an activation they landed on may be landed on again
+    /// in this election, each call covering relations of its own (D8, D10).
+    pub(crate) electing: FxHashSet<ActRef>,
+    /// Per call in its phase, every node its expansion puts back, at any depth, each at its offset from the call's
+    /// position (R28, R50); read from the dictionary and dropped whenever the dictionary changes.
+    pub(crate) expansions: std::cell::RefCell<FxHashMap<Sym, std::rc::Rc<Vec<(Sym, Offset, Vec<NeuronId>)>>>>,
+    /// Per expansion kept, the functions it was read through: a change to one drops the expansions that used it.
+    pub(crate) expansion_deps: std::cell::RefCell<FxHashMap<Sym, Vec<crate::dictionary::FuncId>>>,
+    /// A test: the machine runs each level as it was trained to, the frame first and time after it, its elections
+    /// covering, lifting, refusing and blocking as each fit is taken, its calls firing level after level, and infers
+    /// and resolves as usual; but it changes nothing of itself. No rows enter a history and the relation index stays
+    /// as it is, no function starts, joins, moves or leaves, no interneuron is allocated (so a fit of a function with
+    /// no living interneuron is not elected), no connection or reward is written, nothing is decommissioned.
+    pub(crate) frozen: bool,
 }
 
 impl Brain {
-    /// Create a new Brain with the given hyperparameters.
+    /// Create a brain.
     ///
-    /// # Arguments
-    /// * `context_length` — number of frames a base neuron stays active (default 10)
-    /// * `group_threshold` — the single brain-wide grouping coefficient θ, shared by spatial (d=0) and temporal (d>0):
-    ///   recognition / reuse fires at similarity ≥ θ, correction fires at similarity < θ (error threshold = 1 − θ)
-    /// * `group_mode` — how the derived correction threshold adapts: 'static' | 'conservative' | 'neutral' | 'aggressive'
-    /// * `pattern_forget_rate` — forget rate applied uniformly to every pattern neuron, all levels
-    /// * `regions` — R — number of regions (1 for single-process)
-    /// * `columns` — C — number of columns per region (1 for single-thread)
-    /// * `consensus_mode` — how action votes combine into a winner ('democratic' | 'nb')
-    /// * `debug` — enable verbose logging
-    pub fn new(
-        context_length: u32,
-        group_threshold: f64,
-        group_mode: GroupMode,
-        pattern_forget_rate: f64,
-        regions: usize,
-        columns: usize,
-        consensus_mode: ConsensusMode,
-        debug: bool,
-    ) -> Self {
-        Self {
-            context_length,
-            debug,
-            consensus_mode,
-            emit_votes: false,
-            learning: true,
-            frame: Vec::new(),
-            rewards: Vec::new(),
-            frame_number: 0,
-            diagnostics: Diagnostics::new(),
-            backup: Backup::new(pattern_forget_rate),
-            thalamus: Thalamus::new(
-                debug,
-                pattern_forget_rate,
-                context_length,
-                group_threshold,
-                group_mode,
-                regions,
-                columns,
-            ),
-            memory: Memory::new(debug, context_length),
+    /// * `h` — the depth of every neuron's history (R4)
+    /// * `policy` — the neighborhood policy (D50) and the action policy (D51)
+    /// * `regions` — R, the number of regions
+    /// * `columns` — C, the number of columns per region
+    /// * `learning` — fixed for the life of the instance: a brain built with learning off runs each frame as trained
+    ///   and changes nothing of itself; it is loaded from a backup to be tested
+    pub fn new(h: usize, policy: Policy, regions: usize, columns: usize, learning: bool) -> Self {
+        Brain {
+            cfg: Config { h, policy, regions: regions.max(1), columns: columns.max(1) },
+            act_dims: vec![ActDim { name: "time".into(), radius: 1 }],
+            dims: Vec::new(),
+            channels: Vec::new(),
+            thalamus: Thalamus::new(regions, columns),
+            alive: 0,
+            base_count: 0,
+            frame_no: 0,
+            pending_weak: Vec::new(),
+            max_reach_t: 1,
+            span_s: 1,
+            retired_funcs: FxHashMap::default(),
+            last_func: FxHashMap::default(),
+            frozen_last_func: FxHashMap::default(),
+            ledger: Vec::new(),
+            ledger_due: FxHashMap::default(),
+            stats_added: 0,
+            stats_reused: 0,
+            last_fits: 0,
+            reach_of: FxHashMap::default(),
+            stats_retired: 0,
+            joined: FxHashMap::default(), jparent: FxHashMap::default(), joined_at: None, refused: FxHashSet::default(), form_src: FxHashMap::default(), form_pre: FxHashSet::default(),
+            start_queue: Vec::new(), half: None, last_start_rounds: 0, joined_stash: FxHashMap::default(),
+            grown: FxHashMap::default(),
+            lifted: FxHashSet::default(),
+            cov_inc: FxHashMap::default(),
+            lift_forms: FxHashMap::default(),
+            kind_of: FxHashMap::default(),
+            taken: FxHashMap::default(),
+            lift_pending: FxHashMap::default(),
+            lifts_due: Vec::new(),
+            counting: false,
+            counts: std::cell::RefCell::new(FxHashMap::default()),
+            missed: std::cell::RefCell::new(Vec::new()),
+            first_frame: None,
+            reach_memo: std::cell::RefCell::new(FxHashMap::default()),
+            last_stats: FrameStats::default(),
+            last_winners: Vec::new(),
+            covered_rel: FxHashSet::default(),
+            covered_by: FxHashMap::default(),
+            call_edges: FxHashMap::default(),
+            call_thru: FxHashMap::default(),
+            call_fit: FxHashMap::default(),
+            electing: FxHashSet::default(),
+            expansions: std::cell::RefCell::new(FxHashMap::default()),
+            expansion_deps: std::cell::RefCell::new(FxHashMap::default()),
+            frozen: !learning,
+            
         }
     }
 
-    // ── Channel registration ────────────────────────────────────────────────
-
-    /// Register a channel spec with the brain. Delegates to Thalamus.
-    /// Returns the allocated channel id and per-dimension id map.
-    pub fn register_channel_spec(
-        &mut self,
-        name: &str,
-        dimensions: Vec<DimSpecInput>,
-        learn_action_sequences: bool,
-    ) -> ChannelRegistration {
-        self.thalamus.register_channel_spec(name, dimensions, learn_action_sequences)
+    /// Declare a spatial activation dimension (D1). Returns its index (1 or 2). The radius is read by nothing (R4).
+    pub fn declare_axis(&mut self, name: &str, _radius: i32) -> usize {
+        assert!(self.act_dims.len() < MAX_DIMS, "at most two spatial axes");
+        self.act_dims.push(ActDim { name: name.into(), radius: 1 });
+        self.act_dims.len() - 1
     }
 
-    /// Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
-    /// See `Thalamus::set_spatial_neighbors`.
-    pub fn set_spatial_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
-        self.thalamus.set_spatial_neighbors(name, neighbor_names);
+    /// Declare a channel with an optional event dimension and action dimension (D3). Base neurons are
+    /// minted in declaration order (D52).
+    pub fn declare_channel(&mut self, name: &str, event: Option<(&str, u32)>, action: Option<(&str, u32)>, axes: &[usize]) -> ChannelId {
+        assert!(self.frame_no == 0, "channels are declared before the first frame");
+        let id = self.channels.len() as ChannelId;
+        let mut mask: u8 = 1;
+        for &a in axes { assert!(a < self.act_dims.len()); mask |= 1 << a; }
+        let mut ev = None;
+        let mut ac = None;
+        if let Some((n, res)) = event { ev = Some(self.declare_dim(n, id, Kind::Event, res, mask)); }
+        if let Some((n, res)) = action { ac = Some(self.declare_dim(n, id, Kind::Action, res, mask)); }
+        self.channels.push(Channel { id, name: name.into(), event: ev, action: ac, axes: mask });
+        id
     }
 
-    /// Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
-    /// See `Thalamus::set_temporal_neighbors`.
-    pub fn set_temporal_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
-        self.thalamus.set_temporal_neighbors(name, neighbor_names);
+    pub(crate) fn declare_dim(&mut self, name: &str, channel: ChannelId, kind: Kind, resolution: u32, axes: u8) -> DimensionId {
+        let id = self.dims.len() as DimensionId;
+        let first = self.thalamus.registry.len() as NeuronId;
+        for b in 0..resolution {
+            let facts = NeuronFacts { kind, dim: Some(id), bucket: b, channel: Some(channel), axes, alive: true };
+            self.thalamus.allot_neuron(facts, self.cfg.h);
+        }
+        self.alive += resolution as usize;
+        self.base_count += resolution;
+        self.dims.push(NeuronDim { id, name: name.into(), channel, kind, resolution, first });
+        id
     }
 
-    /// Declare the same neighbor set for BOTH phases. See `Thalamus::set_channel_neighbors`.
-    pub fn set_channel_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
-        self.thalamus.set_channel_neighbors(name, neighbor_names);
+    pub fn find_base_neuron(&self, dim: DimensionId, bucket: u32) -> NeuronId { self.dims[dim as usize].first + bucket }
+
+    pub fn find_act(&self, r: ActRef) -> Option<&Act> {
+        self.thalamus.frames.iter().find(|f| f.no == r.frame).and_then(|f| f.acts.get(r.index as usize))
     }
 
-    // ── Context / reset ─────────────────────────────────────────────────────
-
-    /// Toggle per-vote resolution on FrameResult.votes. Default off (training
-    /// hot path stays free of per-vote string allocation and metadata lookups).
-    /// Inference/debug harnesses that consume votes flip this on.
-    pub fn set_emit_votes(&mut self, enabled: bool) {
-        self.emit_votes = enabled;
+    pub(crate) fn find_act_mut(&mut self, r: ActRef) -> Option<&mut Act> {
+        self.thalamus.frames.iter_mut().find(|f| f.no == r.frame).and_then(|f| f.acts.get_mut(r.index as usize))
     }
 
-    /// Toggle the master learning flag.
-    /// See `Brain.learning` for the list of mutating operations that get skipped when learning is off.
-    /// Voting and inference still run, so `process_frame` continues to populate FrameResult.inferences identically.
-    /// Only the learning side effects are suppressed.
-    pub fn set_learning(&mut self, learning: bool) {
-        self.learning = learning;
-    }
+    pub(crate) fn find_frame_mut(&mut self, no: FrameNumber) -> Option<&mut FrameRec> { self.thalamus.frames.iter_mut().find(|f| f.no == no) }
 
-    /// Inspect the current learning flag (test-only).
-    #[cfg(test)]
-    pub fn is_learning(&self) -> bool {
-        self.learning
-    }
-
-    /// Reset brain memory state for a clean episode start.
-    /// Materializes all lazy decay, resets frame counter and death ledger so
-    /// the next episode starts clean while preserving learned knowledge.
+    /// Clear every open activation and standing inference; keep the dictionary and connections.
     pub fn reset_context(&mut self) {
-        // println!("Resetting brain context...");
-
-        // Materialize all lazy decay and reset timestamps so frameNumber can restart at 0
-        self.thalamus.materialize_and_reset_neurons(self.frame_number);
-        self.frame_number = 0;
-
-        // Reset accuracy stats
-        self.diagnostics.reset_accuracy_stats();
-
-        // Clear memory and rewards history
-        self.memory.reset();
-        self.rewards.clear();
+        self.thalamus.frames.clear();
+        self.pending_weak.clear();
     }
 
-    /// Hard reset: clears ALL learned data (used mainly for tests).
-    pub fn reset_brain(&mut self) {
-        println!("Hard resetting brain (all learned data)...");
+    // ───────────────────────────── one frame ─────────────────────────────
 
-        // reset active memory (also resets frameNumber)
-        self.reset_context();
-
-        // reset all neurons
-        self.thalamus.reset();
-    }
-
-    /// Reset accuracy and reward stats for a new episode.
-    pub fn reset_accuracy_stats(&mut self) {
-        self.diagnostics.reset_accuracy_stats();
-    }
-
-    // ── Save / load ──────────────────────────────────���──────────────────────
-
-    /// Save brain state to `<job_dir>/backups/<label>/`. Materializes lazy decay
-    /// before snapshotting so strengths reflect true post-decay values.
-    pub fn save(&mut self, job_dir: &std::path::Path, label: &str) -> Result<PathBuf, String> {
-        self.thalamus.materialize_and_reset_neurons(self.frame_number);
-        self.frame_number = 0;
-        let snapshot = self.thalamus.get_snapshot();
-        self.backup.save(job_dir, label, &snapshot)
-    }
-
-    /// Load a backup by label from `<job_dir>/backups/<label>/`.
-    pub fn load(&mut self, job_dir: &std::path::Path, label: &str) -> Result<(), String> {
-        let snapshot = self.backup.load(job_dir, label)?;
-        self.thalamus.restore_snapshot(&snapshot);
-        Ok(())
-    }
-
-    // ── Context save / load ─────────────────────────────────────────────────
-
-    /// Save the brain's runtime context (active neurons, frame number, rewards,
-    /// inferred neurons) to `<job_dir>/contexts/<label>/`. Uses "latest" semantics
-    /// identical to brain save: timestamped folder vs named folder.
-    ///
-    /// Active neuron activation frames are stored as offsets relative to the
-    /// current frame_number (always ≤ 0). On restore, frame_number is set to 0
-    /// and the offsets become the activation_frames directly — no timestamp
-    /// fixup needed.
-    pub fn save_context(&self, job_dir: &std::path::Path, label: &str) -> Result<PathBuf, String> {
-        let contexts_dir = job_dir.join("contexts");
-        fs::create_dir_all(&contexts_dir)
-            .map_err(|e| format!("Failed to create contexts dir: {}", e))?;
-
-        let folder = if label == "latest" {
-            let timestamp = crate::backup::format_timestamp();
-            contexts_dir.join(&timestamp)
-        } else {
-            contexts_dir.join(label)
-        };
-
-        if label != "latest" && folder.exists() {
-            fs::remove_dir_all(&folder)
-                .map_err(|e| format!("Failed to clear context folder: {}", e))?;
+    /// Process one frame: what was observed and what ran, with any rewards (§2.3). Returns the
+    /// machine's output for the frame ahead.
+    pub fn process_frame(&mut self, inputs: &[Input], rewards: Vec<Reward>) -> Vec<Winner> {
+        let start = std::time::Instant::now();
+        // what a frozen machine named or recorded for its own calls goes once it learns again (`last_func`, poses);
+        // the expansions kept may have been read through those poses
+        self.thalamus.dict.frozen = self.frozen;
+        if !self.frozen {
+            self.frozen_last_func.clear();
+            if self.thalamus.dict.drop_frozen_syms() { self.forget_all_expansions(); }
         }
-        fs::create_dir_all(&folder)
-            .map_err(|e| format!("Failed to create context folder: {}", e))?;
+        self.frame_no += 1;
+        let fno = self.frame_no;
+        let mut stats = FrameStats { frame: fno, ..Default::default() };
 
-        // active_neurons.csv: neuron_id, activation_offset, level, activated_pattern_id, threshold
-        // activation_offset = activation_frame - frame_number (always ≤ 0).
-        // Temporal-only — spatial activations are wiped per-frame and don't appear in snapshots.
-        let activations = self.memory.get_context_snapshot();
-        let rows: Vec<Vec<String>> = activations.iter()
-            .map(|(id, frame, level, state)| {
-                let offset = frame - self.frame_number;
-                let pattern_id_str = state.activated_pattern_id.map_or(String::new(), |p| p.to_string());
-                let threshold_str = state.threshold.map_or(String::new(), |t| t.to_string());
-                vec![id.to_string(), offset.to_string(), level.to_string(), pattern_id_str, threshold_str]
-            })
-            .collect();
-        write_csv(&folder.join("active_neurons.csv"), &rows)?;
-
-        // votes.csv: neuron_id, activation_offset, voted_neuron_id, strength, reward, distance
-        let mut vote_rows: Vec<Vec<String>> = Vec::new();
-        for (id, frame, _level, state) in &activations {
-            let offset = frame - self.frame_number;
-            if let Some(ref votes) = state.votes {
-                for vote in votes {
-                    vote_rows.push(vec![
-                        id.to_string(), offset.to_string(),
-                        vote.neuron_id.to_string(), vote.strength.to_string(),
-                        vote.reward.to_string(), vote.distance.to_string(),
-                    ]);
-                }
-            }
+        // the frame's base activations: strong where the world reported, weak where only an inference named them (D40)
+        let mut frame = FrameRec { no: fno, rewards, ..Default::default() };
+        let mut reported: FxHashSet<(DimensionId, Pos)> = FxHashSet::default();
+        for inp in inputs {
+            let dim = &self.dims[inp.dim as usize];
+            if inp.bucket >= dim.resolution { continue; }
+            let mut pos = inp.pos;
+            pos[0] = fno as i32;
+            if !reported.insert((inp.dim, pos)) { continue; }
+            let n = dim.first + inp.bucket;
+            let idx = frame.acts.len() as u32;
+            frame.acts.push(self.make_act(n, pos, true));
+            if dim.kind == Kind::Action { frame.actions_ran.push((dim.channel, ActRef { frame: fno, index: idx })); }
         }
-        write_csv(&folder.join("votes.csv"), &vote_rows)?;
-
-        // context_refs.csv: neuron_id, activation_offset, ref_neuron_id, ref_distance
-        let mut ref_rows: Vec<Vec<String>> = Vec::new();
-        for (id, frame, _level, state) in &activations {
-            let offset = frame - self.frame_number;
-            if let Some(ref ctx) = state.context {
-                for entry in ctx {
-                    ref_rows.push(vec![
-                        id.to_string(), offset.to_string(),
-                        entry.neuron_id.to_string(), entry.distance.to_string(),
-                    ]);
-                }
-            }
+        // what an inference named peeks through where the report names nothing (R40)
+        let weak = std::mem::take(&mut self.pending_weak);
+        for (n, p) in weak {
+            let Some(dim) = self.thalamus.registry[n].dim else { continue };
+            let mut pos = p;
+            pos[0] = fno as i32;
+            if reported.contains(&(dim, pos)) { continue; }
+            frame.acts.push(self.make_act(n, pos, false));
         }
-        write_csv(&folder.join("context_refs.csv"), &ref_rows)?;
-
-        // rewards.csv: age, channel_id, reward (one row per entry in the rewards vec)
-        let mut reward_rows: Vec<Vec<String>> = Vec::new();
-        for (age, reward_map) in self.rewards.iter().enumerate() {
-            for (&channel_id, &reward) in reward_map {
-                reward_rows.push(vec![age.to_string(), channel_id.to_string(), reward.to_string()]);
-            }
-        }
-        write_csv(&folder.join("rewards.csv"), &reward_rows)?;
-
-        // inferred_neurons.csv: neuron_id, dim_id, bucket_id, channel_id, strength, reward, probability
-        let inferred = self.memory.get_inferred_snapshot();
-        let inferred_rows: Vec<Vec<String>> = inferred.iter()
-            .map(|inf| vec![
-                inf.neuron_id.to_string(),
-                inf.coordinate.dim_id.to_string(),
-                inf.coordinate.bucket_id.to_string(),
-                inf.channel_id.to_string(),
-                inf.strength.to_string(),
-                inf.reward.to_string(),
-                inf.probability.to_string(),
-            ])
-            .collect();
-        write_csv(&folder.join("inferred_neurons.csv"), &inferred_rows)?;
-
-        println!("💾 Context saved: {} ({} active neurons, frame {})",
-            folder.display(), activations.len(), self.frame_number);
-        Ok(folder)
-    }
-
-    /// Load a context snapshot from `<job_dir>/contexts/<label>/`.
-    /// Activation frames are stored as negative offsets — on restore,
-    /// frame_number is 0 so the offsets become the activation_frames directly.
-    pub fn load_context(&mut self, job_dir: &std::path::Path, label: &str) -> Result<(), String> {
-        let contexts_dir = job_dir.join("contexts");
-
-        let folder = if label == "latest" {
-            self.find_latest_context_folder(&contexts_dir)
-                .ok_or_else(|| format!("--load-context latest requested but no contexts found in {}", contexts_dir.display()))?
-        } else {
-            let named = contexts_dir.join(label);
-            if !named.exists() {
-                return Err(format!("--load-context {} requested but folder does not exist: {}", label, named.display()));
-            }
-            named
-        };
-
-        println!("📂 Loading context: {}", folder.display());
-
-        // active_neurons.csv: neuron_id, activation_offset, level [, activated_pattern_id, threshold]
-        // Temporal-only — snapshots no longer carry a phase column because spatial state is wiped
-        // per-frame and isn't persisted. Older snapshots that had a phase column are tolerated
-        // (extra columns are simply ignored).
-        let neuron_rows = read_csv(&folder.join("active_neurons.csv"))?;
-        let mut activations: Vec<(NeuronId, FrameNumber, Level, LevelAgeState)> = Vec::with_capacity(neuron_rows.len());
-        for row in &neuron_rows {
-            if row.len() < 3 { continue; }
-            let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad neuron_id: {}", e))?;
-            let activation_frame: FrameNumber = row[1].parse().map_err(|e| format!("Bad activation_frame: {}", e))?;
-            let level: Level = row[2].parse().map_err(|e| format!("Bad level: {}", e))?;
-            let activated_pattern_id = row.get(3).and_then(|s| if s.is_empty() { None } else { s.parse().ok() });
-            let threshold = row.get(4).and_then(|s| if s.is_empty() { None } else { s.parse().ok() });
-            activations.push((neuron_id, activation_frame, level, LevelAgeState {
-                activated_pattern_id,
-                threshold,
-                votes: None,
-                context: None,
-            }));
-        }
-
-        // votes.csv: neuron_id, activation_offset, voted_neuron_id, strength, reward, distance
-        let votes_file = folder.join("votes.csv");
-        if votes_file.exists() {
-            let vote_rows = read_csv(&votes_file)?;
-            for row in &vote_rows {
-                if row.len() < 6 { continue; }
-                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad vote neuron_id: {}", e))?;
-                let offset: FrameNumber = row[1].parse().map_err(|e| format!("Bad vote offset: {}", e))?;
-                let vote = Vote {
-                    neuron_id: row[2].parse().map_err(|e| format!("Bad voted_neuron_id: {}", e))?,
-                    strength: row[3].parse().map_err(|e| format!("Bad vote strength: {}", e))?,
-                    reward: row[4].parse().map_err(|e| format!("Bad vote reward: {}", e))?,
-                    distance: row[5].parse().map_err(|e| format!("Bad vote distance: {}", e))?,
-                };
-                if let Some(entry) = activations.iter_mut().find(|(id, frame, _, _)| *id == neuron_id && *frame == offset) {
-                    entry.3.votes.get_or_insert_with(Vec::new).push(vote);
-                }
-            }
-        }
-
-        // context_refs.csv: neuron_id, activation_offset, ref_neuron_id, ref_distance
-        let refs_file = folder.join("context_refs.csv");
-        if refs_file.exists() {
-            let ref_rows = read_csv(&refs_file)?;
-            for row in &ref_rows {
-                if row.len() < 4 { continue; }
-                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad ref neuron_id: {}", e))?;
-                let offset: FrameNumber = row[1].parse().map_err(|e| format!("Bad ref offset: {}", e))?;
-                let ctx_entry = ContextRefEntry {
-                    neuron_id: row[2].parse().map_err(|e| format!("Bad ref_neuron_id: {}", e))?,
-                    distance: row[3].parse().map_err(|e| format!("Bad ref_distance: {}", e))?,
-                };
-                if let Some(entry) = activations.iter_mut().find(|(id, frame, _, _)| *id == neuron_id && *frame == offset) {
-                    entry.3.context.get_or_insert_with(Vec::new).push(ctx_entry);
-                }
-            }
-        }
-
-        self.memory.restore_context_snapshot(self.frame_number, &activations);
-
-        // rewards.csv
-        self.rewards.clear();
-        let rewards_file = folder.join("rewards.csv");
-        if rewards_file.exists() {
-            let reward_rows = read_csv(&rewards_file)?;
-            for row in &reward_rows {
-                if row.len() < 3 { continue; }
-                let age: usize = row[0].parse().map_err(|e| format!("Bad reward age: {}", e))?;
-                let channel_id: ChannelId = row[1].parse().map_err(|e| format!("Bad reward channel: {}", e))?;
-                let reward: Reward = row[2].parse().map_err(|e| format!("Bad reward value: {}", e))?;
-                while self.rewards.len() <= age {
-                    self.rewards.push(FxHashMap::default());
-                }
-                self.rewards[age].insert(channel_id, reward);
-            }
-        }
-
-        // inferred_neurons.csv
-        let inferred_file = folder.join("inferred_neurons.csv");
-        if inferred_file.exists() {
-            let inferred_rows = read_csv(&inferred_file)?;
-            let mut inferred = Vec::with_capacity(inferred_rows.len());
-            for row in &inferred_rows {
-                if row.len() < 7 { continue; }
-                inferred.push(InferredNeuron {
-                    neuron_id: row[0].parse().map_err(|e| format!("Bad inferred neuron_id: {}", e))?,
-                    coordinate: Coordinate {
-                        dim_id: row[1].parse().map_err(|e| format!("Bad inferred dim_id: {}", e))?,
-                        bucket_id: row[2].parse().map_err(|e| format!("Bad inferred bucket_id: {}", e))?,
-                    },
-                    channel_id: row[3].parse().map_err(|e| format!("Bad inferred channel_id: {}", e))?,
-                    strength: row[4].parse().map_err(|e| format!("Bad inferred strength: {}", e))?,
-                    reward: row[5].parse().map_err(|e| format!("Bad inferred reward: {}", e))?,
-                    probability: row[6].parse().map_err(|e| format!("Bad inferred probability: {}", e))?,
-                });
-            }
-            self.memory.restore_inferred_snapshot(inferred);
-        }
-
-        println!("   Restored {} active neurons", activations.len());
-        Ok(())
-    }
-
-    /// Find the most recent timestamped context folder under `contexts_dir`.
-    /// Only considers folders matching the `YYYY-MM-DD_HH-mm-ss` format (same
-    /// convention as brain backups). Named label folders are ignored — they are
-    /// loaded by exact name, not by recency. Returns None if no timestamped
-    /// folders exist.
-    fn find_latest_context_folder(&self, contexts_dir: &std::path::Path) -> Option<PathBuf> {
-        if !contexts_dir.exists() { return None; }
-
-        // Collect only timestamp-formatted folder names (named labels are skipped)
-        let mut folders: Vec<String> = fs::read_dir(contexts_dir).ok()?
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
-            .map(|e| e.file_name().to_string_lossy().to_string())
-            .filter(|name| crate::backup::is_timestamp_folder(name))
-            .collect();
-        if folders.is_empty() { return None; }
-
-        // Lex-sort puts newest last thanks to zero-padded timestamps
-        folders.sort();
-        Some(contexts_dir.join(folders.last().unwrap()))
-    }
-
-    // ── Lookup helpers ─────────────────────────────────────────────────────────
-
-	/// returns dimension id for a given dimension name
-    pub fn get_dimension_id_by_name(&self, name: &str) -> Option<DimensionId> {
-        self.thalamus.get_dimension_id_by_name(name)
-    }
-
-    /// returns neuron id for a given coordinate
-    pub fn get_neuron_id_by_coordinate(&self, coordinate: &Coordinate) -> Option<NeuronId> {
-        self.thalamus.get_neuron_id_by_coordinate(coordinate)
-    }
-
-    // ── Inspection ──────────────────────────────────────────────────────────
-
-    /// Inspection: { parent_id, level, context_entries } for a pattern neuron.
-    /// Returns parent_id and level for any neuron; context_entries is empty
-    /// for level-0 sensory neurons (no parent → no stored context).
-    pub fn inspect_neuron(&self, neuron_id: NeuronId) -> InspectedNeuron {
-        let temporal_level = self.thalamus.get_neuron_temporal_level(neuron_id).unwrap_or(0);
-        let parent = self.thalamus.get_neuron_parent(neuron_id);
-        let context = parent
-            .and_then(|_| self.thalamus.get_pattern_context_entries(neuron_id))
-            .unwrap_or_default();
-        InspectedNeuron { neuron_id, temporal_level, parent_id: parent, context }
-    }
-
-    /// Inspection: dump a neuron's outgoing connections. Returns
-    /// (distance, target_neuron_id, strength, reward) tuples.
-    pub fn get_neuron_connections(&self, neuron_id: NeuronId) -> Vec<(Distance, NeuronId, f64, f64)> {
-        self.thalamus.get_neuron_connections(neuron_id).unwrap_or_default()
-    }
-
-    /// Diagnostic: cumulative number of spatial corrections minted since brain start (or last hard reset).
-    pub fn get_spatial_correction_count(&self) -> u64 {
-        self.thalamus.get_spatial_correction_count()
-    }
-
-    /// Diagnostic: number of correction neurons currently sitting above the base spatial level.
-    pub fn count_active_spatial_corrections(&self) -> usize {
-        self.thalamus.count_active_spatial_corrections()
-    }
-
-    /// Diagnostic: per-level count of correction neurons. Index = (spatial_level - 1), so
-    /// returned[0] = count at level 1, returned[1] = count at level 2, etc. Length = highest level reached.
-    pub fn spatial_level_counts(&self) -> Vec<u32> {
-        self.thalamus.spatial_level_counts()
-    }
-
-    /// Export a snapshot of all active neurons in context with their levels and phase.
-    pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, LevelAgeState)> {
-        self.memory.get_context_snapshot()
-    }
-
-    // ── Diagnostics ─────────────────────────────────────────────────────────
-
-    /// Episode summary with all diagnostic information.
-    pub fn get_episode_summary(&self) -> EpisodeSummary {
-        EpisodeSummary {
-            frame_number: self.frame_number,
-            stats: self.diagnostics.get_stats(),
-        }
-    }
-
-    /// Compose the cumulative/episode-level summary the host renderer uses.
-    /// Numbers only — the renderer formats units and decides how to show None.
-    pub fn get_frame_summary(&self) -> FrameSummary {
-        FrameSummary {
-            frame_number: self.frame_number,
-            neuron_count: self.thalamus.get_neuron_count(),
-            max_temporal_level: self.thalamus.get_max_temporal_level(),
-            max_spatial_level: self.thalamus.get_max_spatial_level(),
-            stats: self.diagnostics.get_stats(),
-        }
-    }
-
-    /// Snapshot of the start-of-frame state for --diagnostic rendering.
-    /// Returns None when the frame was empty (nothing to show).
-    pub fn get_start_frame_info(&self) -> Option<StartFrameInfo> {
-        if self.frame.is_empty() { return None; }
-        Some(StartFrameInfo {
-            frame_number: self.frame_number,
-            rewards: self.rewards.first().cloned().unwrap_or_default(),
-            frame: self.frame.iter().map(|p| FramePointInfo {
-                coordinate: p.coordinate.clone(),
-                channel_id: p.channel_id,
-                neuron_type: p.neuron_type.clone(),
-            }).collect(),
-            dimension_id_to_name: self.thalamus.get_dimension_id_to_name(),
-        })
-    }
-
-    // ── Main frame pipeline ─────────────────────────────────────────────────
-
-    /// Id-native frame entry point. Accepts raw scalars per dimension and returns
-    /// inferred predictions plus per-frame diagnostic byproducts. The brain is a
-    /// pure compute function — no channel I/O, no action dispatch, no printing.
-    ///
-    /// # Arguments
-    /// * `inputs` — channelId → (dimId → raw scalar)
-    /// * `rewards` — channelId → reward for previous frame's actions
-    pub fn process_frame(
-        &mut self,
-        inputs: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
-        rewards: &FxHashMap<ChannelId, Reward>,
-    ) -> FrameResult {
-        // FrameTimings::default() captures the frame-start Instant.
-        // timings.finalize() reads it back into timings.total at the end of the frame, so the
-        // wall-clock measurement lives entirely inside the timings struct.
-        let mut timings = FrameTimings::default();
-
-        // Bump the brain's frame counter and sync memory to it.
-        // Every downstream lookup keyed on the frame number (Op-2 reap, eviction math, activation
-        // frame-keys) assumes this has run, so nothing else may read the frame number first.
-        self.tick_frame();
-
-        // Build the current frame from quantized inputs and previously inferred actions.
-        let frame_neurons = self.get_frame_neurons(inputs, &mut timings);
-        if frame_neurons.is_empty() {
-            timings.finalize();
-            return FrameResult {
-                inferences: FxHashMap::default(),
-                votes: Vec::new(),
-                elapsed: timings.total,
-                timings,
-            };
-        }
-
-        // Op-1: construct any new sensory neurons in their owning columns. Runs in both learning
-        // and non-learning modes — without sensory neurons we cannot process the frame at all.
-        self.create_new_sensory_neurons(&frame_neurons, &mut timings);
-
-        // Op-2: forget connections and patterns to avoid curse of dimensionality.
-        // Skipped in non-learning mode so learned neurons do not decay or get forgotten.
-        self.cleanup_dead_patterns(&mut timings);
-
-        // Spatial phase: clear spatial[0], activate sensory events, run d=0 co-activation sweep, mint
-        // corrections, hand off the apex set (fired \ subsumed) into temporal_level_index[0].
-        // Event-only — actions skip spatial entirely. No rewards, no inference performance tracking.
-        let spatial = self.process_spatial(&frame_neurons.events, &mut timings);
-
-        // Temporal phase: push rewards, inject carry-forward actions into temporal[0] alongside spatial's
-        // apex set, track inference performance for last frame's predictions, run the d>0 sequence sweep.
-        let temporal = self.process_temporal(rewards, &frame_neurons.actions, &mut timings);
-
-        // Op-4 + Op-5: flush deferred neuron creation and contextRef updates across both phases.
-        // Spatial-correction specs are already folded into spatial.neuron_specs by process_spatial.
-        // Partial-move spec/dispatch fields out of both sweeps so we can keep temporal.votes owned
-        // and pass it into inference without cloning.
-        self.apply_merged_results(
-            spatial.neuron_specs,
-            temporal.neuron_specs,
-            spatial.dispatch_results,
-            temporal.dispatch_results,
-            &mut timings,
-        );
-
-        // Inference consumes temporal votes only. Spatial d=0 votes are same-frame co-activation
-        // predictions; they don't contribute to next-frame consensus or action voting (see doc §3.3
-        // and 1c spatial error pass).
-        let (inferences, resolved_votes) = self.infer_neurons(&temporal.votes, &mut timings);
-
-        // Accumulate MAPE by comparing continuous event predictions to the actual input scalars.
-        self.track_continuous_error(&inferences, inputs, &mut timings);
-
-        timings.finalize();
-        FrameResult {
-            inferences,
-            votes: resolved_votes,
-            elapsed: timings.total,
-            timings,
-        }
-    }
-
-    /// Advance the brain's frame counter and sync memory to the new value.
-    /// Memory acts as a slave clock — the brain owns the tick.
-    /// Called once per frame, at the very top of process_frame, before anything else reads the frame number.
-    fn tick_frame(&mut self) {
-        self.frame_number += 1;
-        self.memory.sync_frame(self.frame_number);
-    }
-
-    // ── Frame building ──────────────────────────────────────────────────────
-
-    /// Build this.frame from quantized inputs: one FramePoint per input scalar.
-    /// Events only — carry-forward actions don't go through self.frame because we already have
-    /// their neuron IDs directly on `InferredNeuron` and don't need the coordinate detour.
-    fn build_frame(&mut self, inputs: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>) {
-        self.frame.clear();
-        for channel_id in self.thalamus.get_channel_ids() {
-
-            // quantize each dimension's scalar to a bucketId and push as event coordinate
-            if let Some(dim_map) = inputs.get(&channel_id) {
-                for (&dim_id, &scalar) in dim_map {
-                    self.thalamus.quantizer.observe(dim_id, scalar);
-                    let bucket_id = self.thalamus.quantizer.quantize(dim_id, scalar);
-                    self.frame.push(FramePoint {
-                        coordinate: Coordinate { dim_id, bucket_id },
-                        channel_id,
-                        neuron_type: NeuronType::Event,
-                    });
-                }
-            }
-        }
-    }
-
-    /// Resolve this frame's quantized inputs and carry-forward actions into neuron IDs, split by role.
-    /// Events go through the coordinate-keyed lookup because input arrives as scalars, not ids.
-    /// Actions skip the lookup — `InferredNeuron` already carries the neuron id from last frame's
-    /// vote, and action neurons are pre-allocated at brain init, so every id is real and is_new is
-    /// always false.
-    fn get_frame_neurons(
-        &mut self,
-        inputs: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
-        timings: &mut FrameTimings,
-    ) -> FrameNeurons {
-        let t = Instant::now();
-
-        // Quantize raw scalars into FramePoints and stash on self.frame.
-        // self.frame doubles as the start-of-frame diagnostic snapshot, so we keep it as an owned Vec on the brain.
-        self.build_frame(inputs);
-
-        // Resolve each event FramePoint to its neuron id, creating the substrate neuron on first sight.
-        // get_neuron_id_for_point is &mut because the first time we see a (channel, coordinate) it mints a new sensory neuron id.
-        let mut events = Vec::with_capacity(self.frame.len());
-        for point in &self.frame {
-            events.push(self.thalamus.get_neuron_id_for_point(
-                &point.coordinate,
-                point.channel_id,
-                point.neuron_type.clone(),
-            ));
-        }
-
-        // Take carry-forward action neuron ids straight off the inferred set.
-        // No coordinate detour, no lookup — the previous frame's infer pass already produced the ids we need.
-        let actions: Vec<PointLookup> = self.memory.get_inferred_neurons().iter()
-            .filter(|n| self.thalamus.get_neuron_type(n.neuron_id) == Some(NeuronType::Action))
-            .map(|n| PointLookup { id: n.neuron_id, is_new: false })
-            .collect();
-
-        timings.build_frame = t.elapsed().as_secs_f64();
-        FrameNeurons { events, actions }
-    }
-
-    /// Op-1: construct any new sensory event neurons in their owning columns.
-    /// Only events can be new this frame — action neurons are pre-allocated during brain
-    /// initialization (one per registered action channel/coordinate), so every carry-forward
-    /// action that reaches us here already exists. Carrying them through this pass would
-    /// just filter them all out as is_new=false.
-    fn create_new_sensory_neurons(&mut self, frame_neurons: &FrameNeurons, timings: &mut FrameTimings) {
-        let t = Instant::now();
-        // Sensory neurons never die themselves, but their hosted correction children must decay —
-        // stamp the base-neuron forget rate, not 0.0 (which leaves those children immortal: a bug).
-        let forget_rate = self.thalamus.base_neuron_forget_rate();
-        let specs: Vec<NeuronCreateSpec> = frame_neurons.events.iter()
-            .filter(|p| p.is_new)
-            .map(|p| NeuronCreateSpec { id: p.id, forget_rate, connections: None })
-            .collect();
-        if !specs.is_empty() {
-            self.thalamus.create_neurons(&specs);
-        }
-        timings.create_sensory = t.elapsed().as_secs_f64();
-    }
-
-    // ── Context aging ───────────────────────────────────────────────────────
-
-    /// Push this frame's channel rewards onto the rewards history and trim to the window.
-    /// Called at the start of temporal processing — spatial doesn't consume rewards.
-    fn push_rewards(&mut self, rewards: &FxHashMap<ChannelId, Reward>) {
-        self.rewards.insert(0, rewards.clone());
-        if self.rewards.len() > self.context_length as usize {
-            self.rewards.pop();
-        }
-    }
-
-    // ── Neuron activation ───────────────────────────────────────────────────
-
-    /// Activate this frame's sensory events in the spatial level index.
-    /// Sensory neurons are level-0 substrate by definition — no thalamus lookup needed for the level.
-    /// Age doesn't apply: spatial is fundamentally same-frame and gets wiped each frame, so this
-    /// writes only to spatial_level_index (no age_index, no neuron_states, no frame keying).
-    /// Events reach the temporal sweep — if at all — via the apex handoff at the end of spatial
-    /// processing, where the non-subsumed survivors get activated in temporal[0] for real.
-    fn activate_sensory_events(&mut self, frame_events: &[PointLookup], timings: &mut FrameTimings) {
-        let t = Instant::now();
-        for p in frame_events {
-            self.memory.activate_spatial_neuron(p.id, 0);
-        }
-        timings.activate += t.elapsed().as_secs_f64();
-    }
-
-    /// Inject the previous frame's inferred actions, carried forward, into temporal[0].
-    /// Actions bypass spatial entirely — they're motor outputs, not perceptual co-activation context.
-    /// They land alongside spatial's apex set in temporal_level_index[0], so the temporal sweep sees
-    /// both "what just happened" (events through the spatial pipeline) and "what the agent just did".
-    /// Action neurons are level-0 substrate, so we pass level=0 directly without a thalamus lookup.
-    fn activate_carry_forward_actions(&mut self, frame_actions: &[PointLookup], timings: &mut FrameTimings) {
-        let t = Instant::now();
-        for p in frame_actions {
-            self.memory.activate_temporal_neuron(p.id, 0);
-        }
-        timings.activate += t.elapsed().as_secs_f64();
-    }
-
-    /// Compare this frame's sensory inputs to last frame's inferred predictions and update
-    /// the running event-accuracy / action-reward stats. Runs at the start of temporal
-    /// processing — the inferred set is from the previous frame's vote, and the actuals
-    /// are this frame's age-0 active neurons.
-    fn track_inference_performance(&mut self) {
-        let active_at_age_0 = self.memory.get_neuron_ids_at_age(0);
-        let inferred = self.memory.get_inferred_neurons();
-        let frame_rewards = self.rewards.first().cloned().unwrap_or_default();
-        let results = self.thalamus.get_inference_results(
-            &active_at_age_0,
-            inferred,
-            &frame_rewards,
-        );
-        self.diagnostics.track_inference_performance(&results);
-    }
-
-    // ── Level processing ────────────────────────────────────────────────────
-
-    /// Run the spatial level-by-level sweep over `spatial_level_index`.
-    /// Walks levels bottom-up: at each level, runs the d=0 co-activation pass over every active
-    /// neuron, activates any matched higher-level pattern at level+1, and stops when no new
-    /// activations push the max-level higher.
-    ///
-    /// Returns accumulated votes, deferred neuron creation specs, raw dispatch results, plus the
-    /// fired set and the subsumed set that the apex handoff consumes to bridge spatial → temporal.
-    /// Per-section timings are written into `timings` (with `+=` so the temporal sweep's flush
-    /// folds into the same buckets).
-    fn process_spatial_levels(&mut self, timings: &mut FrameTimings) -> SweepResult {
-
-        // The sensory axis the thalamus uses for vote-error evaluation and connection learning.
-        // For spatial this is the co-active set at level 0 of the spatial index — a single set,
-        // no recency dimension.
-        let sensory_neurons = self.memory.get_spatial_base_level();
-
-        // Maximum currently-active spatial level. Walked bottom-up; can grow as patterns at
-        // higher levels fire and get activated.
-        let mut max_active_level = self.memory.get_spatial_max_active_level();
-
-        // Track newly-created error pattern ids so they are excluded from the level pass at
-        // their own level (prevents double connection-learning and context leak).
-        let mut new_error_pattern_ids: FxHashSet<NeuronId> = FxHashSet::default();
-
-        // Accumulate votes, new neuron specs, and dispatch results across levels.
-        let mut votes = Vec::new();
-        let mut neuron_specs = Vec::new();
-        let mut dispatch_results = Vec::new();
-        let mut neuron_timings = crate::neuron::NeuronOpTimings::default();
-        let mut orch_timings = crate::thalamus::OrchestrationTimings::default();
-        let mut mem_timings = MemoryTimings::default();
-
-        // Spatial apex tracking: any neuron whose child pattern fires at level+1 is "subsumed".
-        // The apex set is `fired \ subsumed` and feeds `temporal_level_index[0]` via the handoff.
-        let mut fired_set: FxHashSet<NeuronId> = FxHashSet::default();
-        let mut subsumed_set: FxHashSet<NeuronId> = FxHashSet::default();
-
-        // Process neurons level-by-level — Op-3 dispatch is the only per-level round-trip.
-        let mut level: Level = 0;
-        loop {
-            if self.debug { println!("Processing Spatial level {}", level); }
-
-            // Get the level's active neuron ids. Spatial neurons carry no per-neuron state, so
-            // this is just a flat set.
-            let t = Instant::now();
-            let level_neuron_ids = self.memory.get_spatial_level_neurons(level);
-            mem_timings.get_level_neurons += t.elapsed().as_secs_f64();
-
-            // Snapshot what fired at this level. Used by the apex handoff after the sweep.
-            for &nid in &level_neuron_ids { fired_set.insert(nid); }
-
-            // Process the level: aggregate view, match spatial patterns, generate d=0 votes.
-            let result = self.thalamus.process_spatial_level(
-                level,
-                &level_neuron_ids,
-                &sensory_neurons,
-                self.frame_number,
-                &mut new_error_pattern_ids,
-                self.learning,
-            );
-            orch_timings.add(&result.orchestration);
-
-            // Spatial state is ephemeral — nothing to write back, by design.
-
-            // Activate matched patterns at level+1. Each activation marks its parent_id as
-            // subsumed — that parent's role this frame is already represented by the
-            // higher-level pattern it activated.
-            let t = Instant::now();
-            for activation in &result.activations {
-                self.memory.activate_spatial_pattern(activation.pattern_id, level + 1);
-                subsumed_set.insert(activation.parent_id);
-            }
-            mem_timings.activate_patterns += t.elapsed().as_secs_f64();
-
-            // If we produced any activations, push the max active level up.
-            if !result.activations.is_empty() {
-                let new_level = (level + 1) as usize;
-                if new_level > max_active_level { max_active_level = new_level; }
-            }
-
-            // Accumulate this level's votes, neuron specs, and dispatch results.
-            votes.extend(result.votes);
-            neuron_specs.extend(result.neuron_specs);
-            for col_res in &result.results { neuron_timings.add(&col_res.timings); }
-            dispatch_results.push(result.results);
-
-            // If we reached the top of the active hierarchy, exit.
-            if level as usize >= max_active_level { break; }
-            level += 1;
-        }
-
-        Self::flush_sweep_timings(timings, &neuron_timings, &orch_timings, &mem_timings);
-        SweepResult { votes, neuron_specs, dispatch_results, fired_set, subsumed_set }
-    }
-
-    /// Run the temporal level-by-level sweep over `temporal_level_index`.
-    /// Walks levels bottom-up: at each level, runs the d>0 sequence pass over every (active
-    /// neuron, age) pair, activates any matched higher-level pattern at level+1, and stops
-    /// when no new activations push the max-level higher.
-    ///
-    /// Returns accumulated votes, deferred neuron creation specs, raw dispatch results, plus the
-    /// fired and subsumed sets (populated harmlessly — the apex handoff doesn't consume them on
-    /// the temporal side). Per-section timings are written into `timings` (with `+=` so the
-    /// spatial sweep's flush folds into the same buckets).
-    fn process_temporal_levels(&mut self, timings: &mut FrameTimings) -> SweepResult {
-
-        // The sensory axis the thalamus uses for vote-error evaluation and connection learning.
-        // For temporal this is the level-0 active set per recency slot — index 0 is the current
-        // frame, index 1 is the previous frame, etc.
-        let sensory_neurons = self.memory.get_temporal_base_level();
-
-        // Maximum currently-active temporal level. Walked bottom-up; can grow as patterns at
-        // higher levels fire and get activated.
-        let mut max_active_level = self.memory.get_temporal_max_active_level();
-
-        // Track newly-created error pattern ids so they are excluded from the level pass at
-        // their own level (prevents double connection-learning and context leak).
-        let mut new_error_pattern_ids: FxHashSet<NeuronId> = FxHashSet::default();
-
-        // Accumulate votes, new neuron specs, and dispatch results across levels.
-        let mut votes = Vec::new();
-        let mut neuron_specs = Vec::new();
-        let mut dispatch_results = Vec::new();
-        let mut neuron_timings = crate::neuron::NeuronOpTimings::default();
-        let mut orch_timings = crate::thalamus::OrchestrationTimings::default();
-        let mut mem_timings = MemoryTimings::default();
-
-        // Fired / subsumed are populated harmlessly on the temporal side — the apex handoff
-        // only consumes them from the spatial sweep — but the SweepResult shape carries them
-        // so the spatial and temporal paths share return types.
-        let mut fired_set: FxHashSet<NeuronId> = FxHashSet::default();
-        let mut subsumed_set: FxHashSet<NeuronId> = FxHashSet::default();
-
-        // Process neurons level-by-level — Op-3 dispatch is the only per-level round-trip.
-        let mut level: Level = 0;
-        loop {
-            if self.debug { println!("Processing Temporal level {}", level); }
-
-            // Get the level's active neurons with their per-age states. Mutated downstream by
-            // the level dispatch (votes/context/threshold written into LevelAgeState) and
-            // written back into memory below.
-            let t = Instant::now();
-            let mut level_neurons = self.memory.get_temporal_level_neurons(level);
-            mem_timings.get_level_neurons += t.elapsed().as_secs_f64();
-
-            // Snapshot what fired at this level. Harmless for temporal (apex doesn't consume).
-            for &nid in level_neurons.keys() { fired_set.insert(nid); }
-
-            // Process the level: aggregate view, recognize temporal patterns, mint error
-            // corrections, collect d>0 votes.
-            let result = self.thalamus.process_temporal_level(
-                level,
-                &mut level_neurons,
-                self.memory.depth(),
-                &sensory_neurons,
-                &self.rewards,
-                self.frame_number,
-                &mut new_error_pattern_ids,
-                self.learning,
-            );
-            orch_timings.add(&result.orchestration);
-
-            // Write the mutated per-neuron state back into memory for next-frame evaluation.
-            // Temporal persists per-neuron state across frames (unlike spatial).
-            let t = Instant::now();
-            self.memory.write_back_level_neurons(&level_neurons);
-            mem_timings.write_back_level_neurons += t.elapsed().as_secs_f64();
-
-            // Activate matched patterns at level+1. Each activation marks its parent_id as
-            // subsumed — that parent's role this frame is already represented by the
-            // higher-level pattern it activated, so vote generation suppresses it.
-            let t = Instant::now();
-            for activation in &result.activations {
-                self.memory.activate_temporal_pattern(activation.pattern_id, level + 1, activation.parent_id, activation.age);
-                subsumed_set.insert(activation.parent_id);
-            }
-            mem_timings.activate_patterns += t.elapsed().as_secs_f64();
-
-            // If we produced any activations, push the max active level up.
-            if !result.activations.is_empty() {
-                let new_level = (level + 1) as usize;
-                if new_level > max_active_level { max_active_level = new_level; }
-            }
-
-            // Accumulate this level's votes, neuron specs, and dispatch results.
-            votes.extend(result.votes);
-            neuron_specs.extend(result.neuron_specs);
-            for col_res in &result.results { neuron_timings.add(&col_res.timings); }
-            dispatch_results.push(result.results);
-
-            // If we reached the top of the active hierarchy, exit.
-            if level as usize >= max_active_level { break; }
-            level += 1;
-        }
-
-        Self::flush_sweep_timings(timings, &neuron_timings, &orch_timings, &mem_timings);
-        SweepResult { votes, neuron_specs, dispatch_results, fired_set, subsumed_set }
-    }
-
-    /// Roll one sweep's sub-bucket accumulators into the frame-level timings. Uses += so spatial
-    /// and temporal sweeps fold into the same fields without overwriting each other.
-    fn flush_sweep_timings(
-        timings: &mut FrameTimings,
-        neuron_timings: &crate::neuron::NeuronOpTimings,
-        orch_timings: &crate::thalamus::OrchestrationTimings,
-        mem_timings: &MemoryTimings,
-    ) {
-        timings.neuron_learn_connections           += neuron_timings.learn_connections;
-        timings.neuron_recognize_patterns          += neuron_timings.recognize_patterns;
-        timings.neuron_correct_errors              += neuron_timings.correct_errors;
-        timings.neuron_generate_votes              += neuron_timings.generate_votes;
-        timings.recognize_candidate_search         += neuron_timings.recognize_candidate_search;
-        timings.recognize_candidate_eval           += neuron_timings.recognize_candidate_eval;
-        timings.recognize_candidates_evaluated     += neuron_timings.recognize_candidates_evaluated;
-        timings.orch_get_level_tasks               += orch_timings.get_level_tasks;
-        timings.orch_dispatch_frame                += orch_timings.dispatch_frame;
-        timings.orch_collect_activations           += orch_timings.collect_activations;
-        timings.orch_collect_votes                 += orch_timings.collect_votes;
-        timings.mem_get_level_neurons              += mem_timings.get_level_neurons;
-        timings.mem_write_back_level_neurons       += mem_timings.write_back_level_neurons;
-        timings.mem_activate_patterns              += mem_timings.activate_patterns;
-    }
-
-    /// Full spatial phase: activate this frame's sensory events in the spatial index, run the d=0
-    /// co-activation sweep, mint and install corrections, and hand off the non-subsumed apex
-    /// set into temporal_level_index[0]. Returns the merged spec batch (sweep + corrections)
-    /// and dispatch results for the deferred-creation flush at the end of the frame.
-    /// Spatial is sensory-only — no rewards, no inference performance tracking.
-    fn process_spatial(&mut self, frame_events: &[PointLookup], timings: &mut FrameTimings) -> SweepResult {
-        let t = Instant::now();
-
-        // Wipe last frame's spatial state.
-        // Spatial is fundamentally same-frame: connections[0] predict co-activations within a single frame.
-        // Carrying spatial activations across frames would cause d=0 learn_connections to strengthen edges
-        // between this frame's actives and last frame's neurons — spurious cross-frame co-activation.
-        self.memory.reset_spatial();
-
-        // Activate this frame's sensory events in spatial[0].
-        // Sensory events DO NOT activate in temporal directly. They reach temporal only via the apex handoff at the end of this function.
-        // Any sensory event subsumed by a higher-level spatial pattern this frame stays out of temporal entirely; only the absorbing pattern represents it.
-        self.activate_sensory_events(frame_events, timings);
-
-        // Run the d=0 co-activation sweep over spatial_level_index.
-        // Walks every active spatial level, matches the active set against each parent's routing table, casts same-frame predictions, and propagates matched patterns up to level+1.
-        // Returns the fired_set (everything that activated anywhere) and subsumed_set (anything whose parent pattern fired at level+1) — the two sets the apex handoff needs.
-        let mut spatial = self.process_spatial_levels(timings);
-
-        // Mint corrections for parents whose d=0 predictions mismatched the actual fired set.
-        // Each correction is a new pattern that gets installed in its parent's routing table for next frame's matching pass.
-        // Also collects per-parent error-rate samples so dynamic error modes (conservative/neutral/aggressive) have data to adapt their thresholds.
-        // Skipped in eval mode: minting and installing corrections mutates the spatial substrate, so a
-        // setLearning(false) pass must not do it — otherwise the "frozen" eval keeps growing the hierarchy
-        // (corrections install into routing tables that survive resetContext, so an image minted on can vote
-        // on a later one) and the result becomes order-dependent and irreproducible.
-        if self.learning {
-            let correction_specs = self.process_spatial_corrections(&spatial);
-
-            // Fold the freshly-minted correction specs into spatial's spec batch.
-            // The end-of-frame flush in apply_merged_results materializes them alongside temporal's specs in one cross-region pass.
-            // Their install ContextRefUpdates were already dispatched inline by process_spatial_corrections — only the neuron-creation half is deferred.
-            spatial.neuron_specs.extend(correction_specs);
-        }
-
-        // Lift the apex set (fired \ subsumed) into temporal_level_index[0].
-        // This is the ONLY path sensory events and spatial corrections take into temporal.
-        self.compute_apex_and_handoff(&spatial.fired_set, &spatial.subsumed_set, timings);
-
-        timings.process_spatial = t.elapsed().as_secs_f64();
-        spatial
-    }
-
-    /// Full temporal phase: push this frame's rewards onto the history, record inference
-    /// performance for last frame's predictions vs. this frame's actuals, then run the d>0
-    /// sequence sweep over `temporal_level_index`. By the time we get here, spatial has
-    /// already populated temporal_level_index[0] with its apex set via the handoff.
-    fn process_temporal(
-        &mut self,
-        rewards: &FxHashMap<ChannelId, Reward>,
-        frame_actions: &[PointLookup],
-        timings: &mut FrameTimings,
-    ) -> SweepResult {
-        let t = Instant::now();
-
-        // Push this frame's channel rewards onto the rewards history and trim to the context window.
-        // Action neurons need the current frame's rewards to resolve their per-edge expected reward during the d>0 sweep below.
-        // Spatial never sees this — it was kept reward-free upstream.
-        self.push_rewards(rewards);
-
-        // Slide the temporal window: evict the frame that just fell off the back of the sliding window.
-        // Done now, not earlier, for two reasons.
-        // First, spatial above needed the full age_index to do cross-frame lookups against the previous frame's history.
-        // Second, track_inference_performance below needs the pre-eviction inferred set to compare last frame's predictions against this frame's actuals.
-        self.memory.advance_temporal_window();
-
-        // Inject the previous frame's inferred actions, carried forward, into temporal_level_index[0].
-        // Spatial's apex handoff already lifted non-subsumed sensory events and spatial corrections in there.
-        // Together they form the full temporal[0] input: external events the brain perceived plus internal actions the brain produced.
-        self.activate_carry_forward_actions(frame_actions, timings);
-
-        // Compare last frame's predictions to this frame's actuals and update the running event-accuracy and action-reward stats.
-        // Inputs to the comparison: last frame's inferred neurons (still in memory because we haven't run the new infer pass yet) vs. this frame's age=0 actives.
-        // The aggregated stats drive the diagnostic per-channel summary printed at frame end and the run-wide accuracy reports.
-        self.track_inference_performance();
-
-        // Run the d>0 sequence sweep over temporal_level_index.
-        // temporal_level_index[0] now holds spatial's apex set plus the carry-forward actions just activated above.
-        // The sweep walks up through temporal patterns that match the recent activation history, casting next-frame votes that infer_neurons will aggregate into a consensus.
-        let result = self.process_temporal_levels(timings);
-
-        timings.process_temporal = t.elapsed().as_secs_f64();
-        result
-    }
-
-    /// Apex handoff: any spatial-fired neuron that did NOT subsume into a higher-level spatial
-    /// pattern this frame is inserted into `temporal_level_index[0]` so the temporal sweep can observe it.
-    /// Subsumed parents are silenced — the higher-level pattern that absorbed them represents them.
-    /// On a fresh brain with no spatial routing, subsumed is empty and apex == fired == sensory.
-    fn compute_apex_and_handoff(
-        &mut self,
-        spatial_fired: &FxHashSet<NeuronId>,
-        spatial_subsumed: &FxHashSet<NeuronId>,
-        timings: &mut FrameTimings,
-    ) {
-        let t = Instant::now();
-
-        // Walk every neuron that fired anywhere in the spatial sweep this frame.
-        // fired_set includes sensory events at level 0 and any spatial correction patterns that matched at level 1+.
-        for &neuron_id in spatial_fired {
-
-            // Skip subsumed neurons.
-            // A neuron is subsumed when a higher-level spatial pattern that absorbs it also fired this frame.
-            // Subsumed parents are silenced — the higher-level pattern represents their role in temporal.
-            // If we let them through, they'd vote alongside the pattern that subsumed them and double-count.
-            if spatial_subsumed.contains(&neuron_id) { continue; }
-
-            // Activate the survivor in temporal_level_index[0].
-            // This is the only path sensory events and spatial corrections take into the temporal sweep.
-            self.memory.activate_temporal_neuron(neuron_id, 0);
-        }
-
-        timings.apex_handoff = t.elapsed().as_secs_f64();
-    }
-
-    /// Spatial error pass: mint corrections from the d=0 sweep's results, install them in their
-    /// parents' routing tables for next frame, and record per-parent Welford error stats (when
-    /// learning). Returns the spec batch so the caller can fold the new correction neurons into the
-    /// deferred-creation flush.
-    /// Not timed — these passes are bookkeeping around the spatial sweep, not their own bucket.
-    fn process_spatial_corrections(&mut self, spatial: &SweepResult) -> Vec<NeuronCreateSpec> {
-
-        // Mint correction specs from the d=0 sweep's dispatch results.
-        // For every non-subsumed fired neuron whose d=0 predictions mismatched the actual fired set, this builds a NeuronCreateSpec for a new correction pattern, an install op to wire it into the parent's routing table, and an error-rate sample for the parent's Welford stats.
-        // Returned specs are deferred — they'll be materialized in the end-of-frame flush along with temporal specs.
-        let (specs, install_ops, feedback) = self.thalamus.mint_spatial_corrections(
-            &spatial.dispatch_results,
-            &spatial.fired_set,
-            &spatial.subsumed_set,
-        );
-
-        // Install the corrections into their parents' routing tables so the parents can recognize the correction's context next frame.
-        // This is a single dispatch per frame, not one per level.
-        self.thalamus.install_spatial_corrections(install_ops, self.frame_number);
-
-        // Record per-parent error-rate samples for the spatial Welford stats.
-        // These samples are what let dynamic error-correction modes adapt the threshold over time.
-        // Without them, get_error_threshold falls back to a static value forever.
-        self.thalamus.record_spatial_errors(&feedback);
-
-        // Return the spec batch.
-        // process_spatial folds these into spatial.neuron_specs so they get materialized in the same flush as temporal specs.
-        specs
-    }
-
-    /// Op-4 + Op-5: flush deferred neuron creation and contextRef updates across both phases in
-    /// one batch. Spatial correction specs were already folded into `spatial_specs` by
-    /// `process_spatial`. Their install ContextRefUpdates were dispatched inline by
-    /// install_spatial_corrections — they aren't batched here.
-    fn apply_merged_results(
-        &mut self,
-        spatial_specs: Vec<NeuronCreateSpec>,
-        temporal_specs: Vec<NeuronCreateSpec>,
-        spatial_dispatch: Vec<Vec<crate::column::ColumnProcessResult>>,
-        temporal_dispatch: Vec<Vec<crate::column::ColumnProcessResult>>,
-        timings: &mut FrameTimings,
-    ) {
-        let t = Instant::now();
-
-        // Merge spec batches from both phases into one Vec.
-        // spatial_specs already includes the spatial-correction specs that process_spatial folded in.
-        // Reuses spatial_specs as the accumulator to avoid reallocating — temporal_specs gets extended onto it in place.
-        let mut neuron_specs = spatial_specs;
-        neuron_specs.extend(temporal_specs);
-
-        // Merge dispatch results from both phases.
-        // Same reuse trick: spatial_dispatch is the accumulator; temporal_dispatch gets extended onto it.
-        // The merged Vec is what thalamus uses to apply ContextRefUpdates across all parents that processed this frame.
-        let mut dispatch_results = spatial_dispatch;
-        dispatch_results.extend(temporal_dispatch);
-
-        // Flush Op-4 (deferred neuron creation) and Op-5 (deferred ContextRef updates) in one cross-region pass.
-        // Neuron specs become real Neuron objects in their owning columns; ContextRef updates patch parents' routing tables with whatever each child's process_level produced.
-        // Spatial-correction installs were already dispatched inline by process_spatial_corrections, so they aren't in dispatch_results.
-        self.thalamus.apply_level_results(&neuron_specs, &dispatch_results);
-
-        timings.apply_results = t.elapsed().as_secs_f64();
-    }
-
-    /// Build the dim-keyed inference view and feed it to the diagnostics MAPE tracker.
-    fn track_continuous_error(
-        &mut self,
-        inferences: &FxHashMap<ChannelId, Vec<DimInferenceOutput>>,
-        inputs: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
-        timings: &mut FrameTimings,
-    ) {
-        let t = Instant::now();
-
-        // Reshape the channel-keyed inference view into the dim-keyed shape the diagnostics tracker wants.
-        // The two views carry the same data — track_continuous_error indexes by dim and reads each prediction's predicted bucket, while infer_neurons groups by channel so callers can render per-channel summaries cheaply.
-        let dim_inferences = self.build_dim_inferences(inferences);
-
-        // Update the running MAPE accumulator.
-        // For each event dim that produced a prediction this frame, the tracker compares the predicted bucket's mid-scalar to the observed scalar in `inputs` and folds the relative error into the per-channel running average.
-        // The quantizer is needed to map bucket id back to the scalar mid the prediction represented.
-        self.diagnostics.track_continuous_error(&dim_inferences, inputs, &self.thalamus.quantizer);
-
-        timings.track_error = t.elapsed().as_secs_f64();
-    }
-
-    // ── Inference (voting consensus) ────────────────────────────────────────
-
-    /// Infer predictions and outputs using voting architecture.
-    /// Returns the per-channel scalar-space inferences, the resolved per-vote
-    /// list (always populated; same path that produces inferences just retains
-    /// the raw data), and the raw winner list for memory persistence.
-    fn infer_neurons(
-        &mut self,
-        votes: &[FlatVote],
-        timings: &mut FrameTimings,
-    ) -> (FxHashMap<ChannelId, Vec<DimInferenceOutput>>, Vec<FrameVote>) {
-        let t = Instant::now();
-        // if no inference votes, wait for more data
-        if votes.is_empty() {
-            if self.debug { println!("No inferences found. Waiting for more data in future frames."); }
-            timings.infer = t.elapsed().as_secs_f64();
-            return (FxHashMap::default(), Vec::new());
-        }
-
-        // Aggregate votes and determine winners
-        let (winners, candidates, dim_best) = self.determine_consensus(votes);
-
-        // Resolve each vote with the metadata callers need to render/analyze without further round-trips.
-        // Targets without resolvable coordinates (shouldn't happen for event/action targets) are dropped.
-        // Gated on emit_votes because per-vote resolution allocates strings, slowing the performance down.
-        let resolved_votes: Vec<FrameVote> = if !self.emit_votes { Vec::new() } else {
-            votes.iter().filter_map(|v| {
-                let target_type = self.thalamus.get_neuron_type(v.neuron_id)?;
-                let coord = self.thalamus.get_neuron_coordinate(v.neuron_id)?;
-                let channel_id = self.thalamus.get_neuron_channel_id(v.neuron_id)?;
-                Some(FrameVote {
-                    voter_id: v.voter_id,
-                    voter_label: self.format_neuron_label(v.voter_id),
-                    voter_temporal_level: self.thalamus.get_neuron_temporal_level(v.voter_id).unwrap_or(0),
-                    target_id: v.neuron_id,
-                    target_type,
-                    channel_id,
-                    dim_id: coord.dim_id,
-                    value: coord.bucket_id,
-                    distance: v.distance,
-                    strength: v.strength,
-                    reward: v.reward,
-                })
-            }).collect()
-        };
-
-        // Save winners to memory (clears old inferences first)
-        self.memory.save_inferred_neurons(winners);
-
-        // Build the scalar-space output
-        let inferences = self.build_inferences_by_channel(&candidates, &dim_best);
-
-        timings.infer = t.elapsed().as_secs_f64();
-        (inferences, resolved_votes)
-    }
-
-    /// Aggregate votes and determine winners per dimension.
-    /// Events win by strength (probability), actions win by reward.
-    fn determine_consensus(&self, votes: &[FlatVote]) -> (Vec<InferredNeuron>, FxHashMap<NeuronId, Candidate>, FxHashMap<DimensionId, DimBestEntry>) {
-        // Aggregate votes into candidates and dimension totals
-        let (mut candidates, dim_total_strength) = self.aggregate_votes(votes);
-
-        // Determine the best neuron per dimension (also sets reward/probability on each candidate)
-        let dim_best = self.determine_dimension_winners(&mut candidates, &dim_total_strength);
-
-        // Build winner objects from dimension winners
-        let winner_ids: FxHashSet<NeuronId> = dim_best.values().map(|w| w.neuron_id).collect();
-        if self.debug { println!("Determined consensus: {} candidates, {} winners", candidates.len(), winner_ids.len()); }
-        let winners = self.build_winners(&winner_ids, &candidates);
-        (winners, candidates, dim_best)
-    }
-
-    /// Aggregate votes into candidate neurons and dimension strength totals.
-    ///
-    /// ── Per-voter split-by-strength normalization ──────────────────────────────────────
-    ///
-    /// Each FlatVote represents one outgoing CONNECTION from a voter neuron to a target neuron.
-    /// A single voter typically casts MULTIPLE votes per frame — one per connection.
-    /// vote() returns the full distance_map of that voter's connections at the voting distance.
-    /// If a voter has connections to several neurons in the SAME dimension (action or event), every one of those connections produces a separate Vote.
-    ///
-    /// The naive aggregation — add each Vote's raw strength to its target candidate — double-counts hedged voters.
-    /// A voter (action_A: str=3, action_B: str=1) in dim D would put 3 strength into action_A AND 1 strength into action_B, total 4 strength for D.
-    /// So, a confident voter wired (action_A: str=4) contributes the same 4 strength but to only one candidate.
-    /// The hedged voter ends up indistinguishable from "two independent voters each voting for a different action" — which it is not.
-    ///
-    /// Fix: scale each vote so a voter's total contribution to a single (dim, distance) is CONSERVED at 1 unit,
-    /// split across its targets proportional to its connection strengths.
-    /// In the example above the hedged voter contributes effective_strength=0.75 to action_A and 0.25 to action_B (sum = 1.0)
-    /// the confident voter contributes 1.0 to action_A.
-    /// "1 voter = 1 unit per (dim, distance)" regardless of how it's distributed.
-    ///
-    /// ── Why (voter, dim, distance) and not just (voter, dim) ───────────────────────────
-    ///
-    /// A single voter can be active at multiple ages simultaneously (the memory window holds it at several past frames).
-    /// Each age produces votes at a different distance — these are independent predictions at different horizons.
-    /// Keying by distance keeps those independent: each (voter, dim, distance) bucket gets its own 1-unit allocation.
-    ///
-    /// Events: With per-voter normalization, every voter contributes exactly 1.0 to dim_total per (dim, distance), so dim_total
-    /// faithfully counts "voters that weighed in on this dim" weighted by their per-target shares. Probabilities become voter shares.
-    ///
-    /// Actions: With per-voter normalization, actions get the same split-by-strength behavior events were already partially getting through dim_total.
-    /// The action winner is still highest reward, but strength magnitudes - used for tie-breaking and downstream consumers - are now properly distributed.
-    /// For actions, reward = weighted_total / strength. Both terms are scaled by the same 1/voter_dim_total factor, so the ratio is invariant.
-    /// A hedged voter still reports the same per-target reward; it just doesn't pretend to be multiple voters.
-    fn aggregate_votes(&self, votes: &[FlatVote]) -> (FxHashMap<NeuronId, Candidate>, FxHashMap<DimensionId, f64>) {
-        let mut candidates: FxHashMap<NeuronId, Candidate> = FxHashMap::default();
-        let mut dim_total_strength: FxHashMap<DimensionId, f64> = FxHashMap::default();
-
-        // Pre-pass: for every vote, accumulate the voter's total strength under (voter_id, dim_id, distance).
-        // This becomes the denominator that scales each individual vote down to its share.
-        // Every vote MUST target a neuron with a coordinate — sensory events and actions have
-        // coordinates by construction. A vote toward a target without a coordinate means we
-        // learned a connection to a pattern neuron upstream, which is a real architectural break
-        // (the per-dim consensus has nothing to do with pattern targets).
-        let mut voter_dim_total: FxHashMap<(NeuronId, DimensionId, Distance), f64> = FxHashMap::default();
-        for v in votes {
-            let coord = self.thalamus.get_neuron_coordinate(v.neuron_id)
-                .unwrap_or_else(|| panic!(
-                    "aggregate_votes: vote target {} has no coordinate (voter={}, distance={}). \
-                     This means a connection was learned toward a pattern neuron — only sensory \
-                     events/actions belong as vote targets.",
-                    v.neuron_id, v.voter_id, v.distance
-                ));
-            *voter_dim_total.entry((v.voter_id, coord.dim_id, v.distance)).or_insert(0.0) += v.strength;
-        }
-
-        // Main pass: aggregate effective (normalized) strengths into candidates and dim totals.
-        for v in votes {
-            let coord = self.thalamus.get_neuron_coordinate(v.neuron_id)
-                .unwrap_or_else(|| panic!(
-                    "aggregate_votes: vote target {} has no coordinate in main pass",
-                    v.neuron_id
-                ));
-
-            // Look up this voter's total strength in the (dim, distance) bucket and compute this vote's share of it.
-            // effective_strength is in [0, 1]; per-voter shares sum to 1.0 within the (dim, distance) bucket by construction.
-            let total = voter_dim_total.get(&(v.voter_id, coord.dim_id, v.distance)).copied().unwrap_or(0.0);
-            if total <= 0.0 { continue; }
-            let effective_strength = v.strength / total;
-
-            // Fetch or insert the candidate for this target neuron.
-            let candidate = candidates.entry(v.neuron_id).or_insert_with(|| Candidate {
-                strength: 0.0,
-                weighted_total: 0.0,
-                reward: 0.0,
-                probability: 0.0,
-                nb_log_score: 0.0,
-            });
-
-            // Accumulate this voter's split share into the candidate's strength.
-            candidate.strength += effective_strength;
-
-            // For actions: accumulate strength-weighted reward sum, to calculate expected reward in determine_dimension_winners
-            if self.thalamus.get_neuron_type(v.neuron_id) == Some(NeuronType::Action) {
-                candidate.weighted_total += effective_strength * v.reward;
-                // Naive-Bayes path: also accumulate the unweighted log-product of posteriors.
-                // One term per vote (per connection) — a near-zero posterior vetoes the candidate.
-                // The NB term is a posterior P(action | voter) and must lie in [0, 1]. reward is an EMA of
-                // the environment's raw reward signal, so this holds only when that signal is itself a
-                // posterior (e.g. MNIST 0/1). A signed or unbounded reward (e.g. stocks P&L) would feed ln a
-                // value <= 0 or > 1, producing NaN/-inf that silently corrupts selection — so fail loud here
-                // rather than let an invalid consensus mode for the domain go unnoticed.
-                if self.consensus_mode == ConsensusMode::Nb {
-                    if !(0.0..=1.0).contains(&v.reward) {
-                        panic!(
-                            "Nb consensus requires reward in [0, 1] (a posterior), but the vote from voter {} \
-                             to action {} has reward {}. This reward signal is not a posterior — use \
-                             Democratic consensus, or normalize rewards to [0, 1].",
-                            v.voter_id, v.neuron_id, v.reward
-                        );
-                    }
-                    candidate.nb_log_score += (v.reward + NB_EPS).ln();
-                }
-            }
-            // For events: accumulate votes into the per-dim probability normalizer. every voter
-            else {
-                *dim_total_strength.entry(coord.dim_id).or_insert(0.0) += effective_strength;
-            }
-        }
-
-        (candidates, dim_total_strength)
-    }
-
-    /// Determine the best neuron per dimension (events by probability, actions by reward).
-    /// Also sets reward/probability on each candidate (JS mutates candidates in-place here).
-    fn determine_dimension_winners(
-        &self,
-        candidates: &mut FxHashMap<NeuronId, Candidate>,
-        dim_total_strength: &FxHashMap<DimensionId, f64>,
-    ) -> FxHashMap<DimensionId, DimBestEntry> {
-        let mut dim_best: FxHashMap<DimensionId, DimBestEntry> = FxHashMap::default();
-
-        for (&neuron_id, candidate) in candidates.iter_mut() {
-            // After fixing aggregate_votes, every candidate must have a coordinate and a type —
-            // candidates are only inserted from votes that survived the coordinate check.
-            let coordinate = self.thalamus.get_neuron_coordinate(neuron_id)
-                .unwrap_or_else(|| panic!("determine_dimension_winners: candidate {} has no coordinate", neuron_id));
-            let neuron_type = self.thalamus.get_neuron_type(neuron_id)
-                .unwrap_or_else(|| panic!("determine_dimension_winners: candidate {} has no neuron type", neuron_id));
-
-            // for actions, reward = weighted_total / strength
-            // for events, probability = strength / dimension total strength
-            // Store the computed score back on the candidate (matches JS behavior)
-            let score = if neuron_type == NeuronType::Action {
-                let reward = if candidate.strength > 0.0 { candidate.weighted_total / candidate.strength } else { 0.0 };
-                candidate.reward = reward;
-                // The winner is selected on the consensus score: the expected reward (Democratic) or
-                // the Naive-Bayes log-product (Nb). reward stays on the candidate either way so the
-                // scalar-space continuous prediction is unchanged by the selection rule.
-                match self.consensus_mode {
-                    ConsensusMode::Democratic => reward,
-                    ConsensusMode::Nb => candidate.nb_log_score,
-                }
-            } else {
-                let total = dim_total_strength.get(&coordinate.dim_id).copied().unwrap_or(0.0);
-                let probability = if total > 0.0 { candidate.strength / total } else { 0.0 };
-                candidate.probability = probability;
-                probability
-            };
-
-            // set the best neuron for this dimension — break ties by strength, then neuron ID
-            let is_better = match dim_best.get(&coordinate.dim_id) {
-                None => true,
-                Some(best) => {
-                    if score != best.score { score > best.score }
-                    else if candidate.strength != best.strength { candidate.strength > best.strength }
-                    else { neuron_id < best.neuron_id }
-                }
-            };
-            if is_better {
-                dim_best.insert(coordinate.dim_id, DimBestEntry { neuron_id, score, strength: candidate.strength });
-            }
-        }
-
-        dim_best
-    }
-
-    /// Build winner InferredNeuron objects from winning neuron IDs.
-    fn build_winners(&self, winner_ids: &FxHashSet<NeuronId>, candidates: &FxHashMap<NeuronId, Candidate>) -> Vec<InferredNeuron> {
-        let mut winners = Vec::with_capacity(winner_ids.len());
-        for &neuron_id in winner_ids {
-            let candidate = match candidates.get(&neuron_id) {
-                Some(c) => c,
-                None => continue,
-            };
-            let coordinate = match self.thalamus.get_neuron_coordinate(neuron_id) {
-                Some(c) => c.clone(),
-                None => continue,
-            };
-            let channel_id = match self.thalamus.get_neuron_channel_id(neuron_id) {
-                Some(c) => c,
-                None => continue,
-            };
-            let neuron_type = self.thalamus.get_neuron_type(neuron_id);
-
-            let (reward, probability) = if neuron_type == Some(NeuronType::Action) {
-                (candidate.reward, 0.0)
-            } else {
-                (0.0, candidate.probability)
-            };
-
-            winners.push(InferredNeuron {
-                neuron_id,
-                coordinate,
-                channel_id,
-                strength: candidate.strength,
-                reward,
-                probability,
-            });
-        }
+        stats.base_acts = frame.acts.len();
+        self.thalamus.frames.push_back(frame);
+
+        // the levels (§6, R26): activate, find, count, group, elect, allocate
+        self.span_s = self.measure_board_span();
+        self.stats_added = 0;
+        self.stats_reused = 0;
+        self.stats_retired = 0;
+        if self.first_frame.is_none() { self.first_frame = Some(fno); }
+        self.climb_levels(&mut stats);
+        // and once more after the frame's last level (D24)
+        self.cover_board();
+        stats.added = self.stats_added;
+        stats.reused = self.stats_reused;
+        stats.retired = self.stats_retired;
+
+        // connect and infer (§7), then decommission what is due (R38)
+        self.connect_board();
+        self.lift_pending.clear();
+        self.infer_board();
+        if !self.frozen { self.reap(); }
+
+        // selection (§8)
+        let winners = self.select();
+        stats.voters = self.last_stats.voters;
+        stats.voters_above_base = self.last_stats.voters_above_base;
+        self.pending_weak = winners.iter().map(|w| (self.find_base_neuron(w.dim, w.bucket), w.pos)).collect();
+
+        stats.apex_acts = self.thalamus.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter()).filter(|a| a.on_apex()).count();
+        stats.neurons = self.alive;
+        stats.patterns = self.thalamus.dict.len();
+        stats.connections = self.thalamus.count_connections();
+        // the window the machine keeps: the longest reach in time among the activations still open (D24)
+        let mut longest = 1;
+        for f in self.thalamus.frames.iter() { for a in &f.acts { if !a.gone && f.no + a.reach[0] as i64 >= fno { longest = longest.max(a.reach[0]); } } }
+        self.max_reach_t = longest;
+        let keep_from = fno - self.max_reach_t.max(self.span_s) as i64 - 1;
+        while self.thalamus.frames.front().map_or(false, |f| f.no < keep_from) { self.thalamus.frames.pop_front(); }
+        self.covered_rel.retain(|(a, b)| a.frame >= keep_from && b.frame >= keep_from);
+        self.call_edges.retain(|c, _| c.frame >= keep_from);
+        self.grown.retain(|c, _| c.frame >= keep_from);
+        self.lifted.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
+        self.cov_inc.retain(|a, v| { v.retain(|b| b.frame >= keep_from); a.frame >= keep_from });
+        self.kind_of.retain(|a, _| a.frame >= keep_from);
+        self.lift_forms.retain(|e, v| { v.retain(|x| x.0.frame >= keep_from && x.1.frame >= keep_from); e.0.frame >= keep_from && e.1.frame >= keep_from });
+        self.taken.retain(|c, _| c.frame >= keep_from);
+        // a refused relation stays refused for as long as its two activations exist (D24)
+        self.refused.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
+        self.form_src.retain(|e, v| { v.retain(|x| x.0.frame >= keep_from && x.1.frame >= keep_from); e.0.frame >= keep_from && e.1.frame >= keep_from });
+        self.form_pre.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
+        self.call_thru.retain(|c, _| c.frame >= keep_from);
+        self.call_fit.clear();
+        stats.elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+        self.last_stats = stats;
+        self.last_winners = winners.clone();
         winners
     }
 
-    /// Build the per-channel, per-dimension inference output in scalar space.
-    /// For each dimension that received votes, produces a single entry containing the
-    /// winning bucket's dequantized value plus a score-weighted continuous prediction.
-    fn build_inferences_by_channel(
-        &self,
-        candidates: &FxHashMap<NeuronId, Candidate>,
-        dim_best: &FxHashMap<DimensionId, DimBestEntry>,
-    ) -> FxHashMap<ChannelId, Vec<DimInferenceOutput>> {
-        /// Per-dimension accumulator for the continuous prediction.
-        struct DimEntry {
-            channel_id: ChannelId,
-            dim_id: DimensionId,
-            kind: NeuronType,
-            weighted_sum: f64,
-            total_score: f64,
+    /// S (D9): one beyond the farthest node any function has from its origin in time, and at least the base reach.
+    pub(crate) fn measure_board_span(&self) -> i32 {
+        // a function's reach in time depends on its nodes and relations alone: it is read again only where they changed
+        let mut memo = self.reach_memo.borrow_mut();
+        let mut best = 1;
+        for f in self.thalamus.dict.funcs.values() {
+            let r = match memo.get(&f.id) {
+                Some((n, rs, r)) if *n == f.nodes && *rs == f.rels => *r,
+                _ => { let r = f.measure_reach(1)[0]; memo.insert(f.id, (f.nodes.clone(), f.rels.clone(), r)); r }
+            };
+            best = best.max(r);
         }
-
-        // Group every candidate by (channelId, dimId) and accumulate weighted sums
-        let mut dims: FxHashMap<(ChannelId, DimensionId), DimEntry> = FxHashMap::default();
-        for (&neuron_id, candidate) in candidates {
-            let coordinate = match self.thalamus.get_neuron_coordinate(neuron_id) {
-                Some(c) => c,
-                None => continue,
-            };
-            let kind = match self.thalamus.get_neuron_type(neuron_id) {
-                Some(t) => t,
-                None => continue,
-            };
-            let channel_id = match self.thalamus.get_neuron_channel_id(neuron_id) {
-                Some(c) => c,
-                None => continue,
-            };
-
-            let key = (channel_id, coordinate.dim_id);
-            let entry = dims.entry(key).or_insert_with(|| DimEntry {
-                channel_id,
-                dim_id: coordinate.dim_id,
-                kind: kind.clone(),
-                weighted_sum: 0.0,
-                total_score: 0.0,
-            });
-
-            // skip candidates with no dequantized value (never-observed bucket)
-            let value = match self.thalamus.quantizer.dequantize(coordinate.dim_id, coordinate.bucket_id.into()) {
-                Some(v) => v,
-                None => continue,
-            };
-
-            let score = if kind == NeuronType::Action {
-                candidate.reward
-            } else {
-                candidate.probability
-            };
-            entry.weighted_sum += score * value;
-            entry.total_score += score;
-        }
-
-        // Finalize each dimension entry: resolve winner via dimBest and compute continuous
-        let mut out: FxHashMap<ChannelId, Vec<DimInferenceOutput>> = FxHashMap::default();
-        for entry in dims.values() {
-            let best = match dim_best.get(&entry.dim_id) {
-                Some(b) => b,
-                None => continue,
-            };
-            let winner_coord = match self.thalamus.get_neuron_coordinate(best.neuron_id) {
-                Some(c) => c,
-                None => continue,
-            };
-            let winner_value = self.thalamus.quantizer.dequantize(winner_coord.dim_id, winner_coord.bucket_id.into());
-            let continuous = if entry.total_score > 0.0 {
-                Some(entry.weighted_sum / entry.total_score)
-            } else {
-                winner_value
-            };
-
-            out.entry(entry.channel_id).or_insert_with(Vec::new).push(DimInferenceOutput {
-                dim_id: entry.dim_id,
-                kind: entry.kind.clone(),
-                winner: WinnerOutput {
-                    neuron_id: best.neuron_id,
-                    value: winner_value,
-                    strength: best.strength,
-                    score: best.score,
-                },
-                continuous,
-            });
-        }
-        out
+        if memo.len() > 2 * self.thalamus.dict.funcs.len() + 64 { memo.retain(|id, _| self.thalamus.dict.funcs.contains_key(id)); }
+        best.max(1)
     }
 
-    /// Convert the per-channel DimInferenceOutput map into the DimInference format
-    /// that Diagnostics.track_continuous_error expects.
-    fn build_dim_inferences(&self, inferences: &FxHashMap<ChannelId, Vec<DimInferenceOutput>>) -> FxHashMap<ChannelId, Vec<DimInference>> {
-        let mut result: FxHashMap<ChannelId, Vec<DimInference>> = FxHashMap::default();
-        for (&channel_id, dim_outputs) in inferences {
-            let entries: Vec<DimInference> = dim_outputs.iter().map(|d| DimInference {
-                dim_id: d.dim_id,
-                kind: match d.kind {
-                    NeuronType::Event => InferenceType::Event,
-                    NeuronType::Action => InferenceType::Action,
-                },
-                continuous: d.continuous,
-            }).collect();
-            result.insert(channel_id, entries);
-        }
-        result
+    /// The record a call stands as now, after every lap it took (D53).
+    pub(crate) fn follow_laps(&self, mut r: ActRef) -> ActRef {
+        let mut n = 0;
+        while let Some(x) = self.grown.get(&r) { r = *x; n += 1; if n > 4096 { break; } }
+        r
     }
 
-    // ── Supervised learning entry point ─────────────────────────────────────
+    pub(crate) fn make_act(&self, n: NeuronId, pos: Pos, strong: bool) -> Act {
+        let nn = &self.thalamus.registry[n];
+        let mut reach = [0; MAX_DIMS];
+        for d in 0..MAX_DIMS { if d == 0 || nn.axes & (1 << d) != 0 { reach[d] = 1; } }
+        Act { neuron: n, sym: n, kind: nn.kind, axes: nn.axes, pos, strong, reach, lo: pos, hi: pos, covered_at: None, coverers: Vec::new(), covers: Vec::new(), fired_by: None, rels: Vec::new(), inferences: Vec::new(), opened_at: self.frame_no, level: 0, height: 0, gone: false }
+    }
 
-    /// Supervised wiring step that sits on top of the last process_frame call.
-    /// `actions` names the correct action neuron(s) per channel as `ChannelId → DimensionId → scalar`.
-    /// `rewards` carries the per-channel reward magnitude.
-    /// `distance` is the connection-table slot at which the voter→action edge gets written and the read-back is taken.
-    /// Wiring covers every currently active voter regardless of age — not just age-0 voters.
-    /// In single-frame setups (MNIST) all voters happen to be at age 0.
-    /// In temporal setups voters at multiple ages all contribute.
-    /// This does NOT run process_frame, activate any new neurons, decay anything, or touch accuracy stats.
-    /// It is pure wiring plus a read-back.
-    /// Wiring goes through `Neuron::strengthen_or_create_connection`.
-    /// That is the same create-or-strengthen + smoothed-reward core that temporal `upsert_connection` uses.
-    /// Supervised wiring skips the alt-action-on-negative-reward exploration `upsert_connection` layers on top.
-    /// That is why `learn()` doesn't need `channel_id` plumbed through.
-    pub fn learn(
-        &mut self,
-        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, Vec<(f64, Reward)>>>,
-        distance: Distance,
-    ) -> FrameResult {
-        let mut timings = FrameTimings::default();
+    // ───────────────────────────── one level (§6, R26) ─────────────────────────────
 
-        // Resolve the supplied (value, reward) pairs to action neuron ids paired with their per-target reward.
-        let action_targets = self.resolve_action_targets(actions);
-
-        // Wire the temporal apex (active, non-subsumed voter across all temporal levels) to the action targets.
-        let voter_ids = self.get_active_voter_ids();
-
-        // Wire every (voter → action) edge at the supplied distance with smoothed-reward accumulation.
-        self.learn_action_connections(&voter_ids, &action_targets, distance);
-
-        // Run a read-only vote sweep + consensus pass over all active voters at all their valid ages.
-        // The caller can then observe the prediction the brain would make for this input post-supervision.
-        let (inferences, votes) = self.compute_inferences(&mut timings);
-
-        timings.finalize();
-        FrameResult {
-            inferences,
-            votes,
-            elapsed: timings.total,
-            timings,
+    /// One level (R26): activate every neuron with an activation here (R20); find what the dictionary holds and
+    /// fit it (R53, D31); count and group (R50, R54, R18), fitting again what changed; elect and allocate (R24,
+    /// R16). Returns the relations returned, the fits accepted, and the interneurons allocated.
+    /// The frame runs up all its levels before time runs at any (R26, R24). The climb: from level 0 up,
+    /// each level's activations are activated and its frame half runs, until a level takes and starts nothing. Then
+    /// from level 0 up each level as built: what is new at it since the climb is activated, its frame half runs over
+    /// the relations only that brought, and its time half over every relation of the level.
+    fn climb_levels(&mut self, stats: &mut FrameStats) {
+        let fno = self.frame_no;
+        let mut activated: FxHashSet<ActRef> = FxHashSet::default();
+        let mut fresh_of: Vec<Vec<Fresh>> = Vec::new();
+        // per level, what the climb did there: relations, fits, accepted, functions added, ms
+        let mut climb: Vec<(usize, usize, usize, usize, f64)> = Vec::new();
+        let at_level = |m: &Brain, level: u32| -> Vec<ActRef> { m.thalamus.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter().enumerate()
+            .filter(|(_, a)| a.opened_at == fno && a.level == level && !a.gone).map(|(i, _)| ActRef { frame: fno, index: i as u32 }).collect::<Vec<_>>()).collect() };
+        let fired_of = |m: &Brain, refs: &[ActRef]| -> FxHashSet<Sym> { refs.iter().filter_map(|r| m.find_act(*r)).map(|a| a.sym).collect() };
+        // the climb
+        let mut level: u32 = 0;
+        loop {
+            let refs: Vec<ActRef> = at_level(self, level).into_iter().filter(|r| !activated.contains(r)).collect();
+            if refs.is_empty() { break; }
+            let lt = std::time::Instant::now();
+            let added_before = self.stats_added;
+            activated.extend(refs.iter().copied());
+            let fresh = self.activate_level(&refs);
+            while fresh_of.len() <= level as usize { fresh_of.push(Vec::new()); }
+            fresh_of[level as usize] = fresh.clone();
+            let fired = fired_of(self, &at_level(self, level));
+            self.last_fits = 0;
+            let (a, m, started) = if self.frozen { self.run_frozen_half(level, true, &fresh) } else { self.run_half(level, true, &fresh, &fired) };
+            self.cover_board();
+            while climb.len() <= level as usize { climb.push((0, 0, 0, 0, 0.0)); }
+            climb[level as usize] = (fresh.len(), self.last_fits, a, self.stats_added - added_before, lt.elapsed().as_secs_f64() * 1000.0);
+            stats.bids += fresh.len();
+            stats.accepted += a;
+            stats.minted += m;
+            if a == 0 && started == 0 { break; }
+            level += 1;
+            if level > 1024 { break; }
+        }
+        // the levels as built, on the board the climb left
+        let mut level: u32 = 0;
+        loop {
+            let all = at_level(self, level);
+            if all.is_empty() { break; }
+            let lt = std::time::Instant::now();
+            let added_before = self.stats_added;
+            let new: Vec<ActRef> = all.iter().copied().filter(|r| !activated.contains(r)).collect();
+            activated.extend(new.iter().copied());
+            let new_fresh = if new.is_empty() { Vec::new() } else { self.activate_level(&new) };
+            while fresh_of.len() <= level as usize { fresh_of.push(Vec::new()); }
+            fresh_of[level as usize].extend(new_fresh.iter().copied());
+            let all_fresh = fresh_of[level as usize].clone();
+            let fired = fired_of(self, &all);
+            self.last_fits = 0;
+            let (a1, m1, _) = if self.frozen { self.run_frozen_half(level, true, &new_fresh) } else { self.run_half(level, true, &new_fresh, &fired) };
+            let (a2, m2, _) = if self.frozen { self.run_frozen_half(level, false, &all_fresh) } else { self.run_half(level, false, &all_fresh, &fired) };
+            self.cover_board();
+            stats.levels += 1;
+            let c = climb.get(level as usize).copied().unwrap_or((0, 0, 0, 0, 0.0));
+            stats.per_level.push((all.len(), c.0 + new_fresh.len(), c.1 + self.last_fits, c.2 + a1 + a2, c.3 + self.stats_added - added_before, c.4 + lt.elapsed().as_secs_f64() * 1000.0));
+            stats.bids += new_fresh.len();
+            stats.accepted += a1 + a2;
+            stats.minted += m1 + m2;
+            level += 1;
+            if level > 1024 { break; }
         }
     }
 
-    /// Resolve (value, reward) pairs supplied to learn() into (action_neuron_id, reward) targets.
-    /// Each `value` is quantized to a bucket id via the channel-dim's quantizer, then looked up as an action neuron.
-    /// Lets the caller specify multiple action targets per dim, each with its own reward — e.g. for supervised digit
-    /// classification, every digit is named on every call: correct digit with reward=1, every other digit with reward=0,
-    /// so the smoothed-reward update on each connection converges to the per-voter posterior `K(V,d) / N_V = P(d|V)`.
-    /// Panics if any value doesn't resolve to a registered action neuron, or if no targets were supplied at all.
-    fn resolve_action_targets(
-        &mut self,
-        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, Vec<(f64, Reward)>>>,
-    ) -> Vec<(NeuronId, Reward)> {
-        let mut action_targets: Vec<(NeuronId, Reward)> = Vec::new();
-        for (&channel_id, dim_map) in actions {
-            for (&dim_id, pairs) in dim_map {
-                for &(value, reward) in pairs {
-                    let bucket_id = self.thalamus.quantizer.quantize(dim_id, value);
-                    let coord = Coordinate { dim_id, bucket_id };
-                    let action_id = self.thalamus.get_neuron_id_by_coordinate(&coord).unwrap_or_else(|| {
-                        panic!("Brain.learn: no action neuron registered at channel={}, dim={}, bucket={}", channel_id, dim_id, bucket_id)
-                    });
-                    action_targets.push((action_id, reward));
+    /// Activate a level's activations (§5): each row into its neuron's history, its relations returned, and the
+    /// relations of this level in their one form (R21, D34).
+    fn activate_level(&mut self, refs: &[ActRef]) -> Vec<Fresh> {
+        assert!(self.lifts_due.is_empty(), "lifts are handed over before a level is activated");
+        let mut by_neuron: FxHashMap<NeuronId, ActivateTask> = FxHashMap::default();
+        let mut order: Vec<NeuronId> = Vec::new();
+        for &r in refs {
+            let nbs = self.observe_neighborhood(r);
+            let (n, own) = { let a = self.find_act(r).unwrap(); (a.neuron, a.sym) };
+            if !by_neuron.contains_key(&n) { order.push(n); }
+            by_neuron.entry(n).or_default().rows.push(RowInput { act: r, own, nbs });
+        }
+        // a row written now holds the relations lifted to a call before it was written (D10)
+        if !self.lift_pending.is_empty() {
+            for &r in refs {
+                for key in [r, self.follow_laps(r)] {
+                    let Some(v) = self.lift_pending.remove(&key) else { continue };
+                    for (nb, o) in v {
+                        let Some((n, task)) = self.make_lift(r, nb, o) else { continue };
+                        by_neuron.get_mut(&n).expect("a pending lift goes to a row of this level").lifts.push(task);
+                    }
                 }
             }
         }
-        assert!(!action_targets.is_empty(), "Brain.learn: no action targets supplied — caller must name at least one action value");
-        action_targets
-    }
-
-    /// Enumerate every currently-active voter across all ages in the sliding window.
-    /// Inhibited neurons (those that activated a higher-level pattern) are excluded.
-    /// They don't vote and shouldn't be wired by learn().
-    /// A voter active at multiple ages is returned once — wiring is per-(voter, target, distance), not per-age.
-    /// Panics if no voters are active — learn() requires a non-empty process_frame to have just run.
-    /// The temporal apex: every active, non-subsumed voter across all temporal levels in the window.
-    /// This is the frontier learn() wires to actions — see the call site for why it's level-agnostic.
-    /// Asserts non-empty, which only holds after process_frame ran on a non-empty frame.
-    fn get_active_voter_ids(&self) -> Vec<NeuronId> {
-        let voter_ids: Vec<NeuronId> = self.memory.get_active_voter_ids().into_iter().collect();
-        assert!(!voter_ids.is_empty(), "Brain.learn: no active voters — process_frame must be called (with a non-empty frame) before learn()");
-        voter_ids
-    }
-
-    /// Build the (voter, action, reward) wiring batch and dispatch it through Thalamus.
-    /// Every active voter wires to every supplied action neuron at the given distance.
-    /// Wiring is additive (strength += 1, reward += reward_arg); the connection is allocated on first encounter.
-    fn learn_action_connections(
-        &mut self,
-        voter_ids: &[NeuronId],
-        action_targets: &[(NeuronId, Reward)],
-        distance: Distance,
-    ) {
-        let mut wirings: Vec<(NeuronId, NeuronId, Reward)> = Vec::with_capacity(voter_ids.len() * action_targets.len());
-        for &voter_id in voter_ids {
-            for &(action_id, reward) in action_targets {
-                wirings.push((voter_id, action_id, reward));
+        let tasks: Vec<(NeuronId, ActivateTask)> = order.iter().map(|&n| (n, by_neuron.remove(&n).unwrap())).collect();
+        let returns: Vec<ActReturn> = self.thalamus.activate_neurons(tasks, !self.frozen).into_iter().flatten().collect();
+        // the board's edges at each activation, and the relations of this level in their one form (R21, D34)
+        let mut fresh: FxHashMap<(ActRef, ActRef), Fresh> = FxHashMap::default();
+        for ret in &returns {
+            let near_s = self.find_act(ret.act).unwrap().sym;
+            let rels: Vec<BoardRel> = ret.rels.iter().map(|(nb, s)| BoardRel { other: nb.act, off: nb.off, strength: *s }).collect();
+            for (nb, s) in &ret.rels {
+                let e = Fresh { near: ret.act, far: nb.act, strength: *s, rel: canon(near_s, nb.sym, nb.off) };
+                let k = edge(ret.act, nb.act);
+                if fresh.get(&k).map_or(true, |x| x.strength < *s) { fresh.insert(k, e); }
             }
+            if let Some(a) = self.find_act_mut(ret.act) { a.rels = rels; }
         }
-        self.thalamus.learn_action_connections(&wirings, distance);
+        let mut fresh: Vec<Fresh> = fresh.into_values().collect();
+        fresh.sort_by(|a, b| (a.near, a.far).cmp(&(b.near, b.far)));
+        fresh
     }
 
-    /// Shared helper that walks every active non-suppressed (voter, age) pair, calls `neuron.vote(age)`
-    /// on each, and feeds the resulting FlatVotes through the existing infer_neurons consensus path.
-    /// Mirrors the voting half of process_frame without any of its mutating side effects.
-    /// Used by `learn` as the post-wire read-back of the brain's prediction after the new wirings land.
-    /// Returns the per-channel inference map and the per-vote detail list for the harness to inspect.
-    fn compute_inferences(
-        &mut self,
-        timings: &mut FrameTimings,
-    ) -> (FxHashMap<ChannelId, Vec<DimInferenceOutput>>, Vec<FrameVote>) {
-        let voter_ages = self.memory.get_active_voter_ages();
-        let votes = self.thalamus.collect_votes_for_voter_ages(&voter_ages);
-        self.infer_neurons(&votes, timings)
+    /// One half of a level on a frozen machine: the elections over the fits of the functions that exist, of one kind,
+    /// as a learning machine runs them; it changes nothing that lasts: no function starts, joins, moves or leaves, and a fit
+    /// of a function with no living interneuron is not in the election, since none is allocated.
+    fn run_frozen_half(&mut self, level: u32, inside: bool, fresh: &[Fresh]) -> (usize, usize, usize) {
+        let kind: Vec<Fresh> = fresh.iter().filter(|e| (e.rel.off[0] == 0) == inside).copied().collect();
+        let found: Vec<FuncId> = self.find(&kind);
+        let mine: Vec<_> = found.iter().filter(|id| self.thalamus.dict.get(**id).and_then(|f| f.inter).map_or(false, |n| self.thalamus.registry.is_alive(n)))
+            .flat_map(|id| self.find_fits(*id)).collect();
+        self.last_fits += mine.len();
+        self.call_fit.clear();
+        let (a, m) = self.elect(level, mine);
+        (a, m, 0)
     }
 
-    // ── Cleanup ─────────────────────────────────────────────────────────────
-
-    /// Runs the cleanup cycle for zombie patterns.
-    /// With lazy decay, this only deletes items that have decayed to zero effective strength.
-    fn cleanup_dead_patterns(&mut self, timings: &mut FrameTimings) {
-        // Forget-and-prune is a learning-mode side effect; in eval we leave the substrate alone.
-        // Still record timing on both paths so the FrameTimings bucket exists every frame.
-        let t = Instant::now();
-        if !self.learning {
-            timings.cleanup_dead = t.elapsed().as_secs_f64();
-            return;
-        }
-        if self.debug { println!("=== CLEANUP STARTING ==="); }
-
-        // reap neurons scheduled to die at this frame
-        let dead_pattern_ids = self.thalamus.reap_dead_neurons(self.frame_number);
-        if dead_pattern_ids.is_empty() {
-            timings.cleanup_dead = t.elapsed().as_secs_f64();
-            return;
-        }
-
-        // delete dead patterns (with recursive cleanup of context references)
-        let deleted_pattern_ids = self.thalamus.delete_patterns(&dead_pattern_ids, self.frame_number);
-
-        // verify no deleted patterns are active — that would be a bug
-        self.memory.assert_not_active(&deleted_pattern_ids);
-
-        if self.debug { println!("=== CLEANUP COMPLETED ===\n"); }
-        timings.cleanup_dead = t.elapsed().as_secs_f64();
+    /// One half of a level (R24, R26, D34): find, elect, count, group, elect and start over the relations of one kind,
+    /// inside the frame or in time, and the functions that hold them. Returns what its elections accepted and
+    /// allocated, and how many functions it started.
+    fn run_half(&mut self, level: u32, inside: bool, fresh: &[Fresh], fired: &FxHashSet<Sym>) -> (usize, usize, usize) {
+        let (mut accepted, mut minted) = (0, 0);
+            let kind: Vec<Fresh> = fresh.iter().filter(|e| (e.rel.off[0] == 0) == inside).copied().collect();
+            // find (R53, D31): the functions that hold a relation of this kind returned at this level; a function
+            // holds one kind (D15)
+            let found: Vec<FuncId> = self.find(&kind);
+            // elect (R24): the fits of the dictionary as it stands cover what it knows before anything in it changes
+            let mine: Vec<_> = found.iter().filter(|id| self.thalamus.dict.get(**id).is_some()).flat_map(|id| self.find_fits(*id)).collect();
+            self.last_fits += mine.len();
+            // grouping reads the fits this election takes, and no other
+            self.call_fit.clear();
+            let (a1, m1) = self.elect(level, mine);
+            accepted += a1;
+            minted += m1;
+            // what the election left on the board: every relation of this kind no call covers and that is not
+            // lifted, its ends standing
+            let left: Vec<Fresh> = kind.iter().filter(|e| !self.covered_rel.contains(&crate::recognize::edge(e.near, e.far)) && !self.lifted.contains(&crate::recognize::edge(e.near, e.far))
+                && self.find_act(e.near).map_or(false, |a| !a.gone && a.covered_at.is_none() && self.stands(a, self.frame_no)) && self.find_act(e.far).map_or(false, |a| !a.gone && a.covered_at.is_none() && self.stands(a, self.frame_no))).copied().collect();
+            // count and group (R50, R54, R18): over the relations of this kind and the functions that hold them
+            let rest: Vec<_> = found.iter().filter(|id| self.thalamus.dict.get(**id).is_some()).flat_map(|id| self.find_fits(*id)).collect();
+            let board: Vec<Fresh> = self.list_board_rels().into_iter().filter(|e| (e.rel.off[0] == 0) == inside).collect();
+            self.half = Some(inside);
+            let changed = self.group(&rest, &left, &board, fired);
+            self.half = None;
+            self.call_fit.clear();
+            self.span_s = self.measure_board_span();
+            // elect again (R24): a function that changed in group is fit on what the first election left
+            let again: Vec<_> = changed.iter().filter(|id| self.thalamus.dict.get(**id).is_some()).flat_map(|id| self.find_fits(*id)).collect();
+            self.last_fits += again.len();
+            let (a2, m2) = self.elect(level, again);
+            accepted += a2;
+            minted += m2;
+            // start (R50): one function at a time, from the relations that may start one and still stand
+            let queue = std::mem::take(&mut self.start_queue);
+            let (a3, m3) = self.start_one_at_a_time(level, &queue, &left);
+            accepted += a3;
+            minted += m3;
+        (accepted, minted, self.last_start_rounds)
     }
 
-    // ── Debug helpers ───────────────────────────────────────────────────────
+    /// How many functions of the dictionary never took a call: no interneuron, or none alive.
+    pub fn count_functions_never_called(&self) -> usize {
+        self.thalamus.dict.funcs.values().filter(|f| f.inter.map_or(true, |n| !self.thalamus.registry.is_alive(n))).count()
+    }
 
-    /// Format a neuron's coordinates as a display label.
-    /// For pattern neurons, resolves up the parent chain to find root sensory coordinates.
-    fn format_neuron_label(&self, neuron_id: NeuronId) -> String {
-        // Pattern neurons: resolve parent chain to root sensory neuron
-        let level = self.thalamus.get_neuron_temporal_level(neuron_id).unwrap_or(0);
-        if level > 0 {
-            if let Some(parent_id) = self.thalamus.get_neuron_parent(neuron_id) {
-                return self.format_neuron_label(parent_id);
+    /// Start (R50): functions start one at a time, and only from a relation that still stands. A relation stands
+    /// where at least one instance of it on the board is covered by no call and is not lifted, refused or blocked,
+    /// its ends standing (D24, D55). Of the relations that may start a function and stand, the one with the most
+    /// instances standing starts first, and on a tie the one whose standing instance is oldest; the election takes
+    /// its fits (R24), and the machine looks again at what stands. Returns what the elections accepted and allocated.
+    fn start_one_at_a_time(&mut self, level: u32, queue: &[crate::dictionary::Rel], left: &[Fresh]) -> (usize, usize) {
+        let (mut accepted, mut minted) = (0, 0);
+        let mut round = 0;
+        loop {
+            let standing = |m: &Brain, e: &Fresh| -> bool {
+                let k = crate::recognize::edge(e.near, e.far);
+                if m.covered_rel.contains(&k) || m.lifted.contains(&k) || m.refused.contains(&k) || m.is_blocked(e.near, e.far) { return false; }
+                let up = |r: ActRef| m.find_act(r).map_or(false, |a| !a.gone && a.covered_at.is_none() && m.stands(a, m.frame_no));
+                up(e.near) && up(e.far)
+            };
+            let mut best: Option<((bool, std::cmp::Reverse<usize>, ActRef), crate::dictionary::Rel)> = None;
+            for r in queue {
+                if self.thalamus.dict.find_holder(r).is_some() { continue; }
+                let inst: Vec<&Fresh> = left.iter().filter(|e| e.rel == *r && standing(self, e)).collect();
+                if inst.is_empty() { continue; }
+                let oldest = inst.iter().map(|e| e.near.min(e.far)).min().unwrap();
+                let key = (r.off[0] != 0, std::cmp::Reverse(inst.len()), oldest);
+                if best.as_ref().map_or(true, |(k, _)| key < *k) { best = Some((key, *r)); }
             }
+            let Some((_, r)) = best else { break };
+            round += 1;
+            let id = self.thalamus.dict.start(r);
+            self.stats_added += 1;
+            let fits = self.find_fits(id);
+            self.last_fits += fits.len();
+            let (a, m) = self.elect(level, fits);
+            accepted += a;
+            minted += m;
         }
+        self.last_start_rounds = round;
+        (accepted, minted)
+    }
 
-        // Sensory neurons: format coordinate (translate id-form to name-form for display)
-        match self.thalamus.get_neuron_coordinate(neuron_id) {
-            Some(coordinate) => {
-                match self.thalamus.coordinate_id_to_name(coordinate) {
-                    Some((name, bucket_id)) => format!("{}={}", name, bucket_id),
-                    None => format!("dim{}={}", coordinate.dim_id, coordinate.bucket_id),
-                }
-            }
-            None => format!("neuron_{}", neuron_id),
+    // ───────────────────────────── inspection ─────────────────────────────
+
+    /// How many living neurons stand at each height, read off their last activation.
+    pub fn count_heights(&self) -> Vec<usize> {
+        let mut heights: FxHashMap<NeuronId, u32> = FxHashMap::default();
+        for f in self.thalamus.frames.iter() { for a in &f.acts { let e = heights.entry(a.neuron).or_default(); if a.height > *e { *e = a.height; } } }
+        let mut v = Vec::new();
+        for (id, _) in self.thalamus.registry.iter().filter(|(_, n)| n.alive) {
+            let h = heights.get(&id).copied().unwrap_or(0) as usize;
+            if v.len() <= h { v.resize(h + 1, 0); }
+            v[h] += 1;
         }
+        v
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::thalamus::DimSpecInput;
+impl Brain {
+    /// The dictionary (D36, D56).
+    pub fn get_dictionary(&self) -> &Dictionary { &self.thalamus.dict }
 
-    /// Helper to create a brain with default settings.
-    fn make_brain() -> Brain {
-        Brain::new(
-            10,                       // context_length
-            0.5,                      // group_threshold
-            GroupMode::Conservative,  // group_mode
-            0.01,                     // pattern_forget_rate
-            1,                        // regions
-            1,                        // columns
-            ConsensusMode::Democratic, // consensus_mode
-            false,                    // debug
-        )
+    /// The board (D9): the frames still open, with their activations.
+    pub fn get_board(&self) -> &VecDeque<FrameRec> { &self.thalamus.frames }
+
+    /// Describe neurons: each one's kind, row count and connection count, the functions it is the interneuron of, and
+    /// its first sixteen connections in key order.
+    pub fn describe_neurons(&mut self, ids: &[NeuronId]) -> Vec<String> {
+        let held = self.thalamus.inspect_neurons(ids.to_vec());
+        let dict = &self.thalamus.dict;
+        ids.iter().zip(held).map(|(&id, (rows, conns))| {
+            let n = &self.thalamus.registry[id];
+            let mut s = match n.kind {
+                Kind::Inter => format!("#{} inter", id),
+                _ => format!("#{} {:?} dim{} b{}", id, n.kind, n.dim.unwrap(), n.bucket),
+            };
+            s.push_str(&format!(" H={} conns={}
+", rows, conns.len()));
+            for fid in dict.list_of_inter(id) { if let Some(f) = dict.get(*fid) { s.push_str(&format!("  is {}
+", dict.describe(f))); } }
+            for ((own, t, o), c) in conns.into_iter().take(16) {
+                s.push_str(&format!("    {} -> {} @{:?} s={:.0} est={:+.2}
+", dict.describe_sym(own), dict.describe_sym(t), o, c.strength, c.estimate()));
+            }
+            s
+        }).collect()
     }
 
-    #[test]
-    fn test_brain_creation() {
-        let brain = make_brain();
-        assert_eq!(brain.frame_number, 0);
-        assert!(brain.frame.is_empty());
-        assert!(brain.rewards.is_empty());
-    }
-
-    #[test]
-    fn test_register_channel_and_process_empty_frame() {
-        let mut brain = make_brain();
-
-        // register a channel with one input dimension
-        let reg = brain.register_channel_spec(
-            "test",
-            vec![DimSpecInput {
-                name: "price".to_string(),
-                kind: DimKind::Input,
-                resolution: 3,
-                mode: Some("static".to_string()),
-                boundaries: Some(vec![-0.5, 0.5]),
-                actions: None,
-                default_action: None,
-                warmup_samples: None,
-            }],
-            false,
-        );
-        assert!(reg.dimension_ids.contains_key("price"));
-
-        // process an empty frame — should return empty inferences
-        let result = brain.process_frame(&FxHashMap::default(), &FxHashMap::default());
-        assert!(result.inferences.is_empty());
-        assert!(result.votes.is_empty());
-    }
-
-    #[test]
-    fn test_process_frame_with_input() {
-        let mut brain = make_brain();
-
-        // register a channel with one input dimension
-        let reg = brain.register_channel_spec(
-            "sensor",
-            vec![DimSpecInput {
-                name: "temp".to_string(),
-                kind: DimKind::Input,
-                resolution: 3,
-                mode: Some("static".to_string()),
-                boundaries: Some(vec![20.0, 30.0]),
-                actions: None,
-                default_action: None,
-                warmup_samples: None,
-            }],
-            false,
-        );
-        let channel_id = reg.channel_id;
-        let dim_id = reg.dimension_ids["temp"];
-
-        // process first frame with a temperature reading
-        let mut inputs = FxHashMap::default();
-        let mut dim_vals = FxHashMap::default();
-        dim_vals.insert(dim_id, 25.0);
-        inputs.insert(channel_id, dim_vals);
-
-        let result = brain.process_frame(&inputs, &FxHashMap::default());
-        assert_eq!(brain.frame_number, 1);
-        // first frame won't have inferences yet (no prior context)
-        assert!(result.inferences.is_empty());
-    }
-
-    #[test]
-    fn test_reset_context() {
-        let mut brain = make_brain();
-        brain.frame_number = 10;
-
-        brain.reset_context();
-        assert_eq!(brain.frame_number, 0);
-        assert!(brain.rewards.is_empty());
-    }
-
-    #[test]
-    fn test_reset_brain() {
-        let mut brain = make_brain();
-        brain.frame_number = 10;
-
-        brain.reset_brain();
-        assert_eq!(brain.frame_number, 0);
-    }
-
-    #[test]
-    fn test_is_better_candidate() {
-        // helper to test the comparison logic
-        let best = DimBestEntry { neuron_id: 5, score: 0.8, strength: 1.0 };
-
-        // higher score wins
-        assert!(0.9 > best.score);
-        // same score, higher strength wins
-        assert_eq!(best.score, 0.8);
-        // same score and strength, lower neuron_id wins
-    }
-
-    #[test]
-    fn test_frame_summary() {
-        let brain = make_brain();
-        let summary = brain.get_frame_summary();
-        assert_eq!(summary.frame_number, 0);
-        assert_eq!(summary.neuron_count, 0);
-    }
-
-    #[test]
-    fn test_episode_summary() {
-        let brain = make_brain();
-        let summary = brain.get_episode_summary();
-        assert_eq!(summary.frame_number, 0);
-        assert!(summary.stats.base_accuracy.is_none());
-    }
+    /// Every neuron's fixed facts, by id.
+    pub fn get_registry(&self) -> &crate::thalamus::Registry { &self.thalamus.registry }
 }
