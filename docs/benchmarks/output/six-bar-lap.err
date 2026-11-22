@@ -1,8 +1,2 @@
-[join-count f13] gain closing a cycle
-[join-left f13] #0→#1[-1, 0, 0] | its last relation joined another function
-[join-count f35] gain
-[join-left f35] #5<#1..#0x0>→#6<#0..#0x1>[-1, 0, 0] | its last relation joined another function
-[join-count f58] gain
-[join-left f58] #11<#6<#0..#0x1>..#5<#0..#1x1>x0>→#10<#5<#0..#1x0>..#7<#1..#1x1>x0>[-3, 0, 0] | its last relation joined another function
-[join-count f96] gain closing a cycle
-[join-left f96] #15<#13<#11<#6<#0..#0x1>..#5<#0..#1x1>x0>..#10<#5<#0..#1x0>..#7<#1..#1x1>x0>x0>..#14<#10<#5<#0..#1x0>..#7<#1..#1x1>x0>..#9<#7<#1..#1x1>..#6<#0..#0x1>x0>x0>x0>→#16<#14<#10<#5<#0..#1x0>..#7<#1..#1x1>x0>..#9<#7<#1..#1x1>..#6<#0..#0x1>x0>x0>..#13<#9<#5<#1..#0x0>..#6<#0..#0x1>x0>..#10<#5<#0..#1x0>..#7<#1..#1x1>x0>x0>x0>[-3, 0, 0] | its last relation joined another function
+
+⏱️  Total Execution Time: 

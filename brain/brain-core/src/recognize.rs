@@ -456,7 +456,7 @@ impl Brain {
                     if b.gone || !self.stands(b, fno) { continue; }
                     // a relation a call covers is off the board
                     if self.covered_rel.contains(&edge(near, br.other)) || self.lifted.contains(&edge(near, br.other)) { continue; }
-                    if !br.strength < 2 { continue; }
+                    if br.strength < 2 { continue; }
                     let k = edge(near, br.other);
                     if out.get(&k).map_or(false, |x| x.strength >= br.strength) { continue; }
                     out.insert(k, Fresh { near, far: br.other, strength: br.strength, rel: canon(a.sym, b.sym, br.off) });

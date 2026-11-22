@@ -58,12 +58,12 @@ node apps/shapes/jobs/shapes.js teach23 30
 | | |
 |---|---|
 | the 2 said 2 | 27 of 30 rounds |
-| the 3 said 3 | 26 of 30 rounds |
+| the 3 said 3 | 27 of 30 rounds |
 | with learning off, the 2 without its digit | says 2 |
 | with learning off, the 3 without its digit | says 3 |
-| functions at the end | 24 |
-| edges at the end | 38 |
-| the dictionary last changed | round 24 |
+| functions at the end | 23 |
+| edges at the end | 42 |
+| the dictionary last changed | round 29 |
 
 Each of these runs in under a second. They are the `hline`, `vline`, `filled-square`, `hollow-square` and
 `two-and-three` benchmarks; their full outputs are saved in [benchmarks/output](benchmarks/output) (see

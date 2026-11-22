@@ -35,13 +35,6 @@ inference GLD: right 106 of 118 | every bar right from cycle 5
   GLD cycle 10: RRRRRRRRRRRR
 recognition: 20 functions | the dictionary last changed at frame 120
 NEVERCALLED 0 of 20
-CLOSING weighed 2 joined 2 (from a function of more relations 0) | cycles at the end 5 of 20 | build joins the calls count would refuse 1 | largest such gain as a cycle 1.0 (on the calls -1.0) | weighs beyond every offset the rows hold 0 | weighs with neither end where the call stands 0 | weighs where one lap on cannot be worked out 0
-UNPAID 0 relations left a function because they did not pay there
-LIFTED TO THE STANDING CALL 0 relations went to other calls than their direct coverers
-LIFT PASSED OVER 0 dropped weak calls, 0 calls aged off the board
-CYCLELAPS f5 | closed at frame 29 | closing strength 3 | held [6] | calls under one lap 8 | one lap or more 8 | most laps 2 | now f5 no origin [#10<#0..#0x0>→#9<#1..#1x0>[-1, 0, 0] #9<#1..#1x0>→#10<#0..#0x0>[-1, 0, 0]] cycle -> #13
-CYCLELAPS f7 | closed at frame 33 | closing strength 2 | held [4] | calls under one lap 7 | one lap or more 7 | most laps 1 | now f7 no origin [#9<#1..#1x0>→#12<#0..#0x0>[-1, 0, 0] #12<#0..#0x0>→#9<#1..#1x0>[-1, 0, 0]] cycle -> #15
-JOINSMOVES joins frame 0 time 1 | moves frame 0 time 4
   combination calls per frame, per cycle: 1:000001101100 2:111111111111 3:111111111111 4:111111111111 5:111111111111 6:111111111111 7:111111111111 8:111111111111 9:111111111111 10:111111111111
   dictionary: level 1 | GLD only | 1 | with a call in the last cycle 0
   dictionary: level 1 | across the channels in time | 1 | with a call in the last cycle 0

@@ -7,8 +7,8 @@ CYCLE 5 | neurons 42 | functions 34 | highest call level in the cycle 3 | the di
 CYCLE 6 | neurons 38 | functions 29 | highest call level in the cycle 4 | the dictionary last changed at frame 180 | right A 100.00%, B 83.33%
 CYCLE 7 | neurons 38 | functions 30 | highest call level in the cycle 3 | the dictionary last changed at frame 196 | right A 100.00%, B 96.67%
 CYCLE 8 | neurons 39 | functions 31 | highest call level in the cycle 4 | the dictionary last changed at frame 234 | right A 100.00%, B 96.67%
-CYCLE 9 | neurons 49 | functions 41 | highest call level in the cycle 4 | the dictionary last changed at frame 270 | right A 100.00%, B 100.00%
-CYCLE 10 | neurons 51 | functions 42 | highest call level in the cycle 5 | the dictionary last changed at frame 300 | right A 100.00%, B 100.00%
+CYCLE 9 | neurons 49 | functions 41 | highest call level in the cycle 4 | the dictionary last changed at frame 270 | right A 100.00%, B 96.67%
+CYCLE 10 | neurons 51 | functions 42 | highest call level in the cycle 5 | the dictionary last changed at frame 300 | right A 100.00%, B 96.67%
 CYCLE 11 | neurons 59 | functions 51 | highest call level in the cycle 5 | the dictionary last changed at frame 327 | right A 100.00%, B 100.00%
 CYCLE 12 | neurons 58 | functions 50 | highest call level in the cycle 5 | the dictionary last changed at frame 347 | right A 100.00%, B 100.00%
 inference A: right 318 of 359 | every bar right from cycle 5
@@ -24,7 +24,7 @@ inference A: right 318 of 359 | every bar right from cycle 5
   A cycle 10: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
   A cycle 11: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
   A cycle 12: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
-inference B: right 313 of 359 | every bar right from cycle 9
+inference B: right 311 of 359 | every bar right from cycle 11
   B cycle  1: -WWWRRWRWRWRRRRWRRRRWRRRRWRRRR
   B cycle  2: WRRWRRRRRRWRRWRRWRRRWRRWRRWRRR
   B cycle  3: WRRWRWRRWRWWRRRWWRWRWWRRRWRRRR
@@ -33,20 +33,12 @@ inference B: right 313 of 359 | every bar right from cycle 9
   B cycle  6: RRRRRWWRRRRWRRRWWRRRRRRRRRRRRR
   B cycle  7: RRRRRRRRRRWRRRRRRRRRRRRRRRRRRR
   B cycle  8: RRRRRRRRRRWRRRRRRRRRRRRRRRRRRR
-  B cycle  9: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
-  B cycle 10: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  B cycle  9: RRRRRRRRRRWRRRRRRRRRRRRRRRRRRR
+  B cycle 10: RRRRRRRRRRWRRRRRRRRRRRRRRRRRRR
   B cycle 11: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
   B cycle 12: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
 recognition: 50 functions | the dictionary last changed at frame 347
 NEVERCALLED 0 of 50
-CLOSING weighed 3 joined 3 (from a function of more relations 0) | cycles at the end 5 of 50 | build joins the calls count would refuse 2 | largest such gain as a cycle 10.0 (on the calls 0.0) | weighs beyond every offset the rows hold 0 | weighs with neither end where the call stands 0 | weighs where one lap on cannot be worked out 0
-UNPAID 0 relations left a function because they did not pay there
-LIFTED TO THE STANDING CALL 0 relations went to other calls than their direct coverers
-LIFT PASSED OVER 0 dropped weak calls, 0 calls aged off the board
-CYCLELAPS f4 | closed at frame 44 | closing strength 5 | held [5] | calls under one lap 31 | one lap or more 21 | most laps 1 | now f4 no origin [#9<#0..#0x0>→#10<#1..#1x0>[-1, 0, 0] #10<#1..#1x0>→#9<#0..#0x0>[-1, 0, 0]] cycle -> #12
-CYCLELAPS f7 | closed at frame 49 | closing strength 5 | held [6] | calls under one lap 31 | one lap or more 21 | most laps 1 | now f7 no origin [#8<#1..#1x0>→#11<#0..#0x0>[-1, 0, 0] #11<#0..#0x0>→#8<#1..#1x0>[-1, 0, 0]] cycle -> #15
-CYCLELAPS f30 | closed at frame 192 | closing strength 10 | held [4, 5] | calls under one lap 6 | one lap or more 6 | most laps 1 | now f30 no origin [#12<#10<#1..#1x0>..#9<#0..#0x0>x0>→#16<#9<#0..#0x0>..#8<#1..#1x0>x0>[-1, 0, 0] #16<#9<#0..#0x0>..#8<#1..#1x0>x0>→#21<#8<#1..#1x0>..#10<#1..#1x0>x0>[-1, 0, 0] #21<#8<#1..#1x0>..#10<#1..#1x0>x0>→#12<#10<#1..#1x0>..#9<#0..#0x0>x0>[-1, 0, 0]] cycle -> #38
-JOINSMOVES joins frame 0 time 0 | moves frame 0 time 15
   combination calls per frame, per cycle: 1:000000101011111111111111111111 2:111111111111111111111111111111 3:111111111111111111111111111111 4:111111111111111111111111111111 5:111111111111111111111111111111 6:111111111111111111111111111111 7:111111111111111111111111111111 8:111111111111111111111111111111 9:111111111111111111111111111111 10:111111111111111111111111111111 11:111111111111111111111111111111 12:111111111111111111111111111111
   one call on the apex stands for A's six bars of a lap: from lap 11 (2 of 12 laps)
   one call on the apex stands for B's six bars of a lap: from lap 11 (2 of 12 laps)

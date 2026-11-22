@@ -1,10 +1,8 @@
 right 31/35 | neurons 260 alive of 262 | patterns 4 | heights [256, 0, 2, 2]
-CLOSING weighed 0 joined 0 (from a function of more relations 0) | cycles at the end 0 of 4 | build joins the calls count would refuse 0 | largest such gain as a cycle - | weighs beyond every offset the rows hold 0 | weighs with neither end where the call stands 0 | weighs where one lap on cannot be worked out 0
-UNPAID 0 relations left a function because they did not pay there
-DICTF f1 | f1 origin #101 [#101→#104[-1, 0, 0] #104→#116[-1, 0, 0]] -> #257
-DICTF f3 | f3 origin #116 [#116→#32[-1, 0, 0] #32→#101[-1, 0, 0]] -> #259
-DICTF f4 | f4 origin #259<#32..#101x0> [#259<#32..#101x0>→#257<#101..#116x0>[-1, 0, 0]] -> #260
-DICTF f5 | f5 origin #257<#104..#116x0> [#257<#104..#116x0>→#259<#116..#101x0>[-1, 0, 0]] -> #261
+DICTF f1 | f1 origin #101 [#101→#104[-1] #104→#116[-1]] -> #257
+DICTF f3 | f3 origin #116 [#116→#32[-1] #32→#101[-1]] -> #259
+DICTF f4 | f4 origin #259<#32..#101x0> [#259<#32..#101x0>→#257<#101..#116x0>[-1]] -> #260
+DICTF f5 | f5 origin #257<#104..#116x0> [#257<#104..#116x0>→#259<#116..#101x0>[-1]] -> #261
 #104 Event dim0 b104 H=9 conns=2
-    #104 -> #101 @[1, 0, 0] s=2 est=+0.00
-    #104 -> #257<#101..#104x0> @[1, 0, 0] s=2 est=+0.00
+    #104 -> #101 @[1] s=2 est=+0.00
+    #104 -> #257<#101..#104x0> @[1] s=2 est=+0.00

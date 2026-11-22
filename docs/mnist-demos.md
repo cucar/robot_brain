@@ -56,35 +56,35 @@ The options:
 **Expected output of the evaluation run:**
 ```
 mnist: 14x14, black and white pixels, the brain loaded from mnist14 on 10000 test images, learning off
-  test: 10000 images | spoke 10000 | right 5667 (56.7%) | apex/image 10.9 | neurons 5670 functions 6595 | 121s
+  test: 10000 images | spoke 10000 | right 5692 (56.9%) | apex/image 10.9 | neurons 5668 functions 6598 | 145s
   confusion (row = digit, column = said):
-    0 [688, 2, 40, 22, 18, 65, 45, 11, 77, 12]
-    1 [28, 865, 36, 11, 21, 58, 36, 31, 38, 11]
-    2 [144, 2, 391, 118, 21, 178, 72, 13, 83, 10]
-    3 [66, 3, 66, 502, 16, 193, 22, 7, 94, 41]
-    4 [81, 12, 29, 47, 459, 98, 47, 18, 85, 106]
-    5 [51, 2, 59, 125, 14, 499, 22, 12, 89, 19]
-    6 [78, 4, 63, 13, 18, 67, 641, 6, 58, 10]
-    7 [43, 15, 54, 41, 43, 85, 14, 492, 36, 205]
-    8 [93, 4, 33, 61, 31, 68, 44, 5, 576, 59]
-    9 [65, 7, 24, 29, 80, 77, 26, 64, 83, 554]
+    0 [689, 3, 43, 18, 20, 66, 43, 7, 80, 11]
+    1 [35, 864, 35, 9, 23, 56, 38, 27, 37, 11]
+    2 [132, 2, 398, 116, 23, 174, 76, 11, 88, 12]
+    3 [65, 1, 74, 503, 16, 192, 21, 11, 91, 36]
+    4 [87, 13, 29, 49, 463, 92, 46, 21, 82, 100]
+    5 [49, 2, 62, 122, 14, 496, 19, 9, 97, 22]
+    6 [74, 5, 61, 10, 22, 69, 646, 4, 58, 9]
+    7 [46, 16, 51, 49, 46, 84, 12, 486, 31, 207]
+    8 [94, 4, 35, 59, 33, 68, 42, 6, 574, 59]
+    9 [67, 5, 26, 31, 77, 76, 23, 68, 63, 573]
 ```
 
-**56.7% on the held-out test set from 5,000 training images**, one pass. The 1s are read best (865 of 1,135); the 2s
-worst, often taken for 0, 3 or 5. Training takes about 3 minutes and the evaluation about 2.
+**56.9% on the held-out test set from 5,000 training images**, one pass. The 1s are read best (864 of 1,135); the 2s
+worst, often taken for 0, 3 or 5. Training takes about 3½ minutes and the evaluation about 2½.
 
 ---
 
 ## Results
 
 Each row is one training pass, then a frozen evaluation on held-out test images. Training is kept to runs of a few
-minutes: the time per training image grows with the dictionary, at 14×14 from 24 ms an image at image 1,000 to 34 ms
-at image 5,000 and 61 ms at image 10,000.
+minutes: the time per training image grows with the dictionary, at 14×14 from about 28 ms an image at image 1,000 to about
+39 ms at image 5,000 and about 70 ms at image 10,000.
 
 | image | training images | test images | held-out test | train pass | evaluation | functions |
 | --- | --- | --- | --- | --- | --- | --- |
-| 14×14 | 5,000 (500 per digit) | 10,000 | **56.7%** | 178 s | 121 s (12 ms an image) | 6,595 |
-| 28×28 | 1,000 (100 per digit) | 2,000 | **39.8%** | 144 s | 193 s (97 ms an image) | 2,582 |
+| 14×14 | 5,000 (500 per digit) | 10,000 | **56.9%** | about 200 s | about 145 s (about 14 ms an image) | 6,598 |
+| 28×28 | 1,000 (100 per digit) | 2,000 | **39.5%** | about 170 s | about 240 s (about 120 ms an image) | 2,591 |
 
 ```bash
 node apps/mnist/jobs/test.js --image-size 28 --per-class 100 --save-brain mnist28
@@ -120,23 +120,23 @@ node apps/mnist/jobs/test.js --image-size 14 --split --per-class 1000 --max-test
 
 ```
 Retention matrix  T0(01)   T1(23)   T2(45)   T3(67)   T4(89)
-  after T0        93.6%    0.0%     0.0%     0.0%     0.0%
-  after T1        66.0%    80.0%    0.0%     0.0%     0.0%
-  after T2        52.1%    50.0%    77.8%    0.0%     0.0%
-  after T3        43.8%    42.5%    51.8%    83.3%    0.0%
-  after T4        39.4%    29.1%    26.5%    50.7%    75.6%
-  Average accuracy after the last task: 44.26%
-  Forgetting per task (best less last): T0:54.3pp T1:50.9pp T2:51.3pp T3:32.6pp T4:0.0pp
-  Average forgetting: 37.82pp
+  after T0        94.4%    0.0%     0.0%     0.0%     0.0%
+  after T1        65.3%    79.6%    0.0%     0.0%     0.0%
+  after T2        54.3%    52.8%    78.8%    0.0%     0.0%
+  after T3        45.7%    41.5%    51.5%    82.5%    0.0%
+  after T4        40.8%    31.0%    26.5%    53.3%    77.5%
+  Average accuracy after the last task: 45.81%
+  Forgetting per task (best less last): T0:53.5pp T1:48.6pp T2:52.3pp T3:29.2pp T4:0.0pp
+  Average forgetting: 36.73pp
 ```
 
 - **The upper triangle is 0%**: the brain never answers a digit it has not yet been taught. No task-ID cheating.
-- **Each task is learned when it is taught**: 76–94% on its own digits right after its task.
-- **Earlier tasks fade as new ones arrive**: the first task falls from 93.6% to 39.4% after four more, and the average
-  forgetting is 37.82 points. After the last task the average is 44.26%: above the ~20% floor where naive backprop
+- **Each task is learned when it is taught**: 78–94% on its own digits right after its task.
+- **Earlier tasks fade as new ones arrive**: the first task falls from 94.4% to 40.8% after four more, and the average
+  forgetting is 36.73 points. After the last task the average is 45.81%: above the ~20% floor where naive backprop
   nets land in this regime, well below joint training.
 
-The run takes about 9 minutes.
+The run takes about 10 minutes.
 
 **Literature baselines:** naive backprop ~20%, EWC / regularization methods ~20–25%, replay-based methods 70–90% (but
 they store and replay old examples), joint-training upper bound ~98%. Citations: van de Ven & Tolias 2019; Hsu et al.
@@ -169,7 +169,7 @@ The collapse: 94.5% (joint) -> 19.4% (sequential), a 75pp drop to the ~20% chanc
 
 Each task hits ~98–99% the moment it is trained, then drops to **0%** as the next task overwrites those weights. The
 brain's earlier tasks fade too, but they do not drop to zero: after all five tasks its oldest task still stands at
-39.4%, where the MLP's stands at 0%.
+40.8%, where the MLP's stands at 0%.
 
 ---
 
@@ -185,17 +185,15 @@ node apps/mnist/jobs/test.js --image-size 14 --train-images <n> --episodes <e>
 
 | benchmark | training images × episodes | right | functions | the dictionary last changed | run time |
 |---|---|---|---|---|---|
-| `mnist-1x60` | 1 × 60 | 1/1 in the last episode; 59/60 over the run | 40 | episode 25 | 1.0 s |
-| `mnist-10x20` | 10 × 20 | 10/10 in the last episode; 187/200 over the run | 220 | episode 20 (still changing) | 3.4 s |
-| `mnist-10x300` | 10 × 300 | 10/10 in the last episode; 2,987/3,000 over the run | 229 | episode 298 | 56.7 s |
-| `mnist-100` | 100 × 1 | 19/100 | 289 | still changing | 1.8 s |
-| `mnist-255` | 255 × 1 | 96/255 | 641 | still changing | 5.2 s |
-| `mnist-1000` | 1,000 × 1 | 435/1,000 | 2,055 | still changing | 23.3 s |
+| `mnist-1x60` | 1 × 60 | 1/1 in the last episode; 59/60 over the run | 34 | episode 34 | about 1 s |
+| `mnist-10x20` | 10 × 20 | 10/10 in the last episode; 186/200 over the run | 216 | episode 20 (still changing) | about 3.5 s |
+| `mnist-10x300` | 10 × 300 | 10/10 in the last episode; 2,986/3,000 over the run | 219 | episode 295 | about 1 minute |
+| `mnist-100` | 100 × 1 | 18/100 | 289 | still changing | about 2 s |
+| `mnist-255` | 255 × 1 | 95/255 | 642 | still changing | about 5 s |
+| `mnist-1000` | 1,000 × 1 | 433/1,000 | 2,069 | still changing | about 25 s |
 
-One image shown again and again is said right from the second episode on, and its dictionary settles at episode 25;
-ten images are all right from the third episode on. The saved outputs of all but `mnist-100` list the dictionary's largest functions with
-functions of equal size in another order than the job prints them (in `mnist-10x20` a different one of the tied
-functions takes the last place), so the runner reports them as `different` on those lines alone.
+One image shown again and again is said right from the second episode on, and its dictionary settles at episode 34;
+ten images are all right from the fourth episode on.
 
 The data are the four raw (gunzipped) idx files of the standard MNIST set; their MD5 sums:
 

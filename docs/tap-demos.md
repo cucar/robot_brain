@@ -31,7 +31,7 @@ dictionary and every living neuron with its connections.
 **Expected output** (the end of the test table):
 ```
 right 37/37
-longest reach in time seen: 5 (silence 8)
+longest reach in time seen: 4 (silence 8)
 guessed activations that stood: []
 dictionary: 3 functions
 ```

@@ -5,144 +5,132 @@ EPISODE 2 | dictionary changed | functions 8 | right 1/1 | calls on the apex per
   episode  2: added 2 retired 0 | right 1/1 (spoke 1) | max levels 3 | neurons 20 functions 8 |  | digit:said 5:5 | apex 25 (22 kept, 3 new, 6 gone) levels 3 added 2 [#12@0,10 #12@0,11 #12@0,5 #12@0,6 #12@0,7 #12@0,8 #12@0,9 #12@11,3 #12@7,5 #12@9,7 #13@3,11 #13@4,3 #13@4,4 #13@5,10 #13@7,7 #13@7,9 #13@8,8 #14@6,5 #15@0,0 #15@0,12 #16@8,4 #17@6,6 #18@0,3 #18@10,8 #19@7,11]
 EPISODE 3 | dictionary changed | functions 18 | right 1/1 | calls on the apex per image 15.0
   episode  3: added 10 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 30 functions 18 |  | digit:said 5:5 | apex 15 (5 kept, 10 new, 20 gone) levels 4 added 10 [#16@8,4 #17@6,6 #18@0,3 #18@10,8 #19@7,11 #20@0,7 #21@4,4 #22@0,9 #23@4,3 #24@0,5 #25@7,7 #26@3,11 #27@7,9 #28@0,0 #29@0,11]
-EPISODE 4 | dictionary changed | functions 20 | right 1/1 | calls on the apex per image 12.0
-  episode  4: added 2 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 30 functions 20 |  | digit:said 5:5 | apex 12 (10 kept, 2 new, 5 gone) levels 4 added 2
+EPISODE 4 | dictionary changed | functions 20 | right 1/1 | calls on the apex per image 13.0
+  episode  4: added 2 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 30 functions 20 |  | digit:said 5:5 | apex 13 (11 kept, 2 new, 4 gone) levels 4 added 2
 EPISODE 5 | dictionary changed | functions 23 | right 1/1 | calls on the apex per image 9.0
-  episode  5: added 3 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 32 functions 23 |  | digit:said 5:5 | apex 9 (6 kept, 3 new, 6 gone) levels 4 added 3
-EPISODE 6 | dictionary changed | functions 25 | right 1/1 | calls on the apex per image 6.0
-  episode  6: added 2 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 33 functions 25 |  | digit:said 5:5 | apex 6 (4 kept, 2 new, 5 gone) levels 5 added 2
+  episode  5: added 3 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 32 functions 23 |  | digit:said 5:5 | apex 9 (6 kept, 3 new, 7 gone) levels 4 added 3
+EPISODE 6 | dictionary changed | functions 25 | right 1/1 | calls on the apex per image 7.0
+  episode  6: added 2 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 33 functions 25 |  | digit:said 5:5 | apex 7 (5 kept, 2 new, 4 gone) levels 5 added 2
 EPISODE 7 | dictionary changed | functions 28 | right 1/1 | calls on the apex per image 7.0
-  episode  7: added 3 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 36 functions 28 |  | digit:said 5:5 | apex 7 (2 kept, 5 new, 4 gone) levels 5 added 3
+  episode  7: added 3 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 36 functions 28 |  | digit:said 5:5 | apex 7 (2 kept, 5 new, 5 gone) levels 5 added 3
 EPISODE 8 | dictionary changed | functions 29 | right 1/1 | calls on the apex per image 7.0
   episode  8: added 1 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 37 functions 29 |  | digit:said 5:5 | apex 7 (4 kept, 3 new, 3 gone) levels 5 added 1
 EPISODE 9 | dictionary same | functions 29 | right 1/1 | calls on the apex per image 6.0
   episode  9: added 0 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 37 functions 29 |  | digit:said 5:5 | apex 6 (5 kept, 1 new, 2 gone) levels 4 added 0
 EPISODE 10 | dictionary changed | functions 30 | right 1/1 | calls on the apex per image 5.0
   episode 10: added 1 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 37 functions 30 |  | digit:said 5:5 | apex 5 (4 kept, 1 new, 2 gone) levels 5 added 1
-EPISODE 11 | dictionary changed | functions 30 | right 1/1 | calls on the apex per image 4.0
-  episode 11: added 0 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 37 functions 30 |  | digit:said 5:5 | apex 4 (4 kept, 0 new, 1 gone) levels 4 added 0
-EPISODE 12 | dictionary changed | functions 32 | right 1/1 | calls on the apex per image 2.0
-  episode 12: added 2 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 39 functions 32 |  | digit:said 5:5 | apex 2 (0 kept, 2 new, 4 gone) levels 5 added 2
-EPISODE 13 | dictionary changed | functions 36 | right 1/1 | calls on the apex per image 6.0
-  episode 13: added 4 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 43 functions 36 |  | digit:said 5:5 | apex 6 (0 kept, 6 new, 2 gone) levels 5 added 4
-EPISODE 14 | dictionary changed | functions 37 | right 1/1 | calls on the apex per image 4.0
-  episode 14: added 1 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 44 functions 37 |  | digit:said 5:5 | apex 4 (0 kept, 4 new, 6 gone) levels 4 added 1
-EPISODE 15 | dictionary same | functions 37 | right 1/1 | calls on the apex per image 4.0
-  episode 15: added 0 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 44 functions 37 |  | digit:said 5:5 | apex 4 (4 kept, 0 new, 0 gone) levels 4 added 0
-EPISODE 16 | dictionary changed | functions 39 | right 1/1 | calls on the apex per image 2.0
-  episode 16: added 2 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 45 functions 39 |  | digit:said 5:5 | apex 2 (0 kept, 2 new, 4 gone) levels 5 added 2
-EPISODE 17 | dictionary changed | functions 39 | right 1/1 | calls on the apex per image 2.0
-  episode 17: added 0 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 45 functions 39 |  | digit:said 5:5 | apex 2 (2 kept, 0 new, 0 gone) levels 5 added 0
-EPISODE 18 | dictionary changed | functions 39 | right 1/1 | calls on the apex per image 3.0
-  episode 18: added 0 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 45 functions 39 |  | digit:said 5:5 | apex 3 (0 kept, 3 new, 2 gone) levels 4 added 0
-EPISODE 19 | dictionary same | functions 39 | right 1/1 | calls on the apex per image 2.0
-  episode 19: added 0 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 45 functions 39 |  | digit:said 5:5 | apex 2 (1 kept, 1 new, 2 gone) levels 5 added 0
-EPISODE 20 | dictionary changed | functions 39 | right 1/1 | calls on the apex per image 2.0
-  episode 20: added 0 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 45 functions 39 |  | digit:said 5:5 | apex 2 (2 kept, 0 new, 0 gone) levels 5 added 0
-EPISODE 21 | dictionary changed | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 21: added 1 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (0 kept, 1 new, 2 gone) levels 6 added 1
-EPISODE 22 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 22: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 23 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 23: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 24 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 24: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 25 | dictionary changed | functions 40 | right 1/1 | calls on the apex per image 2.0
-  episode 25: added 0 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 46 functions 40 |  | digit:said 5:5 | apex 2 (0 kept, 2 new, 1 gone) levels 5 added 0
-EPISODE 26 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 26: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (0 kept, 1 new, 2 gone) levels 6 added 0
-EPISODE 27 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 27: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 28 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 28: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 29 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 29: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 30 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 30: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 31 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 31: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 32 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 32: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 33 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 33: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 34 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 34: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 35 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 35: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 36 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 36: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 37 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 37: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 38 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 38: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 39 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 39: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 40 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 40: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 41 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 41: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 42 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 42: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 43 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 43: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 44 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 44: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 45 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 45: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 46 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 46: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 47 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 47: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 48 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 48: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 49 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 49: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 50 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 50: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 51 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 51: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 52 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 52: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 53 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 53: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 54 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 54: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 55 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 55: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 56 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 56: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 57 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 57: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 58 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 58: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
-EPISODE 59 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 59: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 11 | dictionary changed | functions 31 | right 1/1 | calls on the apex per image 4.0
+  episode 11: added 1 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 38 functions 31 |  | digit:said 5:5 | apex 4 (3 kept, 1 new, 2 gone) levels 5 added 1
+EPISODE 12 | dictionary changed | functions 32 | right 1/1 | calls on the apex per image 3.0
+  episode 12: added 1 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 38 functions 32 |  | digit:said 5:5 | apex 3 (2 kept, 1 new, 2 gone) levels 5 added 1
+EPISODE 13 | dictionary changed | functions 33 | right 1/1 | calls on the apex per image 2.0
+  episode 13: added 1 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 38 functions 33 |  | digit:said 5:5 | apex 2 (2 kept, 0 new, 1 gone) levels 4 added 1
+EPISODE 14 | dictionary same | functions 33 | right 1/1 | calls on the apex per image 2.0
+  episode 14: added 0 retired 0 | right 1/1 (spoke 1) | max levels 5 | neurons 38 functions 33 |  | digit:said 5:5 | apex 2 (2 kept, 0 new, 0 gone) levels 5 added 0
+EPISODE 15 | dictionary changed | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 15: added 1 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (0 kept, 1 new, 2 gone) levels 6 added 1
+EPISODE 16 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 16: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 17 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 17: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 18 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 18: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 19 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 19: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 20 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 20: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 21 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 21: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 22 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 22: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 23 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 23: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 24 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 24: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 25 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 25: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 26 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 26: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 27 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 27: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 28 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 28: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 29 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 29: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 30 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 30: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 31 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 31: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 32 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 32: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 33 | dictionary changed | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 33: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 34 | dictionary changed | functions 34 | right 1/1 | calls on the apex per image 2.0
+  episode 34: added 0 retired 0 | right 1/1 (spoke 1) | max levels 4 | neurons 39 functions 34 |  | digit:said 5:5 | apex 2 (0 kept, 2 new, 1 gone) levels 4 added 0
+EPISODE 35 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 35: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (0 kept, 1 new, 2 gone) levels 6 added 0
+EPISODE 36 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 36: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 37 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 37: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 38 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 38: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 39 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 39: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 40 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 40: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 41 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 41: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 42 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 42: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 43 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 43: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 44 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 44: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 45 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 45: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 46 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 46: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 47 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 47: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 48 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 48: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 49 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 49: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 50 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 50: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 51 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 51: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 52 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 52: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 53 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 53: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 54 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 54: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 55 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 55: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 56 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 56: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 57 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 57: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 58 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 58: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
+EPISODE 59 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 59: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0
 LASTEP image 0 (digit 5) | calls on the apex 1 | bare pixels on the apex 0 | levels 6
-EPISODE 60 | dictionary same | functions 40 | right 1/1 | calls on the apex per image 1.0
-  episode 60: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 46 functions 40 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0 [#45@0,0]
-NEVERCALLED 0 of 40
-CLOSING weighed 2 joined 2 (from a function of more relations 0) | cycles at the end 8 of 40 | build joins the calls count would refuse 2 | largest such gain as a cycle 17.0 (on the calls -1.0) | weighs beyond every offset the rows hold 0 | weighs with neither end where the call stands 2 | weighs where one lap on cannot be worked out 0
-UNPAID 3 relations left a function because they did not pay there
-LIFTED TO THE STANDING CALL 4825 relations went to other calls than their direct coverers
-LIFT PASSED OVER 0 dropped weak calls, 0 calls aged off the board
-TWICE frames with an interneuron called more than once 239 | of those, a row holds another call of the same interneuron 120
-CYCLELAPS f21 | closed at frame 11 | closing strength 4 | held [4, 4] | calls under one lap 1 | one lap or more 0 | most laps 0 | now f21 no origin [#22<#12<#0..#0x6>..#12<#0..#0x4>x0>→#26<#13<#1..#1x3>..#13<#1..#1x3>x1>[0, 3, 2] #22<#12<#0..#0x6>..#12<#0..#0x4>x0>→#29<#12<#0..#0x2>..#15<#12<#0..#0x13>..#12<#0..#0x13>x1>x0>[0, 0, 2] #29<#12<#0..#0x2>..#15<#12<#0..#0x13>..#12<#0..#0x13>x1>x0>→#26<#13<#1..#1x3>..#13<#1..#1x3>x1>[0, 3, 0]] cycle -> #12
-CYCLELAPS f36 | closed at frame 35 | closing strength 5 | held [17, 5] | calls under one lap 42 | one lap or more 0 | most laps 0 | now f36 no origin [#18<#12<#0..#0x3>..#12<#0..#0x3>x1>→#13<#1..#1x6>[0, 4, 0] #18<#12<#0..#0x3>..#12<#0..#0x3>x1>→#12<#24<#12<#0..#0x5>..#12<#0..#0x5>x1>..#16<#1..#12<#0..#0x4>x0>x0>[0, 0, 2] #12<#24<#12<#0..#0x5>..#12<#0..#0x5>x1>..#16<#1..#12<#0..#0x4>x0>x0>→#13<#1..#1x6>[0, 4, -2]] cycle -> #43
-JOINSMOVES joins frame 31 time 0 | moves frame 1 time 0
-  train: 60 images | spoke 59 | right 59 (98.3% of all, 100.0% of spoken) | lessons 60 | apex/image 3.2 | neurons 46 functions 40
-  dictionary by (relations, nodes, cycle, has interneuron): {(1, 1, true, true): 6, (1, 2, false, true): 23, (2, 3, false, true): 5, (3, 3, true, true): 2, (3, 4, false, true): 2, (4, 5, false, true): 1, (13, 14, false, true): 1}
-    f8 origin #12<#0..#0x6> [#12<#0..#0x6>→#12<#0..#0x7>[0, 0, 1] #12<#0..#0x6>→#17<#1..#12<#0..#0x6>x0>[0, 6, -1] #12<#0..#0x7>→#13<#1..#1x2>[0, 7, 1] #12<#0..#0x7>→#13<#1..#1x1>[0, 8, 0] #13<#1..#1x1>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 2, 0] #25<#13<#1..#1x1>..#12<#0..#0x4>x0>→#13<#1..#1x1>[0, 1, 1] #23<#13<#1..#1x6>..#12<#0..#0x2>x0>→#17<#1..#12<#0..#0x6>x0>[0, 2, 3] #23<#13<#1..#1x6>..#12<#0..#0x2>x0>→#16<#1..#12<#0..#0x4>x0>[0, 4, 1] #23<#13<#1..#1x6>..#12<#0..#0x2>x0>→#21<#13<#1..#1x2>..#12<#0..#0x6>x0>[0, 0, 1] #22<#12<#0..#0x6>..#13<#1..#1x2>x0>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 10, -1] #22<#12<#0..#0x6>..#13<#1..#1x2>x0>→#15<#12<#0..#0x13>..#12<#0..#0x13>x1>[0, 0, 3] #22<#12<#0..#0x6>..#13<#1..#1x2>x0>→#19<#12<#0..#0x6>..#12<#0..#0x4>x0>[0, 7, 2] #22<#12<#0..#0x6>..#13<#1..#1x2>x0>→#26<#13<#1..#1x3>..#13<#1..#1x3>x1>[0, 3, 2]] -> #20
-    f11 origin #13<#1..#1x6> [#13<#1..#1x6>→#14<#1..#0x0>[0, 2, 2] #13<#1..#1x6>→#12<#0..#0x2>[0, 7, 0] #13<#1..#1x6>→#16<#1..#12<#0..#0x4>x0>[0, 4, 1] #13<#1..#1x6>→#21<#13<#1..#1x2>..#12<#0..#0x6>x0>[0, 0, 1]] -> #23
-    f15 origin #13<#1..#1x2> [#13<#1..#1x2>→#13<#1..#1x1>[0, 1, -1] #13<#1..#1x2>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 3, -1] #13<#1..#1x2>→#19<#12<#0..#0x6>..#12<#0..#0x4>x0>[0, 0, 2]] -> #27
-    f21 no origin [#22<#12<#0..#0x6>..#12<#0..#0x4>x0>→#26<#13<#1..#1x3>..#13<#1..#1x3>x1>[0, 3, 2] #22<#12<#0..#0x6>..#12<#0..#0x4>x0>→#29<#12<#0..#0x2>..#15<#12<#0..#0x13>..#12<#0..#0x13>x1>x0>[0, 0, 2] #29<#12<#0..#0x2>..#15<#12<#0..#0x13>..#12<#0..#0x13>x1>x0>→#26<#13<#1..#1x3>..#13<#1..#1x3>x1>[0, 3, 0]] cycle -> #12
-    f36 no origin [#18<#12<#0..#0x3>..#12<#0..#0x3>x1>→#13<#1..#1x6>[0, 4, 0] #18<#12<#0..#0x3>..#12<#0..#0x3>x1>→#12<#24<#12<#0..#0x5>..#12<#0..#0x5>x1>..#16<#1..#12<#0..#0x4>x0>x0>[0, 0, 2] #12<#24<#12<#0..#0x5>..#12<#0..#0x5>x1>..#16<#1..#12<#0..#0x4>x0>x0>→#13<#1..#1x6>[0, 4, -2]] cycle -> #43
+EPISODE 60 | dictionary same | functions 34 | right 1/1 | calls on the apex per image 1.0
+  episode 60: added 0 retired 0 | right 1/1 (spoke 1) | max levels 6 | neurons 39 functions 34 |  | digit:said 5:5 | apex 1 (1 kept, 0 new, 0 gone) levels 6 added 0 [#38@0,0]
+NEVERCALLED 0 of 34
+  train: 60 images | spoke 59 | right 59 (98.3% of all, 100.0% of spoken) | lessons 60 | apex/image 3.0 | neurons 39 functions 34
+  dictionary by (relations, nodes, cycle, has interneuron): {(1, 1, true, true): 6, (1, 2, false, true): 21, (2, 3, false, true): 2, (3, 3, true, true): 1, (3, 4, false, true): 3, (13, 14, false, true): 1}
+    f8 origin #12<#0..#0x6> [#12<#0..#0x6>→#12<#0..#0x7>[0, 0, 1] #12<#0..#0x6>→#17<#1..#12<#0..#0x6>x0>[0, 6, -1] #12<#0..#0x7>→#13<#1..#1x2>[0, 7, 1] #12<#0..#0x7>→#13<#1..#1x1>[0, 8, 0] #13<#1..#1x1>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 2, 0] #25<#13<#1..#1x1>..#12<#0..#0x4>x0>→#13<#1..#1x1>[0, 1, 1] #23<#13<#1..#1x6>..#12<#0..#0x2>x0>→#17<#1..#12<#0..#0x6>x0>[0, 2, 3] #22<#12<#0..#0x6>..#13<#1..#1x2>x0>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 10, -1] #23<#13<#1..#1x6>..#12<#0..#0x2>x0>→#16<#1..#12<#0..#0x4>x0>[0, 4, 1] #23<#13<#1..#1x6>..#12<#0..#0x2>x0>→#21<#13<#1..#1x2>..#12<#0..#0x6>x0>[0, 0, 1] #22<#12<#0..#0x6>..#13<#1..#1x2>x0>→#15<#12<#0..#0x13>..#12<#0..#0x13>x1>[0, 0, 3] #22<#12<#0..#0x6>..#13<#1..#1x2>x0>→#19<#12<#0..#0x6>..#12<#0..#0x4>x0>[0, 7, 2] #22<#12<#0..#0x6>..#13<#1..#1x2>x0>→#26<#13<#1..#1x3>..#13<#1..#1x3>x1>[0, 3, 2]] -> #20
     f10 origin #12<#0..#0x6> [#12<#0..#0x6>→#12<#0..#0x4>[0, 0, 1] #12<#0..#0x6>→#13<#1..#1x2>[0, 7, 0] #12<#0..#0x4>→#12<#0..#0x2>[0, 0, 1]] -> #22
+    f15 origin #13<#1..#1x2> [#13<#1..#1x2>→#13<#1..#1x1>[0, 1, -1] #13<#1..#1x2>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 3, -1] #13<#1..#1x2>→#19<#12<#0..#0x6>..#12<#0..#0x4>x0>[0, 0, 2]] -> #27
+    f18 no origin [#15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 0, 3] #15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#20<#12<#0..#0x6>..#18<#12<#0..#0x3>..#12<#0..#0x3>x1>x0>[0, 0, 7] #18<#12<#0..#0x3>..#12<#0..#0x3>x1>→#20<#12<#0..#0x6>..#18<#12<#0..#0x3>..#12<#0..#0x3>x1>x0>[0, 0, 4]] cycle -> #12
+    f23 origin #24<#12<#0..#0x5>..#12<#0..#0x5>x1> [#24<#12<#0..#0x5>..#12<#0..#0x5>x1>→#23<#13<#1..#1x6>..#12<#0..#0x2>x0>[0, 4, -2] #24<#12<#0..#0x5>..#12<#0..#0x5>x1>→#21<#13<#1..#1x2>..#12<#0..#0x6>x0>[0, 4, -1] #21<#13<#1..#1x2>..#12<#0..#0x6>x0>→#16<#1..#12<#0..#0x4>x0>[0, 4, 0]] -> #12
+    f11 origin #13<#1..#1x6> [#13<#1..#1x6>→#14<#1..#0x0>[0, 2, 2] #13<#1..#1x6>→#12<#0..#0x2>[0, 7, 0]] -> #23
     f25 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [#15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#26<#13<#1..#1x3>..#13<#1..#1x3>x1>[0, 3, -1] #15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#19<#12<#0..#0x6>..#12<#0..#0x4>x0>[0, 7, -1]] -> #33
-    f9 origin #13<#1..#1x2> [#13<#1..#1x2>→#12<#0..#0x6>[0, 3, 1] #13<#1..#1x2>→#14<#1..#0x0>[0, 2, 1]] -> #21
-    f23 origin #24<#12<#0..#0x5>..#12<#0..#0x5>x1> [#24<#12<#0..#0x5>..#12<#0..#0x5>x1>→#21<#13<#1..#1x2>..#12<#0..#0x6>x0>[0, 4, -1] #21<#13<#1..#1x2>..#12<#0..#0x6>x0>→#16<#1..#12<#0..#0x4>x0>[0, 4, 0]] -> #12
-    f29 origin #20<#12<#0..#0x6>..#18<#12<#0..#0x3>..#12<#0..#0x3>x1>x0> [#20<#12<#0..#0x6>..#18<#12<#0..#0x3>..#12<#0..#0x3>x1>x0>→#22<#12<#0..#0x6>..#13<#1..#1x2>x0>[0, 0, 2] #20<#12<#0..#0x6>..#18<#12<#0..#0x3>..#12<#0..#0x3>x1>x0>→#33<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#19<#12<#0..#0x6>..#12<#0..#0x4>x0>x0>[0, 0, 5]] -> #12
-    f16 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x2> [#15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#12<#0..#0x2>[0, 11, 3] #15<#12<#0..#0x13>..#12<#0..#0x13>x2>→#13<#1..#1x6>[0, 4, 3]] -> #28
-  test: 0 images | spoke 0 | right 0 (0.0%) | apex/image 0.0 | neurons 46 functions 40
+  test: 0 images | spoke 0 | right 0 (0.0%) | apex/image 0.0 | neurons 39 functions 34
   confusion (row = digit, column = said):
     0 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     1 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

@@ -32,10 +32,10 @@ node apps/stocks/jobs/synthetic-extended-test.js
 **Expected output:**
 ```
 CYCLE 20 | neurons 11 | functions 7 | highest call level in the cycle 3 | the dictionary last changed at frame 73 | right KGC 100.00%
-inference KGC: right 227 of 238 | every bar right from cycle 8
+inference KGC: right 225 of 238 | every bar right from cycle 8
 ```
 
-227 of 238 bars right (95.4%), and every bar right from the eighth lap on.
+225 of 238 bars right (94.5%), and every bar right from the eighth lap on.
 
 ## The six-bar lap
 
@@ -83,7 +83,7 @@ over the shorter runs, 87–99%:
 |---|---|---|---|---|
 | `--mode two --laps 10` (KGC, GLD) | KGC 107, GLD 106 | 118 each | 5, 5 | 20 |
 | `--mode lap --laps 30` (A +1 −2 −3 +2 +3 −1, B +2 +1 −1 −3 +3 −2) | A 177, B 166 | 179 each | 2, 9 | 13 |
-| `--mode lap65 --laps 12` (A on six bars, B on five: they repeat together every 30) | A 318, B 313 | 359 each | 5, 9 | 50 |
+| `--mode lap65 --laps 12` (A on six bars, B on five: they repeat together every 30) | A 318, B 311 | 359 each | 5, 11 | 50 |
 | `--mode three --laps 100` | KGC 1181, GLD 1188, SPY 1177 | 1199 each | 8, 8, 9 | 43 |
 | `--mode three4 --laps 100 --all4` | KGC 1181, GLD 1190, SPY 1171, Q 1179 | 1199 each | 7, 5, 9, 8 | 50 |
 
@@ -101,12 +101,12 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 
 **Expected output** (the end of the lap):
 ```
-TRADER lap 1 | net profit $33001.33 | ROI +220.01% | +0.021651%/frame | Sharpe 0.01 | transaction cost $25904.65 | trades 24963
-CYCLE 1 | neurons 1833 | functions 1793 | highest call level in the cycle 4 | the dictionary last changed at frame 5373 | right SO 50.56%, VALE 50.63%, STLD 50.43%, GOOGL 51.04%, MU 49.94%, PLTR 49.79%, UUUU 50.18%, PFE 51.08%, CRM 49.07%, HAL 50.45% | net profit $33001.33, ROI 220.01% (24963 trades)
+TRADER lap 1 | net profit $36844.68 | ROI +245.63% | +0.023085%/frame | Sharpe 0.02 | transaction cost $25923.67 | trades 25028
+CYCLE 1 | neurons 1829 | functions 1789 | highest call level in the cycle 4 | the dictionary last changed at frame 5373 | right SO 50.63%, VALE 50.78%, STLD 50.60%, GOOGL 50.97%, MU 50.04%, PLTR 50.00%, UUUU 50.12%, PFE 51.45%, CRM 49.24%, HAL 50.99% | net profit $36844.68, ROI 245.63% (25028 trades)
 ```
 
 **In one pass, the brain does not predict the next day's move.** Every stock is right on about half of its real bars
-(49–51%), and the trader's Sharpe ratio is 0.01: $15,000 becomes $48,001, about 5.6% a year, which is what holding a
+(49–51%), and the trader's Sharpe ratio is 0.02: $15,000 becomes $51,845, about 6.0% a year, which is what holding a
 basket of risky stocks pays, with no skill in it. The run takes about 30 seconds.
 
 The ride is rough. The portfolio holds three stocks on 82% of the bars, nearly always fully invested, with no cash
@@ -114,12 +114,12 @@ cushion:
 
 | | |
 |---|---|
-| drawdowns deeper than 10% / 20% / 30% / 50% | 13 / 5 / 2 / 1 |
-| the deepest | −75.7%, from June 2008 ($25,830) to March 2020 ($6,285); back above the 2008 peak only in March 2024 |
-| daily volatility | 2.3% (37.2% a year) |
-| days moving more than 5% / 10% | 208 / 30 |
+| drawdowns deeper than 10% / 20% / 30% / 50% | 12 / 6 / 2 / 1 |
+| the deepest | −77.2%, from June 2008 ($27,382) to March 2020 ($6,256); back above the 2008 peak only in December 2023 |
+| daily volatility | 2.3% (36.9% a year) |
+| days moving more than 5% / 10% | 202 / 31 |
 | worst and best day | −31.6% (15 July 2019), +23.5% (5 January 2009) |
-| losing years | 2005, 2008, 2011, 2015, 2018, 2019 (the worst 2008, −39.2%) |
+| losing years | 2005, 2007, 2008, 2011, 2015, 2018, 2019 (the worst 2008, −48.3%) |
 
 What the brain does with these stocks is memorize their history, lap after lap: the next demos after the random
 baseline.
@@ -139,8 +139,8 @@ Over seeds 1 to 10, against the brain's single pass over the same ten stocks wit
 
 | settings | random: profit, seeds 1–10 | random: Sharpe | the brain, first pass | beats |
 |---|---|---|---|---|
-| one stock at a time, no cost | $7,819 to $2,625,508 (middle about $68,000) | −0.08 to 0.58 | $403,594, Sharpe 0.19 | 9 of 10 seeds |
-| three stocks, 0.02% cost | −$6,883 to $915,496 (middle about $15,000) | −0.22 to 0.44 | $33,001, Sharpe 0.01 | 7 of 10 seeds |
+| one stock at a time, no cost | $7,819 to $2,625,508 (middle about $68,000) | −0.08 to 0.58 | $621,303, Sharpe 0.22 | 9 of 10 seeds |
+| three stocks, 0.02% cost | −$6,883 to $915,496 (middle about $15,000) | −0.22 to 0.44 | $36,845, Sharpe 0.02 | 7 of 10 seeds |
 
 The coin owns at most one stock in either row; the settings are the brain's, and the cost is the coin's too. On its
 first pass the brain earns more than most coins but not more than a lucky one: with daily moves right half the
@@ -157,16 +157,16 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 
 | lap | right, average of the ten | Sharpe | per-frame return | trades |
 |---|---|---|---|---|
-| 1 | 50.32% | 0.19 | +0.062% | 9,050 |
-| 2 | 53.61% | 2.05 | +0.459% | 9,177 |
-| 3 | 58.44% | 3.75 | +0.826% | 9,150 |
-| 4 | 67.28% | 6.25 | +1.555% | 9,120 |
-| 5 | 77.61% | 8.78 | +2.295% | 9,144 |
+| 1 | 50.48% | 0.22 | +0.070% | 9,062 |
+| 2 | 53.42% | 2.01 | +0.455% | 9,184 |
+| 3 | 58.46% | 3.79 | +0.839% | 9,185 |
+| 4 | 67.05% | 6.18 | +1.551% | 9,168 |
+| 5 | 77.61% | 8.87 | +2.289% | 9,155 |
 
 All ten stocks climb together: in lap 5 every one is right on 76–79% of its bars. The trader's return per bar and its
-Sharpe ratio climb with them, and ahead of the share right: at 53.61% right in lap 2 the Sharpe ratio is already 2.05.
+Sharpe ratio climb with them, and ahead of the share right: at 53.42% right in lap 2 the Sharpe ratio is already 2.01.
 The first lap's
-profit is $403,594 (ROI +2,691%); from there the profit compounds within each lap past any real figure, so the
+profit is $621,303 (ROI +4,142%); from there the profit compounds within each lap past any real figure, so the
 per-frame return and the Sharpe ratio are the numbers to read. This is memorization of the history the brain trades
 on, not a forward return. The run takes about 7 minutes.
 
@@ -180,11 +180,11 @@ node apps/stocks/jobs/test.js --symbols KGC,GOLD,SPY --episodes 5
 
 | lap | right KGC | right GOLD | right SPY | Sharpe | functions |
 |---|---|---|---|---|---|
-| 1 | 50.19% | 50.00% | 50.06% | 0.02 | 484 |
-| 2 | 53.08% | 54.48% | 53.86% | 1.31 | 807 |
-| 3 | 57.38% | 61.67% | 57.58% | 2.79 | 1,270 |
-| 4 | 62.44% | 70.59% | 62.52% | 4.35 | 2,011 |
-| 5 | 67.04% | 79.85% | 68.10% | 5.47 | 2,265 |
+| 1 | 50.43% | 49.51% | 50.43% | −0.08 | 484 |
+| 2 | 53.36% | 54.15% | 53.88% | 1.22 | 807 |
+| 3 | 57.17% | 61.77% | 57.66% | 2.76 | 1,270 |
+| 4 | 62.35% | 70.33% | 62.76% | 4.33 | 2,011 |
+| 5 | 67.06% | 80.05% | 68.43% | 5.52 | 2,265 |
 
 From a coin flip in the first lap to 67–80% in the fifth, on real market data. GOLD is graded only on its real bars, 15,232 over the five laps, against 26,864 for KGC and SPY. The run
 takes about 2½ minutes.

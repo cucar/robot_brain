@@ -95,14 +95,6 @@ inference B: right 166 of 179 | every bar right from cycle 9
   B cycle 30: RRRRRR
 recognition: 13 functions | the dictionary last changed at frame 100
 NEVERCALLED 0 of 13
-CLOSING weighed 3 joined 3 (from a function of more relations 1) | cycles at the end 2 of 13 | build joins the calls count would refuse 2 | largest such gain as a cycle 5.0 (on the calls -1.0) | weighs beyond every offset the rows hold 0 | weighs with neither end where the call stands 0 | weighs where one lap on cannot be worked out 0
-UNPAID 0 relations left a function because they did not pay there
-LIFTED TO THE STANDING CALL 0 relations went to other calls than their direct coverers
-LIFT PASSED OVER 0 dropped weak calls, 0 calls aged off the board
-CYCLELAPS f6 | closed at frame 31 | closing strength 4 | held [4] | calls under one lap 0 | one lap or more 1 | most laps 1 | now f6 origin #10<#0..#0x0> [#10<#0..#0x0>→#9<#1..#1x0>[-1, 0, 0]] -> #14 (no longer a cycle)
-CYCLELAPS f8 | closed at frame 38 | closing strength 5 | held [4, 5] | calls under one lap 0 | one lap or more 24 | most laps 1 | now f8 no origin [#10<#0..#0x0>→#11<#0..#0x0>[-1, 0, 0] #11<#0..#0x0>→#9<#1..#1x0>[-1, 0, 0] #9<#1..#1x0>→#10<#0..#0x0>[-1, 0, 0]] cycle -> #16
-CYCLELAPS f16 | closed at frame 100 | closing strength 3 | held [4] | calls under one lap 0 | one lap or more 1 | most laps 14 | now f16 no origin [#23<#19<#18<#12<#1..#1x0>..#10<#0..#0x0>x0>..#16<#10<#0..#0x0>..#9<#1..#1x0>x1>x0>..#21<#16<#9<#1..#1x0>..#9<#1..#1x0>x0>..#18<#9<#1..#1x0>..#10<#0..#0x0>x0>x0>x0>→#22<#21<#14<#10<#0..#0x0>..#9<#1..#1x0>x0>..#18<#9<#1..#1x0>..#10<#0..#0x0>x0>x0>..#19<#18<#12<#1..#1x0>..#10<#0..#0x0>x0>..#16<#10<#0..#0x0>..#9<#1..#1x0>x1>x0>x0>[-4, 0, 0] #22<#21<#14<#10<#0..#0x0>..#9<#1..#1x0>x0>..#18<#9<#1..#1x0>..#10<#0..#0x0>x0>x0>..#19<#18<#12<#1..#1x0>..#10<#0..#0x0>x0>..#16<#10<#0..#0x0>..#9<#1..#1x0>x1>x0>x0>→#23<#19<#18<#12<#1..#1x0>..#10<#0..#0x0>x0>..#16<#10<#0..#0x0>..#9<#1..#1x0>x1>x0>..#21<#16<#9<#1..#1x0>..#9<#1..#1x0>x0>..#18<#9<#1..#1x0>..#10<#0..#0x0>x0>x0>x0>[-2, 0, 0]] cycle -> #24
-JOINSMOVES joins frame 0 time 0 | moves frame 0 time 6
   combination calls per frame, per cycle: 1:000000 2:101011 3:111111 4:111111 5:111111 6:111111 7:111111 8:111111 9:111111 10:111111 11:111111 12:111111 13:111111 14:111111 15:111111 16:111111 17:111111 18:111111 19:111111 20:111111 21:111111 22:111111 23:111111 24:111111 25:111111 26:111111 27:111111 28:111111 29:111111 30:111111
   one call on the apex stands for A's six bars of a lap: from lap 13 (18 of 30 laps)
   one call on the apex stands for B's six bars of a lap: from lap 13 (18 of 30 laps)
@@ -128,50 +120,8 @@ JOINSMOVES joins frame 0 time 0 | moves frame 0 time 6
   function f14 | level 4 | nodes call(f13), call(f11) | relations call(f13) → call(f11) at t-2 | a call in the last cycle
   function f15 | level 4 | nodes call(f11), call(f13) | relations call(f11) → call(f13) at t-3 | a call in the last cycle
   function f16 | level 5 | nodes call(f15), call(f14) | relations call(f15) → call(f14) at t-4; call(f14) → call(f15) at t-2 | a cycle | a call in the last cycle
-  calls on the apex at the last frame: 52 | reaching frames 175-180: 8
-  apex: call of f13 | level 3 | frames {91} | channels 2
-  apex: call of f8 | level 2 | frames {91, 92, 93} | channels 2
-  apex: call of f16 | level 5 | frames {91, 92, 93, 94} | channels 2
-  apex: call of f10 | level 2 | frames {93, 94, 95} | channels 2
-  apex: call of f17 | level 5 | frames {91, 92, 93, 94, 95, 96} | channels 2
-  apex: call of f13 | level 3 | frames {93, 94, 95, 96, 97} | channels 2
-  apex: call of f8 | level 2 | frames {96, 97, 98, 99} | channels 2
-  apex: call of f10 | level 2 | frames {99, 100, 101} | channels 2
-  apex: call of f13 | level 3 | frames {99, 100, 101, 102, 103} | channels 2
-  apex: call of f8 | level 2 | frames {102, 103, 104, 105} | channels 2
-  apex: call of f10 | level 2 | frames {105, 106, 107} | channels 2
-  apex: call of f13 | level 3 | frames {105, 106, 107, 108, 109} | channels 2
-  apex: call of f8 | level 2 | frames {108, 109, 110, 111} | channels 2
-  apex: call of f10 | level 2 | frames {111, 112, 113} | channels 2
-  apex: call of f13 | level 3 | frames {111, 112, 113, 114, 115} | channels 2
-  apex: call of f8 | level 2 | frames {114, 115, 116, 117} | channels 2
-  apex: call of f10 | level 2 | frames {117, 118, 119} | channels 2
-  apex: call of f13 | level 3 | frames {117, 118, 119, 120, 121} | channels 2
-  apex: call of f8 | level 2 | frames {120, 121, 122, 123} | channels 2
-  apex: call of f10 | level 2 | frames {123, 124, 125} | channels 2
-  apex: call of f13 | level 3 | frames {123, 124, 125, 126, 127} | channels 2
-  apex: call of f8 | level 2 | frames {126, 127, 128, 129} | channels 2
-  apex: call of f10 | level 2 | frames {129, 130, 131} | channels 2
-  apex: call of f13 | level 3 | frames {129, 130, 131, 132, 133} | channels 2
-  apex: call of f8 | level 2 | frames {132, 133, 134, 135} | channels 2
-  apex: call of f10 | level 2 | frames {135, 136, 137} | channels 2
-  apex: call of f13 | level 3 | frames {135, 136, 137, 138, 139} | channels 2
-  apex: call of f8 | level 2 | frames {138, 139, 140, 141} | channels 2
-  apex: call of f10 | level 2 | frames {141, 142, 143} | channels 2
-  apex: call of f13 | level 3 | frames {141, 142, 143, 144, 145} | channels 2
-  apex: call of f8 | level 2 | frames {144, 145, 146, 147} | channels 2
-  apex: call of f10 | level 2 | frames {147, 148, 149} | channels 2
-  apex: call of f13 | level 3 | frames {147, 148, 149, 150, 151} | channels 2
-  apex: call of f8 | level 2 | frames {150, 151, 152, 153} | channels 2
-  apex: call of f10 | level 2 | frames {153, 154, 155} | channels 2
-  apex: call of f13 | level 3 | frames {153, 154, 155, 156, 157} | channels 2
-  apex: call of f8 | level 2 | frames {156, 157, 158, 159} | channels 2
-  apex: call of f10 | level 2 | frames {159, 160, 161} | channels 2
-  apex: call of f13 | level 3 | frames {159, 160, 161, 162, 163} | channels 2
-  apex: call of f8 | level 2 | frames {162, 163, 164, 165} | channels 2
-  apex: call of f10 | level 2 | frames {165, 166, 167} | channels 2
-  apex: call of f13 | level 3 | frames {165, 166, 167, 168, 169} | channels 2
-  apex: call of f8 | level 2 | frames {168, 169, 170, 171} | channels 2
+  calls on the apex at the last frame: 10 | reaching frames 175-180: 8
+  apex: call of f8 | level 2 | frames {171} | channels 2
   apex: call of f10 | level 2 | frames {171, 172, 173} | channels 2
   apex: call of f13 | level 3 | frames {171, 172, 173, 174, 175} | channels 2
   apex: call of f8 | level 2 | frames {174, 175, 176, 177} | channels 2
@@ -180,5 +130,5 @@ JOINSMOVES joins frame 0 time 0 | moves frame 0 time 6
   apex: call of f6 | level 2 | frames {179, 180} | channels 2
   apex: call of f13 | level 3 | frames {177, 178, 179, 180} | channels 2
   apex: call of f14 | level 4 | frames {174, 175, 176, 177, 178, 179, 180} | channels 2
-  apex: call of f16 | level 5 | frames {91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180} | channels 2
+  apex: call of f16 | level 5 | frames {171, 172, 173, 174, 175, 176, 177, 178, 179, 180} | channels 2
 

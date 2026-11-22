@@ -131,7 +131,7 @@ Because the plateau-potential work is the tightest biological fit, its scope mus
 | Core primitive | Integrate + threshold | Integrate + threshold | Coincidence via delays | Thresholded coincidence count | Match + route | **Fit a graph of exact offsets; name it** |
 | Multi-channel | Via designed layers | Via graph | No | Columns | No | **One dictionary; neighborhood policy** |
 | Spatial processing | Imported convolution | Imported convolution | No | Spatial pooler (designed) | No | **Native (offsets in space and time in one graph)** |
-| Online class-incremental, no replay | No | Not demonstrated | No | Partial | N/A | **Partial: Split-MNIST 44.26% after five tasks, no unseen class ever named (14×14, 10,000 images; [mnist-demos.md](mnist-demos.md))** |
+| Online class-incremental, no replay | No | Not demonstrated | No | Partial | N/A | **Partial: Split-MNIST 45.81% after five tasks, no unseen class ever named (14×14, 10,000 images; [mnist-demos.md](mnist-demos.md))** |
 | Representation | Distributed weights | Distributed weights | Distributed | SDR | Discrete symbolic | **Discrete named graphs** |
 
 ---

@@ -19,17 +19,17 @@ episode, and `--describe <letters>` prints the dictionary and the letters' neuro
 
 **Expected output:**
 ```
-EPISODE 1 | right 12321/33053 (37.28%) | functions 2009
-EPISODE 2 | right 13310/33053 (40.27%) | functions 2692
-EPISODE 3 | right 13948/33053 (42.20%) | functions 3296
-EPISODE 4 | right 14741/33053 (44.60%) | functions 3803
-EPISODE 5 | right 15455/33053 (46.76%) | functions 4226
-right 15455/33053 | neurons 4482 alive of 24617 | patterns 4226 | heights [4474, 7, 1]
+EPISODE 1 | right 12358/33053 (37.39%) | functions 2009
+EPISODE 2 | right 13336/33053 (40.35%) | functions 2692
+EPISODE 3 | right 13960/33053 (42.24%) | functions 3295
+EPISODE 4 | right 14733/33053 (44.57%) | functions 3805
+EPISODE 5 | right 15450/33053 (46.74%) | functions 4230
+right 15450/33053 | neurons 4486 alive of 24623 | patterns 4230 | heights [4478, 7, 1]
 ```
 
-The text is 33,054 bytes. The share of bytes said right climbs every episode, from 37.28% to 46.76% in five, and is
-still climbing at the fifth; the dictionary grows by 683, 604, 507 and 423 functions from one episode to the next. The
-last line counts the living neurons by height: 4,474 at height 0, 7 at height 1 and 1 at height 2. The run takes about
+The text is 33,054 bytes. The share of bytes said right climbs every episode, from 37.39% to 46.74% in five, and is
+still climbing at the fifth; the dictionary grows by 683, 603, 510 and 425 functions from one episode to the next. The
+last line counts the living neurons by height: 4,478 at height 0, 7 at height 1 and 1 at height 2. The run takes about
 4½ minutes.
 
 ---
@@ -65,7 +65,7 @@ node apps/text/jobs/alternation.js 33
 ```
 right 30/30 | neurons 27 | functions 1
 alternation inference 30/30 | wrong at frames []
-recognition: 1 function(s): f0 no origin [#24→#23[-1, 0, 0] #23→#24[-1, 0, 0]] cycle -> #26 | the dictionary last changed at frame 8
+recognition: 1 function(s): f0 no origin [#24→#23[-1] #23→#24[-1]] cycle -> #26 | the dictionary last changed at frame 8
 ```
 
 30 of 30 said right, none wrong, with one function at the end: a cycle over the two letters, the dictionary's last

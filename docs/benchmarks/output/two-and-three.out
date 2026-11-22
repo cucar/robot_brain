@@ -22,34 +22,34 @@ the 3:
   round  2: the 2 said 3 | the 3 said 2 | functions 9 edges 9 | dictionary changed
   round  3: the 2 said 3 | the 3 said 2 | functions 14 edges 15 | dictionary changed
   round  4: the 2 said 2 | the 3 said 3 | functions 16 edges 17 | dictionary changed
-  round  5: the 2 said 2 | the 3 said 3 | functions 20 edges 25 | dictionary changed
-  round  6: the 2 said 2 | the 3 said 2 | functions 20 edges 30 | dictionary changed
-  round  7: the 2 said 2 | the 3 said 3 | functions 21 edges 32 | dictionary changed
+  round  5: the 2 said 2 | the 3 said 3 | functions 20 edges 24 | dictionary changed
+  round  6: the 2 said 2 | the 3 said 3 | functions 20 edges 29 | dictionary changed
+  round  7: the 2 said 2 | the 3 said 3 | functions 21 edges 31 | dictionary changed
   round  8: the 2 said 2 | the 3 said 3 | functions 23 edges 35 | dictionary changed
   round  9: the 2 said 2 | the 3 said 3 | functions 23 edges 35 | dictionary same
-  round 10: the 2 said 2 | the 3 said 3 | functions 24 edges 37 | dictionary changed
-  round 11: the 2 said 2 | the 3 said 3 | functions 25 edges 38 | dictionary changed
-  round 12: the 2 said 2 | the 3 said 3 | functions 25 edges 38 | dictionary same
-  round 13: the 2 said 2 | the 3 said 3 | functions 26 edges 40 | dictionary changed
-  round 14: the 2 said 2 | the 3 said 3 | functions 26 edges 40 | dictionary same
-  round 15: the 2 said 2 | the 3 said 3 | functions 26 edges 40 | dictionary same
-  round 16: the 2 said 2 | the 3 said 3 | functions 26 edges 40 | dictionary same
-  round 17: the 2 said 2 | the 3 said 3 | functions 26 edges 40 | dictionary same
-  round 18: the 2 said 2 | the 3 said 3 | functions 26 edges 40 | dictionary same
-  round 19: the 2 said 2 | the 3 said 3 | functions 26 edges 40 | dictionary same
-  round 20: the 2 said 2 | the 3 said 3 | functions 26 edges 40 | dictionary same
-  round 21: the 2 said 2 | the 3 said 3 | functions 26 edges 40 | dictionary same
-  round 22: the 2 said 2 | the 3 said 3 | functions 26 edges 40 | dictionary same
-  round 23: the 2 said 2 | the 3 said 3 | functions 26 edges 40 | dictionary same
-  round 24: the 2 said 2 | the 3 said 3 | functions 24 edges 38 | dictionary changed
-  round 25: the 2 said 2 | the 3 said 3 | functions 24 edges 38 | dictionary same
-  round 26: the 2 said 2 | the 3 said 3 | functions 24 edges 38 | dictionary same
-  round 27: the 2 said 2 | the 3 said 3 | functions 24 edges 38 | dictionary same
-  round 28: the 2 said 2 | the 3 said 3 | functions 24 edges 38 | dictionary same
-  round 29: the 2 said 2 | the 3 said 3 | functions 24 edges 38 | dictionary same
-  round 30: the 2 said 2 | the 3 said 3 | functions 24 edges 38 | dictionary same
-  the dictionary last changed at round 24
-  dictionary: 24 functions
+  round 10: the 2 said 2 | the 3 said 3 | functions 23 edges 36 | dictionary changed
+  round 11: the 2 said 2 | the 3 said 3 | functions 24 edges 37 | dictionary changed
+  round 12: the 2 said 2 | the 3 said 3 | functions 24 edges 37 | dictionary same
+  round 13: the 2 said 2 | the 3 said 3 | functions 25 edges 39 | dictionary changed
+  round 14: the 2 said 2 | the 3 said 3 | functions 25 edges 39 | dictionary same
+  round 15: the 2 said 2 | the 3 said 3 | functions 25 edges 39 | dictionary same
+  round 16: the 2 said 2 | the 3 said 3 | functions 25 edges 39 | dictionary same
+  round 17: the 2 said 2 | the 3 said 3 | functions 25 edges 39 | dictionary same
+  round 18: the 2 said 2 | the 3 said 3 | functions 25 edges 39 | dictionary same
+  round 19: the 2 said 2 | the 3 said 3 | functions 25 edges 39 | dictionary same
+  round 20: the 2 said 2 | the 3 said 3 | functions 25 edges 39 | dictionary same
+  round 21: the 2 said 2 | the 3 said 3 | functions 25 edges 39 | dictionary same
+  round 22: the 2 said 2 | the 3 said 3 | functions 25 edges 39 | dictionary same
+  round 23: the 2 said 2 | the 3 said 3 | functions 25 edges 39 | dictionary same
+  round 24: the 2 said 2 | the 3 said 3 | functions 23 edges 37 | dictionary changed
+  round 25: the 2 said 2 | the 3 said 3 | functions 23 edges 37 | dictionary same
+  round 26: the 2 said 2 | the 3 said 3 | functions 23 edges 37 | dictionary same
+  round 27: the 2 said 2 | the 3 said 3 | functions 23 edges 37 | dictionary same
+  round 28: the 2 said 2 | the 3 said 3 | functions 23 edges 38 | dictionary changed
+  round 29: the 2 said 2 | the 3 said 3 | functions 23 edges 42 | dictionary changed
+  round 30: the 2 said 2 | the 3 said 3 | functions 23 edges 42 | dictionary same
+  the dictionary last changed at round 29
+  dictionary: 23 functions
     f0: a cycle, no origin, interneuron #12
       black sees black at (+1, +0)   [#0→#0[0, 1, 0]]
     f1: a cycle, no origin, interneuron #13
@@ -59,11 +59,11 @@ the 3:
     f3: a cycle, no origin, interneuron #15
       white sees white at (+0, +1)   [#1→#1[0, 0, 1]]
     f6: a cycle, no origin, interneuron #18
-      the call #12 of f0,f13,f21,f22,f24 (from black to black, 3 laps) sees the call #12 of f0,f13,f21,f22,f24 (from black to black, 3 laps) at (+0, +1)   [#12<#0..#0x3>→#12<#0..#0x3>[0, 0, 1]]
+      the call #12 of f0,f13,f21,f22,f23 (from black to black, 3 laps) sees the call #12 of f0,f13,f21,f22,f23 (from black to black, 3 laps) at (+0, +1)   [#12<#0..#0x3>→#12<#0..#0x3>[0, 0, 1]]
     f7: origin the call #14 of f2 (from black to black, 8 laps), interneuron #19
       the call #14 of f2 (from black to black, 8 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+1, +2)   [#14<#0..#0x8>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 1, 2]]
-    f8: origin the call #12 of f0,f13,f21,f22,f24 (from black to black, 4 laps), interneuron #20
-      the call #12 of f0,f13,f21,f22,f24 (from black to black, 4 laps) sees the call #14 of f2 (from black to black, 8 laps) at (+5, -8)   [#12<#0..#0x4>→#14<#0..#0x8>[0, 5, -8]]
+    f8: origin the call #12 of f0,f13,f21,f22,f23 (from black to black, 4 laps), interneuron #20
+      the call #12 of f0,f13,f21,f22,f23 (from black to black, 4 laps) sees the call #14 of f2 (from black to black, 8 laps) at (+5, -8)   [#12<#0..#0x4>→#14<#0..#0x8>[0, 5, -8]]
     f9: a cycle, no origin, interneuron #21
       the call #13 of f1 (from white to white, 4 laps) sees the call #15 of f3,f18 (from white to white, 1 laps) at (+4, +1)   [#13<#1..#1x4>→#15<#1..#1x1>[0, 4, 1]]
       the call #13 of f1 (from white to white, 4 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+0, +1)   [#13<#1..#1x4>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 0, 1]]
@@ -81,13 +81,15 @@ the 3:
     f14: origin the call #14 of f2 (from black to black, 8 laps), interneuron #25
       the call #14 of f2 (from black to black, 8 laps) sees the call #13 of f1 (from white to white, 4 laps) at (+1, +7)   [#14<#0..#0x8>→#13<#1..#1x4>[0, 1, 7]]
       the call #14 of f2 (from black to black, 8 laps) sees the call #15 of f3,f18 (from white to white, 1 laps) at (+1, +5)   [#14<#0..#0x8>→#15<#1..#1x1>[0, 1, 5]]
-      the call #14 of f2 (from black to black, 8 laps) sees the call #12 of f0,f13,f21,f22,f24 (from black to black, 4 laps) at (+1, +0)   [#14<#0..#0x8>→#12<#0..#0x4>[0, 1, 0]]
+      the call #14 of f2 (from black to black, 8 laps) sees the call #12 of f0,f13,f21,f22,f23 (from black to black, 4 laps) at (+1, +0)   [#14<#0..#0x8>→#12<#0..#0x4>[0, 1, 0]]
     f15: a cycle, no origin, interneuron #26
       the call #14 of f2 (from black to black, 8 laps) sees the call #13 of f1 (from white to white, 3 laps) at (+1, +4)   [#14<#0..#0x8>→#13<#1..#1x3>[0, 1, 4]]
       the call #14 of f2 (from black to black, 8 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+1, +5)   [#14<#0..#0x8>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 1, 5]]
       the call #13 of f1 (from white to white, 3 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+0, +1)   [#13<#1..#1x3>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 0, 1]]
-    f16: origin the call #12 of f0,f13,f21,f22,f24 (from black to black, 4 laps), interneuron #27
-      the call #12 of f0,f13,f21,f22,f24 (from black to black, 4 laps) sees the call #20 of f8 (from #12<#0..#0x4> to #14<#0..#0x8>, 0 laps) at (+0, +8)   [#12<#0..#0x4>→#20<#12<#0..#0x4>..#14<#0..#0x8>x0>[0, 0, 8]]
+    f16: a cycle, no origin, interneuron #27
+      the call #12 of f0,f13,f21,f22,f23 (from black to black, 4 laps) sees the call #20 of f8 (from #12<#0..#0x4> to #14<#0..#0x8>, 0 laps) at (+0, +8)   [#12<#0..#0x4>→#20<#12<#0..#0x4>..#14<#0..#0x8>x0>[0, 0, 8]]
+      the call #12 of f0,f13,f21,f22,f23 (from black to black, 4 laps) sees the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #13<#1..#1x3>, 0 laps) at (+0, +1)   [#12<#0..#0x4>→#29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#13<#1..#1x3>x0>[0, 0, 1]]
+      the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #13<#1..#1x3>, 0 laps) sees the call #20 of f8 (from #12<#0..#0x4> to #14<#0..#0x8>, 0 laps) at (+0, +7)   [#29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#13<#1..#1x3>x0>→#20<#12<#0..#0x4>..#14<#0..#0x8>x0>[0, 0, 7]]
     f17: a cycle, no origin, interneuron #28
       the call #21 of f9 (from #13<#1..#1x4> to #15<#1..#1x1>, 0 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+0, +1)   [#21<#13<#1..#1x4>..#15<#1..#1x1>x0>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 0, 1]]
       the call #21 of f9 (from #13<#1..#1x4> to #15<#1..#1x1>, 0 laps) sees the call #22 of f10 (from #13<#1..#1x4> to #15<#1..#1x1>, 0 laps) at (+0, +3)   [#21<#13<#1..#1x4>..#15<#1..#1x1>x0>→#22<#13<#1..#1x4>..#15<#1..#1x1>x0>[0, 0, 3]]
@@ -96,30 +98,45 @@ the 3:
       the call #22 of f10 (from #13<#1..#1x4> to #15<#1..#1x1>, 0 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+1, +1)   [#22<#13<#1..#1x4>..#15<#1..#1x1>x0>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 1, 1]]
     f19: origin the call #23 of f11 (from #13<#1..#1x3> to #15<#1..#1x6>, 0 laps), interneuron #29
       the call #23 of f11 (from #13<#1..#1x3> to #15<#1..#1x6>, 0 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+0, +1)   [#23<#13<#1..#1x3>..#15<#1..#1x6>x0>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 0, 1]]
-      the call #23 of f11 (from #13<#1..#1x3> to #15<#1..#1x6>, 0 laps) sees the call #24 of f12 (from #18<#12<#0..#0x3>..#12<#0..#0x3>x1> to #13<#1..#1x3>, 0 laps) at (+0, +4)   [#23<#13<#1..#1x3>..#15<#1..#1x6>x0>→#24<#18<#12<#0..#0x3>..#12<#0..#0x3>x1>..#13<#1..#1x3>x0>[0, 0, 4]]
       the call #23 of f11 (from #13<#1..#1x3> to #15<#1..#1x6>, 0 laps) sees the call #13 of f1 (from white to white, 3 laps) at (+0, +6)   [#23<#13<#1..#1x3>..#15<#1..#1x6>x0>→#13<#1..#1x3>[0, 0, 6]]
+      the call #23 of f11 (from #13<#1..#1x3> to #15<#1..#1x6>, 0 laps) sees the call #20 of f8 (from #12<#0..#0x4> to #14<#0..#0x8>, 0 laps) at (+0, +7)   [#23<#13<#1..#1x3>..#15<#1..#1x6>x0>→#20<#12<#0..#0x4>..#14<#0..#0x8>x0>[0, 0, 7]]
     f20: origin the call #25 of f14 (from #14<#0..#0x8> to #13<#1..#1x4>, 0 laps), interneuron #30
       the call #25 of f14 (from #14<#0..#0x8> to #13<#1..#1x4>, 0 laps) sees the call #22 of f10 (from #13<#1..#1x4> to #15<#1..#1x1>, 0 laps) at (+1, +4)   [#25<#14<#0..#0x8>..#13<#1..#1x4>x0>→#22<#13<#1..#1x4>..#15<#1..#1x1>x0>[0, 1, 4]]
     f21: origin the call #25 of f14 (from #14<#0..#0x8> to #13<#1..#1x4>, 0 laps), interneuron #12
       the call #25 of f14 (from #14<#0..#0x8> to #13<#1..#1x4>, 0 laps) sees the call #27 of f16 (from #12<#0..#0x4> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) at (+1, +0)   [#25<#14<#0..#0x8>..#13<#1..#1x4>x0>→#27<#12<#0..#0x4>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>[0, 1, 0]]
     f22: origin the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps), interneuron #12
       the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #27 of f16 (from #12<#0..#0x4> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) at (+1, +0)   [#26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#27<#12<#0..#0x4>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>[0, 1, 0]]
-      the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #24<#18<#12<#0..#0x3>..#12<#0..#0x3>x1>..#13<#1..#1x3>x0>, 0 laps) at (+1, +1)   [#26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#24<#18<#12<#0..#0x3>..#12<#0..#0x3>x1>..#13<#1..#1x3>x0>x0>[0, 1, 1]]
-    f23: origin the call #12 of f0,f13,f21,f22,f24 (from #26<#14<#0..#0x8>..#13<#1..#1x3>x0> to #27<#12<#0..#0x4>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>, 0 laps), interneuron #31
-      the call #12 of f0,f13,f21,f22,f24 (from #26<#14<#0..#0x8>..#13<#1..#1x3>x0> to #27<#12<#0..#0x4>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>, 0 laps) sees the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #24<#18<#12<#0..#0x3>..#12<#0..#0x3>x1>..#13<#1..#1x3>x0>, 0 laps) at (+1, +1)   [#12<#26<#14<#0..#0x8>..#13<#1..#1x3>x0>..#27<#12<#0..#0x4>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>x0>→#29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#24<#18<#12<#0..#0x3>..#12<#0..#0x3>x1>..#13<#1..#1x3>x0>x0>[0, 1, 1]]
-    f24: origin the call #25 of f14 (from #14<#0..#0x8> to #13<#1..#1x4>, 0 laps), interneuron #12
+      the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+1, +5)   [#26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 1, 5]]
+      the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #13<#1..#1x3>, 0 laps) at (+1, +1)   [#26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#13<#1..#1x3>x0>[0, 1, 1]]
+      the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #12 of f0,f13,f21,f22,f23 (from black to black, 4 laps) at (+1, +0)   [#26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#12<#0..#0x4>[0, 1, 0]]
+      the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #20 of f8 (from #12<#0..#0x4> to #14<#0..#0x8>, 0 laps) at (+1, +8)   [#26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#20<#12<#0..#0x4>..#14<#0..#0x8>x0>[0, 1, 8]]
+    f23: origin the call #25 of f14 (from #14<#0..#0x8> to #13<#1..#1x4>, 0 laps), interneuron #12
       the call #25 of f14 (from #14<#0..#0x8> to #13<#1..#1x4>, 0 laps) sees the call #20 of f8 (from #12<#0..#0x4> to #14<#0..#0x8>, 0 laps) at (+1, +8)   [#25<#14<#0..#0x8>..#13<#1..#1x4>x0>→#20<#12<#0..#0x4>..#14<#0..#0x8>x0>[0, 1, 8]]
-    f25: origin the call #12 of f0,f13,f21,f22,f24 (from #25<#14<#0..#0x8>..#13<#1..#1x4>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps), interneuron #32
-      the call #12 of f0,f13,f21,f22,f24 (from #25<#14<#0..#0x8>..#13<#1..#1x4>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) sees the call #22 of f10 (from #13<#1..#1x4> to #15<#1..#1x1>, 0 laps) at (+1, +4)   [#12<#25<#14<#0..#0x8>..#13<#1..#1x4>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>→#22<#13<#1..#1x4>..#15<#1..#1x1>x0>[0, 1, 4]]
-      the call #12 of f0,f13,f21,f22,f24 (from #25<#14<#0..#0x8>..#13<#1..#1x4>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) sees the call #28 of f17 (from #21<#13<#1..#1x4>..#15<#1..#1x1>x0> to #18<#12<#0..#0x3>..#12<#0..#0x3>x1>, 0 laps) at (+1, +1)   [#12<#25<#14<#0..#0x8>..#13<#1..#1x4>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>→#28<#21<#13<#1..#1x4>..#15<#1..#1x1>x0>..#18<#12<#0..#0x3>..#12<#0..#0x3>x1>x0>[0, 1, 1]]
+    f24: origin the call #12 of f0,f13,f21,f22,f23 (from #25<#14<#0..#0x8>..#13<#1..#1x4>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps), interneuron #31
+      the call #12 of f0,f13,f21,f22,f23 (from #25<#14<#0..#0x8>..#13<#1..#1x4>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) sees the call #22 of f10 (from #13<#1..#1x4> to #15<#1..#1x1>, 0 laps) at (+1, +4)   [#12<#25<#14<#0..#0x8>..#13<#1..#1x4>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>→#22<#13<#1..#1x4>..#15<#1..#1x1>x0>[0, 1, 4]]
+      the call #12 of f0,f13,f21,f22,f23 (from #25<#14<#0..#0x8>..#13<#1..#1x4>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) sees the call #28 of f17 (from #21<#13<#1..#1x4>..#15<#1..#1x1>x0> to #18<#12<#0..#0x3>..#12<#0..#0x3>x1>, 0 laps) at (+1, +1)   [#12<#25<#14<#0..#0x8>..#13<#1..#1x4>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>→#28<#21<#13<#1..#1x4>..#15<#1..#1x1>x0>..#18<#12<#0..#0x3>..#12<#0..#0x3>x1>x0>[0, 1, 1]]
   test, the 2 without its digit: says 2 | voters 1
   on the apex: 1 calls, 0 bare pixels
     level 4: 1 calls
-      #32<#12<#25<#14<#0..#0x8>..#13<#1..#1x4>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>..#22<#13<#1..#1x4>..#15<#1..#1x1>x0>x0> at (0, 0) | the call #32 of f25 (from #12<#25<#14<#0..#0x8>..#13<#1..#1x4>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0> to #22<#13<#1..#1x4>..#15<#1..#1x1>x0>, 0 laps) | f25 | covers [#12<#25<#14<#0..#0x8>..#13<#1..#1x4>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>@0,0 #22<#13<#1..#1x4>..#15<#1..#1x1>x0>@1,4 #28<#21<#13<#1..#1x4>..#15<#1..#1x1>x0>..#18<#12<#0..#0x3>..#12<#0..#0x3>x1>x0>@1,1] | stands for 63 pixels
+      #31<#12<#25<#14<#0..#0x8>..#13<#1..#1x4>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>..#22<#13<#1..#1x4>..#15<#1..#1x1>x0>x0> at (0, 0) | the call #31 of f24 (from #12<#25<#14<#0..#0x8>..#13<#1..#1x4>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0> to #22<#13<#1..#1x4>..#15<#1..#1x1>x0>, 0 laps) | f24 | covers [#12<#25<#14<#0..#0x8>..#13<#1..#1x4>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>@0,0 #22<#13<#1..#1x4>..#15<#1..#1x1>x0>@1,4 #28<#21<#13<#1..#1x4>..#15<#1..#1x1>x0>..#18<#12<#0..#0x3>..#12<#0..#0x3>x1>x0>@1,1] | stands for 63 pixels
     relations between what stands on the apex: 0
-  test, the 3 without its digit: says 3 | voters 1
-  on the apex: 1 calls, 0 bare pixels
-    level 4: 1 calls
-      #12<#26<#14<#0..#0x8>..#13<#1..#1x3>x0>..#29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#24<#18<#12<#0..#0x3>..#12<#0..#0x3>x1>..#13<#1..#1x3>x0>x0>x0> at (0, 0) | the call #12 of f0,f13,f21,f22,f24 (from #26<#14<#0..#0x8>..#13<#1..#1x3>x0> to #29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#24<#18<#12<#0..#0x3>..#12<#0..#0x3>x1>..#13<#1..#1x3>x0>x0>, 0 laps) | f22 | covers [#26<#14<#0..#0x8>..#13<#1..#1x3>x0>@0,0 #27<#12<#0..#0x4>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>@1,0 #29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#24<#18<#12<#0..#0x3>..#12<#0..#0x3>x1>..#13<#1..#1x3>x0>x0>@1,1] | stands for 63 pixels
-    relations between what stands on the apex: 0
-dictionary: 24 functions, 38 edges | not at an end, would have left: 0 (strength below the threshold 0, worth alone above its contribution 0, to join another function 0) | relation at the origin left 0 (ties for the latest node 0)
+  test, the 3 without its digit: says 3 | voters 4
+  on the apex: 4 calls, 0 bare pixels
+    level 1: 1 calls
+      #12<#0..#0x4> at (1, 0) | the call #12 of f0,f13,f21,f22,f23 (from black to black, 4 laps) | f0 | covers [B@1,0 B@2,0 B@3,0 B@4,0 B@5,0] | stands for 5 pixels
+    level 2: 2 calls
+      #18<#12<#0..#0x3>..#12<#0..#0x3>x1> at (1, 5) | the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) | f6 | covers [#12<#0..#0x3>@1,5 #12<#0..#0x3>@1,6] | stands for 8 pixels
+      #26<#14<#0..#0x8>..#13<#1..#1x3>x0> at (0, 0) | the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) | f15 | covers [#14<#0..#0x8>@0,0 #13<#1..#1x3>@1,4] | stands for 13 pixels
+    level 3: 1 calls
+      #29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0> at (1, 1) | the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) | f19 | covers [#23<#13<#1..#1x3>..#15<#1..#1x6>x0>@1,1 #18<#12<#0..#0x3>..#12<#0..#0x3>x1>@1,2 #13<#1..#1x3>@1,7 #20<#12<#0..#0x4>..#14<#0..#0x8>x0>@1,8] | stands for 37 pixels
+    relations between what stands on the apex: 10
+      #12<#0..#0x4>@1,0 – #26<#14<#0..#0x8>..#13<#1..#1x3>x0>@0,0 : the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #12 of f0,f13,f21,f22,f23 (from black to black, 4 laps) at (+1, undefined) | as held: #26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#12<#0..#0x4>[0, 1] | returned at strength 60 | held by f22
+      #12<#0..#0x4>@1,0 – #29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>@1,1 : the call #12 of f0,f13,f21,f22,f23 (from black to black, 4 laps) sees the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) at (+0, +1) | as held: #12<#0..#0x4>→#29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>[0, 0, 1] | returned at strength 28 | held by no function
+      #18<#12<#0..#0x3>..#12<#0..#0x3>x1>@1,5 – #26<#14<#0..#0x8>..#13<#1..#1x3>x0>@0,0 : the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+1, +5) | as held: #26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 1, 5] | returned at strength 27 | held by f22
+      #18<#12<#0..#0x3>..#12<#0..#0x3>x1>@1,5 – #29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>@1,1 : the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+0, +4) | as held: #29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 0, 4] | returned at strength 28 | held by no function
+      #26<#14<#0..#0x8>..#13<#1..#1x3>x0>@0,0 – #12<#0..#0x4>@1,0 : the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #12 of f0,f13,f21,f22,f23 (from black to black, 4 laps) at (+1, undefined) | as held: #26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#12<#0..#0x4>[0, 1] | returned at strength 27 | held by f22
+      #26<#14<#0..#0x8>..#13<#1..#1x3>x0>@0,0 – #18<#12<#0..#0x3>..#12<#0..#0x3>x1>@1,5 : the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+1, +5) | as held: #26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 1, 5] | returned at strength 27 | held by f22
+      #26<#14<#0..#0x8>..#13<#1..#1x3>x0>@0,0 – #29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>@1,1 : the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) at (+1, +1) | as held: #26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>[0, 1, 1] | returned at strength 27 | held by no function
+      #29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>@1,1 – #26<#14<#0..#0x8>..#13<#1..#1x3>x0>@0,0 : the call #26 of f15 (from #14<#0..#0x8> to #13<#1..#1x3>, 0 laps) sees the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) at (+1, +1) | as held: #26<#14<#0..#0x8>..#13<#1..#1x3>x0>→#29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>[0, 1, 1] | returned at strength 2 | held by no function
+      #29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>@1,1 – #12<#0..#0x4>@1,0 : the call #12 of f0,f13,f21,f22,f23 (from black to black, 4 laps) sees the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) at (+0, +1) | as held: #12<#0..#0x4>→#29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>[0, 0, 1] | returned at strength 2 | held by no function
+      #29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>@1,1 – #18<#12<#0..#0x3>..#12<#0..#0x3>x1>@1,5 : the call #29 of f19 (from #23<#13<#1..#1x3>..#15<#1..#1x6>x0> to #20<#12<#0..#0x4>..#14<#0..#0x8>x0>, 0 laps) sees the call #18 of f6 (from #12<#0..#0x3> to #12<#0..#0x3>, 1 laps) at (+0, +4) | as held: #29<#23<#13<#1..#1x3>..#15<#1..#1x6>x0>..#20<#12<#0..#0x4>..#14<#0..#0x8>x0>x0>→#18<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 0, 4] | returned at strength 2 | held by no function

@@ -5,9 +5,7 @@ hline:
     BBBBBBB
     BBBBBBB
   hline showing  1: said - | levels 3 | on the apex 6 | functions 3 | dictionary changed
-BARE showing 1: black(6,2)
   hline showing  2: said 0 | levels 3 | on the apex 5 | functions 4 | dictionary changed
-BARE showing 2: black(6,2)
   hline showing  3: said 0 | levels 3 | on the apex 4 | functions 4 | dictionary same
   hline showing  4: said 0 | levels 4 | on the apex 3 | functions 5 | dictionary changed
   hline showing  5: said 0 | levels 4 | on the apex 2 | functions 6 | dictionary changed
@@ -36,17 +34,11 @@ BARE showing 2: black(6,2)
   hline showing 28: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
   hline showing 29: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
   hline showing 30: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-BARE showing 30: none
   on the apex: 1 calls, 0 bare pixels
     level 4: 1 calls
       #15<#17<#12<#0..#0x6>..#14<#12<#0..#0x6>..#13<#1..#1x4>x0>x0>..#16<#15<#12<#0..#0x6>..#12<#0..#0x6>x1>..#0x0>x0> at (0, 0) | the call #15 of f3,f6 (from #17<#12<#0..#0x6>..#14<#12<#0..#0x6>..#13<#1..#1x4>x0>x0> to #16<#15<#12<#0..#0x6>..#12<#0..#0x6>x1>..#0x0>, 0 laps) | f6 | covers [#17<#12<#0..#0x6>..#14<#12<#0..#0x6>..#13<#1..#1x4>x0>x0>@0,0 #16<#15<#12<#0..#0x6>..#12<#0..#0x6>x1>..#0x0>@0,3] | stands for 35 pixels
     relations between what stands on the apex: 0
 NEVERCALLED hline 0 of 7
-CLOSING weighed 0 joined 0 (from a function of more relations 0) | cycles at the end 3 of 7 | build joins the calls count would refuse 0 | largest such gain as a cycle - | weighs beyond every offset the rows hold 0 | weighs with neither end where the call stands 0 | weighs where one lap on cannot be worked out 0
-UNPAID 0 relations left a function because they did not pay there
-LIFTED TO THE STANDING CALL 354 relations went to other calls than their direct coverers
-LIFT PASSED OVER 0 dropped weak calls, 0 calls aged off the board
-TWICE frames with an interneuron called more than once 54 | of those, a row holds another call of the same interneuron 30
   hline: the dictionary last changed at showing 7 (unchanged over the last 23 showings)
   dictionary: 7 functions
     f0: a cycle, no origin, interneuron #12
@@ -64,4 +56,3 @@ TWICE frames with an interneuron called more than once 54 | of those, a row hold
       the call #12 of f0 (from black to black, 6 laps) sees the call #14 of f2 (from #12<#0..#0x6> to #13<#1..#1x4>, 0 laps) at (+0, +1)   [#12<#0..#0x6>→#14<#12<#0..#0x6>..#13<#1..#1x4>x0>[0, 0, 1]]
     f6: origin the call #17 of f5 (from #12<#0..#0x6> to #14<#12<#0..#0x6>..#13<#1..#1x4>x0>, 0 laps), interneuron #15
       the call #17 of f5 (from #12<#0..#0x6> to #14<#12<#0..#0x6>..#13<#1..#1x4>x0>, 0 laps) sees the call #16 of f4 (from #15<#12<#0..#0x6>..#12<#0..#0x6>x1> to black, 0 laps) at (+0, +3)   [#17<#12<#0..#0x6>..#14<#12<#0..#0x6>..#13<#1..#1x4>x0>x0>→#16<#15<#12<#0..#0x6>..#12<#0..#0x6>x1>..#0x0>[0, 0, 3]]
-dictionary: 7 functions, 8 edges | not at an end, would have left: 0 (strength below the threshold 0, worth alone above its contribution 0, to join another function 0) | relation at the origin left 0 (ties for the latest node 0)
