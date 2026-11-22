@@ -5,12 +5,12 @@ CYCLE 3 | neurons 25 | functions 17 | highest call level in the cycle 3 | the di
 CYCLE 4 | neurons 28 | functions 20 | highest call level in the cycle 3 | the dictionary last changed at frame 120 | right A 90.00%, B 80.00%
 CYCLE 5 | neurons 42 | functions 34 | highest call level in the cycle 3 | the dictionary last changed at frame 148 | right A 100.00%, B 86.67%
 CYCLE 6 | neurons 38 | functions 29 | highest call level in the cycle 4 | the dictionary last changed at frame 180 | right A 100.00%, B 83.33%
-CYCLE 7 | neurons 38 | functions 30 | highest call level in the cycle 3 | the dictionary last changed at frame 196 | right A 100.00%, B 96.67%
+CYCLE 7 | neurons 38 | functions 30 | highest call level in the cycle 3 | the dictionary last changed at frame 197 | right A 100.00%, B 96.67%
 CYCLE 8 | neurons 39 | functions 31 | highest call level in the cycle 4 | the dictionary last changed at frame 234 | right A 100.00%, B 96.67%
-CYCLE 9 | neurons 49 | functions 41 | highest call level in the cycle 4 | the dictionary last changed at frame 270 | right A 100.00%, B 96.67%
-CYCLE 10 | neurons 51 | functions 42 | highest call level in the cycle 5 | the dictionary last changed at frame 300 | right A 100.00%, B 96.67%
+CYCLE 9 | neurons 49 | functions 41 | highest call level in the cycle 4 | the dictionary last changed at frame 270 | right A 100.00%, B 100.00%
+CYCLE 10 | neurons 51 | functions 42 | highest call level in the cycle 5 | the dictionary last changed at frame 300 | right A 100.00%, B 100.00%
 CYCLE 11 | neurons 59 | functions 51 | highest call level in the cycle 5 | the dictionary last changed at frame 327 | right A 100.00%, B 100.00%
-CYCLE 12 | neurons 58 | functions 50 | highest call level in the cycle 5 | the dictionary last changed at frame 347 | right A 100.00%, B 100.00%
+CYCLE 12 | neurons 58 | functions 49 | highest call level in the cycle 5 | the dictionary last changed at frame 352 | right A 100.00%, B 100.00%
 inference A: right 318 of 359 | every bar right from cycle 5
   A cycle  1: -RWWWWRRWWRRWWWWRRRWRWRRRWRWRR
   A cycle  2: RWRWRWWWWRRRWRRRRWWWRRWWWRRRWR
@@ -24,7 +24,7 @@ inference A: right 318 of 359 | every bar right from cycle 5
   A cycle 10: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
   A cycle 11: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
   A cycle 12: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
-inference B: right 311 of 359 | every bar right from cycle 11
+inference B: right 313 of 359 | every bar right from cycle 9
   B cycle  1: -WWWRRWRWRWRRRRWRRRRWRRRRWRRRR
   B cycle  2: WRRWRRRRRRWRRWRRWRRRWRRWRRWRRR
   B cycle  3: WRRWRWRRWRWWRRRWWRWRWWRRRWRRRR
@@ -33,12 +33,12 @@ inference B: right 311 of 359 | every bar right from cycle 11
   B cycle  6: RRRRRWWRRRRWRRRWWRRRRRRRRRRRRR
   B cycle  7: RRRRRRRRRRWRRRRRRRRRRRRRRRRRRR
   B cycle  8: RRRRRRRRRRWRRRRRRRRRRRRRRRRRRR
-  B cycle  9: RRRRRRRRRRWRRRRRRRRRRRRRRRRRRR
-  B cycle 10: RRRRRRRRRRWRRRRRRRRRRRRRRRRRRR
+  B cycle  9: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+  B cycle 10: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
   B cycle 11: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
   B cycle 12: RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
-recognition: 50 functions | the dictionary last changed at frame 347
-NEVERCALLED 0 of 50
+recognition: 49 functions | the dictionary last changed at frame 352
+NEVERCALLED 0 of 49
   combination calls per frame, per cycle: 1:000000101011111111111111111111 2:111111111111111111111111111111 3:111111111111111111111111111111 4:111111111111111111111111111111 5:111111111111111111111111111111 6:111111111111111111111111111111 7:111111111111111111111111111111 8:111111111111111111111111111111 9:111111111111111111111111111111 10:111111111111111111111111111111 11:111111111111111111111111111111 12:111111111111111111111111111111
   one call on the apex stands for A's six bars of a lap: from lap 11 (2 of 12 laps)
   one call on the apex stands for B's six bars of a lap: from lap 11 (2 of 12 laps)
@@ -49,7 +49,7 @@ NEVERCALLED 0 of 50
   dictionary: level 2 | over the combination calls | 10 | with a call in the last cycle 10
   dictionary: level 3 | across the channels in time | 13 | with a call in the last cycle 13
   dictionary: level 4 | across the channels in time | 14 | with a call in the last cycle 14
-  dictionary: level 5 | across the channels in time | 9 | with a call in the last cycle 9
+  dictionary: level 5 | across the channels in time | 8 | with a call in the last cycle 8
   function f0 | level 1 | nodes A↑, B↑ | relations A↑ → B↑ at t0 | a call in the last cycle
   function f1 | level 1 | nodes A↓, B↑ | relations A↓ → B↑ at t0 | a call in the last cycle
   function f2 | level 1 | nodes A↑, B↓ | relations A↑ → B↓ at t0 | a call in the last cycle
@@ -95,19 +95,19 @@ NEVERCALLED 0 of 50
   function f56 | level 5 | nodes call(f39), call(f44), call(f43) | relations call(f39) → call(f44) at t-1; call(f44) → call(f43) at t-2 | a call in the last cycle
   function f58 | level 5 | nodes call(f46), call(f45), call(f39) | relations call(f46) → call(f45) at t-2; call(f45) → call(f39) at t-1 | a call in the last cycle
   function f60 | level 5 | nodes call(f48), call(f40), call(f47) | relations call(f48) → call(f40) at t-1; call(f40) → call(f47) at t-1 | a call in the last cycle
-  function f61 | level 5 | nodes call(f49), call(f48) | relations call(f49) → call(f48) at t-4 | a call in the last cycle
-  function f62 | level 5 | nodes call(f41), call(f49) | relations call(f41) → call(f49) at t-1 | a call in the last cycle
+  function f62 | level 5 | nodes call(f41), call(f49), call(f48) | relations call(f41) → call(f49) at t-1; call(f49) → call(f48) at t-4 | a call in the last cycle
   function f63 | level 5 | nodes call(f50), call(f42) | relations call(f50) → call(f42) at t-3 | a call in the last cycle
   function f64 | level 5 | nodes call(f53), call(f46) | relations call(f53) → call(f46) at t-2 | a call in the last cycle
   function f65 | level 5 | nodes call(f47), call(f53) | relations call(f47) → call(f53) at t-4 | a call in the last cycle
-  calls on the apex at the last frame: 12 | reaching frames 355-360: 8
-  apex: call of f61 | level 5 | frames {351} | channels 2
-  apex: call of f62 | level 5 | frames {351, 352} | channels 2
-  apex: call of f20 | level 3 | frames {351, 352, 353} | channels 2
-  apex: call of f54 | level 5 | frames {351, 352, 353, 354} | channels 2
+  calls on the apex at the last frame: 13 | reaching frames 355-360: 8
+  apex: call of f7 | level 2 | frames {350} | channels 2
+  apex: call of f61 | level 5 | frames {350, 351} | channels 2
+  apex: call of f62 | level 5 | frames {350, 351, 352} | channels 2
+  apex: call of f20 | level 3 | frames {350, 351, 352, 353} | channels 2
+  apex: call of f54 | level 5 | frames {350, 351, 352, 353, 354} | channels 2
   apex: call of f4 | level 2 | frames {353, 354, 355, 356} | channels 2
   apex: call of f50 | level 4 | frames {352, 353, 354, 355, 356, 357} | channels 2
-  apex: call of f63 | level 5 | frames {351, 352, 353, 354, 355, 356, 357} | channels 2
+  apex: call of f63 | level 5 | frames {350, 351, 352, 353, 354, 355, 356, 357} | channels 2
   apex: call of f36 | level 3 | frames {353, 354, 355, 356, 357, 358} | channels 2
   apex: call of f3 | level 1 | frames {360} | channels 2
   apex: call of f7 | level 2 | frames {359, 360} | channels 2

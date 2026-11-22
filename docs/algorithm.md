@@ -72,12 +72,9 @@ call. What followed any activation, its function's later nodes
 included, is on the neurons as connections with an estimate (D25), and the reward lives there, where the choice
 is.
 
-**The compression is lossy in two ways, and both are limits of the neuron.**
-
-| Loss      | Description                                                                                                                                       | Reference |
-|-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
-| memory    | A neuron has limited memory: it remembers only its most recent activations, and reports its relations over those, so what it saw earlier no longer shapes the dictionary. | D18       |
-| laps      | A call's phase says how many laps its cycle ran, and a relation to the call names those laps, so the dictionary holds a stretch at each length it recurred at: the same shape at two lengths is two functions until a variable over laps and offsets joins them. | D15, D37, D34 |
+**The compression is lossy in one way, and it is a limit of the neuron.** A neuron has limited memory: it
+remembers only its most recent activations, and reports its relations over those, so what it saw earlier no
+longer shapes the dictionary (D18).
 
 **A neuron's vision is a limit, not a loss.** A base neuron sees its neighbors one position away in each
 dimension and nothing beyond (D4). What lies farther reaches the dictionary through the hierarchy: an interneuron
@@ -276,10 +273,12 @@ that fires through it (D8), and expansion ends on base symbols read back through
 > | relation | two poses and the offset between them (D34) |
 
 > **D9 — Activation window.** An activation at position `f` in time has two spans. It **stands on the board**
-> through `f + S`, where `S` is the longest reach in time among the neurons the machine holds, one beyond the
-> farthest node any function reaches from its latest (D4, D24): for that long a fit may land on it, and an
-> interneuron whose reach extends to it sees it. `S` moves with the dictionary, up when a function gains a node
-> toward its past and down when the last function of that depth leaves. It is **open**, connecting, through
+> through `f + S`. `S` is the **board span**: the longest reach in time among the neurons the machine holds
+> (D4). A neuron's reach is the longest any activation of it has had. A neuron counts for as long as it lives,
+> with or without an activation open (R38). The board span is one number for the whole machine: every
+> activation stands that long, whatever its own reach. For that long a fit may land on it, and an interneuron
+> whose reach extends to it sees it. The board span goes up in the frame a call fires with a longer reach. It
+> goes down when the neuron that had the longest is decommissioned. It is **open**, connecting, through
 > `f + reach_t`, its own reach in time (D4): a neuron learns what followed only as far as it sees. Two things
 > reach it while it is open, one frame at a time, by the connect call after the frame's last level (§7.1):
 >
@@ -370,7 +369,9 @@ connection read.
 > landed on, at any depth (D53, R28), and no further. The call's own
 > position says nothing about how far it sees. In time its position is the latest activation it
 > landed on, so it sees back to the earliest frame of anything it stands for, and one frame more. Where what
-> it stands for comes back to an interneuron already expanded, it stops there (D36), and so does its reach. How
+> it stands for comes back to its own interneuron, its reach stops after one lap (D36). It goes back through
+> its own earlier calls to the one that stood at the node it stands at now, and no further. So a cycle's call
+> reaches one lap of the cycle, however long the cycle has run. How
 > far an activation sees is one thing, and where its neighbors stand is another. A call keeps every neighbor
 > of what it covered (D10), and some of those stand farther away than the call sees. That is fine: reach only
 > says what an activation sees when it fires.
@@ -1883,8 +1884,7 @@ machine works out itself (R22).
 > while it stands on the board, and on its call's once it is covered, and is credited those alone (D5, R23). A bound activation is
 > still on the apex and is a neighbor to every later function. A later fit that lands on it covers the relations of its own
 > that no call has covered, and nothing else (D10). So every relation is paid for once. The coverage set spans one
-> frame more than the longest reach in time among the neurons the machine holds, no function reaches further
-> back, which is the span an activation stands on the board (D9), and the box every other activation dimension
+> frame more than the board span (D9), and the box every other activation dimension
 > gives, and ages out with it, and over the same span the
 > machine keeps the action that ran at each frame in each action channel, for the shares a reward sends back
 > (R33). **The machine holds
@@ -2056,8 +2056,8 @@ level has settled, so it is recorded in the `connect` call instead (R31).
 > left, nothing can fire it again. Every function that names it as a node leaves the dictionary with it, since
 > it can no longer hold, and so on up: that is its **subtree**. The death frame is the frame in which the last
 > activation of the interneuron, or of any neuron in its subtree, leaves the board, and this frame when none
-> stands on it. That set only shrinks. An activation stands on the board through the machine's longest reach
-> in time (D9), which is longer than it connects, so a neuron is never allocated again while a fit could still
+> stands on it. That set only shrinks. An activation stands on the board through the board span
+> (D9), which is at least as long as it connects, so a neuron is never allocated again while a fit could still
 > land on one of its activations or an interneuron could still see it.
 >
 > **Decommissioning is after the frame's connect and infer calls** (§7), so the last exposure an activation

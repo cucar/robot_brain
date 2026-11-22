@@ -97,6 +97,8 @@ pub struct Brain {
     pub(crate) last_fits: usize,
     /// Per interneuron, the farthest it has seen in each dimension, over its activations (D4).
     pub(crate) reach_of: FxHashMap<NeuronId, Pos>,
+    /// The longest of those in time, over the living interneurons.
+    pub(crate) reach_most: i32,
     pub(crate) stats_retired: usize,
     /// The relations covered by the calls taken so far at one level of one frame, across every election of the
     /// level, each with the call and its function, as adjacency, and the sets they join (D24); the frame and level
@@ -215,6 +217,7 @@ impl Brain {
             stats_reused: 0,
             last_fits: 0,
             reach_of: FxHashMap::default(),
+            reach_most: 1,
             stats_retired: 0,
             joined: FxHashMap::default(), jparent: FxHashMap::default(), joined_at: None, refused: FxHashSet::default(), form_src: FxHashMap::default(), form_pre: FxHashSet::default(),
             start_queue: Vec::new(), half: None, last_start_rounds: 0, joined_stash: FxHashMap::default(),
@@ -401,7 +404,7 @@ impl Brain {
     /// S (D9): one beyond the farthest node any function has from its origin in time, and at least the base reach.
     pub(crate) fn measure_board_span(&self) -> i32 {
         // the dictionary keeps each function's reach in time as the function changes
-        self.thalamus.dict.read_span()
+        self.thalamus.dict.read_span().max(self.reach_most)
     }
 
     /// The record a call stands as now, after every lap it took (D53).

@@ -397,6 +397,7 @@ impl Brain {
         for r in read_table(folder, "ledger_due.csv")? { self.ledger_due.insert(parse(&r[0])?, parse(&r[1])?); }
         for r in read_table(folder, "last_func.csv")? { self.last_func.insert(parse(&r[0])?, parse(&r[1])?); }
         for r in read_table(folder, "reach_of.csv")? { self.reach_of.insert(parse(&r[0])?, read_pos(&r[1])?); }
+        self.reach_most = self.reach_of.values().map(|p| p[0]).max().unwrap_or(1);
         self.last_stats = FrameStats::default();
         Ok(())
     }

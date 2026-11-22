@@ -163,7 +163,7 @@ neurons and their connections:
 #4 inter H=17 conns=2
   is f0 no origin [#0→#0[-1]] cycle -> #4
     #4<#0..#0x0> -> #2 @[1] s=17 est=+1.00
-    #4<#0..#0x0> -> #3 @[2] s=8 est=+1.00
+    #4<#0..#0x0> -> #3 @[2] s=1 est=+1.00
 #5 inter H=7 conns=1
   is f1 origin #1 [#1→#0[-1]] -> #5
     #5<#1..#0x0> -> #3 @[1] s=7 est=+1.00

@@ -15,8 +15,8 @@ for longer than any reach, then runs `a, b, a, b, …`, then `m, n, m, n, …`, 
 long or short, and a pair may come once or often. Nothing follows a stretch but silence, so what a pass teaches
 is the alternation itself.
 
-An activation stands on the board one frame beyond the farthest node any function reaches from its latest
-(D9): while the dictionary holds pairs and cycles of offset 1, that is two frames, so at any frame the board
+An activation stands on the board for the board span, the longest reach in time among the neurons the
+machine holds (D9): while the dictionary holds pairs and cycles of offset 1, that is two frames, so at any frame the board
 holds that frame and the two before it. Before any function is in the dictionary it holds that frame and the
 one before.
 

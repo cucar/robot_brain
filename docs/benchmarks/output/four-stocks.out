@@ -222,7 +222,7 @@ ALL4 200 | L2 f27; L3 f36
 ALL4 201 | L2 f16; L3 f38; L4 f47; L5 f54
 ALL4 202 | L2 f28; L3 f38
 ALL4 203 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 17 | neurons 69 | functions 53 | highest call level in the cycle 5 | the dictionary last changed at frame 194 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+CYCLE 17 | neurons 69 | functions 53 | highest call level in the cycle 6 | the dictionary last changed at frame 194 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
 ALL4 204 | L2 f22; L3 f30; L4 f42; L5 f55
 ALL4 205 | L3 f43; L4 f50; L5 f56; L6 f58
 ALL4 206 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
@@ -235,7 +235,7 @@ ALL4 212 | L2 f27; L3 f36
 ALL4 213 | L2 f16; L3 f38; L4 f47; L5 f54
 ALL4 214 | L2 f28; L3 f38
 ALL4 215 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 18 | neurons 69 | functions 53 | highest call level in the cycle 6 | the dictionary last changed at frame 216 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+CYCLE 18 | neurons 70 | functions 53 | highest call level in the cycle 6 | the dictionary last changed at frame 216 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
 ALL4 216 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
 ALL4 217 | L3 f43; L4 f50; L5 f56; L6 f59
 ALL4 218 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59

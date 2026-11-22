@@ -33,11 +33,11 @@ node apps/stocks/jobs/synthetic-extended-test.js
 
 **Expected output:**
 ```
-CYCLE 20 | neurons 11 | functions 7 | highest call level in the cycle 3 | the dictionary last changed at frame 73 | right KGC 100.00%
-inference KGC: right 225 of 238 | every bar right from cycle 8
+CYCLE 20 | neurons 13 | functions 10 | highest call level in the cycle 5 | the dictionary last changed at frame 163 | right KGC 100.00%
+inference KGC: right 223 of 238 | every bar right from cycle 10
 ```
 
-225 of 238 bars right (94.5%), and every bar right from the eighth lap on.
+223 of 238 bars right (93.7%), and every bar right from the tenth lap on.
 
 ## The six-bar lap
 
@@ -52,8 +52,8 @@ node apps/stocks/jobs/synthetic-cycle-test.js 30
 | right, every inference against the bar it was made for | 165/178 |
 | lessons (frames where the brain said nothing) | 3 |
 | first lap all right | 7 |
-| functions at the end | 11 |
-| the dictionary last changed | frame 96 |
+| functions at the end | 10 |
+| the dictionary last changed | frame 76 |
 
 Every bar of the lap is right over the last 10 laps.
 
@@ -83,10 +83,10 @@ over the shorter runs, 87–99%:
 
 | command | right | of | every bar right from lap | functions |
 |---|---|---|---|---|
-| `--mode two --laps 10` (KGC, GLD) | KGC 107, GLD 106 | 118 each | 5, 5 | 20 |
+| `--mode two --laps 10` (KGC, GLD) | KGC 107, GLD 106 | 118 each | 5, 5 | 21 |
 | `--mode lap --laps 30` (A +1 −2 −3 +2 +3 −1, B +2 +1 −1 −3 +3 −2) | A 177, B 166 | 179 each | 2, 9 | 13 |
-| `--mode lap65 --laps 12` (A on six bars, B on five: they repeat together every 30) | A 318, B 311 | 359 each | 5, 11 | 50 |
-| `--mode three --laps 100` | KGC 1181, GLD 1188, SPY 1177 | 1199 each | 8, 8, 9 | 43 |
+| `--mode lap65 --laps 12` (A on six bars, B on five: they repeat together every 30) | A 318, B 313 | 359 each | 5, 9 | 49 |
+| `--mode three --laps 100` | KGC 1181, GLD 1188, SPY 1177 | 1199 each | 8, 8, 9 | 45 |
 | `--mode three4 --laps 100 --all4` | KGC 1181, GLD 1190, SPY 1171, Q 1179 | 1199 each | 7, 5, 9, 8 | 50 |
 
 ---
@@ -103,12 +103,12 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 
 **Expected output** (the end of the lap):
 ```
-TRADER lap 1 | net profit $192580.75 | ROI +1283.87% | +0.048913%/frame | Sharpe 0.19 | transaction cost $65962.28 | trades 25270
-CYCLE 1 | neurons 5523 | functions 5463 | highest call level in the cycle 3 | the dictionary last changed at frame 5373 | right SO 50.24%, VALE 50.82%, STLD 49.48%, GOOGL 51.38%, MU 51.25%, PLTR 50.75%, UUUU 50.60%, PFE 50.95%, CRM 51.71%, HAL 49.27% | net profit $192580.75, ROI 1283.87% (25270 trades)
+TRADER lap 1 | net profit $181520.54 | ROI +1210.14% | +0.047894%/frame | Sharpe 0.19 | transaction cost $64866.40 | trades 25285
+CYCLE 1 | neurons 5523 | functions 5463 | highest call level in the cycle 3 | the dictionary last changed at frame 5373 | right SO 50.24%, VALE 50.82%, STLD 49.42%, GOOGL 51.40%, MU 51.27%, PLTR 50.75%, UUUU 50.58%, PFE 50.95%, CRM 51.60%, HAL 49.29% | net profit $181520.54, ROI 1210.14% (25285 trades)
 ```
 
 **In one pass, the brain does not predict the next day's move.** Every stock is right on about half of its real bars
-(49–52%), and the trader's Sharpe ratio is 0.19: $15,000 becomes $207,581, about 13.1% a year. With every stock right
+(49–52%), and the trader's Sharpe ratio is 0.19: $15,000 becomes $196,521, about 12.8% a year. With every stock right
 half the time that is not skill: it is within what a coin earns on the same stocks (below). The run takes about 1½
 minutes.
 
@@ -118,11 +118,11 @@ cushion:
 | | |
 |---|---|
 | drawdowns deeper than 10% / 20% / 30% / 50% | 17 / 8 / 4 / 2 |
-| the deepest | −63.6%, from January 2006 ($24,585) to November 2008 ($8,951); back above the 2006 peak in October 2010 |
+| the deepest | −63.2%, from January 2006 ($24,585) to November 2008 ($9,058); back above the 2006 peak in October 2010 |
 | daily volatility | 2.4% (38.1% a year) |
-| days moving more than 5% / 10% | 221 / 28 |
-| worst and best day | −19.4% (10 October 2008), +36.4% (24 May 2010) |
-| losing years | 2007, 2008, 2011, 2014, 2015, 2022 (the worst 2022, −35.2%) |
+| days moving more than 5% / 10% | 221 / 27 |
+| worst and best day | −19.4% (10 October 2008), +36.5% (24 May 2010) |
+| losing years | 2007, 2008, 2011, 2014, 2015, 2022 (the worst 2022, −36.0%) |
 
 What the brain does with these stocks is memorize their history, lap after lap: the next demos after the random
 baseline.
@@ -142,8 +142,8 @@ Over seeds 1 to 10, against the brain's single pass over the same ten stocks wit
 
 | settings | random: profit, seeds 1–10 | random: Sharpe | the brain, first pass | beats |
 |---|---|---|---|---|
-| one stock at a time, no cost, without volume | $7,819 to $2,625,508 (middle about $68,000) | −0.08 to 0.58 | $621,303, Sharpe 0.22 | 9 of 10 seeds |
-| three stocks, 0.02% cost, with volume | −$6,883 to $915,496 (middle about $15,000) | −0.22 to 0.44 | $192,581, Sharpe 0.19 | 9 of 10 seeds |
+| one stock at a time, no cost, without volume | $7,819 to $2,625,508 (middle about $68,000) | −0.08 to 0.58 | $590,561, Sharpe 0.22 | 9 of 10 seeds |
+| three stocks, 0.02% cost, with volume | −$6,883 to $915,496 (middle about $15,000) | −0.22 to 0.44 | $181,521, Sharpe 0.19 | 9 of 10 seeds |
 
 The coin owns at most one stock in either row; the settings are the brain's, and the cost is the coin's too. On its
 first pass the brain earns more than most coins but not more than a lucky one: with daily moves right half the
@@ -160,18 +160,18 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 
 | lap | right, average of the ten | Sharpe | per-frame return | trades |
 |---|---|---|---|---|
-| 1 | 50.48% | 0.22 | +0.070% | 9,062 |
-| 2 | 53.42% | 2.01 | +0.455% | 9,184 |
-| 3 | 58.46% | 3.79 | +0.839% | 9,185 |
-| 4 | 67.05% | 6.18 | +1.551% | 9,168 |
-| 5 | 77.61% | 8.87 | +2.289% | 9,155 |
+| 1 | 50.49% | 0.22 | +0.069% | 9,064 |
+| 2 | 53.46% | 2.00 | +0.453% | 9,185 |
+| 3 | 58.49% | 3.78 | +0.836% | 9,176 |
+| 4 | 67.05% | 6.18 | +1.551% | 9,192 |
+| 5 | 77.62% | 8.88 | +2.292% | 9,157 |
 
-All ten stocks climb together: in lap 5 every one is right on 76–79% of its bars. The trader's return per bar and its
-Sharpe ratio climb with them, and ahead of the share right: at 53.42% right in lap 2 the Sharpe ratio is already 2.01.
+All ten stocks climb together: in lap 5 every one is right on 76–80% of its bars. The trader's return per bar and its
+Sharpe ratio climb with them, and ahead of the share right: at 53.46% right in lap 2 the Sharpe ratio is already 2.00.
 The first lap's
-profit is $621,303 (ROI +4,142%); from there the profit compounds within each lap past any real figure, so the
+profit is $590,561 (ROI +3,937%); from there the profit compounds within each lap past any real figure, so the
 per-frame return and the Sharpe ratio are the numbers to read. This is memorization of the history the brain trades
-on, not a forward return. The run takes about 7 minutes.
+on, not a forward return. The run takes about 6 minutes.
 
 ## Stock Sequence Memorization
 
@@ -184,16 +184,16 @@ node apps/stocks/jobs/test.js --symbols KGC,GOLD,SPY --episodes 5 --volume
 
 | lap | right KGC | right GOLD | right SPY | Sharpe | functions |
 |---|---|---|---|---|---|
-| 1 | 51.53% | 51.36% | 52.79% | 0.40 | 577 |
-| 2 | 54.68% | 53.76% | 55.76% | 1.51 | 1,256 |
-| 3 | 64.47% | 65.38% | 63.82% | 4.71 | 2,753 |
-| 4 | 76.03% | 80.57% | 75.06% | 7.56 | 3,793 |
-| 5 | 83.29% | 85.95% | 81.70% | 8.74 | 4,576 |
+| 1 | 51.53% | 51.36% | 52.76% | 0.40 | 577 |
+| 2 | 54.74% | 53.76% | 55.93% | 1.53 | 1,256 |
+| 3 | 64.58% | 65.38% | 64.14% | 4.75 | 2,753 |
+| 4 | 76.18% | 80.57% | 75.21% | 7.59 | 3,793 |
+| 5 | 83.51% | 86.08% | 81.87% | 8.77 | 4,576 |
 
 From a coin flip in the first lap to 82–86% in the fifth, on real market data. GOLD is graded only on its real bars,
 15,233 over the five laps, against 26,864 for KGC and SPY. The run takes about 6 minutes.
 
-Without `--volume` the fifth lap ends at 67.06%, 80.05% and 68.43%, with 2,265 functions, in about 2½ minutes. The
+Without `--volume` the fifth lap ends at 67.36%, 80.14% and 68.36%, with 2,266 functions, in about 2½ minutes. The
 volume gives the brain more to tell one day from another, and it memorizes the history faster.
 
 ---

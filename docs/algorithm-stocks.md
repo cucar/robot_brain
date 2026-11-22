@@ -20,8 +20,8 @@ There is no spatial dimension, so a function fits at one position per frame. A c
 interneuron at the latest bar it covers, in the pose its fit read: from which node to which, and how many laps
 (D37, D53). It stands for the bars it covers and inherits their relations to the outside (D10). A
 bare bar costs its relation to the bar before it, one relation (D12, D13). A call costs nothing of its own, one
-per relation that did not come true and one per argument, and nothing else. A bar stands on the board one frame beyond the
-farthest node any function reaches from its latest (D9): while the dictionary holds pairs and cycles of offset
+per relation that did not come true and one per argument, and nothing else. A bar stands on the board for the board span, the
+longest reach in time among the neurons the machine holds (D9): while the dictionary holds pairs and cycles of offset
 1, that is two frames.
 
 **Out.** One action dimension per channel, with two base actions, `own` and `disown`: the state the machine

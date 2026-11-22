@@ -19,18 +19,18 @@ episode, and `--describe <letters>` prints the dictionary and the letters' neuro
 
 **Expected output:**
 ```
-EPISODE 1 | right 12358/33053 (37.39%) | functions 2009
-EPISODE 2 | right 13336/33053 (40.35%) | functions 2692
-EPISODE 3 | right 13960/33053 (42.24%) | functions 3295
-EPISODE 4 | right 14733/33053 (44.57%) | functions 3805
-EPISODE 5 | right 15450/33053 (46.74%) | functions 4230
-right 15450/33053 | neurons 4486 alive of 24623 | patterns 4230 | heights [4478, 7, 1]
+EPISODE 1 | right 12328/33053 (37.30%) | functions 2009
+EPISODE 2 | right 13314/33053 (40.28%) | functions 2692
+EPISODE 3 | right 13946/33053 (42.19%) | functions 3295
+EPISODE 4 | right 14740/33053 (44.60%) | functions 3805
+EPISODE 5 | right 15463/33053 (46.78%) | functions 4230
+right 15463/33053 | neurons 4486 alive of 24623 | patterns 4230 | heights [4462, 12, 5, 3, 3, 1]
 ```
 
-The text is 33,054 bytes. The share of bytes said right climbs every episode, from 37.39% to 46.74% in five, and is
+The text is 33,054 bytes. The share of bytes said right climbs every episode, from 37.30% to 46.78% in five, and is
 still climbing at the fifth; the dictionary grows by 683, 603, 510 and 425 functions from one episode to the next. The
-last line counts the living neurons by height: 4,478 at height 0, 7 at height 1 and 1 at height 2. The run takes about
-4½ minutes.
+last line counts the living neurons by height: 4,462 at height 0, 12 at height 1, 5 at height 2, 3 at
+height 3, 3 at height 4 and 1 at height 5. The run takes about 2¾ minutes.
 
 ---
 

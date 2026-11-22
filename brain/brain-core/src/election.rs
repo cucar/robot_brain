@@ -298,12 +298,25 @@ impl Brain {
         // what it stands for in space is the union of what it covers, and it sees one beyond that (D4)
         let (mut lo, mut hi) = (origin.pos, origin.pos);
         for c in covers.iter().filter_map(|r| self.find_act(*r)) { lo = lo.least(&c.lo); hi = hi.most(&c.hi); }
-        // its reach stops at an earlier call of its own interneuron: what it stands for comes back to itself there (D4)
+        // its reach goes back one lap: through its own earlier calls, to the one that stood at the node it stands at
+        // now, where what it stands for comes back to itself (D4)
+        let stands_at = f.nodes[latest.1];
         let (mut seen_lo, mut seen_hi) = (origin.pos, origin.pos);
-        for c in covers.iter().filter_map(|r| self.find_act(*r)) {
-            let (c_lo, c_hi) = if c.neuron == neuron { (c.pos, c.pos) } else { (c.lo, c.hi) };
-            seen_lo = seen_lo.least(&c_lo);
-            seen_hi = seen_hi.most(&c_hi);
+        let mut walk: Vec<ActRef> = covers.clone();
+        let mut walked: FxHashSet<ActRef> = FxHashSet::default();
+        while let Some(r) = walk.pop() {
+            if !walked.insert(r) { continue; }
+            let Some(c) = self.find_act(r) else { continue };
+            if c.neuron != neuron {
+                seen_lo = seen_lo.least(&c.lo);
+                seen_hi = seen_hi.most(&c.hi);
+                continue;
+            }
+            // an earlier call of its own: the lap began where it stood at this node, and goes on through what it covered otherwise
+            if self.thalamus.dict.find_pose(c.sym).map_or(true, |p| p.from == stands_at) { continue; }
+            seen_lo = seen_lo.least(&c.pos);
+            seen_hi = seen_hi.most(&c.pos);
+            walk.extend(c.covers.iter().copied());
         }
         let reach = Pos::make(origin.axes.count(), |d| if origin.axes.has(d) { (origin.pos[d] - seen_lo[d]).max(seen_hi[d] - origin.pos[d]) + 1 } else { 0 });
         let act = Act {
@@ -312,7 +325,9 @@ impl Brain {
             fired_by: Some(FiredBy { func: f.id, failed: fit.failed.clone() }),
             rels: Vec::new(), inferences: Vec::new(), opened_at: fno, level: level + 1, height, gone: false,
         };
-        if !self.frozen { let r = self.reach_of.entry(neuron).or_insert(Pos::zero()); *r = r.most(&act.reach); }
+        if !self.frozen { let r = self.reach_of.entry(neuron).or_insert(Pos::zero()); *r = r.most(&act.reach); self.reach_most = self.reach_most.max(act.reach[0]); }
+        // the board span is the longest reach in time of any neuron, from the frame a call first has it (D9)
+        self.span_s = self.span_s.max(act.reach[0]);
         let Some(fr) = self.find_frame_mut(fno) else { return minted };
         let me = ActRef { frame: fno, index: fr.acts.len() as u32 };
         fr.acts.push(act);

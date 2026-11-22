@@ -27,6 +27,7 @@ impl Brain {
             pending = std::mem::take(&mut self.ledger);
         }
         // the neurons are cleared and their poses forgotten in one batch (R38)
+        if !cleared.is_empty() { self.reach_most = self.reach_of.values().map(|p| p[0]).max().unwrap_or(1); }
         self.thalamus.decommission_neurons(cleared, dead);
         self.ledger = keep;
         self.retired_funcs.retain(|_, (_, until)| *until >= fno);
@@ -87,6 +88,7 @@ impl Brain {
         self.thalamus.registry.mark_dead(c);
         self.alive -= 1;
         self.last_func.remove(&c);
+        self.reach_of.remove(&c);
         // every function that names it can no longer hold, and leaves (its subtree)
         for id in self.thalamus.dict.list_naming(c) {
             if let Some(f) = self.thalamus.dict.remove(id) {

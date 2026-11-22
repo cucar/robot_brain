@@ -2,13 +2,13 @@ three: 100 cycles of 12 bars
   KGC moves per cycle: DUDUDUUDUDUU
   GLD moves per cycle: UDDDDDDUDDUU
   SPY moves per cycle: DDDUDUDUDUUU
-CYCLE 1 | neurons 19 | functions 7 | highest call level in the cycle 1 | the dictionary last changed at frame 11 | right KGC 45.45%, GLD 72.73%, SPY 36.36%
+CYCLE 1 | neurons 20 | functions 7 | highest call level in the cycle 1 | the dictionary last changed at frame 11 | right KGC 45.45%, GLD 72.73%, SPY 36.36%
 CYCLE 2 | neurons 27 | functions 15 | highest call level in the cycle 2 | the dictionary last changed at frame 23 | right KGC 83.33%, GLD 83.33%, SPY 41.67%
 CYCLE 3 | neurons 32 | functions 20 | highest call level in the cycle 3 | the dictionary last changed at frame 34 | right KGC 83.33%, GLD 83.33%, SPY 66.67%
 CYCLE 4 | neurons 36 | functions 24 | highest call level in the cycle 3 | the dictionary last changed at frame 48 | right KGC 75.00%, GLD 91.67%, SPY 83.33%
 CYCLE 5 | neurons 39 | functions 27 | highest call level in the cycle 3 | the dictionary last changed at frame 59 | right KGC 83.33%, GLD 91.67%, SPY 100.00%
 CYCLE 6 | neurons 43 | functions 30 | highest call level in the cycle 3 | the dictionary last changed at frame 71 | right KGC 91.67%, GLD 91.67%, SPY 91.67%
-CYCLE 7 | neurons 42 | functions 30 | highest call level in the cycle 4 | the dictionary last changed at frame 81 | right KGC 83.33%, GLD 91.67%, SPY 100.00%
+CYCLE 7 | neurons 43 | functions 30 | highest call level in the cycle 4 | the dictionary last changed at frame 81 | right KGC 83.33%, GLD 91.67%, SPY 100.00%
 CYCLE 8 | neurons 42 | functions 30 | highest call level in the cycle 4 | the dictionary last changed at frame 81 | right KGC 100.00%, GLD 100.00%, SPY 91.67%
 CYCLE 9 | neurons 44 | functions 32 | highest call level in the cycle 5 | the dictionary last changed at frame 108 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 CYCLE 10 | neurons 48 | functions 36 | highest call level in the cycle 5 | the dictionary last changed at frame 118 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
@@ -18,90 +18,90 @@ CYCLE 13 | neurons 51 | functions 38 | highest call level in the cycle 5 | the d
 CYCLE 14 | neurons 52 | functions 40 | highest call level in the cycle 6 | the dictionary last changed at frame 163 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 CYCLE 15 | neurons 52 | functions 40 | highest call level in the cycle 6 | the dictionary last changed at frame 163 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 CYCLE 16 | neurons 56 | functions 44 | highest call level in the cycle 6 | the dictionary last changed at frame 192 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 17 | neurons 55 | functions 43 | highest call level in the cycle 6 | the dictionary last changed at frame 196 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 17 | neurons 56 | functions 43 | highest call level in the cycle 6 | the dictionary last changed at frame 196 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 CYCLE 18 | neurons 57 | functions 45 | highest call level in the cycle 7 | the dictionary last changed at frame 216 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 CYCLE 19 | neurons 57 | functions 44 | highest call level in the cycle 7 | the dictionary last changed at frame 228 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 CYCLE 20 | neurons 58 | functions 46 | highest call level in the cycle 7 | the dictionary last changed at frame 235 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 CYCLE 21 | neurons 58 | functions 46 | highest call level in the cycle 7 | the dictionary last changed at frame 235 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 CYCLE 22 | neurons 60 | functions 48 | highest call level in the cycle 8 | the dictionary last changed at frame 260 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 CYCLE 23 | neurons 61 | functions 48 | highest call level in the cycle 8 | the dictionary last changed at frame 272 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 24 | neurons 60 | functions 48 | highest call level in the cycle 8 | the dictionary last changed at frame 272 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 24 | neurons 61 | functions 48 | highest call level in the cycle 8 | the dictionary last changed at frame 272 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 CYCLE 25 | neurons 60 | functions 48 | highest call level in the cycle 8 | the dictionary last changed at frame 272 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 CYCLE 26 | neurons 61 | functions 49 | highest call level in the cycle 9 | the dictionary last changed at frame 307 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 27 | neurons 61 | functions 49 | highest call level in the cycle 9 | the dictionary last changed at frame 307 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 28 | neurons 61 | functions 49 | highest call level in the cycle 9 | the dictionary last changed at frame 307 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 29 | neurons 61 | functions 49 | highest call level in the cycle 9 | the dictionary last changed at frame 307 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 30 | neurons 61 | functions 49 | highest call level in the cycle 9 | the dictionary last changed at frame 307 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 31 | neurons 61 | functions 49 | highest call level in the cycle 9 | the dictionary last changed at frame 307 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 32 | neurons 61 | functions 49 | highest call level in the cycle 9 | the dictionary last changed at frame 307 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 33 | neurons 59 | functions 47 | highest call level in the cycle 9 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 34 | neurons 59 | functions 47 | highest call level in the cycle 9 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 35 | neurons 59 | functions 47 | highest call level in the cycle 9 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 36 | neurons 59 | functions 47 | highest call level in the cycle 9 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 37 | neurons 59 | functions 47 | highest call level in the cycle 9 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 38 | neurons 59 | functions 47 | highest call level in the cycle 9 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 39 | neurons 59 | functions 47 | highest call level in the cycle 9 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 40 | neurons 59 | functions 47 | highest call level in the cycle 9 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 41 | neurons 59 | functions 47 | highest call level in the cycle 9 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 42 | neurons 59 | functions 47 | highest call level in the cycle 9 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 43 | neurons 57 | functions 45 | highest call level in the cycle 9 | the dictionary last changed at frame 515 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 44 | neurons 57 | functions 45 | highest call level in the cycle 9 | the dictionary last changed at frame 515 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 45 | neurons 56 | functions 44 | highest call level in the cycle 9 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 46 | neurons 56 | functions 44 | highest call level in the cycle 9 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 47 | neurons 56 | functions 44 | highest call level in the cycle 9 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 48 | neurons 56 | functions 44 | highest call level in the cycle 9 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 49 | neurons 56 | functions 44 | highest call level in the cycle 9 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 50 | neurons 56 | functions 44 | highest call level in the cycle 9 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 51 | neurons 56 | functions 44 | highest call level in the cycle 9 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 52 | neurons 56 | functions 44 | highest call level in the cycle 9 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 53 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 54 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 55 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 56 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 57 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 58 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 59 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 60 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 61 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 62 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 63 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 64 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 65 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 66 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 67 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 68 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 69 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 70 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 71 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 72 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 73 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 74 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 75 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 76 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 77 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 78 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 79 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 80 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 81 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 82 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 83 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 84 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 85 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 86 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 87 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 88 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 89 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 90 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 91 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 92 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 93 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 94 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 95 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 96 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 97 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 98 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 99 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
-CYCLE 100 | neurons 55 | functions 43 | highest call level in the cycle 9 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 27 | neurons 62 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 315 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 28 | neurons 62 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 315 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 29 | neurons 64 | functions 52 | highest call level in the cycle 10 | the dictionary last changed at frame 343 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 30 | neurons 64 | functions 51 | highest call level in the cycle 10 | the dictionary last changed at frame 351 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 31 | neurons 64 | functions 51 | highest call level in the cycle 10 | the dictionary last changed at frame 351 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 32 | neurons 63 | functions 51 | highest call level in the cycle 10 | the dictionary last changed at frame 351 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 33 | neurons 61 | functions 49 | highest call level in the cycle 10 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 34 | neurons 61 | functions 49 | highest call level in the cycle 10 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 35 | neurons 61 | functions 49 | highest call level in the cycle 10 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 36 | neurons 61 | functions 49 | highest call level in the cycle 10 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 37 | neurons 61 | functions 49 | highest call level in the cycle 10 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 38 | neurons 61 | functions 49 | highest call level in the cycle 10 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 39 | neurons 61 | functions 49 | highest call level in the cycle 10 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 40 | neurons 61 | functions 49 | highest call level in the cycle 10 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 41 | neurons 61 | functions 49 | highest call level in the cycle 10 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 42 | neurons 61 | functions 49 | highest call level in the cycle 10 | the dictionary last changed at frame 389 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 43 | neurons 59 | functions 47 | highest call level in the cycle 10 | the dictionary last changed at frame 515 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 44 | neurons 59 | functions 47 | highest call level in the cycle 10 | the dictionary last changed at frame 515 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 45 | neurons 58 | functions 46 | highest call level in the cycle 10 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 46 | neurons 58 | functions 46 | highest call level in the cycle 10 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 47 | neurons 58 | functions 46 | highest call level in the cycle 10 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 48 | neurons 58 | functions 46 | highest call level in the cycle 10 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 49 | neurons 58 | functions 46 | highest call level in the cycle 10 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 50 | neurons 58 | functions 46 | highest call level in the cycle 10 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 51 | neurons 58 | functions 46 | highest call level in the cycle 10 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 52 | neurons 58 | functions 46 | highest call level in the cycle 10 | the dictionary last changed at frame 533 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 53 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 54 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 55 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 56 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 57 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 58 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 59 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 60 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 61 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 62 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 63 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 64 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 65 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 66 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 67 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 68 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 69 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 70 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 71 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 72 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 73 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 74 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 75 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 76 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 77 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 78 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 79 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 80 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 81 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 82 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 83 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 84 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 85 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 86 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 87 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 628 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 88 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 89 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 90 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 91 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 92 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 93 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 94 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 95 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 96 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 97 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 98 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 99 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
+CYCLE 100 | neurons 57 | functions 45 | highest call level in the cycle 10 | the dictionary last changed at frame 1046 | right KGC 100.00%, GLD 100.00%, SPY 100.00%
 inference KGC: right 1181 of 1199 | every bar right from cycle 8
   KGC cycle  1: -WRRRWWRWRWW
   KGC cycle  2: RRRWRRRRRRRW
@@ -405,8 +405,8 @@ inference SPY: right 1177 of 1199 | every bar right from cycle 9
   SPY cycle 98: RRRRRRRRRRRR
   SPY cycle 99: RRRRRRRRRRRR
   SPY cycle 100: RRRRRRRRRRRR
-recognition: 43 functions | the dictionary last changed at frame 1046
-NEVERCALLED 0 of 43
+recognition: 45 functions | the dictionary last changed at frame 1046
+NEVERCALLED 0 of 45
   combination calls per frame, per cycle: 1:000011101111 2:111111111111 3:111111111111 4:111111111111 5:111111111111 6:111111111111 7:111111111111 8:111111111111 9:111111111111 10:111111111111 11:111111111111 12:111111111111 13:111111111111 14:111111111111 15:111111111111 16:111111111111 17:111111111111 18:111111111111 19:111111111111 20:111111111111 21:111111111111 22:111111111111 23:111111111111 24:111111111111 25:111111111111 26:111111111111 27:111111111111 28:111111111111 29:111111111111 30:111111111111 31:111111111111 32:111111111111 33:111111111111 34:111111111111 35:111111111111 36:111111111111 37:111111111111 38:111111111111 39:111111111111 40:111111111111 41:111111111111 42:111111111111 43:111111111111 44:111111111111 45:111111111111 46:111111111111 47:111111111111 48:111111111111 49:111111111111 50:111111111111 51:111111111111 52:111111111111 53:111111111111 54:111111111111 55:111111111111 56:111111111111 57:111111111111 58:111111111111 59:111111111111 60:111111111111 61:111111111111 62:111111111111 63:111111111111 64:111111111111 65:111111111111 66:111111111111 67:111111111111 68:111111111111 69:111111111111 70:111111111111 71:111111111111 72:111111111111 73:111111111111 74:111111111111 75:111111111111 76:111111111111 77:111111111111 78:111111111111 79:111111111111 80:111111111111 81:111111111111 82:111111111111 83:111111111111 84:111111111111 85:111111111111 86:111111111111 87:111111111111 88:111111111111 89:111111111111 90:111111111111 91:111111111111 92:111111111111 93:111111111111 94:111111111111 95:111111111111 96:111111111111 97:111111111111 98:111111111111 99:111111111111 100:111111111111
   dictionary: level 1 | association between bars | 5 | with a call in the last cycle 5
   dictionary: level 2 | over the combination calls | 7 | with a call in the last cycle 7
@@ -417,7 +417,8 @@ NEVERCALLED 0 of 43
   dictionary: level 6 | across the channels in time | 4 | with a call in the last cycle 4
   dictionary: level 7 | across the channels in time | 3 | with a call in the last cycle 3
   dictionary: level 8 | across the channels in time | 2 | with a call in the last cycle 2
-  dictionary: level 9 | across the channels in time | 1 | with a call in the last cycle 1
+  dictionary: level 9 | across the channels in time | 2 | with a call in the last cycle 2
+  dictionary: level 10 | across the channels in time | 1 | with a call in the last cycle 1
   function f1 | level 1 | nodes KGC↓, SPY↓ | relations KGC↓ → SPY↓ at t0 | a call in the last cycle
   function f3 | level 1 | nodes KGC↑, GLD↓ | relations KGC↑ → GLD↓ at t0 | a call in the last cycle
   function f6 | level 1 | nodes KGC↓, GLD↓ | relations KGC↓ → GLD↓ at t0 | a call in the last cycle
@@ -461,22 +462,31 @@ NEVERCALLED 0 of 43
   function f55 | level 8 | nodes call(f51), call(f53), call(f52) | relations call(f51) → call(f53) at t-1; call(f53) → call(f52) at t-4 | a call in the last cycle
   function f56 | level 8 | nodes call(f52), call(f51) | relations call(f52) → call(f51) at t-3 | a call in the last cycle
   function f57 | level 9 | nodes call(f55), call(f56) | relations call(f55) → call(f56) at t-4 | a call in the last cycle
-  calls on the apex at the last frame: 25 | reaching frames 1195-1200: 11
-  apex: call of f56 | level 8 | frames {1179} | channels 3
-  apex: call of f47 | level 6 | frames {1179, 1180} | channels 3
+  function f58 | level 9 | nodes call(f56), call(f55) | relations call(f56) → call(f55) at t-7 | a call in the last cycle
+  function f59 | level 10 | nodes call(f58), call(f57) | relations call(f58) → call(f57) at t-8; call(f57) → call(f58) at t-4 | a cycle | a call in the last cycle
+  calls on the apex at the last frame: 32 | reaching frames 1195-1200: 12
+  apex: call of f47 | level 6 | frames {1167, 1168} | channels 3
+  apex: call of f17 | level 3 | frames {1167, 1168, 1169, 1170} | channels 3
+  apex: call of f55 | level 8 | frames {1167, 1168, 1169, 1170, 1171, 1172} | channels 3
+  apex: call of f31 | level 3 | frames {1171, 1172, 1173} | channels 3
+  apex: call of f42 | level 5 | frames {1167, 1168, 1169, 1170, 1171, 1172, 1173, 1174} | channels 3
+  apex: call of f27 | level 3 | frames {1173, 1174, 1175} | channels 3
+  apex: call of f51 | level 7 | frames {1167, 1168, 1169, 1170, 1171, 1172, 1173, 1174, 1175, 1176} | channels 3
+  apex: call of f36 | level 4 | frames {1173, 1174, 1175, 1176, 1177} | channels 3
+  apex: call of f29 | level 3 | frames {1176, 1177, 1178} | channels 3
+  apex: call of f47 | level 6 | frames {1171, 1172, 1173, 1174, 1175, 1176, 1177, 1178, 1179, 1180} | channels 3
   apex: call of f17 | level 3 | frames {1179, 1180, 1181, 1182} | channels 3
-  apex: call of f57 | level 9 | frames {1179, 1180, 1181, 1182, 1183} | channels 3
-  apex: call of f55 | level 8 | frames {1179, 1180, 1181, 1182, 1183, 1184} | channels 3
+  apex: call of f55 | level 8 | frames {1167, 1168, 1169, 1170, 1171, 1172, 1173, 1174, 1175, 1176, 1177, 1178, 1179, 1180, 1181, 1182, 1183, 1184} | channels 3
   apex: call of f31 | level 3 | frames {1183, 1184, 1185} | channels 3
   apex: call of f42 | level 5 | frames {1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186} | channels 3
   apex: call of f27 | level 3 | frames {1185, 1186, 1187} | channels 3
-  apex: call of f51 | level 7 | frames {1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188} | channels 3
+  apex: call of f51 | level 7 | frames {1176, 1177, 1178, 1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188} | channels 3
   apex: call of f36 | level 4 | frames {1185, 1186, 1187, 1188, 1189} | channels 3
   apex: call of f29 | level 3 | frames {1188, 1189, 1190} | channels 3
-  apex: call of f56 | level 8 | frames {1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191} | channels 3
   apex: call of f47 | level 6 | frames {1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191, 1192} | channels 3
   apex: call of f17 | level 3 | frames {1191, 1192, 1193, 1194} | channels 3
-  apex: call of f57 | level 9 | frames {1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191, 1192, 1193, 1194, 1195} | channels 3
+  apex: call of f57 | level 9 | frames {1176, 1177, 1178, 1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191, 1192, 1193, 1194, 1195} | channels 3
+  apex: call of f59 | level 10 | frames {1167, 1168, 1169, 1170, 1171, 1172, 1173, 1174, 1175, 1176, 1177, 1178, 1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191, 1192, 1193, 1194, 1195} | channels 3
   apex: call of f55 | level 8 | frames {1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191, 1192, 1193, 1194, 1195, 1196} | channels 3
   apex: call of f31 | level 3 | frames {1195, 1196, 1197} | channels 3
   apex: call of f42 | level 5 | frames {1191, 1192, 1193, 1194, 1195, 1196, 1197, 1198} | channels 3
