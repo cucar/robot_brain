@@ -71,7 +71,7 @@ impl Brain {
     /// the older interneuron on a tie.
     fn reuse(&self, f: &Func, root: usize) -> Option<NeuronId> {
         let lay = f.lay_out_from(root);
-        let add = |a: &Pos, b: &Offset| { let mut p = *a; for d in 0..MAX_DIMS { p[d] += b[d]; } p };
+        let add = |a: &Pos, b: &Offset| a.plus(b);
         // the function's expansion down to base neurons, and the calls met inside its nodes' calls, each at its place
         let mut out: Vec<(Sym, Pos)> = Vec::new();
         let mut met: Vec<(Sym, Pos)> = Vec::new();
@@ -89,7 +89,7 @@ impl Brain {
             }
         }
         met.retain(|(s, _)| !own_nodes.contains(&self.thalamus.dict.find_neuron_of(*s)));
-        met.sort_by_key(|(s, p)| (p.iter().map(|x| x.unsigned_abs()).sum::<u32>(), self.thalamus.dict.find_neuron_of(*s)));
+        met.sort_by_key(|(s, p)| ((0..p.len()).map(|d| p[d].unsigned_abs()).sum::<u32>(), self.thalamus.dict.find_neuron_of(*s)));
         met.dedup();
         out.sort();
         out.dedup();
@@ -103,9 +103,9 @@ impl Brain {
             let mut own: Vec<(Sym, Pos)> = self.read_expansion(s).iter().filter(|(x, _, _)| *x < SYM_CALL).map(|(x, d, _)| (*x, *d)).collect();
             if own.is_empty() { continue; }
             // its length in each dimension, and the function's expansion over that length, aligned at the present end
-            let (mut lo, mut hi) = ([0i32; MAX_DIMS], [0i32; MAX_DIMS]);
-            for (_, q) in &own { for d in 0..MAX_DIMS { lo[d] = lo[d].min(q[d]); hi[d] = hi[d].max(q[d]); } }
-            let inside = |q: &Pos| (0..MAX_DIMS).all(|d| q[d] >= lo[d] && q[d] <= hi[d]);
+            let (mut lo, mut hi) = (Pos::zero(), Pos::zero());
+            for (_, q) in &own { lo = lo.least(q); hi = hi.most(q); }
+            let inside = |q: &Pos| (0..q.len().max(lo.len()).max(hi.len())).all(|d| q[d] >= lo[d] && q[d] <= hi[d]);
             let mut a: Vec<(Sym, Pos)> = out.iter().filter(|(_, q)| inside(q)).copied().collect();
             own.sort();
             own.dedup();
@@ -291,25 +291,22 @@ impl Brain {
         let height = 1 + covers.iter().filter_map(|r| self.find_act(*r)).map(|a| a.height).max().unwrap_or(0);
         // what it stands for in space is the union of what it covers, and it sees one beyond that (D4)
         let (mut lo, mut hi) = (origin.pos, origin.pos);
-        for c in covers.iter().filter_map(|r| self.find_act(*r)) { for d in 0..MAX_DIMS { lo[d] = lo[d].min(c.lo[d]); hi[d] = hi[d].max(c.hi[d]); } }
+        for c in covers.iter().filter_map(|r| self.find_act(*r)) { lo = lo.least(&c.lo); hi = hi.most(&c.hi); }
         // its reach stops at an earlier call of its own interneuron: what it stands for comes back to itself there (D4)
         let (mut seen_lo, mut seen_hi) = (origin.pos, origin.pos);
         for c in covers.iter().filter_map(|r| self.find_act(*r)) {
             let (c_lo, c_hi) = if c.neuron == neuron { (c.pos, c.pos) } else { (c.lo, c.hi) };
-            for d in 0..MAX_DIMS { seen_lo[d] = seen_lo[d].min(c_lo[d]); seen_hi[d] = seen_hi[d].max(c_hi[d]); }
+            seen_lo = seen_lo.least(&c_lo);
+            seen_hi = seen_hi.most(&c_hi);
         }
-        let mut reach = [0i32; MAX_DIMS];
-        for d in 0..MAX_DIMS {
-            if d > 0 && origin.axes & (1 << d) == 0 { continue; }
-            reach[d] = (origin.pos[d] - seen_lo[d]).max(seen_hi[d] - origin.pos[d]) + 1;
-        }
+        let reach = Pos::make(origin.axes.count(), |d| if origin.axes.has(d) { (origin.pos[d] - seen_lo[d]).max(seen_hi[d] - origin.pos[d]) + 1 } else { 0 });
         let act = Act {
             neuron, sym, kind: Kind::Inter, axes: origin.axes, pos: origin.pos, strong, reach, lo, hi,
             covered_at: None, coverers: Vec::new(), covers: covers.clone(),
             fired_by: Some(FiredBy { func: f.id, failed: fit.failed.clone() }),
             rels: Vec::new(), inferences: Vec::new(), opened_at: fno, level: level + 1, height, gone: false,
         };
-        if !self.frozen { let r = self.reach_of.entry(neuron).or_insert([0; MAX_DIMS]); for d in 0..MAX_DIMS { r[d] = r[d].max(act.reach[d]); } }
+        if !self.frozen { let r = self.reach_of.entry(neuron).or_insert(Pos::zero()); *r = r.most(&act.reach); }
         let Some(fr) = self.find_frame_mut(fno) else { return minted };
         let me = ActRef { frame: fno, index: fr.acts.len() as u32 };
         fr.acts.push(act);

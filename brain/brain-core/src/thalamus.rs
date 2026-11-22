@@ -28,7 +28,7 @@ pub struct NeuronFacts {
     pub dim: Option<DimensionId>,
     pub bucket: u32,
     pub channel: Option<ChannelId>,
-    pub axes: u8,
+    pub axes: Axes,
     pub alive: bool,
 }
 

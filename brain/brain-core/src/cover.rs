@@ -66,7 +66,7 @@ impl Brain {
             let Some(xa) = self.find_act(x) else { continue };
             if xa.gone { continue; }
             if let Some(br) = a.rels.iter().find(|br| br.other == x) { out.push((x, br.off)); continue; }
-            if let Some(br) = xa.rels.iter().find(|br| br.other == me) { let mut n = br.off; for v in n.iter_mut() { *v = -*v; } out.push((x, n)); }
+            if let Some(br) = xa.rels.iter().find(|br| br.other == me) { out.push((x, br.off.negated())); }
         }
         out
     }
@@ -222,7 +222,7 @@ impl Brain {
                 if !self.cfg.policy.past[a.kind as usize][x.kind as usize] { continue; }
                 let off = offset_between(a, x);
                 let mut within = true;
-                for k in 1..MAX_DIMS { if (a.axes & x.axes) & (1 << k) != 0 && off[k].abs() > a.reach[k] { within = false; } }
+                for k in a.axes.space() { let k = *k as usize; if x.axes.has(k) && off[k].abs() > a.reach[k] { within = false; } }
                 if within && off[d].signum() == sign { return true; }
             }
         }

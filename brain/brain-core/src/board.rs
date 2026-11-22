@@ -49,7 +49,7 @@ pub struct Act {
     /// Its pose (D8): its neuron's id for a base activation, the interneuron in the call's phase for a call.
     pub sym: Sym,
     pub kind: Kind,
-    pub axes: u8,
+    pub axes: Axes,
     pub pos: Pos,
     pub strong: bool,
     pub reach: Pos,
@@ -90,11 +90,7 @@ impl Act {
 
 /// The offset from one activation to another in the dimensions both are laid out over, and time (D6).
 pub fn offset_between(a: &Act, b: &Act) -> Offset {
-    let shared = a.axes & b.axes;
-    let mut o = [0i32; MAX_DIMS];
-    o[0] = b.pos[0] - a.pos[0];
-    for d in 1..MAX_DIMS { if shared & (1 << d) != 0 { o[d] = b.pos[d] - a.pos[d]; } }
-    o
+    Pos::make(a.pos.len().max(b.pos.len()), |d| if d == 0 || (a.axes.has(d) && b.axes.has(d)) { b.pos[d] - a.pos[d] } else { 0 })
 }
 
 #[derive(Clone, Debug, Default)]
@@ -174,10 +170,10 @@ impl Brain {
                 if f.no > a.pos[0] as i64 || (a.pos[0] as i64 - f.no) > a.reach[0] as i64 { continue; }
                 for (i, c) in f.acts.iter().enumerate() {
                     if c.neuron == NeuronId::MAX || !c.covers.is_empty() { continue; }
-                    let shared = a.axes & c.axes;
                     let mut within = true;
-                    for d in 1..MAX_DIMS {
-                        if shared & (1 << d) == 0 { continue; }
+                    for d in a.axes.space() {
+                        let d = *d as usize;
+                        if !c.axes.has(d) { continue; }
                         if (c.pos[d] - a.pos[d]).abs() > a.reach[d] { within = false; break; }
                     }
                     if !within { continue; }

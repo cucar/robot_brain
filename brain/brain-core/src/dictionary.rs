@@ -19,11 +19,11 @@ pub struct Rel {
     pub off: Offset,
 }
 
-fn neg(o: &Offset) -> Offset { let mut r = *o; for x in r.iter_mut() { *x = -*x; } r }
+fn neg(o: &Offset) -> Offset { o.negated() }
 
 /// The one form of the relation from `n` to `m` standing at `off` from it (D34).
 pub fn canon(n: Sym, m: Sym, off: Offset) -> Rel {
-    let first = off.iter().copied().find(|x| *x != 0);
+    let first = (0..off.len()).map(|d| off[d]).find(|x| *x != 0);
     let keep = if off[0] != 0 { off[0] < 0 } else {
         match first { Some(x) => x > 0, None => n <= m }
     };
@@ -100,9 +100,7 @@ impl Func {
     pub fn find_lap(&self) -> Option<Offset> {
         let lay = self.lay_out();
         let (_, ua, ub, off) = lay.closing?;
-        let mut l = [0i32; MAX_DIMS];
-        for d in 0..MAX_DIMS { l[d] = lay.position[ua][d] + off[d] - lay.position[ub][d]; }
-        Some(l)
+        Some(lay.position[ua].plus(&off).minus(&lay.position[ub]))
     }
 
     /// The nodes of its cycle in the order a lap reads them back from node `root` (D53, D54), the root first.
@@ -110,7 +108,7 @@ impl Func {
         let Some(l) = self.find_lap() else { return vec![] };
         let lay = self.lay_out_from(root);
         let mut v = self.list_cycle_nodes();
-        v.sort_by_key(|&i| (lay.position[i].iter().zip(&l).map(|(a, b)| *a as i64 * *b as i64).sum::<i64>(), i != root, i));
+        v.sort_by_key(|&i| ((0..lay.position[i].len().max(l.len())).map(|d| lay.position[i][d] as i64 * l[d] as i64).sum::<i64>(), i != root, i));
         v
     }
 
@@ -140,7 +138,7 @@ impl Func {
         let n = self.nodes.len();
         let mut position: Vec<Option<Pos>> = vec![None; n];
         let mut parent: Vec<Option<(usize, usize)>> = vec![None; n];
-        position[root] = Some([0; MAX_DIMS]);
+        position[root] = Some(Pos::zero());
         let mut used = vec![false; self.rels.len()];
         let mut tree = Vec::new();
         let mut queue = vec![root];
@@ -153,14 +151,13 @@ impl Func {
                 if used[ri] { continue; }
                 let (ua, ub) = (self.find_node(r.a).unwrap(), self.find_node(r.b).unwrap());
                 let (v, off) = if ua == u { (ub, r.off) } else if ub == u { (ua, neg(&r.off)) } else { continue };
-                steps.push((later(&off, &[0; MAX_DIMS]), ri, v, off));
+                steps.push((later(&off, &Pos::zero()), ri, v, off));
             }
             steps.sort_by_key(|s| s.0);
             for (_, ri, v, off) in steps {
                 if used[ri] || position[v].is_some() { continue; }
                 used[ri] = true;
-                let mut p = position[u].unwrap();
-                for d in 0..MAX_DIMS { p[d] += off[d]; }
+                let p = position[u].unwrap().plus(&off);
                 position[v] = Some(p);
                 parent[v] = Some((ri, u));
                 tree.push((ri, u, v, off));
@@ -171,7 +168,7 @@ impl Func {
             let (ua, ub) = (self.find_node(r.a).unwrap(), self.find_node(r.b).unwrap());
             (ri, ua, ub, r.off)
         });
-        Layout { tree, closing, position: position.into_iter().map(|p| p.unwrap_or([0; MAX_DIMS])).collect(), parent }
+        Layout { tree, closing, position: position.into_iter().map(|p| p.unwrap_or(Pos::zero())).collect(), parent }
     }
 
     /// The tree relations from `from` to `to` along the spanning tree, in order, each with its offset in that
@@ -206,17 +203,17 @@ impl Func {
     /// How far its activation sees (D4, D9): one position beyond its farthest node from its latest, in each
     /// dimension of `axes`. A cycle has no fixed latest node, since the last lap may stop at any node of it: read
     /// from each node of it, the farthest.
-    pub fn measure_reach(&self, axes: u8) -> Pos {
+    pub fn measure_reach(&self, axes: Axes) -> Pos {
         let roots: Vec<usize> = if self.has_cycle() { (0..self.nodes.len()).collect() } else { vec![0] };
-        let mut r = [0; MAX_DIMS];
+        let mut r = vec![0; axes.count()];
         for root in roots {
             let lay = self.lay_out_from(root);
-            for d in 0..MAX_DIMS {
-                if d > 0 && axes & (1 << d) == 0 { continue; }
+            for d in 0..r.len() {
+                if !axes.has(d) { continue; }
                 r[d] = r[d].max(lay.position.iter().map(|p| p[d].abs()).max().unwrap_or(0) + 1);
             }
         }
-        r
+        Pos::from_slice(&r)
     }
 
     /// Two functions with the same relations and the same origin are one (D36); a cycle has no origin.
@@ -250,6 +247,8 @@ pub struct Dictionary {
     pub frozen: bool,
     pub frozen_syms: Vec<(NeuronId, Phase)>,
     frozen_index: FxHashMap<(NeuronId, Phase), Sym>,
+    /// How many activation dimensions the machine was built with, time among them: an offset is printed to that many.
+    pub dims: usize,
     pub(crate) next_id: FuncId,
     pub(crate) next_join: u64,
 }
@@ -441,7 +440,7 @@ impl Dictionary {
     }
 
     pub fn describe(&self, f: &Func) -> String {
-        let rels: Vec<String> = f.rels.iter().map(|r| format!("{}→{}{:?}", self.describe_sym(r.a), self.describe_sym(r.b), &r.off[..])).collect();
+        let rels: Vec<String> = f.rels.iter().map(|r| format!("{}→{}{:?}", self.describe_sym(r.a), self.describe_sym(r.b), r.off.to_vec(self.dims.max(r.off.len())))).collect();
         let mut s = match f.find_origin() { Some(o) => format!("f{} origin {} [{}]", f.id, self.describe_sym(o), rels.join(" ")), None => format!("f{} no origin [{}]", f.id, rels.join(" ")) };
         if f.has_cycle() { s.push_str(" cycle"); }
         if let Some(i) = f.inter { s.push_str(&format!(" -> #{}", i)); }

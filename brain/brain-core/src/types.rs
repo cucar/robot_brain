@@ -1,12 +1,176 @@
 /// Shared types for the UCAR machine (docs/algorithm.md).
 
-/// Time plus up to two spatial activation dimensions. Index 0 is always time (D1).
-pub const MAX_DIMS: usize = 3;
+use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
+use std::sync::{OnceLock, RwLock};
 
-/// A coordinate: frame in slot 0, spatial positions after it (D2).
-pub type Pos = [i32; MAX_DIMS];
-/// A rounded offset between two coordinates (D6).
-pub type Offset = [i32; MAX_DIMS];
+use rustc_hash::FxHashSet;
+
+/// A position: one number per activation dimension, time first (D1).
+///
+/// It has no fixed number of dimensions: a dimension it does not hold reads as zero.
+/// Time is held in the position itself.
+/// The numbers of space are held once for all the positions that share them, with the zeros after the last number
+/// that is not zero left off.
+#[derive(Clone, Copy)]
+pub struct Pos {
+    time: i32,
+    space: &'static [i32],
+}
+
+/// An offset between two positions, exact in every dimension (D6).
+pub type Offset = Pos;
+
+/// The numbers of space every position shares: each list is kept once, for the life of the process.
+static SPACES: OnceLock<RwLock<FxHashSet<&'static [i32]>>> = OnceLock::new();
+
+/// The one kept copy of a list of numbers, the zeros at its end left off.
+fn share_numbers(numbers: &[i32]) -> &'static [i32] {
+    let mut held = numbers.len();
+    while held > 0 && numbers[held - 1] == 0 { held -= 1; }
+    let numbers = &numbers[..held];
+    if numbers.is_empty() { return &[]; }
+    let table = SPACES.get_or_init(|| RwLock::new(FxHashSet::default()));
+    if let Some(kept) = table.read().unwrap().get(numbers) { return kept; }
+    let mut table = table.write().unwrap();
+    if let Some(kept) = table.get(numbers) { return kept; }
+    let kept: &'static [i32] = Box::leak(numbers.to_vec().into_boxed_slice());
+    table.insert(kept);
+    kept
+}
+
+static ZERO: i32 = 0;
+
+impl Pos {
+    /// The position with zero in every dimension.
+    pub fn zero() -> Pos { Pos { time: 0, space: &[] } }
+
+    /// A position from its numbers, time first.
+    pub fn from_slice(numbers: &[i32]) -> Pos {
+        match numbers.split_first() { Some((time, space)) => Pos { time: *time, space: share_numbers(space) }, None => Pos::zero() }
+    }
+
+    /// A position of `count` dimensions, each number given by its dimension.
+    pub fn make(count: usize, number: impl Fn(usize) -> i32) -> Pos {
+        // the numbers are gathered on the stack where they are few, so making a position allocates nothing
+        if count <= 8 {
+            let mut numbers = [0i32; 8];
+            for d in 0..count { numbers[d] = number(d); }
+            return Pos::from_slice(&numbers[..count]);
+        }
+        let numbers: Vec<i32> = (0..count).map(number).collect();
+        Pos::from_slice(&numbers)
+    }
+
+    /// How many dimensions it holds: time, and space up to its last number that is not zero.
+    pub fn len(&self) -> usize { 1 + self.space.len() }
+
+    /// Its numbers, time first, to `count` dimensions.
+    pub fn to_vec(&self, count: usize) -> Vec<i32> { (0..count).map(|d| self[d]).collect() }
+
+    /// The same position with one dimension set.
+    pub fn with(&self, dimension: usize, number: i32) -> Pos {
+        if dimension == 0 { return Pos { time: number, space: self.space }; }
+        Pos::make(self.len().max(dimension + 1), |d| if d == dimension { number } else { self[d] })
+    }
+
+    /// This position moved by an offset.
+    pub fn plus(&self, other: &Pos) -> Pos {
+        if other.space.is_empty() { return Pos { time: self.time + other.time, space: self.space }; }
+        Pos::make(self.len().max(other.len()), |d| self[d] + other[d])
+    }
+
+    /// The offset from another position to this one.
+    pub fn minus(&self, other: &Pos) -> Pos {
+        if other.space.is_empty() { return Pos { time: self.time - other.time, space: self.space }; }
+        Pos::make(self.len().max(other.len()), |d| self[d] - other[d])
+    }
+
+    /// The opposite offset.
+    pub fn negated(&self) -> Pos {
+        if self.space.is_empty() { return Pos { time: -self.time, space: self.space }; }
+        Pos::make(self.len(), |d| -self[d])
+    }
+
+    /// The lesser of the two in each dimension.
+    pub fn least(&self, other: &Pos) -> Pos { Pos::make(self.len().max(other.len()), |d| self[d].min(other[d])) }
+
+    /// The greater of the two in each dimension.
+    pub fn most(&self, other: &Pos) -> Pos { Pos::make(self.len().max(other.len()), |d| self[d].max(other[d])) }
+
+    /// Whether every dimension is zero.
+    pub fn is_zero(&self) -> bool { self.time == 0 && self.space.is_empty() }
+
+    /// The order of two positions in space alone, dimension by dimension in the order they are declared.
+    pub fn compare_space(&self, other: &Pos) -> Ordering {
+        for d in 1..self.len().max(other.len()) {
+            let order = self[d].cmp(&other[d]);
+            if order != Ordering::Equal { return order; }
+        }
+        Ordering::Equal
+    }
+}
+
+impl std::ops::Index<usize> for Pos {
+    type Output = i32;
+    fn index(&self, dimension: usize) -> &i32 {
+        if dimension == 0 { return &self.time; }
+        self.space.get(dimension - 1).unwrap_or(&ZERO)
+    }
+}
+
+impl PartialEq for Pos {
+    fn eq(&self, other: &Pos) -> bool { self.time == other.time && (std::ptr::eq(self.space, other.space) || self.space == other.space) }
+}
+
+impl Eq for Pos {}
+
+impl Hash for Pos {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.time.hash(state);
+        self.space.hash(state);
+    }
+}
+
+impl Ord for Pos {
+    fn cmp(&self, other: &Pos) -> Ordering { self.time.cmp(&other.time).then_with(|| self.compare_space(other)) }
+}
+
+impl PartialOrd for Pos {
+    fn partial_cmp(&self, other: &Pos) -> Option<Ordering> { Some(self.cmp(other)) }
+}
+
+impl std::fmt::Debug for Pos {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.debug_list().entries((0..self.len()).map(|d| self[d])).finish() }
+}
+
+/// The activation dimensions a channel is laid out over (D3): time always, and the dimensions of space it names.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Axes {
+    space: &'static [i32],
+}
+
+impl Axes {
+    /// Time alone.
+    pub fn time() -> Axes { Axes { space: &[] } }
+
+    /// Time and the named dimensions of space.
+    pub fn from_dims(dimensions: &[usize]) -> Axes {
+        let mut space: Vec<i32> = dimensions.iter().filter(|d| **d > 0).map(|d| *d as i32).collect();
+        space.sort_unstable();
+        space.dedup();
+        Axes { space: share_numbers(&space) }
+    }
+
+    /// Whether it is laid out over a dimension.
+    pub fn has(&self, dimension: usize) -> bool { dimension == 0 || self.space.contains(&(dimension as i32)) }
+
+    /// Its dimensions of space, in the order they are declared.
+    pub fn space(&self) -> &'static [i32] { self.space }
+
+    /// One more than its last dimension: how many dimensions a position laid out over it holds at most.
+    pub fn count(&self) -> usize { 1 + self.space.last().map_or(0, |d| *d as usize) }
+}
 
 /// Guards against a loop that never ends: where one is passed, the machine stops with a message.
 /// The levels one frame climbs.
@@ -44,7 +208,7 @@ pub struct Phase {
 /// order the dimensions are declared.
 pub fn later(a: &Pos, b: &Pos) -> bool {
     if a[0] != b[0] { return a[0] > b[0]; }
-    a[1..] < b[1..]
+    a.compare_space(b) == Ordering::Less
 }
 
 /// The three kinds the neighborhood policy distinguishes (D50).
@@ -81,8 +245,8 @@ pub struct Channel {
     pub name: String,
     pub event: Option<DimensionId>,
     pub action: Option<DimensionId>,
-    /// Bitmask over activation dimensions; bit 0 (time) is always set.
-    pub axes: u8,
+    /// The activation dimensions it is laid out over.
+    pub axes: Axes,
 }
 
 /// What an action dimension outputs when every candidate is negative (D51).

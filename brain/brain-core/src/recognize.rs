@@ -39,15 +39,16 @@ pub(crate) struct Fresh {
     pub rel: Rel,
 }
 
-fn add(a: &Pos, b: &Offset) -> Pos { let mut p = *a; for d in 0..MAX_DIMS { p[d] += b[d]; } p }
-fn neg(o: &Offset) -> Offset { let mut r = *o; for x in r.iter_mut() { *x = -*x; } r }
+fn add(a: &Pos, b: &Offset) -> Pos { a.plus(b) }
+fn neg(o: &Offset) -> Offset { o.negated() }
 
 pub(crate) fn edge(a: ActRef, b: ActRef) -> (ActRef, ActRef) { if a <= b { (a, b) } else { (b, a) } }
 
 /// Whether two offsets lie along one line (D15: the direction a cycle advances in).
 fn parallel(a: &Offset, b: &Offset) -> bool {
-    if a.iter().all(|x| *x == 0) || b.iter().all(|x| *x == 0) { return false; }
-    (0..MAX_DIMS).all(|d| (0..MAX_DIMS).all(|e| a[d] as i64 * b[e] as i64 == a[e] as i64 * b[d] as i64))
+    if a.is_zero() || b.is_zero() { return false; }
+    let count = a.len().max(b.len());
+    (0..count).all(|d| (0..count).all(|e| a[d] as i64 * b[e] as i64 == a[e] as i64 * b[d] as i64))
 }
 
 impl Brain {
@@ -254,7 +255,7 @@ impl Brain {
         if let Some(v) = self.expansions.borrow().get(&s) { return v.clone(); }
         let mut out = Vec::new();
         let mut deps = Vec::new();
-        self.expand_nodes(s, [0; MAX_DIMS], &mut Vec::new(), &mut out, &mut deps);
+        self.expand_nodes(s, Pos::zero(), &mut Vec::new(), &mut out, &mut deps);
         out.sort_unstable();
         out.dedup();
         deps.sort_unstable();
@@ -299,16 +300,14 @@ impl Brain {
                 nodes.retain(|(m, _)| !order.iter().any(|v| f.nodes[*v] == *m));
                 for i in 0..total {
                     let (v, k) = (order[i % c], (i / c) as i32);
-                    let mut q = lay.position[v];
-                    for d in 0..MAX_DIMS { q[d] += k * l[d]; }
+                    let q = Pos::make(lay.position[v].len().max(l.len()), |d| lay.position[v][d] + k * l[d]);
                     nodes.push((f.nodes[v], q));
                 }
             }
         }
         path.push(n);
         for (m, q) in nodes {
-            let mut p = at;
-            for d in 0..MAX_DIMS { p[d] += q[d]; }
+            let p = at.plus(&q);
             out.push((m, p, path.clone()));
             self.expand_nodes(m, p, path, out, deps);
         }
@@ -502,8 +501,7 @@ impl Brain {
             taken.entry(f.id).or_default().extend(fit.edges.iter().map(|&(a, b)| edge(a, b)));
             let lay = f.lay_out();
             let Some(entry) = self.find_act(fit.entry.1) else { continue };
-            let mut opos = entry.pos;
-            for d in 0..MAX_DIMS { opos[d] -= lay.position[fit.entry.0][d]; }
+            let opos = entry.pos.minus(&lay.position[fit.entry.0]);
             for (l, node) in fit.acts() { touch.entry(f.id).or_default().push((l, f.nodes[node], opos)); }
         }
         for e in board {
@@ -516,8 +514,7 @@ impl Brain {
                 let Some(node) = f.find_node(n) else { continue };
                 let start = f.nodes[node];
                 let lay = f.lay_out();
-                let mut opos = a.pos;
-                for d in 0..MAX_DIMS { opos[d] -= lay.position[node][d]; }
+                let opos = a.pos.minus(&lay.position[node]);
                 touch.entry(f.id).or_default().push((end, start, opos));
             }
         }
@@ -537,8 +534,7 @@ impl Brain {
                 let Some(f) = self.thalamus.dict.get(fit.func) else { continue };
                 let lay = f.lay_out();
                 let Some(entry) = self.find_act(fit.entry.1) else { continue };
-                let mut opos = entry.pos;
-                for d in 0..MAX_DIMS { opos[d] -= lay.position[fit.entry.0][d]; }
+                let opos = entry.pos.minus(&lay.position[fit.entry.0]);
                 let mut offers: Vec<(ActRef, ActRef, Sym)> = Vec::new();
                 // a call that also landed on an activation the fit landed on: its relations that share that
                 // activation (R50)
@@ -644,8 +640,7 @@ impl Brain {
                         let (u, v, seen) = if attach == rel.b { (rel.b, rel.a, neg(&rel.off)) } else { (rel.a, rel.b, rel.off) };
                         let lay = f.lay_out();
                         let (iu, iv) = (f.find_node(u).unwrap(), f.find_node(v).unwrap());
-                        let mut back = [0i32; MAX_DIMS];
-                        for d in 0..MAX_DIMS { back[d] = lay.position[iv][d] - lay.position[iu][d]; }
+                        let back = lay.position[iv].minus(&lay.position[iu]);
                         if seen != back { continue; }
                     }
                     if ka && kb {
@@ -835,8 +830,7 @@ impl Brain {
     /// off the relation index; an occurrence whose later end fired this frame is counted at the earlier end as well,
     /// whose row takes it only at the connect step.
     pub(crate) fn count_ends(&self, r: &Rel) -> (u32, u32) {
-        let mut neg = r.off;
-        for x in neg.iter_mut() { *x = -*x; }
+        let neg = r.off.negated();
         let (ca, na) = self.ask(CountQuery::Ends { own: r.a, far: r.b, off: r.off });
         let (cb, nb) = self.ask(CountQuery::Ends { own: r.b, far: r.a, off: neg });
         (ca + nb, cb + na)
@@ -948,7 +942,7 @@ impl Brain {
                     let g = Func::from_rels(rest[0].a, &rest);
                     let lay = g.lay_out();
                     let mut order: Vec<usize> = (0..g.nodes.len()).collect();
-                    order.sort_by(|&i, &j| { let (p, q) = (lay.position[i], lay.position[j]); q[0].cmp(&p[0]).then_with(|| p[1..].cmp(&q[1..])) });
+                    order.sort_by(|&i, &j| { let (p, q) = (lay.position[i], lay.position[j]); q[0].cmp(&p[0]).then_with(|| p.compare_space(&q)) });
                     let no = g.nodes[order[0]];
                     self.thalamus.dict.set_origin(fid, no);
                 }

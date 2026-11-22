@@ -37,16 +37,15 @@ impl Brain {
     /// is read only where something stands there to land on (D54); without, every lap is beyond what has happened.
     pub(crate) fn expand_to(&self, f: &Func, root: usize, at: Pos, board: bool) -> Vec<(Sym, Pos)> {
         let lay = f.lay_out_from(root);
-        let shift = |p: &Pos, k: i32, l: &Pos| { let mut q = at; for d in 0..MAX_DIMS { q[d] += p[d] + k * l[d]; } q };
-        let zero = [0i32; MAX_DIMS];
+        let shift = |p: &Pos, k: i32, l: &Pos| Pos::make(at.len().max(p.len()).max(l.len()), |d| at[d] + p[d] + k * l[d]);
+        let zero = Pos::zero();
         let mut out: Vec<(Sym, Pos)> = f.nodes.iter().enumerate().map(|(i, m)| (*m, shift(&lay.position[i], 0, &zero))).collect();
         let Some((_, ua, ub, off)) = lay.closing else { return out };
         // one lap: from the node the closing relation reaches to the node it leaves, then the closing relation again
-        let mut lap = [0i32; MAX_DIMS];
-        for d in 0..MAX_DIMS { lap[d] = lay.position[ua][d] + off[d] - lay.position[ub][d]; }
+        let lap = lay.position[ua].plus(&off).minus(&lay.position[ub]);
         let path: Vec<usize> = Func::find_tree_path(&lay, ub, ua).iter().map(|s| s.2).collect();
         // a closed shape comes back to the activation it started at: its lap advances nowhere, so it has no laps to read
-        if lap.iter().all(|x| *x == 0) { return out; }
+        if lap.is_zero() { return out; }
         for k in 1i32.. {
             assert!(k <= MAX_LAPS as i32, "an inferred cycle was read back more than {} laps", MAX_LAPS);
             let reached = shift(&lay.position[ub], k, &lap);

@@ -178,7 +178,7 @@ impl Brain {
     /// * `learning` — fixed for the life of the instance: a brain built with learning off runs each frame as trained
     ///   and changes nothing of itself; it is loaded from a backup to be tested
     pub fn new(h: usize, policy: Policy, regions: usize, columns: usize, learning: bool) -> Self {
-        Brain {
+        let mut brain = Brain {
             cfg: Config { h, policy, regions: regions.max(1), columns: columns.max(1) },
             act_dims: vec![ActDim { name: "time".into(), radius: 1 }],
             dims: Vec::new(),
@@ -226,14 +226,15 @@ impl Brain {
             expansions: std::cell::RefCell::new(FxHashMap::default()),
             expansion_deps: std::cell::RefCell::new(FxHashMap::default()),
             frozen: !learning,
-            
-        }
+        };
+        brain.thalamus.dict.dims = brain.act_dims.len();
+        brain
     }
 
-    /// Declare a spatial activation dimension (D1). Returns its index (1 or 2). The radius is read by nothing (R4).
+    /// Declare a spatial activation dimension (D1). Returns its index, from 1. The radius is read by nothing (R4).
     pub fn declare_axis(&mut self, name: &str, _radius: i32) -> usize {
-        assert!(self.act_dims.len() < MAX_DIMS, "at most two spatial axes");
         self.act_dims.push(ActDim { name: name.into(), radius: 1 });
+        self.thalamus.dict.dims = self.act_dims.len();
         self.act_dims.len() - 1
     }
 
@@ -242,8 +243,8 @@ impl Brain {
     pub fn declare_channel(&mut self, name: &str, event: Option<(&str, u32)>, action: Option<(&str, u32)>, axes: &[usize]) -> ChannelId {
         assert!(self.frame_no == 0, "channels are declared before the first frame");
         let id = self.channels.len() as ChannelId;
-        let mut mask: u8 = 1;
-        for &a in axes { assert!(a < self.act_dims.len()); mask |= 1 << a; }
+        for &a in axes { assert!(a < self.act_dims.len()); }
+        let mask = Axes::from_dims(axes);
         let mut ev = None;
         let mut ac = None;
         if let Some((n, res)) = event { ev = Some(self.declare_dim(n, id, Kind::Event, res, mask)); }
@@ -252,7 +253,7 @@ impl Brain {
         id
     }
 
-    pub(crate) fn declare_dim(&mut self, name: &str, channel: ChannelId, kind: Kind, resolution: u32, axes: u8) -> DimensionId {
+    pub(crate) fn declare_dim(&mut self, name: &str, channel: ChannelId, kind: Kind, resolution: u32, axes: Axes) -> DimensionId {
         let id = self.dims.len() as DimensionId;
         let first = self.thalamus.registry.len() as NeuronId;
         for b in 0..resolution {
@@ -306,8 +307,7 @@ impl Brain {
         for inp in inputs {
             let dim = &self.dims[inp.dim as usize];
             if inp.bucket >= dim.resolution { continue; }
-            let mut pos = inp.pos;
-            pos[0] = fno as i32;
+            let pos = inp.pos.with(0, fno as i32);
             if !reported.insert((inp.dim, pos)) { continue; }
             let n = dim.first + inp.bucket;
             let idx = frame.acts.len() as u32;
@@ -318,8 +318,7 @@ impl Brain {
         let weak = std::mem::take(&mut self.pending_weak);
         for (n, p) in weak {
             let Some(dim) = self.thalamus.registry[n].dim else { continue };
-            let mut pos = p;
-            pos[0] = fno as i32;
+            let pos = p.with(0, fno as i32);
             if reported.contains(&(dim, pos)) { continue; }
             frame.acts.push(self.make_act(n, pos, false));
         }
@@ -389,7 +388,7 @@ impl Brain {
         for f in self.thalamus.dict.funcs.values() {
             let r = match memo.get(&f.id) {
                 Some((n, rs, r)) if *n == f.nodes && *rs == f.rels => *r,
-                _ => { let r = f.measure_reach(1)[0]; memo.insert(f.id, (f.nodes.clone(), f.rels.clone(), r)); r }
+                _ => { let r = f.measure_reach(Axes::time())[0]; memo.insert(f.id, (f.nodes.clone(), f.rels.clone(), r)); r }
             };
             best = best.max(r);
         }
@@ -406,8 +405,7 @@ impl Brain {
 
     pub(crate) fn make_act(&self, n: NeuronId, pos: Pos, strong: bool) -> Act {
         let nn = &self.thalamus.registry[n];
-        let mut reach = [0; MAX_DIMS];
-        for d in 0..MAX_DIMS { if d == 0 || nn.axes & (1 << d) != 0 { reach[d] = 1; } }
+        let reach = Pos::make(nn.axes.count(), |d| if nn.axes.has(d) { 1 } else { 0 });
         Act { neuron: n, sym: n, kind: nn.kind, axes: nn.axes, pos, strong, reach, lo: pos, hi: pos, covered_at: None, coverers: Vec::new(), covers: Vec::new(), fired_by: None, rels: Vec::new(), inferences: Vec::new(), opened_at: self.frame_no, level: 0, height: 0, gone: false }
     }
 
@@ -669,7 +667,7 @@ impl Brain {
 ", dict.describe(f))); } }
             for ((own, t, o), c) in conns.into_iter().take(16) {
                 s.push_str(&format!("    {} -> {} @{:?} s={:.0} est={:+.2}
-", dict.describe_sym(own), dict.describe_sym(t), o, c.strength, c.estimate()));
+", dict.describe_sym(own), dict.describe_sym(t), o.to_vec(dict.dims.max(o.len())), c.strength, c.estimate()));
             }
             s
         }).collect()

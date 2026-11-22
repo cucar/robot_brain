@@ -159,11 +159,19 @@ fn write_kind(k: Kind) -> String { (k as u8).to_string() }
 
 fn read_kind(s: &str) -> Result<Kind, String> { match s { "0" => Ok(Kind::Event), "1" => Ok(Kind::Action), "2" => Ok(Kind::Inter), _ => Err(bad(s)) } }
 
-fn write_pos(p: &[i32; MAX_DIMS]) -> String { p.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(":") }
+fn write_pos(p: &Pos) -> String { (0..p.len()).map(|d| p[d].to_string()).collect::<Vec<_>>().join(":") }
 
-fn read_pos(s: &str) -> Result<[i32; MAX_DIMS], String> {
+fn write_axes(a: &Axes) -> String { if a.space().is_empty() { "-".into() } else { a.space().iter().map(|d| d.to_string()).collect::<Vec<_>>().join(":") } }
+
+fn read_axes(s: &str) -> Result<Axes, String> {
+    if s == "-" { return Ok(Axes::time()); }
+    let v: Vec<usize> = s.split(':').map(parse).collect::<Result<_, _>>()?;
+    Ok(Axes::from_dims(&v))
+}
+
+fn read_pos(s: &str) -> Result<Pos, String> {
     let v: Vec<i32> = s.split(':').map(parse).collect::<Result<_, _>>()?;
-    v.try_into().map_err(|_| bad(s))
+    Ok(Pos::from_slice(&v))
 }
 
 fn write_act(r: &ActRef) -> String { format!("{}:{}", r.frame, r.index) }
@@ -276,14 +284,14 @@ impl Brain {
         write_table(folder, "brain.csv", scalars.into_iter().map(|(k, v)| vec![k.to_string(), v]))?;
         write_table(folder, "act_dims.csv", self.act_dims.iter().map(|d| vec![d.name.clone(), d.radius.to_string()]))?;
         write_table(folder, "dims.csv", self.dims.iter().map(|d| vec![d.id.to_string(), d.name.clone(), d.channel.to_string(), write_kind(d.kind), d.resolution.to_string(), d.first.to_string()]))?;
-        write_table(folder, "channels.csv", self.channels.iter().map(|c| vec![c.id.to_string(), c.name.clone(), write_opt(c.event, |d| d.to_string()), write_opt(c.action, |d| d.to_string()), c.axes.to_string()]))?;
+        write_table(folder, "channels.csv", self.channels.iter().map(|c| vec![c.id.to_string(), c.name.clone(), write_opt(c.event, |d| d.to_string()), write_opt(c.action, |d| d.to_string()), write_axes(&c.axes)]))?;
         // the neurons: the registry, and what each holds, read in one batch
         let ids: Vec<NeuronId> = (0..self.thalamus.registry.len() as NeuronId).collect();
         let held = self.thalamus.export_neurons(ids.clone());
         let reg = &self.thalamus.registry;
         write_table(folder, "neurons.csv", ids.iter().zip(&held).map(|(&id, (h, now, _, _))| {
             let f = &reg[id];
-            vec![id.to_string(), write_kind(f.kind), write_opt(f.dim, |d| d.to_string()), f.bucket.to_string(), write_opt(f.channel, |c| c.to_string()), f.axes.to_string(), write_bool(f.alive), h.to_string(), now.to_string()]
+            vec![id.to_string(), write_kind(f.kind), write_opt(f.dim, |d| d.to_string()), f.bucket.to_string(), write_opt(f.channel, |c| c.to_string()), write_axes(&f.axes), write_bool(f.alive), h.to_string(), now.to_string()]
         }))?;
         write_table(folder, "rows.csv", ids.iter().zip(&held).flat_map(|(&id, (_, _, rows, _))| rows.iter().map(move |r| vec![
             id.to_string(), r.act.frame.to_string(), r.act.index.to_string(), r.own.to_string(),
@@ -329,14 +337,15 @@ impl Brain {
         self.max_reach_t = read_key(&s, "max_reach_t")?;
         self.span_s = read_key(&s, "span_s")?;
         self.act_dims = read_table(folder, "act_dims.csv")?.iter().map(|r| Ok(ActDim { name: r[0].clone(), radius: parse(&r[1])? })).collect::<Result<_, String>>()?;
+        self.thalamus.dict.dims = self.act_dims.len();
         self.dims = read_table(folder, "dims.csv")?.iter().map(|r| Ok(NeuronDim { id: parse(&r[0])?, name: r[1].clone(), channel: parse(&r[2])?, kind: read_kind(&r[3])?, resolution: parse(&r[4])?, first: parse(&r[5])? })).collect::<Result<_, String>>()?;
-        self.channels = read_table(folder, "channels.csv")?.iter().map(|r| Ok(Channel { id: parse(&r[0])?, name: r[1].clone(), event: read_opt(&r[2], parse)?, action: read_opt(&r[3], parse)?, axes: parse(&r[4])? })).collect::<Result<_, String>>()?;
+        self.channels = read_table(folder, "channels.csv")?.iter().map(|r| Ok(Channel { id: parse(&r[0])?, name: r[1].clone(), event: read_opt(&r[2], parse)?, action: read_opt(&r[3], parse)?, axes: read_axes(&r[4])? })).collect::<Result<_, String>>()?;
         // the neurons: each with its facts, its rows and its connections, created in one batch
         let mut neurons: Vec<(NeuronFacts, usize, FrameNumber, Vec<Row>, Vec<((Sym, Sym, Offset), Conn)>)> = Vec::new();
         for r in read_table(folder, "neurons.csv")? {
             let id: NeuronId = parse(&r[0])?;
             if id as usize != neurons.len() { return Err(bad("neurons.csv: ids in order")); }
-            let facts = NeuronFacts { kind: read_kind(&r[1])?, dim: read_opt(&r[2], parse)?, bucket: parse(&r[3])?, channel: read_opt(&r[4], parse)?, axes: parse(&r[5])?, alive: read_bool(&r[6])? };
+            let facts = NeuronFacts { kind: read_kind(&r[1])?, dim: read_opt(&r[2], parse)?, bucket: parse(&r[3])?, channel: read_opt(&r[4], parse)?, axes: read_axes(&r[5])?, alive: read_bool(&r[6])? };
             neurons.push((facts, parse(&r[7])?, parse(&r[8])?, Vec::new(), Vec::new()));
         }
         for r in read_table(folder, "rows.csv")? {
@@ -402,7 +411,7 @@ impl Brain {
             write_list(&f.rewards, |r| format!("{}/{}/{}", r.reward, r.frames, if r.channels.is_empty() { "-".into() } else { r.channels.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(";") })),
         ]))?;
         write_table(folder, "acts.csv", frames.iter().flat_map(|f| f.acts.iter().map(move |a| vec![
-            f.no.to_string(), a.neuron.to_string(), a.sym.to_string(), write_kind(a.kind), a.axes.to_string(), write_pos(&a.pos), write_bool(a.strong),
+            f.no.to_string(), a.neuron.to_string(), a.sym.to_string(), write_kind(a.kind), write_axes(&a.axes), write_pos(&a.pos), write_bool(a.strong),
             write_pos(&a.reach), write_pos(&a.lo), write_pos(&a.hi), write_opt(a.covered_at, |c| c.to_string()), write_list(&a.coverers, write_act),
             write_list(&a.covers, write_act), write_opt(a.fired_by.as_ref(), |fb| fb.func.to_string()), write_opt(a.fired_by.as_ref(), |fb| write_list(&fb.failed, |x| x.to_string())),
             write_list(&a.rels, |br| format!("{}:{}:{}", write_act(&br.other), br.strength, write_pos(&br.off))),
@@ -457,7 +466,7 @@ impl Brain {
                 Ok(Inference { target: parse(p[0])?, strength: parse(p[1])?, estimate: parse(p[2])?, struck: read_bool(p[3])?, offset: read_pos(p[4])? })
             })?;
             let act = Act {
-                neuron: parse(&r[1])?, sym: parse(&r[2])?, kind: read_kind(&r[3])?, axes: parse(&r[4])?, pos: read_pos(&r[5])?, strong: read_bool(&r[6])?,
+                neuron: parse(&r[1])?, sym: parse(&r[2])?, kind: read_kind(&r[3])?, axes: read_axes(&r[4])?, pos: read_pos(&r[5])?, strong: read_bool(&r[6])?,
                 reach: read_pos(&r[7])?, lo: read_pos(&r[8])?, hi: read_pos(&r[9])?, covered_at: read_opt(&r[10], parse)?, coverers: read_list(&r[11], read_act)?,
                 covers: read_list(&r[12], read_act)?, fired_by, rels, inferences,
                 opened_at: parse(&r[17])?, level: parse(&r[18])?, height: parse(&r[19])?, gone: read_bool(&r[20])?,

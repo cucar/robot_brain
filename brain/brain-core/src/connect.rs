@@ -26,16 +26,12 @@ impl Brain {
 
     /// The offset of a connection from an activation to one standing on the apex at `pos` (D25): the age in time,
     /// and the exact difference in every other dimension the two share; none beyond the holder's reach.
-    fn make_connection_offset(&self, h: &Act, axes: u8, pos: &Pos, age: u32) -> Option<Offset> {
-        let mut o = [0i32; MAX_DIMS];
-        o[0] = age as i32;
-        let shared = h.axes & axes;
-        for d in 1..MAX_DIMS {
-            if shared & (1 << d) == 0 { continue; }
-            o[d] = pos[d] - h.pos[d];
-            if !h.sees(d, o[d]) { return None; }
+    fn make_connection_offset(&self, h: &Act, axes: Axes, pos: &Pos, age: u32) -> Option<Offset> {
+        for d in h.axes.space() {
+            let d = *d as usize;
+            if axes.has(d) && !h.sees(d, pos[d] - h.pos[d]) { return None; }
         }
-        Some(o)
+        Some(Pos::make(h.pos.len().max(pos.len()), |d| if d == 0 { age as i32 } else if h.axes.has(d) && axes.has(d) { pos[d] - h.pos[d] } else { 0 }))
     }
 
     /// The connect call on every open activation past age 0 (§7.1, R31, R33): its row takes what stands on this
@@ -47,7 +43,7 @@ impl Brain {
         if self.frozen { return; }
         let fno = self.frame_no;
         let span_default = self.max_reach_t.max(1) as u32;
-        let apex: Vec<(ActRef, Sym, NeuronId, Kind, u8, Pos, bool)> = self.thalamus.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter().enumerate().map(move |(i, b)| (f.no, i, b)))
+        let apex: Vec<(ActRef, Sym, NeuronId, Kind, Axes, Pos, bool)> = self.thalamus.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter().enumerate().map(move |(i, b)| (f.no, i, b)))
             .filter(|(_, _, b)| b.on_apex() && b.neuron != NeuronId::MAX).map(|(no, i, b)| (ActRef { frame: no, index: i as u32 }, b.sym, b.neuron, b.kind, b.axes, b.pos, b.strong)).collect();
         let rewards: Vec<Reward> = self.thalamus.frames.iter().find(|f| f.no == fno).map(|f| f.rewards.clone()).unwrap_or_default();
         let mut writes: Vec<(NeuronId, Sym, Sym, Offset, f64)> = Vec::new();
@@ -147,7 +143,7 @@ impl Brain {
         if t.kind == Kind::Action { dims.push(t.dim.unwrap()); }
         else if t.kind == Kind::Inter {
             let mut expanded = Vec::new();
-            self.expand_from(target, [0; MAX_DIMS], FrameNumber::MIN, false, &mut Vec::new(), &mut expanded, None);
+            self.expand_from(target, Pos::zero(), FrameNumber::MIN, false, &mut Vec::new(), &mut expanded, None);
             for (n, _) in expanded {
                 let nn = &self.thalamus.registry[n];
                 if nn.kind == Kind::Action { if let Some(d) = nn.dim { if !dims.contains(&d) { dims.push(d); } } }

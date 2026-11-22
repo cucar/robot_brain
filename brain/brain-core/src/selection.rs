@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use crate::brain::*;
 use crate::types::*;
 
-fn add(a: &Pos, b: &Offset) -> Pos { let mut p = *a; for d in 0..MAX_DIMS { p[d] += b[d]; } p }
+fn add(a: &Pos, b: &Offset) -> Pos { a.plus(b) }
 
 impl Brain {
     /// What one open activation infers at the frame ahead (R46): the base symbols its standing inferences expand to
@@ -27,8 +27,7 @@ impl Brain {
             for (n, p) in expanded {
                 if p[0] as i64 != ahead { continue; }
                 let nn = &self.thalamus.registry[n];
-                let mut pp = p;
-                for d in 1..MAX_DIMS { if nn.axes & (1 << d) == 0 { pp[d] = 0; } }
+                let pp = Pos::make(p.len(), |d| if nn.axes.has(d) { p[d] } else { 0 });
                 out.push((n, pp, inf.strength, inf.estimate));
             }
         }
@@ -136,8 +135,7 @@ impl Brain {
             }
             let Some((b, est, share)) = best else { continue };
             if dim.kind == Kind::Action && est < 0.0 && self.cfg.policy.action == ActionPolicy::Nothing { continue; }
-            let mut pos = key.1;
-            pos[0] = ahead as i32;
+            let pos = key.1.with(0, ahead as i32);
             winners.push(Winner { dim: key.0, bucket: b, pos, kind: dim.kind, estimate: est, share, voters: voters_at[&key] });
         }
         winners
@@ -151,10 +149,8 @@ impl Brain {
         let Some(f) = self.thalamus.frames.iter().find(|f| f.no == q[0] as i64) else { return false };
         f.acts.iter().any(|a| {
             if a.gone { return false; }
-            let mut p = a.pos;
-            let mut qq = *q;
-            for d in 1..MAX_DIMS { if a.axes & (1 << d) == 0 { p[d] = 0; qq[d] = 0; } }
-            p == qq && (a.sym == n || self.thalamus.dict.starts_at(a.sym, n))
+            let same = (0..a.pos.len().max(q.len())).all(|d| !a.axes.has(d) || a.pos[d] == q[d]);
+            same && (a.sym == n || self.thalamus.dict.starts_at(a.sym, n))
         })
     }
 
