@@ -2236,7 +2236,8 @@ here**, and no test is waiting on any of it.
 > environment that pays each frame's action as it goes reports.
 >
 > **The whole window is the longest open one.** When no span is named, `S` is the longest reach in time among
-> the neurons the machine holds: an activation of that neuron is open through `S` frames (D9), so the furthest
+> the neurons the machine holds as active, the ones with an activation open (D9). An activation of that
+> neuron is open through `S` frames, so the furthest
 > back any open activation could have seen an action run is `S − 1` frames, and no share can reach further than
 > the connections that would take it. With base neurons alone that is `S = 1`, the degenerate case above.
 >
@@ -2458,8 +2459,8 @@ happened (R32).
 > **What is read.** The inferred interneuron's function, as it stands in the dictionary (R28): its fixed nodes,
 > each at an offset, and its variables, each at its node, read back from the completion the inference names,
 > one expansion down and no deeper. Whatever is read at the frame ahead or beyond is what the inference
-> proposes, and is not judged. Against them stands the apex of each frame within the longest reach in time, as
-> the machine keeps it (D24).
+> proposes, and is not judged. Against them stands every activation of each frame within the longest reach in
+> time, covered or not, as the machine keeps it (D24).
 >
 > **What each expanded node is worth.**
 >
