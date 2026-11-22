@@ -109,34 +109,34 @@ Reference results on MNIST, for scale (each trained on the full 60,000 images):
 
 Five tasks of two digits each, `{0,1} {2,3} {4,5} {6,7} {8,9}` (citing van de Ven & Tolias 2019 and Hsu et al.
 2018), trained strictly in turn: each task once, never revisited, **no task given**, the answers always all ten
-digits. After each task a copy of the brain with learning off is tested on the test set, building a retention matrix:
-the share right on each task's test digits after each task.
+digits. Then a copy of the brain with learning off is tested on the test set.
+
+**Forgetting is measured against regular training.** The same 10,000 images, 1,000 of each digit, are taught to a
+second brain with the digits mixed, in the file's order, and that brain is tested on the same test images. The two
+brains see the same training images and the same test images. Only the order differs. What regular training gets
+right and split training does not is the forgetting.
 
 ```bash
+# split: two digits at a time
 node apps/mnist/jobs/test.js --image-size 14 --split --per-class 1000 --max-test-images 2000
+
+# regular: the same images, the digits mixed
+node apps/mnist/jobs/test.js --image-size 14 --per-class 1000 --save-brain mnist14x1000
+node apps/mnist/jobs/test.js --image-size 14 --per-class 1000 --load-brain mnist14x1000 --disable-learning --test-data --max-test-images 2000
 ```
 
-1,000 images of each digit (10,000 in all), 2,000 test images after each task:
+| training on the same 10,000 images | right, of the same 2,000 test images | functions |
+|---|---|---|
+| regular, the digits mixed | 1,057 (52.9%) | 11,765 |
+| split, two digits at a time | 907 (45.4%) | 11,760 |
+| **forgetting** | 150 (**7.5 points**) | |
 
-```
-Retention matrix  T0(01)   T1(23)   T2(45)   T3(67)   T4(89)
-  after T0        94.4%    0.0%     0.0%     0.0%     0.0%
-  after T1        65.3%    79.6%    0.0%     0.0%     0.0%
-  after T2        54.3%    52.8%    78.8%    0.0%     0.0%
-  after T3        45.7%    41.5%    51.5%    82.5%    0.0%
-  after T4        40.8%    31.0%    26.5%    53.3%    77.5%
-  Average accuracy after the last task: 45.81%
-  Forgetting per task (best less last): T0:53.5pp T1:48.6pp T2:52.3pp T3:29.2pp T4:0.0pp
-  Average forgetting: 36.73pp
-```
+Learning the digits two at a time builds a dictionary of the same size as learning them mixed, and loses 150 of the
+1,057 answers.
 
-- **The upper triangle is 0%**: the brain never answers a digit it has not yet been taught. No task-ID cheating.
-- **Each task is learned when it is taught**: 78–94% on its own digits right after its task.
-- **Earlier tasks fade as new ones arrive**: the first task falls from 94.4% to 40.8% after four more, and the average
-  forgetting is 36.73 points. After the last task the average is 45.81%: above the ~20% floor where naive backprop
-  nets land in this regime, well below joint training.
+The split run prints its figure on the line `TEST after task 4`, and the regular test on its `test:` line.
 
-The run takes about 10 minutes.
+The split run takes about 10 minutes. The regular run takes about 9½ minutes to train and half a minute to test.
 
 **Literature baselines:** naive backprop ~20%, EWC / regularization methods ~20–25%, replay-based methods 70–90% (but
 they store and replay old examples), joint-training upper bound ~98%. Citations: van de Ven & Tolias 2019; Hsu et al.
@@ -167,9 +167,10 @@ Retention matrix  T0(0,1)   T1(2,3)   T2(4,5)   T3(6,7)   T4(8,9)
 The collapse: 94.5% (joint) -> 19.4% (sequential), a 75pp drop to the ~20% chance floor.
 ```
 
-Each task hits ~98–99% the moment it is trained, then drops to **0%** as the next task overwrites those weights. The
-brain's earlier tasks fade too, but they do not drop to zero: after all five tasks its oldest task still stands at
-40.8%, where the MLP's stands at 0%.
+Each task hits ~98–99% the moment it is trained, then drops to **0%** as the next task overwrites those weights.
+
+By the measure above, the MLP forgets 75 points: 94.5% trained on all ten digits at once, 19.6% trained in turn. The
+brain forgets 7.5 points: 52.9% with the digits mixed, 45.4% in turn.
 
 ---
 
