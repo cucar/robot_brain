@@ -8,12 +8,14 @@ see [mnist-demos.md](mnist-demos.md), [text-demos.md](text-demos.md), [shape-dem
 Each stock is one channel: the price's move from one bar to the next, up or down, is the event, and own or out is the
 action. The reward of a bar is the move, signed by the action that stood over it, scoped to that stock's channel and
 that one frame. Where the brain says nothing for a stock, the world runs the move itself as a lesson. With `--volume`,
-each stock also gets a channel of its own for its volume's move; it is off by default.
+each stock also gets a channel of its own for its volume's move, up or down. It is off by default. The trading demo and
+the sequence memorization below turn it on.
 
 The daily histories fill the days before a stock was listed, and the days it did not trade, with its price held and a
 volume of 0 (PLTR before its listing in September 2020, most of GOLD's early years, some of UUUU's). No trading
 happened on such a day, so the jobs skip it: the stock reports nothing that frame, runs nothing and earns nothing, and
-a prediction made for it is not graded.
+a prediction made for it is not graded. A filled day holds the volume of the last day the stock traded, as it holds
+the price, so the first trading day after it moves against that day.
 
 The included `1D` timeframe data is ready to use — **no API key needed** for these demos. To download fresh or
 different data, see [Downloading Fresh Stock Data](#downloading-fresh-stock-data) at the end.
@@ -91,35 +93,36 @@ over the shorter runs, 87–99%:
 
 ## Stock Trading
 
-Ten stocks over their whole daily history (5,373 bars, January 2005 to May 2026), one channel each, with a trader. At
+Ten stocks over their whole daily history (5,373 bars, January 2005 to May 2026), a price channel and a volume channel each, with a trader. At
 each bar the trader brings its holdings in line with what the brain last said: each stock is owned or out, at most
 three owned at once, the value split evenly among them, a cost of 0.02% on every trade. It starts with $15,000.
 
 ```bash
-node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL --max-positions 3 --transaction-cost 0.02
+node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL --max-positions 3 --transaction-cost 0.02 --volume
 ```
 
 **Expected output** (the end of the lap):
 ```
-TRADER lap 1 | net profit $36844.68 | ROI +245.63% | +0.023085%/frame | Sharpe 0.02 | transaction cost $25923.67 | trades 25028
-CYCLE 1 | neurons 1829 | functions 1789 | highest call level in the cycle 4 | the dictionary last changed at frame 5373 | right SO 50.63%, VALE 50.78%, STLD 50.60%, GOOGL 50.97%, MU 50.04%, PLTR 50.00%, UUUU 50.12%, PFE 51.45%, CRM 49.24%, HAL 50.99% | net profit $36844.68, ROI 245.63% (25028 trades)
+TRADER lap 1 | net profit $192580.75 | ROI +1283.87% | +0.048913%/frame | Sharpe 0.19 | transaction cost $65962.28 | trades 25270
+CYCLE 1 | neurons 5523 | functions 5463 | highest call level in the cycle 3 | the dictionary last changed at frame 5373 | right SO 50.24%, VALE 50.82%, STLD 49.48%, GOOGL 51.38%, MU 51.25%, PLTR 50.75%, UUUU 50.60%, PFE 50.95%, CRM 51.71%, HAL 49.27% | net profit $192580.75, ROI 1283.87% (25270 trades)
 ```
 
 **In one pass, the brain does not predict the next day's move.** Every stock is right on about half of its real bars
-(49–51%), and the trader's Sharpe ratio is 0.02: $15,000 becomes $51,845, about 6.0% a year, which is what holding a
-basket of risky stocks pays, with no skill in it. The run takes about 30 seconds.
+(49–52%), and the trader's Sharpe ratio is 0.19: $15,000 becomes $207,581, about 13.1% a year. With every stock right
+half the time that is not skill: it is within what a coin earns on the same stocks (below). The run takes about 1½
+minutes.
 
-The ride is rough. The portfolio holds three stocks on 82% of the bars, nearly always fully invested, with no cash
+The ride is rough. The portfolio holds three stocks on 84% of the bars, nearly always fully invested, with no cash
 cushion:
 
 | | |
 |---|---|
-| drawdowns deeper than 10% / 20% / 30% / 50% | 12 / 6 / 2 / 1 |
-| the deepest | −77.2%, from June 2008 ($27,382) to March 2020 ($6,256); back above the 2008 peak only in December 2023 |
-| daily volatility | 2.3% (36.9% a year) |
-| days moving more than 5% / 10% | 202 / 31 |
-| worst and best day | −31.6% (15 July 2019), +23.5% (5 January 2009) |
-| losing years | 2005, 2007, 2008, 2011, 2015, 2018, 2019 (the worst 2008, −48.3%) |
+| drawdowns deeper than 10% / 20% / 30% / 50% | 17 / 8 / 4 / 2 |
+| the deepest | −63.6%, from January 2006 ($24,585) to November 2008 ($8,951); back above the 2006 peak in October 2010 |
+| daily volatility | 2.4% (38.1% a year) |
+| days moving more than 5% / 10% | 221 / 28 |
+| worst and best day | −19.4% (10 October 2008), +36.4% (24 May 2010) |
+| losing years | 2007, 2008, 2011, 2014, 2015, 2022 (the worst 2022, −35.2%) |
 
 What the brain does with these stocks is memorize their history, lap after lap: the next demos after the random
 baseline.
@@ -139,8 +142,8 @@ Over seeds 1 to 10, against the brain's single pass over the same ten stocks wit
 
 | settings | random: profit, seeds 1–10 | random: Sharpe | the brain, first pass | beats |
 |---|---|---|---|---|
-| one stock at a time, no cost | $7,819 to $2,625,508 (middle about $68,000) | −0.08 to 0.58 | $621,303, Sharpe 0.22 | 9 of 10 seeds |
-| three stocks, 0.02% cost | −$6,883 to $915,496 (middle about $15,000) | −0.22 to 0.44 | $36,845, Sharpe 0.02 | 7 of 10 seeds |
+| one stock at a time, no cost, without volume | $7,819 to $2,625,508 (middle about $68,000) | −0.08 to 0.58 | $621,303, Sharpe 0.22 | 9 of 10 seeds |
+| three stocks, 0.02% cost, with volume | −$6,883 to $915,496 (middle about $15,000) | −0.22 to 0.44 | $192,581, Sharpe 0.19 | 9 of 10 seeds |
 
 The coin owns at most one stock in either row; the settings are the brain's, and the cost is the coin's too. On its
 first pass the brain earns more than most coins but not more than a lucky one: with daily moves right half the
@@ -148,7 +151,7 @@ time, its single-pass profit is within the range chance gives. Each random run t
 
 ## Action Learning in Low Accuracy
 
-The same ten stocks over five laps of their history, one stock owned at a time, no transaction cost. The brain keeps
+The same ten stocks over five laps of their history, without volume, one stock owned at a time, no transaction cost. The brain keeps
 what it learned from lap to lap; the trader starts each lap from $15,000.
 
 ```bash
@@ -172,22 +175,26 @@ on, not a forward return. The run takes about 7 minutes.
 
 ## Stock Sequence Memorization
 
-KGC, GOLD and SPY over their whole history (5,373 moves each), five laps, one stock owned at a time, no cost.
+KGC, GOLD and SPY over their whole history (5,373 moves each), five laps, each stock with its volume channel, one
+stock owned at a time, no cost.
 
 ```bash
-node apps/stocks/jobs/test.js --symbols KGC,GOLD,SPY --episodes 5
+node apps/stocks/jobs/test.js --symbols KGC,GOLD,SPY --episodes 5 --volume
 ```
 
 | lap | right KGC | right GOLD | right SPY | Sharpe | functions |
 |---|---|---|---|---|---|
-| 1 | 50.43% | 49.51% | 50.43% | −0.08 | 484 |
-| 2 | 53.36% | 54.15% | 53.88% | 1.22 | 807 |
-| 3 | 57.17% | 61.77% | 57.66% | 2.76 | 1,270 |
-| 4 | 62.35% | 70.33% | 62.76% | 4.33 | 2,011 |
-| 5 | 67.06% | 80.05% | 68.43% | 5.52 | 2,265 |
+| 1 | 51.53% | 51.36% | 52.79% | 0.40 | 577 |
+| 2 | 54.68% | 53.76% | 55.76% | 1.51 | 1,256 |
+| 3 | 64.47% | 65.38% | 63.82% | 4.71 | 2,753 |
+| 4 | 76.03% | 80.57% | 75.06% | 7.56 | 3,793 |
+| 5 | 83.29% | 85.95% | 81.70% | 8.74 | 4,576 |
 
-From a coin flip in the first lap to 67–80% in the fifth, on real market data. GOLD is graded only on its real bars, 15,232 over the five laps, against 26,864 for KGC and SPY. The run
-takes about 2½ minutes.
+From a coin flip in the first lap to 82–86% in the fifth, on real market data. GOLD is graded only on its real bars,
+15,233 over the five laps, against 26,864 for KGC and SPY. The run takes about 6 minutes.
+
+Without `--volume` the fifth lap ends at 67.06%, 80.05% and 68.43%, with 2,265 functions, in about 2½ minutes. The
+volume gives the brain more to tell one day from another, and it memorizes the history faster.
 
 ---
 

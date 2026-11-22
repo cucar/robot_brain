@@ -3,7 +3,7 @@
 /// other end takes the call (D10, D18). The kind each covered relation decides (D34), and the deadlocks refused where
 /// they would close (D24).
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 
 use crate::brain::*;
 use crate::neuron::*;
@@ -121,7 +121,15 @@ impl Brain {
     pub(crate) fn lift_relations(&mut self, me: ActRef) {
         let Some(a) = self.find_act(me).cloned() else { return };
         let mut rels: Vec<(ActRef, u32)> = a.rels.iter().map(|br| (br.other, br.strength)).collect();
-        for f in self.thalamus.frames.iter() { for (j, b) in f.acts.iter().enumerate() { if b.gone { continue; } for br in &b.rels { if br.other == me { rels.push((ActRef { frame: f.no, index: j as u32 }, br.strength)); } } } }
+        // the activations whose relations name it, in the order they stand on the board
+        let mut holders: Vec<ActRef> = self.rel_holders.get(&me).cloned().unwrap_or_default();
+        holders.sort();
+        holders.dedup();
+        for h in holders {
+            let Some(b) = self.find_act(h) else { continue };
+            if b.gone { continue; }
+            for br in &b.rels { if br.other == me { rels.push((h, br.strength)); } }
+        }
         // an end that is covered is the call that stands over it: the coverers followed upward to each call no call
         // covers now (D55)
         let coverers: Vec<ActRef> = self.find_standing_over(&a.coverers);
@@ -156,7 +164,12 @@ impl Brain {
                         if first && (in_taken || held || xa.rels.iter().any(|br| br.other == c)) { self.form_pre.insert(f); }
                         let v = self.form_src.entry(f).or_default(); if !v.contains(&e) { v.push(e); }
                     }
-                    if let Some(xm) = self.find_act_mut(x) { if !held && !xm.rels.iter().any(|br| br.other == c) { xm.rels.push(BoardRel { other: c, off, strength: s }); } }
+                    let mut took = false;
+                    if let Some(xm) = self.find_act_mut(x) { if !held && !xm.rels.iter().any(|br| br.other == c) { xm.rels.push(BoardRel { other: c, off, strength: s }); took = true; } }
+                    if took {
+                        self.rel_holders.entry(c).or_default().push(x);
+                        self.rel_log.push(x);
+                    }
                     // the row at the relation's other end holds it too (D18, D55, R50): the row of what stands there on the
                     // board, an activation no call has landed on, as itself, or the call that had already landed on that
                     // end, the row of the activation under it taking nothing. Inside the frame it takes the call as a
@@ -262,28 +275,6 @@ impl Brain {
 
 
 
-    /// The calls on the shortest chain of relations covered in this election from `a` to `b`, if they are joined.
-    pub(crate) fn find_joined_chain(&self, a: ActRef, b: ActRef) -> Option<Vec<ActRef>> {
-        if a == b || self.find_joined_root(a) != self.find_joined_root(b) { return None; }
-        let mut prev: FxHashMap<ActRef, (ActRef, ActRef)> = FxHashMap::default();
-        let mut q = std::collections::VecDeque::new();
-        q.push_back(a);
-        prev.insert(a, (a, a));
-        while let Some(x) = q.pop_front() {
-            if x == b { break; }
-            for &(y, call, _) in self.joined.get(&x).map(|v| v.as_slice()).unwrap_or(&[]) {
-                if prev.contains_key(&y) { continue; }
-                prev.insert(y, (x, call));
-                q.push_back(y);
-            }
-        }
-        if !prev.contains_key(&b) { return None; }
-        let mut calls: Vec<ActRef> = Vec::new();
-        let mut x = b;
-        while x != a { let (p, c) = prev[&x]; if !calls.contains(&c) { calls.push(c); } x = p; }
-        Some(calls)
-    }
-
     /// A refused relation that had already ended at a call: that edge leaves the board, and every edge it became
     /// above. An edge that also stands for a relation that is not refused, or stood on the board before, stays (D24).
     pub(crate) fn remove_forms(&mut self, e: (ActRef, ActRef), depth: usize) {
@@ -306,22 +297,28 @@ impl Brain {
     /// At the start of a round of the election: every relation on the board whose two ends the calls taken so far at
     /// this level of this frame join is refused, inside the frame or in time, whether or not a fit offers it or a
     /// function holds it (D24, D55). Returns the ends of the relations refused now.
-    pub(crate) fn mark_refused(&mut self, fits: &[crate::recognize::Fit]) -> Vec<ActRef> {
+    pub(crate) fn mark_refused(&mut self) -> Vec<ActRef> {
         let mut ends = Vec::new();
+        // a joined activation that took a new relation since this level last looked is checked again
+        for h in &self.rel_log[self.jlog_seen.min(self.rel_log.len())..] { if self.joined.contains_key(h) { self.jdirty.insert(*h); } }
+        self.jlog_seen = self.rel_log.len();
+        // nothing joined has changed since the last check: nothing new closes a deadlock
+        if self.jdirty.is_empty() { return ends; }
         let mut cands: Vec<(ActRef, ActRef)> = Vec::new();
         let keys: Vec<ActRef> = self.joined.keys().copied().collect();
         for x in &keys {
+            if !self.jdirty.contains(x) { continue; }
             let Some(xa) = self.find_act(*x) else { continue };
             if xa.gone { continue; }
             for br in &xa.rels { if self.joined.contains_key(&br.other) { cands.push((*x, br.other)); } }
         }
-        for fit in fits { cands.extend(fit.edges.iter().copied()); }
+        self.jdirty.clear();
         let mut seen: FxHashSet<(ActRef, ActRef)> = FxHashSet::default();
         for (a, b) in cands {
             let e = edge(a, b);
             if !seen.insert(e) { continue; }
             if self.refused.contains(&e) || self.is_blocked(a, b) || self.covered_rel.contains(&e) { continue; }
-            if self.find_joined_chain(a, b).is_none() { continue; }
+            if a == b || self.find_joined_root(a) != self.find_joined_root(b) { continue; }
             self.refused.insert(e);
             // where it had already ended at a call, that edge leaves the board, with every edge above it
             if self.lifted.contains(&e) { self.remove_forms(e, 0); }

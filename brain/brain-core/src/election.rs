@@ -134,18 +134,24 @@ impl Brain {
         if self.joined_at != Some((self.frame_no, level)) {
             // a level visited twice in one frame, in the climb and after it, keeps what it joined across both visits
             match self.joined_at {
-                Some((f, l)) if f == self.frame_no => { let j = std::mem::take(&mut self.joined); let p = std::mem::take(&mut self.jparent); self.joined_stash.insert(l, (j, p)); }
-                _ => self.joined_stash.clear(),
+                Some((f, l)) if f == self.frame_no => {
+                    let state = JoinState { joined: std::mem::take(&mut self.joined), parent: std::mem::take(&mut self.jparent), members: std::mem::take(&mut self.jmembers), dirty: std::mem::take(&mut self.jdirty), log_seen: self.jlog_seen };
+                    self.joined_stash.insert(l, state);
+                }
+                _ => { self.joined_stash.clear(); self.rel_log.clear(); }
             }
-            let (j, p) = self.joined_stash.remove(&level).unwrap_or_default();
-            self.joined = j;
-            self.jparent = p;
+            let state = self.joined_stash.remove(&level).unwrap_or_default();
+            self.joined = state.joined;
+            self.jparent = state.parent;
+            self.jmembers = state.members;
+            self.jdirty = state.dirty;
+            self.jlog_seen = state.log_seen;
             self.joined_at = Some((self.frame_no, level));
         }
         let (mut accepted, mut minted) = (0, 0);
         loop {
             // a relation whose two ends the calls taken so far join would close a deadlock: it is refused (D24, D55)
-            let _ = self.mark_refused(&fits);
+            self.mark_refused();
             let mut best: Option<(usize, f64)> = None;
             // each fit's tie order read once per round, not at every comparison (speed only)
             let mut ranks: Vec<Option<(i64, u8, u64, u64, ActRef)>> = vec![None; fits.len()];
@@ -320,7 +326,16 @@ impl Brain {
             self.joined.entry(a).or_default().push((b, me, f.id));
             self.joined.entry(b).or_default().push((a, me, f.id));
             let (ra, rb) = (self.find_joined_root(a), self.find_joined_root(b));
-            if ra != rb { self.jparent.insert(ra, rb); }
+            // the two ends, and every activation of two sets that become one, are checked again for what to refuse
+            self.jdirty.insert(a);
+            self.jdirty.insert(b);
+            if ra != rb {
+                self.jparent.insert(ra, rb);
+                let moved = self.jmembers.remove(&ra).unwrap_or_else(|| vec![ra]);
+                let stay = self.jmembers.entry(rb).or_insert_with(|| vec![rb]);
+                stay.extend(moved);
+                self.jdirty.extend(stay.iter().copied());
+            }
             self.decide_kind(a, b);
             if self.covered_rel.insert(edge(a, b)) {
                 self.cov_inc.entry(a).or_default().push(b);

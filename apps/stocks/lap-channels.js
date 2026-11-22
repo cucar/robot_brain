@@ -62,7 +62,11 @@ function readHistory(folder, symbol, { offset, holdout, maxFrames }) {
 	if (maxFrames !== null) rows = rows.slice(0, maxFrames + 1);
 	const prices = rows.map(row => row[0]);
 	const filled = rows.slice(1).map(([price, volume]) => !price || !volume);
-	return { prices, moves: readChanges(prices, false), volumes: readChanges(rows.map(row => row[1]), false), filled };
+	// a filled day holds the volume of the last day the stock traded, as it holds the price,
+	// so the first trading day after it moves against that day and not against the fill's 0
+	let traded = 0;
+	const volumes = rows.map(([, volume]) => { if (volume) traded = volume; return traded; });
+	return { prices, moves: readChanges(prices, false), volumes: readChanges(volumes, false), filled };
 }
 
 /**

@@ -32,8 +32,8 @@ export const BENCHMARKS = [
 	{ name: 'three-stocks', job: 'apps/stocks/jobs/multi-channel-test.js', args: ['--mode', 'three', '--laps', '100'], drop: STOCK_DROP },
 	{ name: 'four-stocks', job: 'apps/stocks/jobs/multi-channel-test.js', args: ['--mode', 'three4', '--laps', '100', '--all4'], drop: STOCK_DROP },
 	// real stocks
-	{ name: 'three-stocks-5-laps', job: 'apps/stocks/jobs/test.js', args: ['--symbols', 'KGC,GOLD,SPY', '--episodes', '5'], drop: STOCK_DROP },
-	{ name: 'ten-stocks', job: 'apps/stocks/jobs/test.js', args: ['--symbols', TEN_STOCKS, '--episodes', '1', '--max-positions', '3', '--transaction-cost', '0.02', '--every', '100'], drop: STOCK_DROP },
+	{ name: 'three-stocks-5-laps', job: 'apps/stocks/jobs/test.js', args: ['--symbols', 'KGC,GOLD,SPY', '--episodes', '5', '--volume'], drop: STOCK_DROP },
+	{ name: 'ten-stocks', job: 'apps/stocks/jobs/test.js', args: ['--symbols', TEN_STOCKS, '--episodes', '1', '--max-positions', '3', '--transaction-cost', '0.02', '--every', '100', '--volume'], drop: STOCK_DROP },
 	// tap and text
 	{ name: 'tap', job: 'apps/tap/jobs/tap.js', args: ['6', '8'] },
 	{ name: 'text', job: 'apps/text/jobs/test.js', args: ['the the the the the the the the the ', '--describe', 'h'], drop: TEXT_DROP },

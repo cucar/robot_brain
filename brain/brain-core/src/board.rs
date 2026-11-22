@@ -103,6 +103,16 @@ pub struct FrameRec {
 }
 
 impl Brain {
+    /// Note, for every activation on the board, the activations whose relations name it.
+    pub(crate) fn rebuild_rel_holders(&mut self) {
+        self.rel_holders.clear();
+        for f in self.thalamus.frames.iter() {
+            for (i, a) in f.acts.iter().enumerate() {
+                for br in &a.rels { self.rel_holders.entry(br.other).or_default().push(ActRef { frame: f.no, index: i as u32 }); }
+            }
+        }
+    }
+
     /// Whether an activation is open, connecting, at the frame being processed: within its own reach in time (D9),
     /// and not a weak one of an earlier frame (D40).
     pub(crate) fn is_open(&self, a: &Act, at: FrameNumber) -> bool {

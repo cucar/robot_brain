@@ -249,6 +249,9 @@ pub struct Dictionary {
     frozen_index: FxHashMap<(NeuronId, Phase), Sym>,
     /// How many activation dimensions the machine was built with, time among them: an offset is printed to that many.
     pub dims: usize,
+    /// Each function's reach in time, and how many functions have each reach: the longest is the board's span (D9).
+    reach_of: FxHashMap<FuncId, i32>,
+    reach_counts: std::collections::BTreeMap<i32, usize>,
     pub(crate) next_id: FuncId,
     pub(crate) next_join: u64,
 }
@@ -256,6 +259,25 @@ pub struct Dictionary {
 impl Dictionary {
     pub fn get(&self, id: FuncId) -> Option<&Func> { self.funcs.get(&id) }
     pub fn len(&self) -> usize { self.funcs.len() }
+    /// The longest reach in time among the functions, and at least one frame (D9).
+    pub fn read_span(&self) -> i32 { self.reach_counts.keys().next_back().copied().unwrap_or(1).max(1) }
+    /// Note a function's reach in time after it changed; a function that has left is dropped.
+    fn note_reach(&mut self, id: FuncId) {
+        if let Some(old) = self.reach_of.remove(&id) {
+            if let Some(count) = self.reach_counts.get_mut(&old) { *count -= 1; if *count == 0 { self.reach_counts.remove(&old); } }
+        }
+        let Some(f) = self.funcs.get(&id) else { return };
+        let reach = f.measure_reach(Axes::time())[0];
+        self.reach_of.insert(id, reach);
+        *self.reach_counts.entry(reach).or_insert(0) += 1;
+    }
+    /// Note every function's reach afresh, where the dictionary was loaded whole.
+    pub(crate) fn note_reaches(&mut self) {
+        self.reach_of.clear();
+        self.reach_counts.clear();
+        let ids: Vec<FuncId> = self.funcs.keys().copied().collect();
+        for id in ids { self.note_reach(id); }
+    }
     pub fn find_holder(&self, r: &Rel) -> Option<FuncId> { self.by_rel.get(r).copied() }
     pub fn list_of_inter(&self, n: NeuronId) -> &[FuncId] { self.by_inter.get(&n).map_or(&[], |v| v.as_slice()) }
     /// The functions whose nodes name a neuron, in any phase (R38, the subtree).
@@ -364,6 +386,7 @@ impl Dictionary {
         let nodes = f.nodes.clone();
         self.funcs.insert(id, f);
         self.reindex(id, &[], &nodes);
+        self.note_reach(id);
         id
     }
 
@@ -381,6 +404,7 @@ impl Dictionary {
         let after = f.nodes.clone();
         self.by_rel.insert(r, id);
         self.reindex(id, &before, &after);
+        self.note_reach(id);
     }
 
     /// A relation leaves its function (R18, R54). The function stays connected: what the origin no longer reaches
@@ -409,6 +433,7 @@ impl Dictionary {
         for x in &cut { self.by_rel.remove(x); }
         self.reindex(id, &before, &after);
         if empty { return (cut, self.remove(id)); }
+        self.note_reach(id);
         (cut, None)
     }
 
@@ -419,11 +444,13 @@ impl Dictionary {
         let Some(i) = f.nodes.iter().position(|x| *x == o) else { return };
         let n = f.nodes.remove(i);
         f.nodes.insert(0, n);
+        self.note_reach(id);
     }
 
     /// Take a function out of the dictionary (R18, R38); returns it.
     pub fn remove(&mut self, id: FuncId) -> Option<Func> {
         let f = self.funcs.remove(&id)?;
+        self.note_reach(id);
         self.reindex(id, &f.nodes, &[]);
         for r in &f.rels { if self.by_rel.get(r) == Some(&id) { self.by_rel.remove(r); } }
         if let Some(n) = f.inter { if let Some(v) = self.by_inter.get_mut(&n) { v.retain(|x| *x != id); } }

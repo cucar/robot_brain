@@ -55,6 +55,16 @@ pub struct Config {
     pub columns: usize,
 }
 
+/// What one level of a frame has joined, kept while the frame visits another level (D24).
+#[derive(Default)]
+pub(crate) struct JoinState {
+    pub joined: FxHashMap<ActRef, Vec<(ActRef, ActRef, FuncId)>>,
+    pub parent: FxHashMap<ActRef, ActRef>,
+    pub members: FxHashMap<ActRef, Vec<ActRef>>,
+    pub dirty: FxHashSet<ActRef>,
+    pub log_seen: usize,
+}
+
 pub struct Brain {
     pub cfg: Config,
     pub act_dims: Vec<ActDim>,
@@ -108,7 +118,17 @@ pub struct Brain {
     /// How many functions the last start step started
     pub(crate) last_start_rounds: usize,
     /// What each level of this frame has joined, kept while the frame visits another level (D24, R24, R26)
-    pub(crate) joined_stash: FxHashMap<u32, (FxHashMap<ActRef, Vec<(ActRef, ActRef, FuncId)>>, FxHashMap<ActRef, ActRef>)>,
+    pub(crate) joined_stash: FxHashMap<u32, JoinState>,
+    /// The activations of each joined set, by the set's root (D24)
+    pub(crate) jmembers: FxHashMap<ActRef, Vec<ActRef>>,
+    /// The joined activations whose relations have not been checked since their set or their relations changed (D24)
+    pub(crate) jdirty: FxHashSet<ActRef>,
+    /// How much of the frame's new relations this level has looked at
+    pub(crate) jlog_seen: usize,
+    /// The activations that took a new relation in this frame, in the order they took it (D55)
+    pub(crate) rel_log: Vec<ActRef>,
+    /// For each activation on the board, the activations whose relations name it (D55)
+    pub(crate) rel_holders: FxHashMap<ActRef, Vec<ActRef>>,
     /// Relations of covered activations that no call covered, lifted to their calls (D24, D10, D55)
     pub(crate) lifted: FxHashSet<(ActRef, ActRef)>,
     /// The covered relations at each activation: the other end of each, kept as each fit is accepted (D24, D28)
@@ -134,10 +154,6 @@ pub struct Brain {
     pub first_frame: Option<FrameNumber>,
     /// A call that took a lap (D53): the record it grew from, to the record it stands as now.
     pub grown: FxHashMap<ActRef, ActRef>,
-    /// Whether two activations stand over a shared one, remembered for one grouping step while nothing on the board
-    /// changes (a speed-up only).
-    /// Each function's reach in time with the nodes and relations it was read from, for S (D9)
-    pub(crate) reach_memo: std::cell::RefCell<FxHashMap<FuncId, (Vec<Sym>, Vec<Rel>, i32)>>,
     pub last_stats: FrameStats,
     pub last_winners: Vec<Winner>,
     /// The coverage set per relation (D24): every board relation an accepted call covers, over the frames on the
@@ -202,6 +218,7 @@ impl Brain {
             stats_retired: 0,
             joined: FxHashMap::default(), jparent: FxHashMap::default(), joined_at: None, refused: FxHashSet::default(), form_src: FxHashMap::default(), form_pre: FxHashSet::default(),
             start_queue: Vec::new(), half: None, last_start_rounds: 0, joined_stash: FxHashMap::default(),
+            jmembers: FxHashMap::default(), jdirty: FxHashSet::default(), jlog_seen: 0, rel_log: Vec::new(), rel_holders: FxHashMap::default(),
             grown: FxHashMap::default(),
             lifted: FxHashSet::default(),
             cov_inc: FxHashMap::default(),
@@ -214,7 +231,6 @@ impl Brain {
             counts: std::cell::RefCell::new(FxHashMap::default()),
             missed: std::cell::RefCell::new(Vec::new()),
             first_frame: None,
-            reach_memo: std::cell::RefCell::new(FxHashMap::default()),
             last_stats: FrameStats::default(),
             last_winners: Vec::new(),
             covered_rel: FxHashSet::default(),
@@ -281,6 +297,7 @@ impl Brain {
     /// Clear every open activation and standing inference; keep the dictionary and connections.
     pub fn reset_context(&mut self) {
         self.thalamus.frames.clear();
+        self.rel_holders.clear();
         self.pending_weak.clear();
     }
 
@@ -373,6 +390,7 @@ impl Brain {
         self.form_src.retain(|e, v| { v.retain(|x| x.0.frame >= keep_from && x.1.frame >= keep_from); e.0.frame >= keep_from && e.1.frame >= keep_from });
         self.form_pre.retain(|e| e.0.frame >= keep_from && e.1.frame >= keep_from);
         self.call_thru.retain(|c, _| c.frame >= keep_from);
+        self.rel_holders.retain(|a, v| { v.retain(|h| h.frame >= keep_from); a.frame >= keep_from });
         self.call_fit.clear();
         stats.elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
         self.last_stats = stats;
@@ -382,18 +400,8 @@ impl Brain {
 
     /// S (D9): one beyond the farthest node any function has from its origin in time, and at least the base reach.
     pub(crate) fn measure_board_span(&self) -> i32 {
-        // a function's reach in time depends on its nodes and relations alone: it is read again only where they changed
-        let mut memo = self.reach_memo.borrow_mut();
-        let mut best = 1;
-        for f in self.thalamus.dict.funcs.values() {
-            let r = match memo.get(&f.id) {
-                Some((n, rs, r)) if *n == f.nodes && *rs == f.rels => *r,
-                _ => { let r = f.measure_reach(Axes::time())[0]; memo.insert(f.id, (f.nodes.clone(), f.rels.clone(), r)); r }
-            };
-            best = best.max(r);
-        }
-        if memo.len() > 2 * self.thalamus.dict.funcs.len() + 64 { memo.retain(|id, _| self.thalamus.dict.funcs.contains_key(id)); }
-        best.max(1)
+        // the dictionary keeps each function's reach in time as the function changes
+        self.thalamus.dict.read_span()
     }
 
     /// The record a call stands as now, after every lap it took (D53).
@@ -520,6 +528,7 @@ impl Brain {
                 let k = edge(ret.act, nb.act);
                 if fresh.get(&k).map_or(true, |x| x.strength < *s) { fresh.insert(k, e); }
             }
+            for br in &rels { self.rel_holders.entry(br.other).or_default().push(ret.act); }
             if let Some(a) = self.find_act_mut(ret.act) { a.rels = rels; }
         }
         let mut fresh: Vec<Fresh> = fresh.into_values().collect();

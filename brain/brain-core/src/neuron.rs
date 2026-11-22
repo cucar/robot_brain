@@ -7,7 +7,7 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::types::*;
 
@@ -160,6 +160,10 @@ pub struct Neuron {
     pub id: NeuronId,
     pub alive: bool,
     pub history: VecDeque<Row>,
+    /// Where each activation's row is: its number counted from the first row the neuron ever wrote.
+    row_of: FxHashMap<ActRef, u64>,
+    /// The number of the oldest row still in the history.
+    first_row: u64,
     pub h: usize,
     /// The relation index (D47): every relation its rows hold, with its strength.
     pub index: FxHashMap<RelKey, u32>,
@@ -168,6 +172,8 @@ pub struct Neuron {
     pub now_index: FxHashMap<RelKey, u32>,
     /// Per phase of its own less its laps, per pose and offset, one connection (D25).
     pub connections: FxHashMap<(Sym, Sym, Offset), Conn>,
+    /// Every pose its rows and its connections have named: a pose not among them is nowhere in the neuron.
+    named: FxHashSet<Sym>,
 }
 
 /// The relations a row holds, each once.
@@ -184,15 +190,35 @@ impl Neuron {
             id,
             alive: true,
             history: VecDeque::new(),
+            row_of: FxHashMap::default(),
+            first_row: 0,
             h,
             index: FxHashMap::default(),
             now_frame: FrameNumber::MIN,
             now_index: FxHashMap::default(),
             connections: FxHashMap::default(),
+            named: FxHashSet::default(),
         }
     }
 
     pub fn strength(&self, k: &RelKey) -> u32 { self.index.get(k).copied().unwrap_or(0) }
+
+    /// Where an activation's row is in the history, if it is still there.
+    fn find_row(&self, act: &ActRef) -> Option<usize> { self.row_of.get(act).map(|n| (n - self.first_row) as usize) }
+
+    /// Write a row at the end of the history.
+    fn push_row(&mut self, row: Row) {
+        self.row_of.insert(row.act, self.first_row + self.history.len() as u64);
+        self.history.push_back(row);
+    }
+
+    /// Take the oldest row out of the history.
+    fn pop_row(&mut self) -> Row {
+        let old = self.history.pop_front().unwrap();
+        if self.row_of.get(&old.act) == Some(&self.first_row) { self.row_of.remove(&old.act); }
+        self.first_row += 1;
+        old
+    }
 
     /// Count keys a row of `frame` came to hold, in the index and in the frame's own index.
     ///
@@ -226,15 +252,16 @@ impl Neuron {
     pub fn activate(&mut self, task: ActivateTask) -> Vec<ActReturn> {
         let incoming = task.rows.len().min(self.h);
         while self.history.len() + incoming > self.h {
-            let old = self.history.pop_front().unwrap();
+            let old = self.pop_row();
             self.remove_keys(&read_keys(&old), old.act.frame);
         }
         let mut admitted: Vec<(ActRef, Sym, Vec<Nb>)> = Vec::new();
         for inp in task.rows.into_iter().take(incoming) {
             let row = Row { act: inp.act, own: inp.own, nbs: inp.nbs };
             self.add_keys(&read_keys(&row), row.act.frame);
+            self.named.extend(row.nbs.iter().map(|nb| nb.sym));
             admitted.push((row.act, row.own, row.nbs.clone()));
-            self.history.push_back(row);
+            self.push_row(row);
         }
         let returns = admitted.into_iter()
             .map(|(act, own, nbs)| ActReturn { act, rels: nbs.iter().map(|nb| (*nb, self.strength(&(own, nb.sym, nb.off)))).collect() })
@@ -270,8 +297,8 @@ impl Neuron {
     ///
     /// Returns whether the row was there.
     pub fn take_lift(&mut self, lift: &LiftTask) -> bool {
-        let found = self.history.iter().rposition(|r| r.act == lift.row)
-            .or_else(|| self.history.iter().rposition(|r| r.act.frame == lift.row.frame && lift.row_records.contains(&r.act)));
+        let found = self.find_row(&lift.row)
+            .or_else(|| lift.row_records.iter().filter(|r| r.frame == lift.row.frame).filter_map(|r| self.find_row(r)).max());
         let Some(i) = found else { return false };
         let call = &lift.call;
         let holds = self.history[i].nbs.iter().any(|x| (x.act == call.act || lift.call_records.contains(&x.act)) && x.off == call.off);
@@ -284,7 +311,7 @@ impl Neuron {
     /// Take what followed the activation (D18): the row holds each neighbor it does not hold yet, and the index
     /// counts it.
     pub fn add_followed(&mut self, viewer: ActRef, nbs: &[Nb]) -> bool {
-        let Some(pos) = self.history.iter().rposition(|r| r.act == viewer) else { return false };
+        let Some(pos) = self.find_row(&viewer) else { return false };
         self.push_neighbors(pos, nbs);
         true
     }
@@ -299,6 +326,7 @@ impl Neuron {
             let key = (row.own, nb.sym, nb.off);
             if !row.nbs.iter().any(|x| x.sym == nb.sym && x.off == nb.off) && !came.contains(&key) { came.push(key); }
             row.nbs.push(*nb);
+            self.named.insert(nb.sym);
         }
         let fr = row.act.frame;
         self.add_keys(&came, fr);
@@ -308,6 +336,7 @@ impl Neuron {
     pub fn write_connections(&mut self, writes: &[ConnectionWrite]) {
         for w in writes {
             let key = (w.own, w.target, w.off);
+            self.named.insert(w.target);
             if w.exposure {
                 self.connections.entry(key).or_default().strength += 1.0;
                 if w.share != 0.0 { self.add_earnings(w); }
@@ -329,6 +358,7 @@ impl Neuron {
                 let key = (w.own, n, w.off);
                 if self.connections.contains_key(&key) { continue; }
                 self.connections.insert(key, Conn { strength: 1.0, earnings: 0.0 });
+                self.named.insert(n);
                 break;
             }
         }
@@ -364,25 +394,32 @@ impl Neuron {
         self.now_frame = now_frame;
         for row in rows {
             let keys = read_keys(&row);
+            self.named.extend(row.nbs.iter().map(|nb| nb.sym));
             for k in &keys { *self.index.entry(*k).or_insert(0) += 1; }
             if row.act.frame == now_frame { for k in &keys { *self.now_index.entry(*k).or_insert(0) += 1; } }
-            self.history.push_back(row);
+            self.push_row(row);
         }
-        for (k, c) in conns { self.connections.insert(k, c); }
+        for (k, c) in conns { self.named.insert(k.1); self.connections.insert(k, c); }
     }
 
     /// Clear a decommissioned neuron (R38).
     pub fn clear(&mut self) {
         self.alive = false;
         self.history.clear();
+        self.row_of.clear();
+        self.first_row = 0;
         self.index.clear();
         self.now_index.clear();
         self.connections.clear();
+        self.named.clear();
     }
 
     /// Forget decommissioned poses (§4.1): remove each, in every phase it had, from every row and relation that names
     /// it.
     pub fn forget(&mut self, dead: &[Sym]) {
+        // a neuron that never named any of them holds nothing of them
+        if !dead.iter().any(|s| self.named.contains(s)) { return; }
+        for s in dead { self.named.remove(s); }
         self.index.retain(|k, _| !dead.contains(&k.0) && !dead.contains(&k.1));
         self.now_index.retain(|k, _| !dead.contains(&k.0) && !dead.contains(&k.1));
         for row in self.history.iter_mut() { row.nbs.retain(|nb| !dead.contains(&nb.sym)); }

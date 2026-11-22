@@ -378,6 +378,7 @@ impl Brain {
             for rel in &f.rels { dict.by_rel.insert(*rel, f.id); }
             dict.funcs.insert(f.id, f);
         }
+        dict.note_reaches();
         let mut fids: Vec<FuncId> = dict.funcs.keys().copied().collect();
         fids.sort();
         for id in fids {
@@ -474,6 +475,7 @@ impl Brain {
             frames.iter_mut().find(|f| f.no == no).ok_or_else(|| bad("acts.csv: frame"))?.acts.push(act);
         }
         self.thalamus.frames = frames;
+        self.rebuild_rel_holders();
         self.pending_weak = read_table(folder, "pending_weak.csv")?.iter().map(|r| Ok((parse(&r[0])?, read_pos(&r[1])?))).collect::<Result<_, String>>()?;
         for r in read_table(folder, "edges.csv")? {
             let e = read_edge(&r[1])?;
