@@ -259,7 +259,8 @@ that fires through it (D8), and expansion ends on base symbols read back through
 > phase, so its pose is the neuron, and a base activation stands where the input laid it. A call is one
 > activation of the interneuron, at the position of the latest activation the fit landed on, in the phase the
 > fit read (D37, D53). A phase is the node the fit started at, the node it ended at, and its **laps**, how many
-> times it went round. A fit reads a cycle one way, the way its relations' offsets advance (D15), so the phase
+> times it went round. Only an advancing cycle has laps (D15): in the phase of a closed shape, or of a function
+> with no cycle, the laps are 0. A fit reads a cycle one way, the way its relations' offsets advance (D15), so the phase
 > names no direction. The phase names its two nodes by their neurons: a node is a pose (D15), so the neuron and
 > its phase say which node. So a phase is two nodes and a number. A ring of calls, each ending at the call
 > before it, keeps the same names lap after lap. Everything the fit landed on has already happened (D54). A
@@ -637,8 +638,7 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > activation the fit landed on at that node. There its offset is the one the function's relations compose to
 > between its two nodes (D34). At any other offset it reaches another activation of that pose, and it closes
 > nothing. A relation of a pose to itself closes one alone, in time and inside the frame. A relation between
-> one neuron in two phases does not: it joins two nodes (D8). A cycle advances by one offset, the one its
-> relations compose to round a lap, in whatever direction that runs, time included. A function that is a cycle
+> one neuron in two phases does not: it joins two nodes (D8). A function that is a cycle
 > holds the relations of the cycle and no other. No relation joins it, and a relation closes a cycle only
 > where every relation of the function is then on the cycle (R50). So a function is a cycle and nothing else,
 > or it has no cycle. `y` after `x` and `x` after `y` is `… x y x y` for as long as it runs, entered at either
@@ -646,6 +646,15 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > comes after a cycle sees its call, and the relation to the call is a function at the level above. A cycle
 > is recognized wherever its relations hold, in the frame the latest of them fires, since nothing else has to
 > hold with it (D54). How a function is read against the board is the fit's (D54).
+>
+> **A cycle is one of two kinds.** The offsets of its relations compose round one lap (D34). Where they compose
+> to an offset that is not zero, the cycle is an **advancing cycle**. A lap ends on another activation, that
+> offset on from where the lap began, and the cycle goes round again from there. It advances in whatever
+> direction the offset runs, time included. Every cycle in time is an advancing cycle, since a relation in time
+> leads to an earlier frame. Inside the frame, a relation of a pose to itself is one. Where the offsets compose
+> to zero, the cycle is a **closed shape**. A lap ends on the activation it began at, so there is no second lap:
+> a closed shape has no laps. Every other cycle inside the frame is a closed shape, since a relation there
+> closes a cycle only where it reaches the activation the fit landed on.
 >
 > **A function is not a neighborhood.** A neighborhood is what one activation saw where it fired, saved once and
 > evicted `H` activations later; a function is what the machine holds. A neighborhood is a fact, a function a
@@ -1008,11 +1017,21 @@ occurs is what the worth measures (D57).
 > (D15). The fit goes round while they land, and ends at the first that does not. That relation is not a
 > failure, whichever of the cycle's relations it is: every fit of a cycle ends where the cycle stops landing.
 > So a cycle's call may stand on part of a lap, and its phase says the node it started at and the node it ended
-> at (D12, D37). A node of the cycle may land on several activations, one per lap; how many is the call's laps
-> (D53). Where the activation it reaches stands under an earlier call of the same function, the relation is
+> at (D12, D37). A closed shape is read round once: the lap ends on the activation the fit entered at, and
+> there is no lap after it (D15). A node of an advancing cycle may land on several activations, one per lap; how
+> many is the call's laps (D53). Where the activation it reaches stands under an earlier call of the same function, the relation is
 > that call's own function going round, and the call takes the lap: it is the same call, its phase that much
 > longer, and no new call is made (D53). Nothing is read past
 > the cycle.
+>
+> **An advancing cycle is read the same way inside the frame and in time.** What differs is how its laps
+> arrive. Inside the frame the whole cycle stands at once, so one fit reads every lap. A row of 14 white pixels
+> is the function "a white pixel beside a white pixel". One fit goes round it 13 times, and its call stands at
+> 13 laps in that frame. In time each frame brings one more activation. So each frame's fit reads one lap, and
+> it lands on the call of the frame before, which takes it. The letter `a` frame after frame is the function
+> "`a` after `a`". At each `a` the fit reads one relation, back to the `a` of the frame before. That `a` stands
+> under the call, so the call takes the lap. The call stands at 1 lap, then 2, then 3, one more each frame, for
+> as long as the `a` keeps coming.
 >
 > **Coming true.** Each relation of a function comes true or does not. It comes true where the board holds a
 > relation of its dimension and offset whose near end is the end already landed and whose far end is what the
@@ -2385,9 +2404,10 @@ happened (R32).
 >
 > 1. **Start** at the node the call's phase starts at (R36, D37), at the call's position in every dimension.
 > 2. **Follow** each relation from an expanded node to the node at its far end, at that relation's offset, to
->    the node the phase ends at. Offsets compose because each is a difference (D34). Round a cycle the laps the
->    phase says; where the phase leaves the laps open, round while the node it reaches has something to land on in
->    the frames that have happened, and beyond them once more (D54, D15). Repeat until no relation leads to a
+>    the node the phase ends at. Offsets compose because each is a difference (D34). Round an advancing cycle the
+>    laps the phase says; where the phase leaves the laps open, round while the node it reaches has something to
+>    land on in the frames that have happened, and beyond them once more (D54, D15). A closed shape is read once
+>    round, since it has no laps (D15). Repeat until no relation leads to a
 >    node not yet expanded, in any dimension.
 > 3. **Expand** each expanded node that is an interneuron the same way, through its function, in its own phase.
 >    Expand each variable to its argument where one is bound, and otherwise as the next paragraph says.
