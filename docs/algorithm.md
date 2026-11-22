@@ -1526,8 +1526,9 @@ argument.
 
 > **R53 — Finding.** For each relation `(a, b, δ)` a neuron returned, the machine reads the index (D36) three
 > ways: as it is; with `b` open, `(a, ?, δ)`; and with `a` open, `(?, b, δ)`. The reading as it is gives the
-> functions that hold that relation. A covered neighbor comes back as itself, with the relation to its call
-> beside it (D5, R21), so a function that holds either is found. An open reading gives the functions that
+> functions that hold that relation. A neighbor a call has landed on, and not yet covered, comes back as itself.
+> A covered neighbor does not come back: each call that stands over it does (D5). An open reading gives the
+> functions that
 > hold a relation with
 > that neuron at that end and that offset and a variable at the other end, a class or a parameter (D38), and
 > no function whose node there is fixed: a fixed node is found as it is or not at all. Where the open end
@@ -1791,18 +1792,17 @@ argument.
 > for an activation it lands on is one (D26). Once the interneuron has fired, that relation is on the board at
 > the level above. It costs one there, like any relation, and a function there may cover it.
 >
-> **A relation is covered once.** A fit whose relation lands on one an earlier accepted call already covers is
-> credited nothing for it (D10, D24).
+> **A relation is covered once.** A fit lands on no board relation a call already covers (D28, D10, D24).
 >
 > **A node that fired and the fit does not land on belongs to neither side.** Its relations stand in the
 > cost as they are if nothing covers them (D23), and the same way if this fit is accepted, since the fit
 > does not land on them: their own cost either way, so they cancel before the test begins.
 >
-> **Coverage changes the credit and never the price.** A relation that came true on a board relation another
-> fit of this election already covers is credited to no one and charged nothing (R24): it came true, so it is
-> not a failure. A relation that did not come true is charged whether or not
-> another call covers something at that position. **What a function gets wrong about a frame is a fact about the
-> two, and ownership does not move it.**
+> **A relation another call covers does not come true for the fit.** Where a relation of the function would
+> land on a board relation a fit taken in this election covers, it does not land. The fit is read again over
+> what stands (D28). That relation is charged as a failure, like any relation that does not come true (D12).
+> What the function reaches only through it is not reached either. A relation that did not come true is
+> charged whether or not another call covers something at that position.
 >
 > **This is the fit's arithmetic over the board, and it differs from the worth.** The worth reads a relation
 > over the neurons' histories (D57); the election reads the board, where earlier frames' credit stands (R23)
