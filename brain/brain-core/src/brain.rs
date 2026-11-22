@@ -400,7 +400,7 @@ impl Brain {
     /// The record a call stands as now, after every lap it took (D53).
     pub(crate) fn follow_laps(&self, mut r: ActRef) -> ActRef {
         let mut n = 0;
-        while let Some(x) = self.grown.get(&r) { r = *x; n += 1; if n > 4096 { break; } }
+        while let Some(x) = self.grown.get(&r) { r = *x; n += 1; assert!(n <= MAX_LAPS, "a call was followed through more than {} laps", MAX_LAPS); }
         r
     }
 
@@ -451,7 +451,7 @@ impl Brain {
             stats.minted += m;
             if a == 0 && started == 0 { break; }
             level += 1;
-            if level > 1024 { break; }
+            assert!(level <= MAX_LEVELS, "frame {} climbed more than {} levels", self.frame_no, MAX_LEVELS);
         }
         // the levels as built, on the board the climb left
         let mut level: u32 = 0;
@@ -478,7 +478,7 @@ impl Brain {
             stats.accepted += a1 + a2;
             stats.minted += m1 + m2;
             level += 1;
-            if level > 1024 { break; }
+            assert!(level <= MAX_LEVELS, "frame {} climbed more than {} levels", self.frame_no, MAX_LEVELS);
         }
     }
 

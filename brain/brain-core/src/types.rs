@@ -8,6 +8,16 @@ pub type Pos = [i32; MAX_DIMS];
 /// A rounded offset between two coordinates (D6).
 pub type Offset = [i32; MAX_DIMS];
 
+/// Guards against a loop that never ends: where one is passed, the machine stops with a message.
+/// The levels one frame climbs.
+pub const MAX_LEVELS: u32 = 1024;
+/// The laps one fit reads, the laps a call is followed through, and the laps an inferred cycle is read back.
+pub const MAX_LAPS: u32 = 4096;
+/// The calls standing over one activation.
+pub const MAX_CALLS_OVER: usize = 4096;
+/// The calls one under another, followed up from an activation or down through an expansion.
+pub const MAX_CALL_DEPTH: usize = 256;
+
 pub type NeuronId = u32;
 pub type DimensionId = u32;
 pub type ChannelId = u32;

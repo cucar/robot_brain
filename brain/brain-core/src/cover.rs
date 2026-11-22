@@ -200,7 +200,7 @@ impl Brain {
     /// Whether a call covers a relation as it stands or in any relation it was lifted to (D55, D24).
     pub(crate) fn is_covered_in_any_form(&self, e: (ActRef, ActRef), depth: usize) -> bool {
         if self.covered_rel.contains(&e) { return true; }
-        if depth > 64 { return false; }
+        assert!(depth <= MAX_CALL_DEPTH, "a lifted relation was followed up through more than {} calls", MAX_CALL_DEPTH);
         self.lift_forms.get(&e).map_or(false, |v| v.iter().any(|f| self.is_covered_in_any_form(*f, depth + 1)))
     }
 
@@ -287,7 +287,7 @@ impl Brain {
     /// A refused relation that had already ended at a call: that edge leaves the board, and every edge it became
     /// above. An edge that also stands for a relation that is not refused, or stood on the board before, stays (D24).
     pub(crate) fn remove_forms(&mut self, e: (ActRef, ActRef), depth: usize) {
-        if depth > 64 { return; }
+        assert!(depth <= MAX_CALL_DEPTH, "a lifted relation was followed up through more than {} calls", MAX_CALL_DEPTH);
         let forms = self.lift_forms.get(&e).cloned().unwrap_or_default();
         for f in forms {
             if self.refused.contains(&f) { continue; }

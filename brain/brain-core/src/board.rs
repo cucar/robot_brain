@@ -145,7 +145,7 @@ impl Brain {
         let Some(b) = self.find_act(r) else { return };
         if b.gone || (b.opened_at == fno && b.level > level) || !self.stands(b, fno) { return; }
         if b.on_apex() { out.push(r); return; }
-        if depth > 256 { return; }
+        assert!(depth <= MAX_CALL_DEPTH, "more than {} calls stand one over another at a covered position", MAX_CALL_DEPTH);
         for c in &b.coverers { self.standing_at(*c, level, out, depth + 1); }
     }
 

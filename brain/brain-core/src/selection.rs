@@ -76,7 +76,8 @@ impl Brain {
             let mut ov: Vec<ActRef> = Vec::new();
             let mut stack: Vec<ActRef> = inhib.get(&r).cloned().unwrap_or_default();
             while let Some(c) = stack.pop() {
-                if c == r || ov.contains(&c) || ov.len() > 4096 { continue; }
+                if c == r || ov.contains(&c) { continue; }
+                assert!(ov.len() <= MAX_CALLS_OVER, "more than {} calls stand over one activation", MAX_CALLS_OVER);
                 ov.push(c);
                 if let Some(up) = inhib.get(&c) { stack.extend(up.iter().copied()); }
             }

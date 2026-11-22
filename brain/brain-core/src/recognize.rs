@@ -162,7 +162,7 @@ impl Brain {
         // round the cycle, lap after lap, while the closing relation lands (D54)
         if let Some((ri, ua, ub, off)) = lay.closing {
             loop {
-                if laps > 4096 { break; }
+                assert!(laps <= MAX_LAPS, "a fit read more than {} laps", MAX_LAPS);
                 let Some(au) = at[ua] else { break };
                 if via_call[ua] { break; }
                 let Some((w, call, to)) = go(self, au, off, f.nodes[ub], &used) else { break };
@@ -282,7 +282,8 @@ impl Brain {
     fn expand_nodes(&self, s: Sym, at: Offset, path: &mut Vec<NeuronId>, out: &mut Vec<(Sym, Offset, Vec<NeuronId>)>, deps: &mut Vec<FuncId>) {
         let Some(phase) = self.thalamus.dict.find_pose(s) else { return };
         let n = self.thalamus.dict.find_neuron_of(s);
-        if path.contains(&n) || path.len() > 64 { return; }
+        if path.contains(&n) { return; }
+        assert!(path.len() <= MAX_CALL_DEPTH, "an expansion went through more than {} calls, one under another", MAX_CALL_DEPTH);
         let Some(f) = self.find_function_for(s).cloned() else { return };
         deps.push(f.id);
         let root = f.find_node(phase.from).unwrap_or(0);

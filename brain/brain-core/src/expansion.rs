@@ -45,7 +45,10 @@ impl Brain {
         let mut lap = [0i32; MAX_DIMS];
         for d in 0..MAX_DIMS { lap[d] = lay.position[ua][d] + off[d] - lay.position[ub][d]; }
         let path: Vec<usize> = Func::find_tree_path(&lay, ub, ua).iter().map(|s| s.2).collect();
-        for k in 1..=64 {
+        // a closed shape comes back to the activation it started at: its lap advances nowhere, so it has no laps to read
+        if lap.iter().all(|x| *x == 0) { return out; }
+        for k in 1i32.. {
+            assert!(k <= MAX_LAPS as i32, "an inferred cycle was read back more than {} laps", MAX_LAPS);
             let reached = shift(&lay.position[ub], k, &lap);
             let happened = board && (reached[0] as i64) <= self.frame_no;
             // over what has happened while something stands there to land on, and beyond it once more (D54, D15)
@@ -69,7 +72,8 @@ impl Brain {
         let Some(nn) = self.thalamus.registry.get(n) else { return };
         if !nn.alive { return; }
         if nn.kind != Kind::Inter { out.push((n, at)); return; }
-        if path.contains(&n) || path.len() > 256 { return; }
+        if path.contains(&n) { return; }
+        assert!(path.len() <= MAX_CALL_DEPTH, "an expansion went through more than {} calls, one under another", MAX_CALL_DEPTH);
         if !path.is_empty() { if let Some(v) = all.as_deref_mut() { v.push((n, at)); } }
         let Some(f) = self.find_function_for(s).cloned() else { return };
         let root = self.thalamus.dict.find_start(s).and_then(|x| f.find_node(x)).unwrap_or(0);
