@@ -507,6 +507,10 @@ impl Brain {
             }
         }
         let tasks: Vec<(NeuronId, ActivateTask)> = order.iter().map(|&n| (n, by_neuron.remove(&n).unwrap())).collect();
+        // a neuron records no more activations of one level than its history holds, and the rest return no relations (§5.1)
+        for (n, t) in &tasks {
+            if t.rows.len() > self.cfg.h { eprintln!("warning: frame {}: neuron #{} has {} activations at one level, more than the history depth of {}", self.frame_no, n, t.rows.len(), self.cfg.h); }
+        }
         let returns: Vec<ActReturn> = self.thalamus.activate_neurons(tasks, !self.frozen).into_iter().flatten().collect();
         // the board's edges at each activation, and the relations of this level in their one form (R21, D34)
         let mut fresh: FxHashMap<(ActRef, ActRef), Fresh> = FxHashMap::default();

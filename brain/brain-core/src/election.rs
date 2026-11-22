@@ -292,10 +292,16 @@ impl Brain {
         // what it stands for in space is the union of what it covers, and it sees one beyond that (D4)
         let (mut lo, mut hi) = (origin.pos, origin.pos);
         for c in covers.iter().filter_map(|r| self.find_act(*r)) { for d in 0..MAX_DIMS { lo[d] = lo[d].min(c.lo[d]); hi[d] = hi[d].max(c.hi[d]); } }
+        // its reach stops at an earlier call of its own interneuron: what it stands for comes back to itself there (D4)
+        let (mut seen_lo, mut seen_hi) = (origin.pos, origin.pos);
+        for c in covers.iter().filter_map(|r| self.find_act(*r)) {
+            let (c_lo, c_hi) = if c.neuron == neuron { (c.pos, c.pos) } else { (c.lo, c.hi) };
+            for d in 0..MAX_DIMS { seen_lo[d] = seen_lo[d].min(c_lo[d]); seen_hi[d] = seen_hi[d].max(c_hi[d]); }
+        }
         let mut reach = [0i32; MAX_DIMS];
         for d in 0..MAX_DIMS {
             if d > 0 && origin.axes & (1 << d) == 0 { continue; }
-            reach[d] = (origin.pos[d] - lo[d]).max(hi[d] - origin.pos[d]) + 1;
+            reach[d] = (origin.pos[d] - seen_lo[d]).max(seen_hi[d] - origin.pos[d]) + 1;
         }
         let act = Act {
             neuron, sym, kind: Kind::Inter, axes: origin.axes, pos: origin.pos, strong, reach, lo, hi,
