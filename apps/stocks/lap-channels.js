@@ -253,6 +253,8 @@ export class LapChannelsJob extends Job {
 		this.cycle = cycle;
 		this.cycles = settings.cycles;
 		this.reportEvery = settings.every;
+		// how many activations a neuron remembers, 256 where the job names none
+		this.historyDepth = settings.historyDepth ?? 256;
 		// the stocks given a volume channel: with volume on, those whose data has volume
 		this.volumeSeries = settings.volume ? series.filter(s => s.volumes) : [];
 		this.trader = new LapTrader(series.map(s => s.name), settings.trader);
@@ -287,7 +289,7 @@ export class LapChannelsJob extends Job {
 	}
 
 	getBrainOptions() {
-		return { h: 256, policy: 'eventsToActions' };
+		return { h: this.historyDepth, policy: 'eventsToActions' };
 	}
 
 	declareChannels() {

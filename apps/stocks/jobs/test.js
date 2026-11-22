@@ -8,7 +8,7 @@
  * usage: node apps/stocks/jobs/test.js [--symbols A,B,...] [--episodes 1] [--max-positions 1]
  *        [--transaction-cost 0] [--initial-capital 15000] [--min-price 0] [--max-price 5000] [--holdout 0]
  *        [--offset 0] [--max-frames N] [--timeframe 1D] [--volume] [--every N] [--random-baseline] [--seed 1]
- *        [--save-brain <label>] [--load-brain <label>] [--disable-learning]
+ *        [--history-depth 256] [--save-brain <label>] [--load-brain <label>] [--disable-learning]
  */
 import path from 'node:path';
 import { runJob, readFlag, readNumber } from 'robot-brain';
@@ -44,6 +44,7 @@ class StockTestJob extends LapChannelsJob {
 			maxFrames: readNumber('--max-frames', null),
 			randomBaseline: process.argv.includes('--random-baseline'),
 			seed: readNumber('--seed', 1),
+			historyDepth: readNumber('--history-depth', 256),
 			trader: {
 				maxPositions: readNumber('--max-positions', 1),
 				costPercent: readNumber('--transaction-cost', 0),
