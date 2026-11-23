@@ -34,6 +34,15 @@ impl Brain {
         Some(Pos::make(h.pos.len().max(pos.len()), |d| if d == 0 { age as i32 } else if h.axes.has(d) && axes.has(d) { pos[d] - h.pos[d] } else { 0 }))
     }
 
+    /// List what stood strong on the apex of an earlier frame when that frame's connections were written (R31).
+    fn list_stood(&self, frame: FrameNumber) -> Vec<(Sym, Kind, Axes, Pos)> {
+        let Some(fr) = self.thalamus.frames.iter().find(|x| x.no == frame) else { return Vec::new() };
+        // on the apex then: fired by that frame, and covered in a later frame or not at all
+        fr.acts.iter().filter(|b| b.strong && !b.gone && b.neuron != NeuronId::MAX && b.opened_at <= frame && b.covered_at.map_or(true, |c| c > 0))
+            .filter(|b| (0..3).any(|h| self.cfg.policy.future[h][b.kind as usize]))
+            .map(|b| (b.sym, b.kind, b.axes, b.pos)).collect()
+    }
+
     /// The connect call on every open activation past age 0 (§7.1, R31, R33): its row takes what stands on this
     /// frame's apex within its reach, as what followed it, covered or not (D18); one uncovered at this frame
     /// connects to every strong activation on this frame's apex within its reach that the policy admits; one
@@ -46,6 +55,10 @@ impl Brain {
         let apex: Vec<(ActRef, Sym, NeuronId, Kind, Axes, Pos, bool)> = self.thalamus.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter().enumerate().map(move |(i, b)| (f.no, i, b)))
             .filter(|(_, _, b)| b.on_apex() && b.neuron != NeuronId::MAX).map(|(no, i, b)| (ActRef { frame: no, index: i as u32 }, b.sym, b.neuron, b.kind, b.axes, b.pos, b.strong)).collect();
         let rewards: Vec<Reward> = self.thalamus.frames.iter().find(|f| f.no == fno).map(|f| f.rewards.clone()).unwrap_or_default();
+        // what stood strong on the apex of each earlier frame a reward that names no channels pays, as it stood at
+        // that frame: what the activations open then connected to (R31, R33)
+        let far = rewards.iter().filter(|rw| rw.channels.is_empty()).map(|rw| if rw.frames == 0 { span_default } else { rw.frames }).max().unwrap_or(0);
+        let stood: Vec<Vec<(Sym, Kind, Axes, Pos)>> = (1..far).map(|d| self.list_stood(fno - d as i64)).collect();
         let mut writes: Vec<(NeuronId, Sym, Sym, Offset, f64)> = Vec::new();
         let mut shares: Vec<(NeuronId, Sym, Sym, Offset, f64)> = Vec::new();
         let mut followed: Vec<(NeuronId, ActRef, Vec<Nb>)> = Vec::new();
@@ -85,16 +98,27 @@ impl Brain {
                         writes.push((a.neuron, a.sym, *bs, o, self.share_reward(&rewards, *bn)));
                     }
                 }
-                // shares for earlier frames (R33): at distance d, into the connection at offset age − d to the
-                // action that ran then, where the activation was uncovered at that frame
+                // shares for earlier frames (R33): at distance d, into the connections at offset age − d
+                // an activation covered before this frame was passed over above, and takes none
                 for rw in &rewards {
                     let s = if rw.frames == 0 { span_default } else { rw.frames };
                     for d in 1..s.min(age + 1) {
                         if a.covered_at.map_or(false, |c| c <= age - d) { continue; }
                         let share = rw.reward * (s - d) as f64 / s as f64;
+                        // a reward that names no channels: every connection the activation wrote at that frame
+                        if rw.channels.is_empty() {
+                            let Some(then) = stood.get(d as usize - 1) else { continue };
+                            for (bs, bk, baxes, bpos) in then {
+                                if !self.cfg.policy.future[a.kind as usize][*bk as usize] { continue; }
+                                let Some(o) = self.make_connection_offset(a, *baxes, bpos, age - d) else { continue };
+                                shares.push((a.neuron, a.sym, *bs, o, share));
+                            }
+                            continue;
+                        }
+                        // one that names channels: the action that ran then in each of them
                         let Some(fr) = self.thalamus.frames.iter().find(|x| x.no == fno - d as i64) else { continue };
                         for (ch, ar) in &fr.actions_ran {
-                            if !rw.channels.is_empty() && !rw.channels.contains(ch) { continue; }
+                            if !rw.channels.contains(ch) { continue; }
                             let Some(b) = self.find_act(*ar) else { continue };
                             if !self.cfg.policy.future[a.kind as usize][b.kind as usize] { continue; }
                             let Some(o) = self.make_connection_offset(a, b.axes, &b.pos, age - d) else { continue };

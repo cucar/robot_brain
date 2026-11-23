@@ -2174,15 +2174,19 @@ two things:
 | | |
 |---|---|
 | the apex | every activation standing on the apex this frame within the activation's reach in every dimension but time (R27, D25). The activation's row takes each at its age, as what followed it, covered or not (D18). Its connections take them only while it is uncovered: one an accepted function covered this frame connects to the neuron that covered it and to nothing else, and one covered earlier connects to nothing more (D10, D25, R31). |
-| the reward | any reward that arrived, for the actions of this frame and for any earlier frame the reward spans, at the distance each one names, with the action that ran at that frame in each channel it pays (D24, R33). |
+| the reward | any reward that arrived, for this frame and for any earlier frame the reward spans, at the distance each one names. With a reward that names channels comes the action that ran at that frame in each channel it pays. With one that names no channels comes what stood strong on the apex of that frame (D24, R33). |
 
 The neuron writes each apex activation into the row at its offset (D18) and, while uncovered, strengthens a
 connection per apex activation: the connection at `(neuron, age)` under its own phase, created at strength 1 or
 incremented (R31), and
 for each reward share the earnings of the connections it names (R33). For this frame, the connections just
-strengthened, in the same write. A share for an earlier frame, at distance `d`, goes into the connection at offset
-`a − d`, the activation's age less the distance, to the action the machine hands it for that frame, where the
-activation was uncovered then (D9). The activation keeps nothing of it. **Nothing is decided, priced or compared
+strengthened, in the same write. A share for an earlier frame, at distance `d`, goes into the connections at offset
+`a − d`, the activation's age less the distance. An activation covered before the frame the reward arrives in
+takes none of it, not for the frames before it was covered either. The call that covered it takes the reward for
+what follows it, through its own connections (D10). The share of a
+reward that names channels goes into the connection to the action the machine hands it for that frame. The share
+of a reward that names no channels goes into every connection the activation wrote at that frame. The activation
+keeps nothing of it. **Nothing is decided, priced or compared
 here**, and no test is waiting on any of it.
 
 > **R31 — A connection carries an estimate.** What stands on the apex at `f + 1` is not known at `f`: the action
@@ -2264,20 +2268,28 @@ here**, and no test is waiting on any of it.
 > reward: a reward is not in short supply, and the point of spreading it is not to conserve it but to say how
 > likely each frame is to have earned it. What is genuinely responsible recurs and accumulates; what is not is
 > sampled once and averaged away. **Each share is delivered, in the `connect` call (§7.1), to every open
-> activation past age 0, and the activation picks the connection from its age and the reward's channels.** The
-> machine hands it, for the frame each distance names, the action that ran there in each channel the reward
-> pays, from the window it keeps (D24). An activation at age `a` takes the share at distance `d`, `d` at most
-> `a`, into its neuron's connection at offset `a − d`, to that action, where it was uncovered at that frame
-> (D9): at distance `0` the connection this call strengthens, in the same write; further back one strengthened
-> `d` frames ago (R31). An activation whose window has closed is not called, so a share reaches no further back
-> than the open activations that would take it.
+> activation past age 0, and the activation picks the connections from its age and the reward's channels.** For
+> a reward that names channels, the machine hands it, for the frame each distance names, the action that ran
+> there in each of them, from the window it keeps (D24). For a reward that names no channels, the machine hands
+> it what stood strong on the apex of that frame. An activation at age `a` takes the share at distance `d`, `d`
+> at most `a`, into its neuron's connections at offset `a − d`. **An activation covered before the frame the
+> reward arrives in takes none of it**, not for the frames before it was covered either. A call that covers an
+> activation is the wider situation the action ran in, and it is the one rewarded: it takes the reward for what
+> follows it, through its own connections (D10). A share for a frame before the call fired does not reach the call,
+> since a connection names only what follows the activation that holds it (D25). So what the covered activation
+> would have taken of that share goes to no one. A share
+> of a reward that names channels goes into the connection to that action. A share of a reward that names no
+> channels goes into every connection the activation wrote at that frame. At distance `0` these are the
+> connections this call strengthens, in the same write; further back they are ones strengthened `d` frames ago
+> (R31). An activation whose window has closed is not called, so a share reaches no further back than the open
+> activations that would take it.
 >
 > **A scoped reward reaches base actions of the channels it names, and nothing else.** A connection names a
 > neuron (D25). A share of a reward that names channels is delivered only to a connection whose neuron is a base
 > action of one of them; a connection to an event or to an interneuron takes none of it. An interneuron belongs
 > to no channel (D2), and a share read through its expansion would give a call spanning two channels one
-> estimate, read in both at resolution (R47). An unscoped reward reaches every connection written at the frames
-> it pays. A machine whose policy lets interneurons be connected to (D50) and whose rewards name channels leaves
+> estimate, read in both at resolution (R47). A reward that names no channels reaches every connection written
+> at the frames it pays, the earlier ones as much as the one it arrives in. A machine whose policy lets interneurons be connected to (D50) and whose rewards name channels leaves
 > those connections unpriced by them; the two are not declared together.
 >
 > **Rewards in one frame are independent.** A connection at one `(neuron, offset)` takes the sum of the shares
