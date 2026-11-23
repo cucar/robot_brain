@@ -52,10 +52,13 @@ impl Index<NeuronId> for Registry {
 }
 
 /// One neuron's part of the connect call (§7.1): what followed its rows, then its connection writes.
+///
+/// `named` lists the interneurons that what followed and the writes name a pose of, for the neuron to note (R38).
 #[derive(Default)]
 pub struct ConnectTask {
     pub followed: Vec<(ActRef, Vec<Nb>)>,
     pub writes: Vec<ConnectionWrite>,
+    pub named: Vec<NeuronId>,
 }
 
 pub struct Thalamus {
@@ -145,6 +148,7 @@ impl Thalamus {
     /// Connect (§7.1): each row takes what followed it, then each neuron writes its connections in order.
     pub fn connect_neurons(&mut self, tasks: Vec<(NeuronId, ConnectTask)>) {
         self.dispatch(tasks, |n, t| {
+            n.note_interneurons(&t.named);
             for (me, nbs) in &t.followed { n.add_followed(*me, nbs); }
             n.write_connections(&t.writes);
         });
@@ -158,8 +162,8 @@ impl Thalamus {
     /// Decommission (R38): clear the decommissioned neurons, then forget their poses in every living neuron.
     pub fn decommission_neurons(&mut self, ids: Vec<NeuronId>, dead: Vec<Sym>) {
         if ids.is_empty() { return; }
-        self.dispatch(ids.into_iter().map(|id| (id, ())).collect(), |n, _| n.clear());
-        self.dispatch_living(|n| n.forget(&dead));
+        self.dispatch(ids.iter().map(|id| (*id, ())).collect(), |n, _| n.clear());
+        self.dispatch_living(|n| n.forget(&ids, &dead));
     }
 
     /// Answer counts over the neurons' rows (D47, R50): per query, its answer, in the order the queries came.
@@ -179,15 +183,15 @@ impl Thalamus {
 
     /// Restore neurons from a backup into a thalamus that holds none: each one's facts in the registry, then each one
     /// created in its column and handed its rows and connections, in one batch.
-    pub fn import_neurons(&mut self, neurons: Vec<(NeuronFacts, usize, FrameNumber, Vec<Row>, Vec<((Sym, Sym, Offset), Conn)>)>) {
+    pub fn import_neurons(&mut self, neurons: Vec<(NeuronFacts, usize, FrameNumber, Vec<Row>, Vec<((Sym, Sym, Offset), Conn)>, Vec<NeuronId>)>) {
         assert!(self.registry.len() == 0, "a backup loads only into a thalamus that holds no neuron");
         let mut tasks = Vec::with_capacity(neurons.len());
-        for (facts, h, now, rows, conns) in neurons {
+        for (facts, h, now, rows, conns, named) in neurons {
             let alive = facts.alive;
             let id = self.allot_neuron(facts, h);
-            tasks.push((id, (now, alive, rows, conns)));
+            tasks.push((id, (now, alive, rows, conns, named)));
         }
-        self.dispatch(tasks, |n, (now, alive, rows, conns)| n.import(now, alive, rows, conns));
+        self.dispatch(tasks, |n, (now, alive, rows, conns, named)| n.import(now, alive, rows, conns, named));
     }
 
     /// Count the connections of every living neuron.

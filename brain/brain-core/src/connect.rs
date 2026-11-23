@@ -155,7 +155,11 @@ impl Brain {
                 tasks.entry(holder).or_default().writes.push(ConnectionWrite { own, target, off, share, exposure, walk });
             }
         }
-        let tasks: Vec<(NeuronId, ConnectTask)> = order.into_iter().map(|n| { let t = tasks.remove(&n).unwrap(); (n, t) }).collect();
+        let tasks: Vec<(NeuronId, ConnectTask)> = order.into_iter().map(|n| {
+            let mut t = tasks.remove(&n).unwrap();
+            t.named = self.list_interneurons(t.followed.iter().flat_map(|(_, nbs)| nbs.iter().map(|nb| nb.sym)).chain(t.writes.iter().map(|w| w.target)));
+            (n, t)
+        }).collect();
         self.thalamus.connect_neurons(tasks);
     }
 

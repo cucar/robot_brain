@@ -62,13 +62,18 @@ pub struct LiftTask {
     pub row_records: Vec<ActRef>,
     pub call_records: Vec<ActRef>,
     pub call: Nb,
+    /// The call's interneuron, for the neuron to note (R38).
+    pub inter: NeuronId,
 }
 
 /// One activation's level task (R20): its rows, and the calls lifted to them before they were written (D10).
+///
+/// `named` lists the interneurons the rows' neighbors are calls of, for the neuron to note (R38).
 #[derive(Clone, Debug, Default)]
 pub struct ActivateTask {
     pub rows: Vec<RowInput>,
     pub lifts: Vec<LiftTask>,
+    pub named: Vec<NeuronId>,
 }
 
 /// One write into a neuron's connections (R31, R33, R37).
@@ -172,8 +177,8 @@ pub struct Neuron {
     pub now_index: FxHashMap<RelKey, u32>,
     /// Per phase of its own less its laps, per pose and offset, one connection (D25).
     pub connections: FxHashMap<(Sym, Sym, Offset), Conn>,
-    /// Every pose its rows and its connections have named: a pose not among them is nowhere in the neuron.
-    named: FxHashSet<Sym>,
+    /// Every interneuron its rows and its connections have named a pose of: one not among them is nowhere in the neuron.
+    named: FxHashSet<NeuronId>,
 }
 
 /// The relations a row holds, each once.
@@ -251,6 +256,7 @@ impl Neuron {
     /// The calls lifted to these rows before they were written are taken after the strengths are read (D10).
     pub fn activate(&mut self, task: ActivateTask) -> Vec<ActReturn> {
         let incoming = task.rows.len().min(self.h);
+        self.note_interneurons(&task.named);
         while self.history.len() + incoming > self.h {
             let old = self.pop_row();
             self.remove_keys(&read_keys(&old), old.act.frame);
@@ -259,7 +265,6 @@ impl Neuron {
         for inp in task.rows.into_iter().take(incoming) {
             let row = Row { act: inp.act, own: inp.own, nbs: inp.nbs };
             self.add_keys(&read_keys(&row), row.act.frame);
-            self.named.extend(row.nbs.iter().map(|nb| nb.sym));
             admitted.push((row.act, row.own, row.nbs.clone()));
             self.push_row(row);
         }
@@ -304,6 +309,7 @@ impl Neuron {
         let holds = self.history[i].nbs.iter().any(|x| (x.act == call.act || lift.call_records.contains(&x.act)) && x.off == call.off);
         if holds { return true; }
         let row_act = self.history[i].act;
+        self.named.insert(lift.inter);
         self.add_followed(row_act, &[*call]);
         true
     }
@@ -326,17 +332,20 @@ impl Neuron {
             let key = (row.own, nb.sym, nb.off);
             if !row.nbs.iter().any(|x| x.sym == nb.sym && x.off == nb.off) && !came.contains(&key) { came.push(key); }
             row.nbs.push(*nb);
-            self.named.insert(nb.sym);
         }
         let fr = row.act.frame;
         self.add_keys(&came, fr);
+    }
+
+    /// Note the interneurons that what the neuron is about to take names a pose of (R38).
+    pub fn note_interneurons(&mut self, named: &[NeuronId]) {
+        self.named.extend(named.iter().copied());
     }
 
     /// Write the frame's connections in order (R31, R33, R37).
     pub fn write_connections(&mut self, writes: &[ConnectionWrite]) {
         for w in writes {
             let key = (w.own, w.target, w.off);
-            self.named.insert(w.target);
             if w.exposure {
                 self.connections.entry(key).or_default().strength += 1.0;
                 if w.share != 0.0 { self.add_earnings(w); }
@@ -358,7 +367,6 @@ impl Neuron {
                 let key = (w.own, n, w.off);
                 if self.connections.contains_key(&key) { continue; }
                 self.connections.insert(key, Conn { strength: 1.0, earnings: 0.0 });
-                self.named.insert(n);
                 break;
             }
         }
@@ -389,17 +397,17 @@ impl Neuron {
 
     /// Take what a backup holds: the rows, with the relation index and the frame's index recounted from them, and the
     /// connections in the order they were held.
-    pub fn import(&mut self, now_frame: FrameNumber, alive: bool, rows: Vec<Row>, conns: Vec<((Sym, Sym, Offset), Conn)>) {
+    pub fn import(&mut self, now_frame: FrameNumber, alive: bool, rows: Vec<Row>, conns: Vec<((Sym, Sym, Offset), Conn)>, named: Vec<NeuronId>) {
         self.alive = alive;
         self.now_frame = now_frame;
+        self.named.extend(named);
         for row in rows {
             let keys = read_keys(&row);
-            self.named.extend(row.nbs.iter().map(|nb| nb.sym));
             for k in &keys { *self.index.entry(*k).or_insert(0) += 1; }
             if row.act.frame == now_frame { for k in &keys { *self.now_index.entry(*k).or_insert(0) += 1; } }
             self.push_row(row);
         }
-        for (k, c) in conns { self.named.insert(k.1); self.connections.insert(k, c); }
+        for (k, c) in conns { self.connections.insert(k, c); }
     }
 
     /// Clear a decommissioned neuron (R38).
@@ -414,12 +422,12 @@ impl Neuron {
         self.named.clear();
     }
 
-    /// Forget decommissioned poses (§4.1): remove each, in every phase it had, from every row and relation that names
+    /// Forget decommissioned interneurons (§4.1): remove each of their poses from every row and relation that names
     /// it.
-    pub fn forget(&mut self, dead: &[Sym]) {
-        // a neuron that never named any of them holds nothing of them
-        if !dead.iter().any(|s| self.named.contains(s)) { return; }
-        for s in dead { self.named.remove(s); }
+    pub fn forget(&mut self, gone: &[NeuronId], dead: &[Sym]) {
+        // a neuron that never named a pose of any of them holds nothing of them
+        if !gone.iter().any(|n| self.named.contains(n)) { return; }
+        for n in gone { self.named.remove(n); }
         self.index.retain(|k, _| !dead.contains(&k.0) && !dead.contains(&k.1));
         self.now_index.retain(|k, _| !dead.contains(&k.0) && !dead.contains(&k.1));
         for row in self.history.iter_mut() { row.nbs.retain(|nb| !dead.contains(&nb.sym)); }

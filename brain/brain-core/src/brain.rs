@@ -491,6 +491,15 @@ impl Brain {
         }
     }
 
+    /// List the interneurons that poses are calls of, each once (R38).
+    pub(crate) fn list_interneurons(&self, syms: impl Iterator<Item = Sym>) -> Vec<NeuronId> {
+        // what a neuron notes of what it takes, so it can tell, when one is decommissioned, whether it holds anything of it
+        let mut v: Vec<NeuronId> = syms.filter(|s| *s >= SYM_CALL).map(|s| self.thalamus.dict.find_neuron_of(s)).collect();
+        v.sort_unstable();
+        v.dedup();
+        v
+    }
+
     /// Activate a level's activations (§5): each row into its neuron's history, its relations returned, and the
     /// relations of this level in their one form (R21, D34).
     fn activate_level(&mut self, refs: &[ActRef]) -> Vec<Fresh> {
@@ -515,7 +524,11 @@ impl Brain {
                 }
             }
         }
-        let tasks: Vec<(NeuronId, ActivateTask)> = order.iter().map(|&n| (n, by_neuron.remove(&n).unwrap())).collect();
+        let tasks: Vec<(NeuronId, ActivateTask)> = order.iter().map(|&n| {
+            let mut t = by_neuron.remove(&n).unwrap();
+            t.named = self.list_interneurons(t.rows.iter().flat_map(|r| r.nbs.iter().map(|nb| nb.sym)));
+            (n, t)
+        }).collect();
         // a neuron records no more activations of one level than its history holds, and the rest return no relations (§5.1)
         for (n, t) in &tasks {
             if t.rows.len() > self.cfg.h { eprintln!("warning: frame {}: neuron #{} has {} activations at one level, more than the history depth of {}", self.frame_no, n, t.rows.len(), self.cfg.h); }

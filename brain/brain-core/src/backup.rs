@@ -341,12 +341,12 @@ impl Brain {
         self.dims = read_table(folder, "dims.csv")?.iter().map(|r| Ok(NeuronDim { id: parse(&r[0])?, name: r[1].clone(), channel: parse(&r[2])?, kind: read_kind(&r[3])?, resolution: parse(&r[4])?, first: parse(&r[5])? })).collect::<Result<_, String>>()?;
         self.channels = read_table(folder, "channels.csv")?.iter().map(|r| Ok(Channel { id: parse(&r[0])?, name: r[1].clone(), event: read_opt(&r[2], parse)?, action: read_opt(&r[3], parse)?, axes: read_axes(&r[4])? })).collect::<Result<_, String>>()?;
         // the neurons: each with its facts, its rows and its connections, created in one batch
-        let mut neurons: Vec<(NeuronFacts, usize, FrameNumber, Vec<Row>, Vec<((Sym, Sym, Offset), Conn)>)> = Vec::new();
+        let mut neurons: Vec<(NeuronFacts, usize, FrameNumber, Vec<Row>, Vec<((Sym, Sym, Offset), Conn)>, Vec<NeuronId>)> = Vec::new();
         for r in read_table(folder, "neurons.csv")? {
             let id: NeuronId = parse(&r[0])?;
             if id as usize != neurons.len() { return Err(bad("neurons.csv: ids in order")); }
             let facts = NeuronFacts { kind: read_kind(&r[1])?, dim: read_opt(&r[2], parse)?, bucket: parse(&r[3])?, channel: read_opt(&r[4], parse)?, axes: read_axes(&r[5])?, alive: read_bool(&r[6])? };
-            neurons.push((facts, parse(&r[7])?, parse(&r[8])?, Vec::new(), Vec::new()));
+            neurons.push((facts, parse(&r[7])?, parse(&r[8])?, Vec::new(), Vec::new(), Vec::new()));
         }
         for r in read_table(folder, "rows.csv")? {
             let id: usize = parse(&r[0])?;
@@ -362,6 +362,15 @@ impl Brain {
             let id: usize = parse(&r[0])?;
             let conn = ((parse(&r[1])?, parse(&r[2])?, read_pos(&r[3])?), Conn { strength: parse(&r[4])?, earnings: parse(&r[5])? });
             neurons.get_mut(id).ok_or_else(|| bad("connections.csv: neuron"))?.4.push(conn);
+        }
+        // the interneurons each neuron's rows and connections name a pose of, read off the pose table (R38)
+        let inters: Vec<NeuronId> = read_table(folder, "poses.csv")?.iter().map(|r| parse(&r[0])).collect::<Result<_, String>>()?;
+        for n in neurons.iter_mut() {
+            let syms = n.3.iter().flat_map(|row| row.nbs.iter().map(|nb| nb.sym)).chain(n.4.iter().map(|(k, _)| k.1));
+            let mut named: Vec<NeuronId> = syms.filter(|s| *s >= SYM_CALL).filter_map(|s| inters.get((s - SYM_CALL) as usize).copied()).collect();
+            named.sort_unstable();
+            named.dedup();
+            n.5 = named;
         }
         self.thalamus.import_neurons(neurons);
         // the dictionary and its indexes
