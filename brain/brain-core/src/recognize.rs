@@ -255,7 +255,8 @@ impl Brain {
         if let Some(v) = self.expansions.borrow().get(&s) { return v.clone(); }
         let mut out = Vec::new();
         let mut deps = Vec::new();
-        self.expand_nodes(s, Pos::zero(), &mut Vec::new(), &mut out, &mut deps);
+        // a function's node says its laps, and so does each call below it (D53)
+        self.walk_expansion(s, Pos::zero(), false, &mut Vec::new(), &mut deps, &mut |m, q, path| { out.push((m, q, path.to_vec())); true });
         out.sort_unstable();
         out.dedup();
         deps.sort_unstable();
@@ -278,40 +279,6 @@ impl Brain {
     pub(crate) fn forget_all_expansions(&self) {
         self.expansions.borrow_mut().clear();
         self.expansion_deps.borrow_mut().clear();
-    }
-
-    fn expand_nodes(&self, s: Sym, at: Offset, path: &mut Vec<NeuronId>, out: &mut Vec<(Sym, Offset, Vec<NeuronId>)>, deps: &mut Vec<FuncId>) {
-        let Some(phase) = self.thalamus.dict.find_pose(s) else { return };
-        let n = self.thalamus.dict.find_neuron_of(s);
-        if path.contains(&n) { return; }
-        assert!(path.len() <= MAX_CALL_DEPTH, "an expansion went through more than {} calls, one under another", MAX_CALL_DEPTH);
-        let Some(f) = self.find_function_for(s).cloned() else { return };
-        deps.push(f.id);
-        let root = f.find_node(phase.from).unwrap_or(0);
-        let lay = f.lay_out_from(root);
-        let mut nodes: Vec<(Sym, Offset)> = f.nodes.iter().enumerate().map(|(i, m)| (*m, lay.position[i])).collect();
-        if let Some(l) = f.find_lap() {
-            // the cycle read back from the node the phase starts at, lap after lap, to the node it ends at (D53)
-            let order = f.order_back(root);
-            if !order.is_empty() {
-                let to = f.find_node(phase.to).unwrap_or(order[order.len() - 1]);
-                let total = f.stretch(root, to, phase.laps);
-                let c = order.len();
-                nodes.retain(|(m, _)| !order.iter().any(|v| f.nodes[*v] == *m));
-                for i in 0..total {
-                    let (v, k) = (order[i % c], (i / c) as i32);
-                    let q = Pos::make(lay.position[v].len().max(l.len()), |d| lay.position[v][d] + k * l[d]);
-                    nodes.push((f.nodes[v], q));
-                }
-            }
-        }
-        path.push(n);
-        for (m, q) in nodes {
-            let p = at.plus(&q);
-            out.push((m, p, path.clone()));
-            self.expand_nodes(m, p, path, out, deps);
-        }
-        path.pop();
     }
 
     /// Ask one count of a pose's rows (D47, R50). The answer comes from this grouping's cache; one not yet answered

@@ -170,8 +170,7 @@ impl Brain {
         let t = &self.thalamus.registry[self.thalamus.dict.find_neuron_of(target)];
         if t.kind == Kind::Action { dims.push(t.dim.unwrap()); }
         else if t.kind == Kind::Inter {
-            let mut expanded = Vec::new();
-            self.expand_from(target, Pos::zero(), FrameNumber::MIN, false, &mut Vec::new(), &mut expanded, None);
+            let expanded = self.expand_from(target, Pos::zero(), FrameNumber::MIN);
             for (n, _) in expanded {
                 let nn = &self.thalamus.registry[n];
                 if nn.kind == Kind::Action { if let Some(d) = nn.dim { if !dims.contains(&d) { dims.push(d); } } }

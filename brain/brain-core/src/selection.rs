@@ -20,9 +20,7 @@ impl Brain {
             // an expansion reads back from where it completes, so one completed already names nothing ahead
             if (at[0] as i64) < ahead { continue; }
             let expanded = memo.entry((inf.target, at)).or_insert_with(|| {
-                let mut expanded = Vec::new();
-                self.expand_from(inf.target, at, ahead, true, &mut Vec::new(), &mut expanded, None);
-                expanded
+                self.expand_from(inf.target, at, ahead)
             }).clone();
             for (n, p) in expanded {
                 if p[0] as i64 != ahead { continue; }
