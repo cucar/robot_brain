@@ -774,12 +774,13 @@ free, no interneuron is granted (R16, R24).
 > So a function of `m` relations costs `m + 1`, whatever its nodes, and a class and a parameter cost nothing.
 > Nothing here is the implementation's: these are the fields, and the costs are read over them.
 
-> **D36 — Interneuron index.** The dictionary (D56) reached three ways:
+> **D36 — Interneuron index.** The dictionary (D56) reached four ways:
 >
 > | By | Reaches |
 > |---|---|
 > | a function | its interneuron, and back, for expansion (R28) |
-> | a relation (D34), or one of its neurons and its offset with the other end open | every function that holds it; or every function that holds a relation with that neuron at that end and that offset and a variable at the other, a class or a parameter (D38) |
+> | a relation (D34) | the function that holds it, one at most: a relation joins a function only by leaving the one it is in (R54) |
+> | one of a relation's neurons and its offset, with the other end open | every function that holds a relation with that neuron at that end and that offset and a variable at the other, a class or a parameter (D38) |
 > | what an interneuron stands for | the interneuron, for reuse when a stretch comes round (R43), and the functions of the same shape, for generalizing (R52) |
 >
 > **The same relations are the same function.** A function is its set of relations, so the same neurons at the
@@ -1301,8 +1302,8 @@ no neuron records it. The machine makes it (R52).
 > that its rows hold, each with its **strength**, the number of rows that hold it. A row holds every neighbor
 > as what stood on the board when the row was written (D18). So a relation to a neuron is counted in the rows that hold that neuron at that offset,
 > whatever calls had landed on it. It is updated
-> when a row is admitted, when a row takes what followed (D18), and when a row is
-> evicted, and at no other time.
+> when a row is admitted, when a row takes what followed (D18), when a row takes a lifted call (D18, D55), and
+> when a row is evicted, and at no other time.
 > Handed a set
 > of relations it is an end of and one more, it returns how many rows hold the set with the one more and how many
 > hold the set without it, over the rows that have taken what followed (R50).
@@ -1526,7 +1527,7 @@ argument.
 
 > **R53 — Finding.** For each relation `(a, b, δ)` a neuron returned, the machine reads the index (D36) three
 > ways: as it is; with `b` open, `(a, ?, δ)`; and with `a` open, `(?, b, δ)`. The reading as it is gives the
-> functions that hold that relation. A neighbor a call has landed on, and not yet covered, comes back as itself.
+> function that holds that relation, one at most (D36). A neighbor a call has landed on, and not yet covered, comes back as itself.
 > A covered neighbor does not come back: each call that stands over it does (D5). An open reading gives the
 > functions that
 > hold a relation with
