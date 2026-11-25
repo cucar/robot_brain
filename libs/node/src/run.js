@@ -48,7 +48,6 @@ export function parseBrainArgs(argv = process.argv) {
 		regions: readWholeNumber(argv, '--regions'),
 		columns: readWholeNumber(argv, '--columns'),
 		learning: argv.includes('--disable-learning') ? false : null,
-		insideFrame: argv.includes('--no-relations-inside-frame') ? false : null,
 		saveBrain: readFlagValue(argv, '--save-brain'),
 		loadBrain: readFlagValue(argv, '--load-brain'),
 		saveContext: readFlagValue(argv, '--save-context'),
@@ -60,7 +59,7 @@ export function parseBrainArgs(argv = process.argv) {
  * The arguments that are not flags: everything left once each `--flag` and the value after it are taken out.
  * A flag that takes no value (`--disable-learning`) is named in `bareFlags`, so the argument after it is kept.
  */
-export function readPositionals(argv = process.argv, bareFlags = ['--disable-learning', '--no-relations-inside-frame']) {
+export function readPositionals(argv = process.argv, bareFlags = ['--disable-learning']) {
 	const args = argv.slice(2);
 	const positionals = [];
 	for (let i = 0; i < args.length; i++) {

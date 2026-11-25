@@ -1691,8 +1691,10 @@ argument.
 > lands, and the candidate costs what it costs where it stands: one on the board at each occasion it holds,
 > and nothing at an occasion the function that holds it lands on it. With it, the dictionary holds one
 > relation more. At each occasion the function lands and the candidate holds, the candidate costs nothing. At
-> each occasion the function lands and the candidate is missing, the function still lands, with one failure,
-> and its other relations are saved there as before. So for a candidate no function holds, the gain is its
+> each occasion the function's other relations hold and the candidate is missing, it costs one. A function
+> lands only where it lands on more relations than it fails (D54). Where it still does, it lands with one
+> failure, and its other relations are saved there as before. Where it does not, it does not land, and the
+> one relation it covered there before stands on the board. So for a candidate no function holds, the gain is its
 > `with` less its `without` less one, read at the node it would attach at. Where a candidate closes a cycle,
 > its gain is the function's worth with it less without it. A candidate joins the function where its gain is
 > highest. A candidate no function holds

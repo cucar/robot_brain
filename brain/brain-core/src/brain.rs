@@ -53,8 +53,6 @@ pub struct Config {
     /// The dispatch: regions, and columns per region, over which the neurons are partitioned by id.
     pub regions: usize,
     pub columns: usize,
-    /// Whether relations inside the frame are read: with it off, an activation's neighbors are in earlier frames only.
-    pub inside_frame: bool,
 }
 
 /// What one level of a frame has joined, kept while the frame visits another level (D24).
@@ -199,7 +197,7 @@ impl Brain {
     ///   and changes nothing of itself; it is loaded from a backup to be tested
     pub fn new(h: usize, policy: Policy, regions: usize, columns: usize, learning: bool) -> Self {
         let mut brain = Brain {
-            cfg: Config { h, policy, regions: regions.max(1), columns: columns.max(1), inside_frame: true },
+            cfg: Config { h, policy, regions: regions.max(1), columns: columns.max(1) },
             act_dims: vec![ActDim { name: "time".into(), radius: 1 }],
             dims: Vec::new(),
             channels: Vec::new(),
@@ -415,9 +413,6 @@ impl Brain {
         while let Some(x) = self.grown.get(&r) { r = *x; n += 1; assert!(n <= MAX_LAPS, "a call was followed through more than {} laps", MAX_LAPS); }
         r
     }
-
-    /// Turn the relations inside the frame on or off: with them off, an activation's neighbors are in earlier frames only.
-    pub fn set_inside_frame(&mut self, on: bool) { self.cfg.inside_frame = on; }
 
     /// The pose a connection names an activation by (D25): its neuron, in its phase less its laps where it is a call.
     pub(crate) fn name_pose(&mut self, neuron: NeuronId, phase: Option<Phase>, _numbers: &Pos) -> Sym {

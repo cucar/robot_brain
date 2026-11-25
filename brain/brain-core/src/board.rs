@@ -180,10 +180,7 @@ impl Brain {
             if r == me || under.contains(&r) || !seen.insert(r) { return; }
             let Some(x) = self.find_act(r) else { return };
             if !self.cfg.policy.past[a.kind as usize][x.kind as usize] { return; }
-            let off = offset_between(a, x);
-            // with the relations inside the frame off, nothing in its own frame is a neighbor
-            if !self.cfg.inside_frame && off[0] == 0 { return; }
-            out.push(Nb { act: r, sym: x.sym, off, numbers: x.numbers });
+            out.push(Nb { act: r, sym: x.sym, off: offset_between(a, x), numbers: x.numbers });
         };
         if a.covers.is_empty() {
             for f in self.thalamus.frames.iter() {

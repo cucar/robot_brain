@@ -35,8 +35,6 @@ pub struct BrainOptions {
     pub columns: Option<u32>,
     /// Fixed for the life of the brain (default true); a brain built with it off is loaded from a backup to be tested.
     pub learning: Option<bool>,
-    /// Whether relations inside the frame are read (default true).
-    pub inside_frame: Option<bool>,
 }
 
 /// One neuron dimension of a channel: its name and how many values it takes.
@@ -340,13 +338,12 @@ impl JsBrain {
     /// Create a brain from its options.
     #[napi(constructor)]
     pub fn new(options: Option<BrainOptions>) -> Result<Self> {
-        let options = options.unwrap_or(BrainOptions { h: None, policy: None, action_policy: None, regions: None, columns: None, learning: None, inside_frame: None });
+        let options = options.unwrap_or(BrainOptions { h: None, policy: None, action_policy: None, regions: None, columns: None, learning: None });
         let policy = make_policy(&options)?;
         let h = options.h.unwrap_or(256) as usize;
         let regions = options.regions.unwrap_or(1) as usize;
         let columns = options.columns.unwrap_or(1) as usize;
-        let mut brain = CoreBrain::new(h, policy, regions, columns, options.learning.unwrap_or(true));
-        brain.set_inside_frame(options.inside_frame.unwrap_or(true));
+        let brain = CoreBrain::new(h, policy, regions, columns, options.learning.unwrap_or(true));
         Ok(JsBrain { inner: RefCell::new(brain) })
     }
 
