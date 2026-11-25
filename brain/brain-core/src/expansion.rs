@@ -46,16 +46,16 @@ impl Brain {
         if !open {
             // the phase says its laps: the cycle is read back from the node the phase starts at, lap after lap, to
             // the node it ends at (D53)
-            let order = f.order_back(root);
+            let order = f.place_back(root);
             let Some(l) = f.find_lap() else { return Some((f.id, out)) };
             if order.is_empty() { return Some((f.id, out)); }
-            let to = phase.and_then(|p| f.find_node(p.to)).unwrap_or(order[order.len() - 1]);
+            let to = phase.and_then(|p| f.find_node(p.to)).unwrap_or(order[order.len() - 1].0);
             let total = f.stretch(root, to, phase.map_or(0, |p| p.laps));
             let c = order.len();
-            out.retain(|(m, _)| !order.iter().any(|v| f.nodes[*v] == *m));
+            out.retain(|(m, _)| !order.iter().any(|(v, _)| f.nodes[*v] == *m));
             for i in 0..total {
-                let (v, k) = (order[i % c], (i / c) as i32);
-                out.push((f.nodes[v], stand(&lay.position[v], k, &l)));
+                let ((v, back), k) = (&order[i % c], (i / c) as i32);
+                out.push((f.nodes[*v], stand(back, k, &l)));
             }
             return Some((f.id, out));
         }

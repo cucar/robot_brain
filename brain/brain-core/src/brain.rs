@@ -53,6 +53,8 @@ pub struct Config {
     /// The dispatch: regions, and columns per region, over which the neurons are partitioned by id.
     pub regions: usize,
     pub columns: usize,
+    /// Whether relations inside the frame are read: with it off, an activation's neighbors are in earlier frames only.
+    pub inside_frame: bool,
 }
 
 /// What one level of a frame has joined, kept while the frame visits another level (D24).
@@ -197,7 +199,7 @@ impl Brain {
     ///   and changes nothing of itself; it is loaded from a backup to be tested
     pub fn new(h: usize, policy: Policy, regions: usize, columns: usize, learning: bool) -> Self {
         let mut brain = Brain {
-            cfg: Config { h, policy, regions: regions.max(1), columns: columns.max(1) },
+            cfg: Config { h, policy, regions: regions.max(1), columns: columns.max(1), inside_frame: true },
             act_dims: vec![ActDim { name: "time".into(), radius: 1 }],
             dims: Vec::new(),
             channels: Vec::new(),
@@ -414,10 +416,18 @@ impl Brain {
         r
     }
 
+    /// Turn the relations inside the frame on or off: with them off, an activation's neighbors are in earlier frames only.
+    pub fn set_inside_frame(&mut self, on: bool) { self.cfg.inside_frame = on; }
+
+    /// The pose a connection names an activation by (D25): its neuron, in its phase less its laps where it is a call.
+    pub(crate) fn name_pose(&mut self, neuron: NeuronId, phase: Option<Phase>, _numbers: &Pos) -> Sym {
+        match phase { Some(p) => self.thalamus.dict.make_sym(neuron, Phase { laps: 0, ..p }), None => neuron }
+    }
+
     pub(crate) fn make_act(&self, n: NeuronId, pos: Pos, strong: bool) -> Act {
         let nn = &self.thalamus.registry[n];
         let reach = Pos::make(nn.axes.count(), |d| if nn.axes.has(d) { 1 } else { 0 });
-        Act { neuron: n, sym: n, kind: nn.kind, axes: nn.axes, pos, strong, reach, lo: pos, hi: pos, covered_at: None, coverers: Vec::new(), covers: Vec::new(), fired_by: None, rels: Vec::new(), inferences: Vec::new(), opened_at: self.frame_no, level: 0, height: 0, gone: false }
+        Act { neuron: n, sym: n, phase: None, numbers: Pos::zero(), kind: nn.kind, axes: nn.axes, pos, strong, reach, lo: pos, hi: pos, covered_at: None, coverers: Vec::new(), covers: Vec::new(), fired_by: None, rels: Vec::new(), inferences: Vec::new(), opened_at: self.frame_no, level: 0, height: 0, gone: false }
     }
 
     // ───────────────────────────── one level (§6, R26) ─────────────────────────────
@@ -494,7 +504,7 @@ impl Brain {
     /// List the interneurons that poses are calls of, each once (R38).
     pub(crate) fn list_interneurons(&self, syms: impl Iterator<Item = Sym>) -> Vec<NeuronId> {
         // what a neuron notes of what it takes, so it can tell, when one is decommissioned, whether it holds anything of it
-        let mut v: Vec<NeuronId> = syms.filter(|s| *s >= SYM_CALL).map(|s| self.thalamus.dict.find_neuron_of(s)).collect();
+        let mut v: Vec<NeuronId> = syms.map(|s| self.thalamus.dict.find_neuron_of(s)).filter(|n| self.thalamus.registry.get(*n).map_or(false, |f| f.kind == Kind::Inter)).collect();
         v.sort_unstable();
         v.dedup();
         v
@@ -508,9 +518,9 @@ impl Brain {
         let mut order: Vec<NeuronId> = Vec::new();
         for &r in refs {
             let nbs = self.observe_neighborhood(r);
-            let (n, own) = { let a = self.find_act(r).unwrap(); (a.neuron, a.sym) };
+            let (n, own, numbers) = { let a = self.find_act(r).unwrap(); (a.neuron, a.sym, a.numbers) };
             if !by_neuron.contains_key(&n) { order.push(n); }
-            by_neuron.entry(n).or_default().rows.push(RowInput { act: r, own, nbs });
+            by_neuron.entry(n).or_default().rows.push(RowInput { act: r, own, numbers, nbs });
         }
         // a row written now holds the relations lifted to a call before it was written (D10)
         if !self.lift_pending.is_empty() {
@@ -537,10 +547,10 @@ impl Brain {
         // the board's edges at each activation, and the relations of this level in their one form (R21, D34)
         let mut fresh: FxHashMap<(ActRef, ActRef), Fresh> = FxHashMap::default();
         for ret in &returns {
-            let near_s = self.find_act(ret.act).unwrap().sym;
+            let (near_s, near_numbers) = { let a = self.find_act(ret.act).unwrap(); (a.sym, a.numbers) };
             let rels: Vec<BoardRel> = ret.rels.iter().map(|(nb, s)| BoardRel { other: nb.act, off: nb.off, strength: *s }).collect();
             for (nb, s) in &ret.rels {
-                let e = Fresh { near: ret.act, far: nb.act, strength: *s, rel: canon(near_s, nb.sym, nb.off) };
+                let e = Fresh { near: ret.act, far: nb.act, strength: *s, rel: canon(near_s, nb.sym, nb.off, near_numbers.minus(&nb.numbers)) };
                 let k = edge(ret.act, nb.act);
                 if fresh.get(&k).map_or(true, |x| x.strength < *s) { fresh.insert(k, e); }
             }
@@ -614,6 +624,49 @@ impl Brain {
         self.thalamus.dict.funcs.values().filter(|f| f.inter.map_or(true, |n| !self.thalamus.registry.is_alive(n))).count()
     }
 
+    /// Gather the channels a neuron stands over: its own for a base neuron, and for an interneuron those of everything
+    /// its functions name, down to base neurons. It stops once it has found two.
+    fn gather_channels(&self, n: NeuronId, path: &mut Vec<NeuronId>, out: &mut Vec<ChannelId>) {
+        let Some(facts) = self.thalamus.registry.get(n) else { return };
+        if facts.kind != Kind::Inter {
+            if let Some(c) = facts.channel { if !out.contains(&c) { out.push(c); } }
+            return;
+        }
+        if path.contains(&n) { return; }
+        path.push(n);
+        for id in self.thalamus.dict.list_of_inter(n) {
+            let Some(f) = self.thalamus.dict.get(*id) else { continue };
+            for s in &f.nodes {
+                self.gather_channels(self.thalamus.dict.find_neuron_of(*s), path, out);
+                if out.len() > 1 { break; }
+            }
+            if out.len() > 1 { break; }
+        }
+        path.pop();
+    }
+
+    /// The one channel a neuron stands over, where everything it stands for is in one channel.
+    pub(crate) fn find_channel_of_neuron(&self, n: NeuronId) -> Option<ChannelId> {
+        let mut out = Vec::new();
+        self.gather_channels(n, &mut Vec::new(), &mut out);
+        if out.len() == 1 { Some(out[0]) } else { None }
+    }
+
+    /// The one channel a relation is inside, where its two ends stand over the same single channel; none where it
+    /// crosses channels.
+    pub(crate) fn find_channel_of_rel(&self, r: &crate::dictionary::Rel) -> Option<ChannelId> {
+        let a = self.find_channel_of_neuron(self.thalamus.dict.find_neuron_of(r.a))?;
+        let b = self.find_channel_of_neuron(self.thalamus.dict.find_neuron_of(r.b))?;
+        if a == b { Some(a) } else { None }
+    }
+
+    /// The one channel a function is inside, where every node of it stands over the same single channel.
+    pub(crate) fn find_channel_of_func(&self, f: &crate::dictionary::Func) -> Option<ChannelId> {
+        let mut out = Vec::new();
+        for s in &f.nodes { self.gather_channels(self.thalamus.dict.find_neuron_of(*s), &mut Vec::new(), &mut out); }
+        if out.len() == 1 { Some(out[0]) } else { None }
+    }
+
     /// Start (R50): functions start one at a time, and only from a relation that still stands. A relation stands
     /// where at least one instance of it on the board is covered by no call and is not lifted, refused or blocked,
     /// its ends standing (D24, D55). Of the relations that may start a function and stand, the one with the most
@@ -629,13 +682,21 @@ impl Brain {
                 let up = |r: ActRef| m.find_act(r).map_or(false, |a| !a.gone && a.covered_at.is_none() && m.stands(a, m.frame_no));
                 up(e.near) && up(e.far)
             };
-            let mut best: Option<((bool, std::cmp::Reverse<usize>, ActRef), crate::dictionary::Rel)> = None;
+            // whether a call inside one channel has landed on an activation
+            let taken = |m: &Brain, r: ActRef| -> bool {
+                m.find_act(r).map_or(false, |a| a.coverers.iter().filter_map(|c| m.find_act(*c)).any(|c| !c.gone && m.find_channel_of_neuron(c.neuron).is_some()))
+            };
+            let mut best: Option<((bool, bool, std::cmp::Reverse<usize>, ActRef), crate::dictionary::Rel)> = None;
             for r in queue {
                 if self.thalamus.dict.find_holder(r).is_some() { continue; }
-                let inst: Vec<&Fresh> = left.iter().filter(|e| e.rel == *r && standing(self, e)).collect();
+                // a relation inside one channel starts before one that crosses channels; and one that crosses channels
+                // starts only where no call inside one channel has landed on either end: there it waits on the board, and
+                // is lifted when that end is covered (D55)
+                let crosses = self.find_channel_of_rel(r).is_none();
+                let inst: Vec<&Fresh> = left.iter().filter(|e| e.rel == *r && standing(self, e) && !(crosses && (taken(self, e.near) || taken(self, e.far)))).collect();
                 if inst.is_empty() { continue; }
                 let oldest = inst.iter().map(|e| e.near.min(e.far)).min().unwrap();
-                let key = (r.off[0] != 0, std::cmp::Reverse(inst.len()), oldest);
+                let key = (crosses, r.off[0] != 0, std::cmp::Reverse(inst.len()), oldest);
                 if best.as_ref().map_or(true, |(k, _)| key < *k) { best = Some((key, *r)); }
             }
             let Some((_, r)) = best else { break };

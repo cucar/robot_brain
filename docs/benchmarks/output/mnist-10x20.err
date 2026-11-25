@@ -1,4 +1,4 @@
-  image 100/200 | last 100: spoke 99 right 86 (86.9% of spoken) , functions added 196 retired 6 | neurons 158 functions 190 | apex/image 8.0 |  so far
-  image 200/200 | last 100: spoke 100 right 100 (100.0% of spoken) , functions added 29 retired 3 | neurons 182 functions 216 | apex/image 5.0 |  so far
+  image 100/200 | last 100: spoke 99 right 81 (81.8% of spoken) , functions added 221 retired 5 | neurons 228 functions 216 | apex/image 9.8 |  so far
+  image 200/200 | last 100: spoke 100 right 96 (96.0% of spoken) , functions added 48 retired 12 | neurons 264 functions 252 | apex/image 6.4 |  so far
 
 ⏱️  Total Execution Time:

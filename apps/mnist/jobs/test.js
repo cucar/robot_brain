@@ -19,7 +19,8 @@
  *
  * usage: node apps/mnist/jobs/test.js [--image-size 7] [--buckets 2] [--per-class 0] [--no-balance]
  *        [--train-images N] [--episodes 1] [--max-test-images 0] [--test-data] [--data <folder>]
- *        [--split] [--save-brain <label>] [--load-brain <label>] [--disable-learning]
+ *        [--split] [--silent-black] [--save-brain <label>] [--load-brain <label>] [--disable-learning]
+ * With --silent-black a pixel of the lowest value reports nothing, so an image is its white pixels alone.
  * The data folder holds the four raw (gunzipped) MNIST idx files; apps/mnist/data by default.
  */
 import fs from 'node:fs';
@@ -204,6 +205,7 @@ class MnistJob extends Job {
 		this.maxTestImages = readNumber('--max-test-images', 0);
 		this.isOnTestData = process.argv.includes('--test-data');
 		this.isSplit = process.argv.includes('--split');
+		this.isBlackSilent = process.argv.includes('--silent-black');
 		if (SIDE % this.size !== 0) throw new Error('the image size must divide 28');
 		this.block = SIDE / this.size;
 	}
@@ -265,7 +267,8 @@ class MnistJob extends Job {
 	 * The pixels' values in words.
 	 */
 	describePixels() {
-		return this.buckets === 2 ? 'black and white pixels' : `pixels in ${this.buckets} values`;
+		const values = this.buckets === 2 ? 'black and white pixels' : `pixels in ${this.buckets} values`;
+		return this.isBlackSilent ? `${values}, the black ones silent` : values;
 	}
 
 	/**
@@ -274,7 +277,12 @@ class MnistJob extends Job {
 	makeInputs(pixels) {
 		const inputs = [];
 		for (let y = 0; y < this.size; y++) {
-			for (let x = 0; x < this.size; x++) inputs.push({ dim: this.pixelDim, bucket: this.readBucket(pixels, x, y), position: [x, y] });
+			for (let x = 0; x < this.size; x++) {
+				const bucket = this.readBucket(pixels, x, y);
+				// with the black pixels silent, a pixel of the lowest value reports nothing
+				if (this.isBlackSilent && bucket === 0) continue;
+				inputs.push({ dim: this.pixelDim, bucket, position: [x, y] });
+			}
 		}
 		return inputs;
 	}

@@ -7,40 +7,40 @@ square:
   square showing  1: said - | levels 2 | on the apex 7 | functions 3 | dictionary changed
   square showing  2: said 0 | levels 3 | on the apex 5 | functions 4 | dictionary changed
   square showing  3: said 0 | levels 3 | on the apex 3 | functions 6 | dictionary changed
-  square showing  4: said 0 | levels 3 | on the apex 3 | functions 6 | dictionary same
-  square showing  5: said 0 | levels 4 | on the apex 2 | functions 7 | dictionary changed
-  square showing  6: said 0 | levels 3 | on the apex 2 | functions 7 | dictionary changed
-  square showing  7: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing  8: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing  9: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 10: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 11: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 12: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 13: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 14: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 15: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 16: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 17: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 18: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 19: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 20: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 21: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 22: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 23: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 24: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 25: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 26: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 27: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 28: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 29: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
-  square showing 30: said 0 | levels 4 | on the apex 1 | functions 7 | dictionary same
+  square showing  4: said 0 | levels 3 | on the apex 3 | functions 6 | dictionary changed
+  square showing  5: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary changed
+  square showing  6: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing  7: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing  8: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing  9: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 10: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 11: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 12: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 13: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 14: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 15: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 16: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 17: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 18: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 19: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 20: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 21: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 22: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 23: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 24: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 25: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 26: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 27: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 28: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 29: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
+  square showing 30: said 0 | levels 3 | on the apex 1 | functions 6 | dictionary same
   on the apex: 1 calls, 0 bare pixels
-    level 3: 1 calls
-      #14<#16<#12<#0..#0x4>..#14<#0..#0x2>x0>..#15<#13<#1..#1x2>..#13<#1..#1x2>x2>x0> at (0, 0) | the call #14 of f2,f6 (from #16<#12<#0..#0x4>..#14<#0..#0x2>x0> to #15<#13<#1..#1x2>..#13<#1..#1x2>x2>, 0 laps) | f6 | covers [#16<#12<#0..#0x4>..#14<#0..#0x2>x0>@0,0 #15<#13<#1..#1x2>..#13<#1..#1x2>x2>@1,1 #17<#12<#0..#0x4>..#14<#0..#0x2>x0>@0,4] | stands for 25 pixels
+    level 2: 1 calls
+      #16<#12..#268435462x0> at (0, 0) | the call #16 of f4 | f4 | covers [#12<#0..#0x4>@0,0 #14<#0..#0x2>@0,1 #13<#1..#1x2>@1,1 #14<#0..#0x2>@4,1 #12<#0..#0x4>@0,4 #13<#1..#1x2>@1,2 #13<#1..#1x2>@1,3] | stands for 25 pixels
     relations between what stands on the apex: 0
-NEVERCALLED square 0 of 7
-  square: the dictionary last changed at showing 6 (unchanged over the last 24 showings)
-  dictionary: 7 functions
+NEVERCALLED square 0 of 6
+  square: the dictionary last changed at showing 5 (unchanged over the last 25 showings)
+  dictionary: 6 functions
     f0: a cycle, no origin, interneuron #12
       black sees black at (+1, +0)   [#0→#0[0, 1, 0]]
     f1: a cycle, no origin, interneuron #13
@@ -48,15 +48,16 @@ NEVERCALLED square 0 of 7
     f2: a cycle, no origin, interneuron #14
       black sees black at (+0, +1)   [#0→#0[0, 0, 1]]
     f3: a cycle, no origin, interneuron #15
-      the call #13 of f1 (from white to white, 2 laps) sees the call #13 of f1 (from white to white, 2 laps) at (+0, +1)   [#13<#1..#1x2>→#13<#1..#1x2>[0, 0, 1]]
-    f4: a cycle, no origin, interneuron #16
-      the call #12 of f0 (from black to black, 4 laps) sees the call #14 of f2,f6 (from black to black, 2 laps) at (+0, +1)   [#12<#0..#0x4>→#14<#0..#0x2>[0, 0, 1]]
-      the call #12 of f0 (from black to black, 4 laps) sees the call #15 of f3 (from #13<#1..#1x2> to #13<#1..#1x2>, 2 laps) at (+1, +1)   [#12<#0..#0x4>→#15<#13<#1..#1x2>..#13<#1..#1x2>x2>[0, 1, 1]]
-      the call #14 of f2,f6 (from black to black, 2 laps) sees the call #15 of f3 (from #13<#1..#1x2> to #13<#1..#1x2>, 2 laps) at (+1, +0)   [#14<#0..#0x2>→#15<#13<#1..#1x2>..#13<#1..#1x2>x2>[0, 1, 0]]
-    f5: a cycle, no origin, interneuron #17
-      the call #12 of f0 (from black to black, 4 laps) sees the call #14 of f2,f6 (from black to black, 2 laps) at (+4, -3)   [#12<#0..#0x4>→#14<#0..#0x2>[0, 4, -3]]
-      the call #12 of f0 (from black to black, 4 laps) sees the call #15 of f3 (from #13<#1..#1x2> to #13<#1..#1x2>, 2 laps) at (+1, -3)   [#12<#0..#0x4>→#15<#13<#1..#1x2>..#13<#1..#1x2>x2>[0, 1, -3]]
-      the call #15 of f3 (from #13<#1..#1x2> to #13<#1..#1x2>, 2 laps) sees the call #14 of f2,f6 (from black to black, 2 laps) at (+3, +0)   [#15<#13<#1..#1x2>..#13<#1..#1x2>x2>→#14<#0..#0x2>[0, 3, 0]]
-    f6: origin the call #16 of f4 (from #12<#0..#0x4> to #14<#0..#0x2>, 0 laps), interneuron #14
-      the call #16 of f4 (from #12<#0..#0x4> to #14<#0..#0x2>, 0 laps) sees the call #15 of f3 (from #13<#1..#1x2> to #13<#1..#1x2>, 2 laps) at (+1, +1)   [#16<#12<#0..#0x4>..#14<#0..#0x2>x0>→#15<#13<#1..#1x2>..#13<#1..#1x2>x2>[0, 1, 1]]
-      the call #16 of f4 (from #12<#0..#0x4> to #14<#0..#0x2>, 0 laps) sees the call #17 of f5 (from #12<#0..#0x4> to #14<#0..#0x2>, 0 laps) at (+0, +4)   [#16<#12<#0..#0x4>..#14<#0..#0x2>x0>→#17<#12<#0..#0x4>..#14<#0..#0x2>x0>[0, 0, 4]]
+      the call #13 of f1 sees the call #13 of f1 at (+0, +1)   [#13→#13[0, 0, 1]]
+    f4: origin the call #12 of f0, interneuron #16
+      the call #12 of f0 sees the call #14 of f2 at (+0, +1)   [#12→#14[0, 0, 1]]
+      the call #12 of f0 sees the call #13 of f1 at (+1, +1)   [#12→#13[0, 1, 1]]
+      the call #12 of f0 sees the call #268435462 of no function now at (+4, +1)   [#12→#14'1[0, 4, 1]]
+      the call #14 of f2 sees the call #268435465 of no function now at (+0, +3)   [#14→#12'1[0, 0, 3]]
+      the call #14 of f2 sees the call #268435463 of no function now at (+1, +1)   [#14→#13'1[0, 1, 1]]
+      the call #14 of f2 sees the call #268435464 of no function now at (+1, +2)   [#14→#13'2[0, 1, 2]]
+    f5: origin the call #12 of f0, interneuron #17
+      the call #12 of f0 sees the call #14 of f2 at (+4, -3)   [#12→#14[0, 4, -3]]
+      the call #12 of f0 sees the call #13 of f1 at (+1, -1)   [#12→#13[0, 1, -1]]
+      the call #268435463 of no function now sees the call #14 of f2 at (+3, -1)   [#13'1→#14[0, 3, -1]]
+      the call #268435464 of no function now sees the call #14 of f2 at (+3, +0)   [#13'2→#14[0, 3, 0]]

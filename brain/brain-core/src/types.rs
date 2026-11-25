@@ -177,6 +177,9 @@ impl Axes {
 pub const MAX_LEVELS: u32 = 1024;
 /// The laps one fit reads, the laps a call is followed through, and the laps an inferred cycle is read back.
 pub const MAX_LAPS: u32 = 4096;
+/// A function names a second and further node of one neuron by a symbol of its own (D15): it is kept in the table of
+/// poses under this mark and its number, in the place of the laps, and has no phase.
+pub const NODE_MARK: u32 = 1 << 31;
 /// The calls standing over one activation.
 pub const MAX_CALLS_OVER: usize = 4096;
 /// The calls one under another, followed up from an activation or down through an expansion.
@@ -194,9 +197,9 @@ pub const SYM_CALL: Sym = 1 << 28;
 
 /// A call's phase (D8, D37, D53): the node the fit started at, the node it ended at, and its laps, how many times it
 /// went round. A fit reads a cycle one way, the way its relations' offsets advance, so the phase names no
-/// direction. A node is a pose (D15), so the phase names each of its two nodes by its pose, the node's neuron in
-/// its own phase. So a phase is two nodes and a number, and a ring of calls, each ending at the call before it,
-/// keeps the same names lap after lap. A neuron in a phase is a pose (`Sym`).
+/// direction. The phase names its two nodes, each a node of the function (D15). So a phase is two nodes and a
+/// number, and a ring of calls, each ending at the call before it, keeps the same names lap after lap.
+/// A neuron in a phase is a pose.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, Default)]
 pub struct Phase {
     pub from: Sym,

@@ -24,1295 +24,1295 @@ ALL4 17 |
 ALL4 18 | 
 ALL4 19 | 
 ALL4 20 | 
-ALL4 21 | L2 f16
+ALL4 21 | 
 ALL4 22 | 
 ALL4 23 | 
-CYCLE 2 | neurons 34 | functions 18 | highest call level in the cycle 2 | the dictionary last changed at frame 24 | right KGC 83.33%, GLD 75.00%, SPY 58.33%, Q 58.33%
+CYCLE 2 | neurons 30 | functions 14 | highest call level in the cycle 1 | the dictionary last changed at frame 22 | right KGC 66.67%, GLD 66.67%, SPY 33.33%, Q 33.33%
 ALL4 24 | 
 ALL4 25 | 
-ALL4 26 | L2 f16
+ALL4 26 | 
 ALL4 27 | 
 ALL4 28 | 
 ALL4 29 | 
 ALL4 30 | 
-ALL4 31 | L2 f20
+ALL4 31 | 
 ALL4 32 | 
-ALL4 33 | L2 f16; L3 f21
+ALL4 33 | L2 f20
 ALL4 34 | 
-ALL4 35 | L2 f22
-CYCLE 3 | neurons 39 | functions 23 | highest call level in the cycle 3 | the dictionary last changed at frame 35 | right KGC 66.67%, GLD 83.33%, SPY 41.67%, Q 75.00%
-ALL4 36 | L2 f22
+ALL4 35 | L2 f21
+CYCLE 3 | neurons 37 | functions 21 | highest call level in the cycle 2 | the dictionary last changed at frame 35 | right KGC 66.67%, GLD 66.67%, SPY 50.00%, Q 50.00%
+ALL4 36 | L2 f21
 ALL4 37 | 
-ALL4 38 | L2 f16
-ALL4 39 | L2 f23
-ALL4 40 | L2 f24
-ALL4 41 | L2 f25
-ALL4 42 | L2 f26
-ALL4 43 | L2 f20
-ALL4 44 | L2 f27
-ALL4 45 | L2 f16
-ALL4 46 | L2 f28
-ALL4 47 | L2 f22
-CYCLE 4 | neurons 45 | functions 29 | highest call level in the cycle 2 | the dictionary last changed at frame 46 | right KGC 75.00%, GLD 91.67%, SPY 58.33%, Q 83.33%
-ALL4 48 | L2 f22
-ALL4 49 | L2 f29
-ALL4 50 | L2 f16
-ALL4 51 | L2 f23
-ALL4 52 | L2 f24
-ALL4 53 | L2 f25
-ALL4 54 | L2 f26
-ALL4 55 | L2 f20
-ALL4 56 | L2 f27
-ALL4 57 | L2 f16
-ALL4 58 | L2 f28
-ALL4 59 | L2 f22
-CYCLE 5 | neurons 47 | functions 31 | highest call level in the cycle 3 | the dictionary last changed at frame 60 | right KGC 91.67%, GLD 100.00%, SPY 83.33%, Q 83.33%
-ALL4 60 | L2 f22; L3 f30
-ALL4 61 | L1 f18
-ALL4 62 | L2 f16
-ALL4 63 | L2 f23; L3 f31
-ALL4 64 | L2 f24; L3 f32
-ALL4 65 | L2 f25; L3 f33
-ALL4 66 | L2 f26; L3 f34
-ALL4 67 | L2 f20; L3 f35
-ALL4 68 | L2 f27; L3 f36
-ALL4 69 | L2 f16; L3 f37
-ALL4 70 | L2 f28; L3 f38
-ALL4 71 | L2 f22; L3 f39
-CYCLE 6 | neurons 56 | functions 40 | highest call level in the cycle 3 | the dictionary last changed at frame 71 | right KGC 91.67%, GLD 100.00%, SPY 91.67%, Q 91.67%
-ALL4 72 | L2 f22; L3 f30
-ALL4 73 | 
-ALL4 74 | L2 f16; L3 f41
-ALL4 75 | L2 f23; L3 f31
-ALL4 76 | L2 f24; L3 f32
-ALL4 77 | L2 f25; L3 f33
-ALL4 78 | L2 f26; L3 f34
-ALL4 79 | L2 f20; L3 f35
-ALL4 80 | L2 f27; L3 f36
-ALL4 81 | L2 f16; L3 f37
-ALL4 82 | L2 f28; L3 f38
-ALL4 83 | L2 f22; L3 f39
-CYCLE 7 | neurons 55 | functions 38 | highest call level in the cycle 3 | the dictionary last changed at frame 82 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 91.67%
-ALL4 84 | L2 f22; L3 f30
-ALL4 85 | 
-ALL4 86 | L2 f16; L3 f41
-ALL4 87 | L2 f23; L3 f32
-ALL4 88 | L2 f24; L3 f32
-ALL4 89 | L2 f25; L3 f34
-ALL4 90 | L2 f26; L3 f34
-ALL4 91 | L2 f20; L3 f36
-ALL4 92 | L2 f27; L3 f36
-ALL4 93 | L2 f16; L3 f38
-ALL4 94 | L2 f28; L3 f38
-ALL4 95 | L2 f22; L3 f39
-CYCLE 8 | neurons 55 | functions 39 | highest call level in the cycle 4 | the dictionary last changed at frame 96 | right KGC 100.00%, GLD 100.00%, SPY 91.67%, Q 100.00%
-ALL4 96 | L2 f22; L3 f30; L4 f42
-ALL4 97 | L3 f43
-ALL4 98 | L2 f16; L3 f41
-ALL4 99 | L2 f23; L3 f32
-ALL4 100 | L2 f24; L3 f32
-ALL4 101 | L2 f25; L3 f34
-ALL4 102 | L2 f26; L3 f34
-ALL4 103 | L2 f20; L3 f36
-ALL4 104 | L2 f27; L3 f36
-ALL4 105 | L2 f16; L3 f38
-ALL4 106 | L2 f28; L3 f38
-ALL4 107 | L2 f22; L3 f39
-CYCLE 9 | neurons 56 | functions 40 | highest call level in the cycle 4 | the dictionary last changed at frame 97 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 108 | L2 f22; L3 f30; L4 f42
-ALL4 109 | L3 f43
-ALL4 110 | L2 f16; L3 f41
-ALL4 111 | L2 f23; L3 f32; L4 f44
-ALL4 112 | L2 f24; L3 f32
-ALL4 113 | L2 f25; L3 f34; L4 f45
-ALL4 114 | L2 f26; L3 f34
-ALL4 115 | L2 f20; L3 f36; L4 f46
-ALL4 116 | L2 f27; L3 f36
-ALL4 117 | L2 f16; L3 f38; L4 f47
-ALL4 118 | L2 f28; L3 f38
-ALL4 119 | L2 f22; L3 f39; L4 f48
-CYCLE 10 | neurons 61 | functions 45 | highest call level in the cycle 4 | the dictionary last changed at frame 119 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 120 | L2 f22; L3 f30; L4 f42
-ALL4 121 | L3 f43; L4 f49
-ALL4 122 | L2 f16; L3 f41; L3 f50
-ALL4 123 | L2 f23; L3 f32; L4 f44
-ALL4 124 | L2 f24; L3 f32
-ALL4 125 | L2 f25; L3 f34; L4 f45
-ALL4 126 | L2 f26; L3 f34
-ALL4 127 | L2 f20; L3 f36; L4 f46
-ALL4 128 | L2 f27; L3 f36
-ALL4 129 | L2 f16; L3 f38; L4 f47
-ALL4 130 | L2 f28; L3 f38
-ALL4 131 | L2 f22; L3 f39; L4 f48
-CYCLE 11 | neurons 63 | functions 47 | highest call level in the cycle 4 | the dictionary last changed at frame 122 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 132 | L2 f22; L3 f30; L4 f42
-ALL4 133 | L3 f43; L4 f49
-ALL4 134 | L2 f16; L3 f41; L3 f50
-ALL4 135 | L2 f23; L3 f32; L4 f44
-ALL4 136 | L2 f24; L3 f32
-ALL4 137 | L2 f25; L3 f34; L4 f45; L5 f51
-ALL4 138 | L2 f26; L3 f34
-ALL4 139 | L2 f20; L3 f36; L4 f46; L5 f52
-ALL4 140 | L2 f27; L3 f36
-ALL4 141 | L2 f16; L3 f38; L4 f47; L5 f53
-ALL4 142 | L2 f28; L3 f38
-ALL4 143 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 12 | neurons 67 | functions 51 | highest call level in the cycle 5 | the dictionary last changed at frame 144 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 144 | L2 f22; L3 f30; L4 f42; L5 f55
-ALL4 145 | L3 f43; L4 f50
-ALL4 146 | L2 f16; L3 f41; L3 f50
-ALL4 147 | L2 f23; L3 f32; L4 f44
-ALL4 148 | L2 f24; L3 f32
-ALL4 149 | L2 f25; L3 f34; L4 f45; L5 f51
-ALL4 150 | L2 f26; L3 f34
-ALL4 151 | L2 f20; L3 f36; L4 f46; L5 f52
-ALL4 152 | L2 f27; L3 f36
-ALL4 153 | L2 f16; L3 f38; L4 f47; L5 f53
-ALL4 154 | L2 f28; L3 f38
-ALL4 155 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 13 | neurons 66 | functions 49 | highest call level in the cycle 5 | the dictionary last changed at frame 155 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 156 | L2 f22; L3 f30; L4 f42; L5 f55
-ALL4 157 | L3 f43; L4 f50
-ALL4 158 | L2 f16; L3 f41; L3 f50
-ALL4 159 | L2 f23; L3 f32; L4 f44
-ALL4 160 | L2 f24; L3 f32
-ALL4 161 | L2 f25; L3 f34; L4 f45; L5 f52
-ALL4 162 | L2 f26; L3 f34
-ALL4 163 | L2 f20; L3 f36; L4 f46; L5 f52
-ALL4 164 | L2 f27; L3 f36
-ALL4 165 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 166 | L2 f28; L3 f38
-ALL4 167 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 14 | neurons 65 | functions 49 | highest call level in the cycle 5 | the dictionary last changed at frame 155 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 168 | L2 f22; L3 f30; L4 f42; L5 f55
-ALL4 169 | L3 f43; L4 f50; L5 f56
-ALL4 170 | L2 f16; L3 f41; L3 f50; L4 f57
-ALL4 171 | L2 f23; L3 f32
-ALL4 172 | L2 f24; L3 f32
-ALL4 173 | L2 f25; L3 f34; L4 f45
-ALL4 174 | L2 f26; L3 f34
-ALL4 175 | L2 f20; L3 f36; L4 f46
-ALL4 176 | L2 f27; L3 f36
-ALL4 177 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 178 | L2 f28; L3 f38
-ALL4 179 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 15 | neurons 67 | functions 51 | highest call level in the cycle 5 | the dictionary last changed at frame 177 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 180 | L2 f22; L3 f30; L4 f42; L5 f55
-ALL4 181 | L3 f43; L4 f50; L5 f56
-ALL4 182 | L2 f16; L3 f41; L3 f50; L4 f57
-ALL4 183 | L2 f23; L3 f32
-ALL4 184 | L2 f24; L3 f32
-ALL4 185 | L2 f25; L3 f34; L4 f45
-ALL4 186 | L2 f26; L3 f34
-ALL4 187 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 188 | L2 f27; L3 f36
-ALL4 189 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 190 | L2 f28; L3 f38
-ALL4 191 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 16 | neurons 67 | functions 51 | highest call level in the cycle 5 | the dictionary last changed at frame 177 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 192 | L2 f22; L3 f30; L4 f42; L5 f55
-ALL4 193 | L3 f43; L4 f50; L5 f56; L6 f58
-ALL4 194 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 195 | L2 f23; L3 f32
-ALL4 196 | L2 f24; L3 f32
-ALL4 197 | L2 f25; L3 f34; L4 f45
-ALL4 198 | L2 f26; L3 f34
-ALL4 199 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 200 | L2 f27; L3 f36
-ALL4 201 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 202 | L2 f28; L3 f38
-ALL4 203 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 17 | neurons 69 | functions 53 | highest call level in the cycle 6 | the dictionary last changed at frame 194 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 204 | L2 f22; L3 f30; L4 f42; L5 f55
-ALL4 205 | L3 f43; L4 f50; L5 f56; L6 f58
-ALL4 206 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 207 | L2 f23; L3 f32
-ALL4 208 | L2 f24; L3 f32
-ALL4 209 | L2 f25; L3 f34; L4 f45
-ALL4 210 | L2 f26; L3 f34
-ALL4 211 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 212 | L2 f27; L3 f36
-ALL4 213 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 214 | L2 f28; L3 f38
-ALL4 215 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 18 | neurons 70 | functions 53 | highest call level in the cycle 6 | the dictionary last changed at frame 216 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 216 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 217 | L3 f43; L4 f50; L5 f56; L6 f59
-ALL4 218 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 219 | L2 f23; L3 f32
-ALL4 220 | L2 f24; L3 f32
-ALL4 221 | L2 f25; L3 f34; L4 f45
-ALL4 222 | L2 f26; L3 f34
-ALL4 223 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 224 | L2 f27; L3 f36
-ALL4 225 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 226 | L2 f28; L3 f38
-ALL4 227 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 19 | neurons 69 | functions 53 | highest call level in the cycle 6 | the dictionary last changed at frame 216 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 228 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 229 | L3 f43; L4 f50; L5 f56; L6 f59
-ALL4 230 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 231 | L2 f23; L3 f32
-ALL4 232 | L2 f24; L3 f32
-ALL4 233 | L2 f25; L3 f34; L4 f45
-ALL4 234 | L2 f26; L3 f34
-ALL4 235 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 236 | L2 f27; L3 f36
-ALL4 237 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 238 | L2 f28; L3 f38
-ALL4 239 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 20 | neurons 69 | functions 53 | highest call level in the cycle 6 | the dictionary last changed at frame 216 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 240 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 241 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 242 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 243 | L2 f23; L3 f32
-ALL4 244 | L2 f24; L3 f32
-ALL4 245 | L2 f25; L3 f34; L4 f45
-ALL4 246 | L2 f26; L3 f34
-ALL4 247 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 248 | L2 f27; L3 f36
-ALL4 249 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 250 | L2 f28; L3 f38
-ALL4 251 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 21 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 252 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 253 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 254 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 255 | L2 f23; L3 f32
-ALL4 256 | L2 f24; L3 f32
-ALL4 257 | L2 f25; L3 f34; L4 f45
-ALL4 258 | L2 f26; L3 f34
-ALL4 259 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 260 | L2 f27; L3 f36
-ALL4 261 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 262 | L2 f28; L3 f38
-ALL4 263 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 22 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 264 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 265 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 266 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 267 | L2 f23; L3 f32
-ALL4 268 | L2 f24; L3 f32
-ALL4 269 | L2 f25; L3 f34; L4 f45
-ALL4 270 | L2 f26; L3 f34
-ALL4 271 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 272 | L2 f27; L3 f36
-ALL4 273 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 274 | L2 f28; L3 f38
-ALL4 275 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 23 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 276 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 277 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 278 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 279 | L2 f23; L3 f32
-ALL4 280 | L2 f24; L3 f32
-ALL4 281 | L2 f25; L3 f34; L4 f45
-ALL4 282 | L2 f26; L3 f34
-ALL4 283 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 284 | L2 f27; L3 f36
-ALL4 285 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 286 | L2 f28; L3 f38
-ALL4 287 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 24 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 288 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 289 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 290 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 291 | L2 f23; L3 f32
-ALL4 292 | L2 f24; L3 f32
-ALL4 293 | L2 f25; L3 f34; L4 f45
-ALL4 294 | L2 f26; L3 f34
-ALL4 295 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 296 | L2 f27; L3 f36
-ALL4 297 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 298 | L2 f28; L3 f38
-ALL4 299 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 25 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 300 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 301 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 302 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 303 | L2 f23; L3 f32
-ALL4 304 | L2 f24; L3 f32
-ALL4 305 | L2 f25; L3 f34; L4 f45
-ALL4 306 | L2 f26; L3 f34
-ALL4 307 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 308 | L2 f27; L3 f36
-ALL4 309 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 310 | L2 f28; L3 f38
-ALL4 311 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 26 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 312 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 313 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 314 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 315 | L2 f23; L3 f32
-ALL4 316 | L2 f24; L3 f32
-ALL4 317 | L2 f25; L3 f34; L4 f45
-ALL4 318 | L2 f26; L3 f34
-ALL4 319 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 320 | L2 f27; L3 f36
-ALL4 321 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 322 | L2 f28; L3 f38
-ALL4 323 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 27 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 324 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 325 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 326 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 327 | L2 f23; L3 f32
-ALL4 328 | L2 f24; L3 f32
-ALL4 329 | L2 f25; L3 f34; L4 f45
-ALL4 330 | L2 f26; L3 f34
-ALL4 331 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 332 | L2 f27; L3 f36
-ALL4 333 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 334 | L2 f28; L3 f38
-ALL4 335 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 28 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 336 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 337 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 338 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 339 | L2 f23; L3 f32
-ALL4 340 | L2 f24; L3 f32
-ALL4 341 | L2 f25; L3 f34; L4 f45
-ALL4 342 | L2 f26; L3 f34
-ALL4 343 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 344 | L2 f27; L3 f36
-ALL4 345 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 346 | L2 f28; L3 f38
-ALL4 347 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 29 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 348 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 349 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 350 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 351 | L2 f23; L3 f32
-ALL4 352 | L2 f24; L3 f32
-ALL4 353 | L2 f25; L3 f34; L4 f45
-ALL4 354 | L2 f26; L3 f34
-ALL4 355 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 356 | L2 f27; L3 f36
-ALL4 357 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 358 | L2 f28; L3 f38
-ALL4 359 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 30 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 360 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 361 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 362 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 363 | L2 f23; L3 f32
-ALL4 364 | L2 f24; L3 f32
-ALL4 365 | L2 f25; L3 f34; L4 f45
-ALL4 366 | L2 f26; L3 f34
-ALL4 367 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 368 | L2 f27; L3 f36
-ALL4 369 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 370 | L2 f28; L3 f38
-ALL4 371 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 31 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 372 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 373 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 374 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 375 | L2 f23; L3 f32
-ALL4 376 | L2 f24; L3 f32
-ALL4 377 | L2 f25; L3 f34; L4 f45
-ALL4 378 | L2 f26; L3 f34
-ALL4 379 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 380 | L2 f27; L3 f36
-ALL4 381 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 382 | L2 f28; L3 f38
-ALL4 383 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 32 | neurons 70 | functions 54 | highest call level in the cycle 7 | the dictionary last changed at frame 241 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 384 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 385 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 386 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 387 | L2 f23; L3 f32
-ALL4 388 | L2 f24; L3 f32
-ALL4 389 | L2 f25; L3 f34; L4 f45
-ALL4 390 | L2 f26; L3 f34
-ALL4 391 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 392 | L2 f27; L3 f36
-ALL4 393 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 394 | L2 f28; L3 f38
-ALL4 395 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 33 | neurons 69 | functions 53 | highest call level in the cycle 7 | the dictionary last changed at frame 388 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 396 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 397 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 398 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 399 | L2 f23; L3 f32
-ALL4 400 | L2 f24; L3 f32
-ALL4 401 | L2 f25; L3 f34; L4 f45
-ALL4 402 | L2 f26; L3 f34
-ALL4 403 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 404 | L2 f27; L3 f36
-ALL4 405 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 406 | L2 f28; L3 f38
-ALL4 407 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 34 | neurons 69 | functions 53 | highest call level in the cycle 7 | the dictionary last changed at frame 388 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 408 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 409 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 410 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 411 | L2 f23; L3 f32
-ALL4 412 | L2 f24; L3 f32
-ALL4 413 | L2 f25; L3 f34; L4 f45
-ALL4 414 | L2 f26; L3 f34
-ALL4 415 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 416 | L2 f27; L3 f36
-ALL4 417 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 418 | L2 f28; L3 f38
-ALL4 419 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 35 | neurons 69 | functions 53 | highest call level in the cycle 7 | the dictionary last changed at frame 388 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 420 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 421 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 422 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 423 | L2 f23; L3 f32
-ALL4 424 | L2 f24; L3 f32
-ALL4 425 | L2 f25; L3 f34; L4 f45
-ALL4 426 | L2 f26; L3 f34
-ALL4 427 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 428 | L2 f27; L3 f36
-ALL4 429 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 430 | L2 f28; L3 f38
-ALL4 431 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 36 | neurons 69 | functions 53 | highest call level in the cycle 7 | the dictionary last changed at frame 388 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 432 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 433 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 434 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 435 | L2 f23; L3 f32
-ALL4 436 | L2 f24; L3 f32
-ALL4 437 | L2 f25; L3 f34; L4 f45
-ALL4 438 | L2 f26; L3 f34
-ALL4 439 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 440 | L2 f27; L3 f36
-ALL4 441 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 442 | L2 f28; L3 f38
-ALL4 443 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 37 | neurons 69 | functions 53 | highest call level in the cycle 7 | the dictionary last changed at frame 388 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 444 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 445 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 446 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 447 | L2 f23; L3 f32
-ALL4 448 | L2 f24; L3 f32
-ALL4 449 | L2 f25; L3 f34; L4 f45
-ALL4 450 | L2 f26; L3 f34
-ALL4 451 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 452 | L2 f27; L3 f36
-ALL4 453 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 454 | L2 f28; L3 f38
-ALL4 455 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 38 | neurons 69 | functions 53 | highest call level in the cycle 7 | the dictionary last changed at frame 388 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 456 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 457 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 458 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 459 | L2 f23; L3 f32
-ALL4 460 | L2 f24; L3 f32
-ALL4 461 | L2 f25; L3 f34; L4 f45
-ALL4 462 | L2 f26; L3 f34
-ALL4 463 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 464 | L2 f27; L3 f36
-ALL4 465 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 466 | L2 f28; L3 f38
-ALL4 467 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 39 | neurons 68 | functions 52 | highest call level in the cycle 7 | the dictionary last changed at frame 458 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 468 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 469 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 470 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 471 | L2 f23; L3 f32
-ALL4 472 | L2 f24; L3 f32
-ALL4 473 | L2 f25; L3 f34; L4 f45
-ALL4 474 | L2 f26; L3 f34
-ALL4 475 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 476 | L2 f27; L3 f36
-ALL4 477 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 478 | L2 f28; L3 f38
-ALL4 479 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 40 | neurons 68 | functions 52 | highest call level in the cycle 7 | the dictionary last changed at frame 458 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 480 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 481 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 482 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 483 | L2 f23; L3 f32
-ALL4 484 | L2 f24; L3 f32
-ALL4 485 | L2 f25; L3 f34; L4 f45
-ALL4 486 | L2 f26; L3 f34
-ALL4 487 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 488 | L2 f27; L3 f36
-ALL4 489 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 490 | L2 f28; L3 f38
-ALL4 491 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 41 | neurons 68 | functions 52 | highest call level in the cycle 7 | the dictionary last changed at frame 458 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 492 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 493 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 494 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 495 | L2 f23; L3 f32
-ALL4 496 | L2 f24; L3 f32
-ALL4 497 | L2 f25; L3 f34; L4 f45
-ALL4 498 | L2 f26; L3 f34
-ALL4 499 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 500 | L2 f27; L3 f36
-ALL4 501 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 502 | L2 f28; L3 f38
-ALL4 503 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 42 | neurons 68 | functions 52 | highest call level in the cycle 7 | the dictionary last changed at frame 458 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 504 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 505 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 506 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 507 | L2 f23; L3 f32
-ALL4 508 | L2 f24; L3 f32
-ALL4 509 | L2 f25; L3 f34; L4 f45
-ALL4 510 | L2 f26; L3 f34
-ALL4 511 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 512 | L2 f27; L3 f36
-ALL4 513 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 514 | L2 f28; L3 f38
-ALL4 515 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 43 | neurons 67 | functions 51 | highest call level in the cycle 7 | the dictionary last changed at frame 511 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 516 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 517 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 518 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 519 | L2 f23; L3 f32
-ALL4 520 | L2 f24; L3 f32
-ALL4 521 | L2 f25; L3 f34; L4 f45
-ALL4 522 | L2 f26; L3 f34
-ALL4 523 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 524 | L2 f27; L3 f36
-ALL4 525 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 526 | L2 f28; L3 f38
-ALL4 527 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 44 | neurons 67 | functions 51 | highest call level in the cycle 7 | the dictionary last changed at frame 511 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 528 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 529 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 530 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 531 | L2 f23; L3 f32
-ALL4 532 | L2 f24; L3 f32
-ALL4 533 | L2 f25; L3 f34; L4 f45
-ALL4 534 | L2 f26; L3 f34
-ALL4 535 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 536 | L2 f27; L3 f36
-ALL4 537 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 538 | L2 f28; L3 f38
-ALL4 539 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 45 | neurons 67 | functions 51 | highest call level in the cycle 7 | the dictionary last changed at frame 511 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 540 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 541 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 542 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 543 | L2 f23; L3 f32
-ALL4 544 | L2 f24; L3 f32
-ALL4 545 | L2 f25; L3 f34; L4 f45
-ALL4 546 | L2 f26; L3 f34
-ALL4 547 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 548 | L2 f27; L3 f36
-ALL4 549 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 550 | L2 f28; L3 f38
-ALL4 551 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 46 | neurons 67 | functions 51 | highest call level in the cycle 7 | the dictionary last changed at frame 511 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 552 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 553 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 554 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 555 | L2 f23; L3 f32
-ALL4 556 | L2 f24; L3 f32
-ALL4 557 | L2 f25; L3 f34; L4 f45
-ALL4 558 | L2 f26; L3 f34
-ALL4 559 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 560 | L2 f27; L3 f36
-ALL4 561 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 562 | L2 f28; L3 f38
-ALL4 563 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 47 | neurons 67 | functions 51 | highest call level in the cycle 7 | the dictionary last changed at frame 511 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 564 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 565 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 566 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 567 | L2 f23; L3 f32
-ALL4 568 | L2 f24; L3 f32
-ALL4 569 | L2 f25; L3 f34; L4 f45
-ALL4 570 | L2 f26; L3 f34
-ALL4 571 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 572 | L2 f27; L3 f36
-ALL4 573 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 574 | L2 f28; L3 f38
-ALL4 575 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 48 | neurons 67 | functions 51 | highest call level in the cycle 7 | the dictionary last changed at frame 511 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 576 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 577 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 578 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 579 | L2 f23; L3 f32
-ALL4 580 | L2 f24; L3 f32
-ALL4 581 | L2 f25; L3 f34; L4 f45
-ALL4 582 | L2 f26; L3 f34
-ALL4 583 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 584 | L2 f27; L3 f36
-ALL4 585 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 586 | L2 f28; L3 f38
-ALL4 587 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 49 | neurons 67 | functions 51 | highest call level in the cycle 7 | the dictionary last changed at frame 511 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 588 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 589 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 590 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 591 | L2 f23; L3 f32
-ALL4 592 | L2 f24; L3 f32
-ALL4 593 | L2 f25; L3 f34; L4 f45
-ALL4 594 | L2 f26; L3 f34
-ALL4 595 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 596 | L2 f27; L3 f36
-ALL4 597 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 598 | L2 f28; L3 f38
-ALL4 599 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 50 | neurons 67 | functions 51 | highest call level in the cycle 7 | the dictionary last changed at frame 511 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 600 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 601 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 602 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 603 | L2 f23; L3 f32
-ALL4 604 | L2 f24; L3 f32
-ALL4 605 | L2 f25; L3 f34; L4 f45
-ALL4 606 | L2 f26; L3 f34
-ALL4 607 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 608 | L2 f27; L3 f36
-ALL4 609 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 610 | L2 f28; L3 f38
-ALL4 611 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 51 | neurons 67 | functions 51 | highest call level in the cycle 7 | the dictionary last changed at frame 511 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 612 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 613 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 614 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 615 | L2 f23; L3 f32
-ALL4 616 | L2 f24; L3 f32
-ALL4 617 | L2 f25; L3 f34; L4 f45
-ALL4 618 | L2 f26; L3 f34
-ALL4 619 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 620 | L2 f27; L3 f36
-ALL4 621 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 622 | L2 f28; L3 f38
-ALL4 623 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 52 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 624 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 625 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 626 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 627 | L2 f23; L3 f32
-ALL4 628 | L2 f24; L3 f32
-ALL4 629 | L2 f25; L3 f34; L4 f45
-ALL4 630 | L2 f26; L3 f34
-ALL4 631 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 632 | L2 f27; L3 f36
-ALL4 633 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 634 | L2 f28; L3 f38
-ALL4 635 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 53 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 636 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 637 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 638 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 639 | L2 f23; L3 f32
-ALL4 640 | L2 f24; L3 f32
-ALL4 641 | L2 f25; L3 f34; L4 f45
-ALL4 642 | L2 f26; L3 f34
-ALL4 643 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 644 | L2 f27; L3 f36
-ALL4 645 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 646 | L2 f28; L3 f38
-ALL4 647 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 54 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 648 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 649 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 650 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 651 | L2 f23; L3 f32
-ALL4 652 | L2 f24; L3 f32
-ALL4 653 | L2 f25; L3 f34; L4 f45
-ALL4 654 | L2 f26; L3 f34
-ALL4 655 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 656 | L2 f27; L3 f36
-ALL4 657 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 658 | L2 f28; L3 f38
-ALL4 659 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 55 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 660 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 661 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 662 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 663 | L2 f23; L3 f32
-ALL4 664 | L2 f24; L3 f32
-ALL4 665 | L2 f25; L3 f34; L4 f45
-ALL4 666 | L2 f26; L3 f34
-ALL4 667 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 668 | L2 f27; L3 f36
-ALL4 669 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 670 | L2 f28; L3 f38
-ALL4 671 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 56 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 672 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 673 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 674 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 675 | L2 f23; L3 f32
-ALL4 676 | L2 f24; L3 f32
-ALL4 677 | L2 f25; L3 f34; L4 f45
-ALL4 678 | L2 f26; L3 f34
-ALL4 679 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 680 | L2 f27; L3 f36
-ALL4 681 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 682 | L2 f28; L3 f38
-ALL4 683 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 57 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 684 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 685 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 686 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 687 | L2 f23; L3 f32
-ALL4 688 | L2 f24; L3 f32
-ALL4 689 | L2 f25; L3 f34; L4 f45
-ALL4 690 | L2 f26; L3 f34
-ALL4 691 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 692 | L2 f27; L3 f36
-ALL4 693 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 694 | L2 f28; L3 f38
-ALL4 695 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 58 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 696 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 697 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 698 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 699 | L2 f23; L3 f32
-ALL4 700 | L2 f24; L3 f32
-ALL4 701 | L2 f25; L3 f34; L4 f45
-ALL4 702 | L2 f26; L3 f34
-ALL4 703 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 704 | L2 f27; L3 f36
-ALL4 705 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 706 | L2 f28; L3 f38
-ALL4 707 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 59 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 708 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 709 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 710 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 711 | L2 f23; L3 f32
-ALL4 712 | L2 f24; L3 f32
-ALL4 713 | L2 f25; L3 f34; L4 f45
-ALL4 714 | L2 f26; L3 f34
-ALL4 715 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 716 | L2 f27; L3 f36
-ALL4 717 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 718 | L2 f28; L3 f38
-ALL4 719 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 60 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 720 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 721 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 722 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 723 | L2 f23; L3 f32
-ALL4 724 | L2 f24; L3 f32
-ALL4 725 | L2 f25; L3 f34; L4 f45
-ALL4 726 | L2 f26; L3 f34
-ALL4 727 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 728 | L2 f27; L3 f36
-ALL4 729 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 730 | L2 f28; L3 f38
-ALL4 731 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 61 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 732 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 733 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 734 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 735 | L2 f23; L3 f32
-ALL4 736 | L2 f24; L3 f32
-ALL4 737 | L2 f25; L3 f34; L4 f45
-ALL4 738 | L2 f26; L3 f34
-ALL4 739 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 740 | L2 f27; L3 f36
-ALL4 741 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 742 | L2 f28; L3 f38
-ALL4 743 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 62 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 744 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 745 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 746 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 747 | L2 f23; L3 f32
-ALL4 748 | L2 f24; L3 f32
-ALL4 749 | L2 f25; L3 f34; L4 f45
-ALL4 750 | L2 f26; L3 f34
-ALL4 751 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 752 | L2 f27; L3 f36
-ALL4 753 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 754 | L2 f28; L3 f38
-ALL4 755 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 63 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 756 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 757 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 758 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 759 | L2 f23; L3 f32
-ALL4 760 | L2 f24; L3 f32
-ALL4 761 | L2 f25; L3 f34; L4 f45
-ALL4 762 | L2 f26; L3 f34
-ALL4 763 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 764 | L2 f27; L3 f36
-ALL4 765 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 766 | L2 f28; L3 f38
-ALL4 767 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 64 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 768 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 769 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 770 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 771 | L2 f23; L3 f32
-ALL4 772 | L2 f24; L3 f32
-ALL4 773 | L2 f25; L3 f34; L4 f45
-ALL4 774 | L2 f26; L3 f34
-ALL4 775 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 776 | L2 f27; L3 f36
-ALL4 777 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 778 | L2 f28; L3 f38
-ALL4 779 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 65 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 780 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 781 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 782 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 783 | L2 f23; L3 f32
-ALL4 784 | L2 f24; L3 f32
-ALL4 785 | L2 f25; L3 f34; L4 f45
-ALL4 786 | L2 f26; L3 f34
-ALL4 787 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 788 | L2 f27; L3 f36
-ALL4 789 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 790 | L2 f28; L3 f38
-ALL4 791 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 66 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 792 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 793 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 794 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 795 | L2 f23; L3 f32
-ALL4 796 | L2 f24; L3 f32
-ALL4 797 | L2 f25; L3 f34; L4 f45
-ALL4 798 | L2 f26; L3 f34
-ALL4 799 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 800 | L2 f27; L3 f36
-ALL4 801 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 802 | L2 f28; L3 f38
-ALL4 803 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 67 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 804 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 805 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 806 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 807 | L2 f23; L3 f32
-ALL4 808 | L2 f24; L3 f32
-ALL4 809 | L2 f25; L3 f34; L4 f45
-ALL4 810 | L2 f26; L3 f34
-ALL4 811 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 812 | L2 f27; L3 f36
-ALL4 813 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 814 | L2 f28; L3 f38
-ALL4 815 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 68 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 816 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 817 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 818 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 819 | L2 f23; L3 f32
-ALL4 820 | L2 f24; L3 f32
-ALL4 821 | L2 f25; L3 f34; L4 f45
-ALL4 822 | L2 f26; L3 f34
-ALL4 823 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 824 | L2 f27; L3 f36
-ALL4 825 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 826 | L2 f28; L3 f38
-ALL4 827 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 69 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 828 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 829 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 830 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 831 | L2 f23; L3 f32
-ALL4 832 | L2 f24; L3 f32
-ALL4 833 | L2 f25; L3 f34; L4 f45
-ALL4 834 | L2 f26; L3 f34
-ALL4 835 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 836 | L2 f27; L3 f36
-ALL4 837 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 838 | L2 f28; L3 f38
-ALL4 839 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 70 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 840 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 841 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 842 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 843 | L2 f23; L3 f32
-ALL4 844 | L2 f24; L3 f32
-ALL4 845 | L2 f25; L3 f34; L4 f45
-ALL4 846 | L2 f26; L3 f34
-ALL4 847 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 848 | L2 f27; L3 f36
-ALL4 849 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 850 | L2 f28; L3 f38
-ALL4 851 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 71 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 852 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 853 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 854 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 855 | L2 f23; L3 f32
-ALL4 856 | L2 f24; L3 f32
-ALL4 857 | L2 f25; L3 f34; L4 f45
-ALL4 858 | L2 f26; L3 f34
-ALL4 859 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 860 | L2 f27; L3 f36
-ALL4 861 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 862 | L2 f28; L3 f38
-ALL4 863 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 72 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 864 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 865 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 866 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 867 | L2 f23; L3 f32
-ALL4 868 | L2 f24; L3 f32
-ALL4 869 | L2 f25; L3 f34; L4 f45
-ALL4 870 | L2 f26; L3 f34
-ALL4 871 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 872 | L2 f27; L3 f36
-ALL4 873 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 874 | L2 f28; L3 f38
-ALL4 875 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 73 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 876 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 877 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 878 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 879 | L2 f23; L3 f32
-ALL4 880 | L2 f24; L3 f32
-ALL4 881 | L2 f25; L3 f34; L4 f45
-ALL4 882 | L2 f26; L3 f34
-ALL4 883 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 884 | L2 f27; L3 f36
-ALL4 885 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 886 | L2 f28; L3 f38
-ALL4 887 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 74 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 888 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 889 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 890 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 891 | L2 f23; L3 f32
-ALL4 892 | L2 f24; L3 f32
-ALL4 893 | L2 f25; L3 f34; L4 f45
-ALL4 894 | L2 f26; L3 f34
-ALL4 895 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 896 | L2 f27; L3 f36
-ALL4 897 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 898 | L2 f28; L3 f38
-ALL4 899 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 75 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 900 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 901 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 902 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 903 | L2 f23; L3 f32
-ALL4 904 | L2 f24; L3 f32
-ALL4 905 | L2 f25; L3 f34; L4 f45
-ALL4 906 | L2 f26; L3 f34
-ALL4 907 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 908 | L2 f27; L3 f36
-ALL4 909 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 910 | L2 f28; L3 f38
-ALL4 911 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 76 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 912 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 913 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 914 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 915 | L2 f23; L3 f32
-ALL4 916 | L2 f24; L3 f32
-ALL4 917 | L2 f25; L3 f34; L4 f45
-ALL4 918 | L2 f26; L3 f34
-ALL4 919 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 920 | L2 f27; L3 f36
-ALL4 921 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 922 | L2 f28; L3 f38
-ALL4 923 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 77 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 924 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 925 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 926 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 927 | L2 f23; L3 f32
-ALL4 928 | L2 f24; L3 f32
-ALL4 929 | L2 f25; L3 f34; L4 f45
-ALL4 930 | L2 f26; L3 f34
-ALL4 931 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 932 | L2 f27; L3 f36
-ALL4 933 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 934 | L2 f28; L3 f38
-ALL4 935 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 78 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 936 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 937 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 938 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 939 | L2 f23; L3 f32
-ALL4 940 | L2 f24; L3 f32
-ALL4 941 | L2 f25; L3 f34; L4 f45
-ALL4 942 | L2 f26; L3 f34
-ALL4 943 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 944 | L2 f27; L3 f36
-ALL4 945 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 946 | L2 f28; L3 f38
-ALL4 947 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 79 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 948 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 949 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 950 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 951 | L2 f23; L3 f32
-ALL4 952 | L2 f24; L3 f32
-ALL4 953 | L2 f25; L3 f34; L4 f45
-ALL4 954 | L2 f26; L3 f34
-ALL4 955 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 956 | L2 f27; L3 f36
-ALL4 957 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 958 | L2 f28; L3 f38
-ALL4 959 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 80 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 960 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 961 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 962 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 963 | L2 f23; L3 f32
-ALL4 964 | L2 f24; L3 f32
-ALL4 965 | L2 f25; L3 f34; L4 f45
-ALL4 966 | L2 f26; L3 f34
-ALL4 967 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 968 | L2 f27; L3 f36
-ALL4 969 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 970 | L2 f28; L3 f38
-ALL4 971 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 81 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 972 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 973 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 974 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 975 | L2 f23; L3 f32
-ALL4 976 | L2 f24; L3 f32
-ALL4 977 | L2 f25; L3 f34; L4 f45
-ALL4 978 | L2 f26; L3 f34
-ALL4 979 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 980 | L2 f27; L3 f36
-ALL4 981 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 982 | L2 f28; L3 f38
-ALL4 983 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 82 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 984 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 985 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 986 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 987 | L2 f23; L3 f32
-ALL4 988 | L2 f24; L3 f32
-ALL4 989 | L2 f25; L3 f34; L4 f45
-ALL4 990 | L2 f26; L3 f34
-ALL4 991 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 992 | L2 f27; L3 f36
-ALL4 993 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 994 | L2 f28; L3 f38
-ALL4 995 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 83 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 996 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 997 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 998 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 999 | L2 f23; L3 f32
-ALL4 1000 | L2 f24; L3 f32
-ALL4 1001 | L2 f25; L3 f34; L4 f45
-ALL4 1002 | L2 f26; L3 f34
-ALL4 1003 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1004 | L2 f27; L3 f36
-ALL4 1005 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1006 | L2 f28; L3 f38
-ALL4 1007 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 84 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1008 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1009 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1010 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1011 | L2 f23; L3 f32
-ALL4 1012 | L2 f24; L3 f32
-ALL4 1013 | L2 f25; L3 f34; L4 f45
-ALL4 1014 | L2 f26; L3 f34
-ALL4 1015 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1016 | L2 f27; L3 f36
-ALL4 1017 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1018 | L2 f28; L3 f38
-ALL4 1019 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 85 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1020 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1021 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1022 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1023 | L2 f23; L3 f32
-ALL4 1024 | L2 f24; L3 f32
-ALL4 1025 | L2 f25; L3 f34; L4 f45
-ALL4 1026 | L2 f26; L3 f34
-ALL4 1027 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1028 | L2 f27; L3 f36
-ALL4 1029 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1030 | L2 f28; L3 f38
-ALL4 1031 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 86 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1032 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1033 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1034 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1035 | L2 f23; L3 f32
-ALL4 1036 | L2 f24; L3 f32
-ALL4 1037 | L2 f25; L3 f34; L4 f45
-ALL4 1038 | L2 f26; L3 f34
-ALL4 1039 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1040 | L2 f27; L3 f36
-ALL4 1041 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1042 | L2 f28; L3 f38
-ALL4 1043 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 87 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1044 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1045 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1046 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1047 | L2 f23; L3 f32
-ALL4 1048 | L2 f24; L3 f32
-ALL4 1049 | L2 f25; L3 f34; L4 f45
-ALL4 1050 | L2 f26; L3 f34
-ALL4 1051 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1052 | L2 f27; L3 f36
-ALL4 1053 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1054 | L2 f28; L3 f38
-ALL4 1055 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 88 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1056 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1057 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1058 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1059 | L2 f23; L3 f32
-ALL4 1060 | L2 f24; L3 f32
-ALL4 1061 | L2 f25; L3 f34; L4 f45
-ALL4 1062 | L2 f26; L3 f34
-ALL4 1063 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1064 | L2 f27; L3 f36
-ALL4 1065 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1066 | L2 f28; L3 f38
-ALL4 1067 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 89 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1068 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1069 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1070 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1071 | L2 f23; L3 f32
-ALL4 1072 | L2 f24; L3 f32
-ALL4 1073 | L2 f25; L3 f34; L4 f45
-ALL4 1074 | L2 f26; L3 f34
-ALL4 1075 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1076 | L2 f27; L3 f36
-ALL4 1077 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1078 | L2 f28; L3 f38
-ALL4 1079 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 90 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1080 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1081 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1082 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1083 | L2 f23; L3 f32
-ALL4 1084 | L2 f24; L3 f32
-ALL4 1085 | L2 f25; L3 f34; L4 f45
-ALL4 1086 | L2 f26; L3 f34
-ALL4 1087 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1088 | L2 f27; L3 f36
-ALL4 1089 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1090 | L2 f28; L3 f38
-ALL4 1091 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 91 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1092 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1093 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1094 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1095 | L2 f23; L3 f32
-ALL4 1096 | L2 f24; L3 f32
-ALL4 1097 | L2 f25; L3 f34; L4 f45
-ALL4 1098 | L2 f26; L3 f34
-ALL4 1099 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1100 | L2 f27; L3 f36
-ALL4 1101 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1102 | L2 f28; L3 f38
-ALL4 1103 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 92 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1104 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1105 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1106 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1107 | L2 f23; L3 f32
-ALL4 1108 | L2 f24; L3 f32
-ALL4 1109 | L2 f25; L3 f34; L4 f45
-ALL4 1110 | L2 f26; L3 f34
-ALL4 1111 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1112 | L2 f27; L3 f36
-ALL4 1113 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1114 | L2 f28; L3 f38
-ALL4 1115 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 93 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1116 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1117 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1118 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1119 | L2 f23; L3 f32
-ALL4 1120 | L2 f24; L3 f32
-ALL4 1121 | L2 f25; L3 f34; L4 f45
-ALL4 1122 | L2 f26; L3 f34
-ALL4 1123 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1124 | L2 f27; L3 f36
-ALL4 1125 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1126 | L2 f28; L3 f38
-ALL4 1127 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 94 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1128 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1129 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1130 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1131 | L2 f23; L3 f32
-ALL4 1132 | L2 f24; L3 f32
-ALL4 1133 | L2 f25; L3 f34; L4 f45
-ALL4 1134 | L2 f26; L3 f34
-ALL4 1135 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1136 | L2 f27; L3 f36
-ALL4 1137 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1138 | L2 f28; L3 f38
-ALL4 1139 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 95 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1140 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1141 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1142 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1143 | L2 f23; L3 f32
-ALL4 1144 | L2 f24; L3 f32
-ALL4 1145 | L2 f25; L3 f34; L4 f45
-ALL4 1146 | L2 f26; L3 f34
-ALL4 1147 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1148 | L2 f27; L3 f36
-ALL4 1149 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1150 | L2 f28; L3 f38
-ALL4 1151 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 96 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1152 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1153 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1154 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1155 | L2 f23; L3 f32
-ALL4 1156 | L2 f24; L3 f32
-ALL4 1157 | L2 f25; L3 f34; L4 f45
-ALL4 1158 | L2 f26; L3 f34
-ALL4 1159 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1160 | L2 f27; L3 f36
-ALL4 1161 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1162 | L2 f28; L3 f38
-ALL4 1163 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 97 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1164 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1165 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1166 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1167 | L2 f23; L3 f32
-ALL4 1168 | L2 f24; L3 f32
-ALL4 1169 | L2 f25; L3 f34; L4 f45
-ALL4 1170 | L2 f26; L3 f34
-ALL4 1171 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1172 | L2 f27; L3 f36
-ALL4 1173 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1174 | L2 f28; L3 f38
-ALL4 1175 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 98 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1176 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1177 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1178 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1179 | L2 f23; L3 f32
-ALL4 1180 | L2 f24; L3 f32
-ALL4 1181 | L2 f25; L3 f34; L4 f45
-ALL4 1182 | L2 f26; L3 f34
-ALL4 1183 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1184 | L2 f27; L3 f36
-ALL4 1185 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1186 | L2 f28; L3 f38
-ALL4 1187 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 99 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1188 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-ALL4 1189 | L3 f43; L4 f50; L5 f56; L6 f59; L7 f61
-ALL4 1190 | L2 f16; L3 f41; L3 f50; L4 f57; L5 f59
-ALL4 1191 | L2 f23; L3 f32
-ALL4 1192 | L2 f24; L3 f32
-ALL4 1193 | L2 f25; L3 f34; L4 f45
-ALL4 1194 | L2 f26; L3 f34
-ALL4 1195 | L2 f20; L3 f36; L4 f46; L5 f54
-ALL4 1196 | L2 f27; L3 f36
-ALL4 1197 | L2 f16; L3 f38; L4 f47; L5 f54
-ALL4 1198 | L2 f28; L3 f38
-ALL4 1199 | L2 f22; L3 f39; L4 f48; L5 f54
-CYCLE 100 | neurons 66 | functions 50 | highest call level in the cycle 7 | the dictionary last changed at frame 1045 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
-ALL4 1200 | L2 f22; L3 f30; L4 f42; L5 f55; L6 f60
-inference KGC: right 1181 of 1199 | every bar right from cycle 7
+ALL4 38 | L2 f20
+ALL4 39 | 
+ALL4 40 | 
+ALL4 41 | L2 f22
+ALL4 42 | 
+ALL4 43 | L2 f24
+ALL4 44 | 
+ALL4 45 | L2 f20; L3 f25
+ALL4 46 | 
+ALL4 47 | L2 f21
+CYCLE 4 | neurons 42 | functions 26 | highest call level in the cycle 3 | the dictionary last changed at frame 46 | right KGC 83.33%, GLD 83.33%, SPY 50.00%, Q 83.33%
+ALL4 48 | L2 f21
+ALL4 49 | L2 f27
+ALL4 50 | L2 f20
+ALL4 51 | L2 f28
+ALL4 52 | L2 f29
+ALL4 53 | L2 f22
+ALL4 54 | 
+ALL4 55 | L2 f24
+ALL4 56 | L2 f30
+ALL4 57 | L2 f20
+ALL4 58 | L2 f31
+ALL4 59 | L2 f21
+CYCLE 5 | neurons 48 | functions 32 | highest call level in the cycle 3 | the dictionary last changed at frame 60 | right KGC 83.33%, GLD 75.00%, SPY 75.00%, Q 83.33%
+ALL4 60 | L2 f21; L3 f32
+ALL4 61 | L2 f27
+ALL4 62 | L2 f20
+ALL4 63 | L2 f28
+ALL4 64 | L2 f29
+ALL4 65 | L2 f22
+ALL4 66 | L2 f23; L3 f33
+ALL4 67 | L2 f24; L3 f34
+ALL4 68 | L2 f30
+ALL4 69 | L2 f20
+ALL4 70 | L2 f31
+ALL4 71 | L2 f21
+CYCLE 6 | neurons 50 | functions 34 | highest call level in the cycle 3 | the dictionary last changed at frame 67 | right KGC 91.67%, GLD 100.00%, SPY 91.67%, Q 91.67%
+ALL4 72 | L2 f21; L3 f32
+ALL4 73 | L2 f27; L3 f35
+ALL4 74 | L2 f20; L3 f36
+ALL4 75 | L2 f28; L3 f37
+ALL4 76 | L2 f29; L3 f38
+ALL4 77 | L2 f22; L3 f39
+ALL4 78 | L2 f23; L3 f33
+ALL4 79 | L2 f24; L3 f34
+ALL4 80 | L2 f30; L3 f40
+ALL4 81 | L2 f20; L3 f41
+ALL4 82 | L2 f31; L3 f42
+ALL4 83 | L2 f21; L3 f43
+CYCLE 7 | neurons 58 | functions 42 | highest call level in the cycle 3 | the dictionary last changed at frame 83 | right KGC 91.67%, GLD 100.00%, SPY 91.67%, Q 91.67%
+ALL4 84 | L2 f21; L3 f32
+ALL4 85 | L2 f27; L3 f35
+ALL4 86 | L2 f20; L3 f36
+ALL4 87 | L2 f28; L3 f37
+ALL4 88 | L2 f29; L3 f38
+ALL4 89 | L2 f22; L3 f39
+ALL4 90 | L2 f23; L3 f34
+ALL4 91 | L2 f24; L3 f34
+ALL4 92 | L2 f30; L3 f40
+ALL4 93 | L2 f20; L3 f41
+ALL4 94 | L2 f31; L3 f42
+ALL4 95 | L2 f21; L3 f43
+CYCLE 8 | neurons 55 | functions 38 | highest call level in the cycle 3 | the dictionary last changed at frame 95 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 96 | L2 f21; L3 f32
+ALL4 97 | L2 f27; L3 f36
+ALL4 98 | L2 f20; L3 f36
+ALL4 99 | L2 f28; L3 f38
+ALL4 100 | L2 f29; L3 f38
+ALL4 101 | L2 f22; L3 f39
+ALL4 102 | L2 f23; L3 f34
+ALL4 103 | L2 f24; L3 f34
+ALL4 104 | L2 f30; L3 f41
+ALL4 105 | L2 f20; L3 f41
+ALL4 106 | L2 f31; L3 f43
+ALL4 107 | L2 f21; L3 f43
+CYCLE 9 | neurons 54 | functions 38 | highest call level in the cycle 3 | the dictionary last changed at frame 95 | right KGC 91.67%, GLD 100.00%, SPY 91.67%, Q 91.67%
+ALL4 108 | L2 f21; L3 f32
+ALL4 109 | L2 f27; L3 f36
+ALL4 110 | L2 f20; L3 f36
+ALL4 111 | L2 f28; L3 f38
+ALL4 112 | L2 f29; L3 f38
+ALL4 113 | L2 f22; L3 f39
+ALL4 114 | L2 f23; L3 f34; L4 f44
+ALL4 115 | L2 f24; L3 f34
+ALL4 116 | L2 f30; L3 f41
+ALL4 117 | L2 f20; L3 f41
+ALL4 118 | L2 f31; L3 f43
+ALL4 119 | L2 f21; L3 f43
+CYCLE 10 | neurons 55 | functions 39 | highest call level in the cycle 3 | the dictionary last changed at frame 114 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 120 | L2 f21; L3 f32
+ALL4 121 | L2 f27; L3 f36; L4 f45
+ALL4 122 | L2 f20; L3 f36
+ALL4 123 | L2 f28; L3 f38; L4 f46
+ALL4 124 | L2 f29; L3 f38
+ALL4 125 | L2 f22; L3 f39; L4 f47
+ALL4 126 | L2 f23; L3 f34; L4 f44
+ALL4 127 | L2 f24; L3 f34
+ALL4 128 | L2 f30; L3 f41; L4 f48
+ALL4 129 | L2 f20; L3 f41
+ALL4 130 | L2 f31; L3 f43; L4 f49
+ALL4 131 | L2 f21; L3 f43
+CYCLE 11 | neurons 61 | functions 45 | highest call level in the cycle 4 | the dictionary last changed at frame 132 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 132 | L2 f21; L3 f32; L4 f50
+ALL4 133 | L2 f27; L3 f36; L4 f45
+ALL4 134 | L2 f20; L3 f36
+ALL4 135 | L2 f28; L3 f38; L4 f46
+ALL4 136 | L2 f29; L3 f38
+ALL4 137 | L2 f22; L3 f39; L4 f47
+ALL4 138 | L2 f23; L3 f34; L4 f44
+ALL4 139 | L2 f24; L3 f34
+ALL4 140 | L2 f30; L3 f41; L4 f48
+ALL4 141 | L2 f20; L3 f41
+ALL4 142 | L2 f31; L3 f43; L4 f49
+ALL4 143 | L2 f21; L3 f43
+CYCLE 12 | neurons 61 | functions 45 | highest call level in the cycle 4 | the dictionary last changed at frame 132 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 144 | L2 f21; L3 f32; L4 f50
+ALL4 145 | L2 f27; L3 f36; L4 f45
+ALL4 146 | L2 f20; L3 f36
+ALL4 147 | L2 f28; L3 f38; L4 f46; L5 f51
+ALL4 148 | L2 f29; L3 f38
+ALL4 149 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 150 | L2 f23; L3 f34; L4 f44; L5 f53
+ALL4 151 | L2 f24; L3 f34
+ALL4 152 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 153 | L2 f20; L3 f41
+ALL4 154 | L2 f31; L3 f43; L4 f49; L5 f55
+ALL4 155 | L2 f21; L3 f43
+CYCLE 13 | neurons 67 | functions 51 | highest call level in the cycle 5 | the dictionary last changed at frame 156 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 156 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 157 | L2 f27; L3 f36; L4 f45; L5 f57
+ALL4 158 | L2 f20; L3 f36
+ALL4 159 | L2 f28; L3 f38; L4 f46; L5 f51
+ALL4 160 | L2 f29; L3 f38
+ALL4 161 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 162 | L2 f23; L3 f34; L4 f44; L5 f53
+ALL4 163 | L2 f24; L3 f34
+ALL4 164 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 165 | L2 f20; L3 f41
+ALL4 166 | L2 f31; L3 f43; L4 f49; L5 f55
+ALL4 167 | L2 f21; L3 f43
+CYCLE 14 | neurons 67 | functions 49 | highest call level in the cycle 5 | the dictionary last changed at frame 168 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 168 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 169 | L2 f27; L3 f36; L4 f45; L5 f57
+ALL4 170 | L2 f20; L3 f36
+ALL4 171 | L2 f28; L3 f38; L4 f46; L5 f52
+ALL4 172 | L2 f29; L3 f38
+ALL4 173 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 174 | L2 f23; L3 f34; L4 f44; L5 f54
+ALL4 175 | L2 f24; L3 f34
+ALL4 176 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 177 | L2 f20; L3 f41
+ALL4 178 | L2 f31; L3 f43; L4 f49; L5 f56
+ALL4 179 | L2 f21; L3 f43
+CYCLE 15 | neurons 65 | functions 49 | highest call level in the cycle 5 | the dictionary last changed at frame 168 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 180 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 181 | L2 f27; L3 f36; L4 f45; L5 f57
+ALL4 182 | L2 f20; L3 f36
+ALL4 183 | L2 f28; L3 f38; L4 f46; L5 f52
+ALL4 184 | L2 f29; L3 f38
+ALL4 185 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 186 | L2 f23; L3 f34; L4 f44; L5 f54
+ALL4 187 | L2 f24; L3 f34
+ALL4 188 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 189 | L2 f20; L3 f41
+ALL4 190 | L2 f31; L3 f43; L4 f49; L5 f56
+ALL4 191 | L2 f21; L3 f43
+CYCLE 16 | neurons 65 | functions 49 | highest call level in the cycle 5 | the dictionary last changed at frame 168 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 192 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 193 | L2 f27; L3 f36; L4 f45; L5 f57
+ALL4 194 | L2 f20; L3 f36
+ALL4 195 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58
+ALL4 196 | L2 f29; L3 f38
+ALL4 197 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 198 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59
+ALL4 199 | L2 f24; L3 f34
+ALL4 200 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 201 | L2 f20; L3 f41
+ALL4 202 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60
+ALL4 203 | L2 f21; L3 f43
+CYCLE 17 | neurons 68 | functions 52 | highest call level in the cycle 6 | the dictionary last changed at frame 202 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 204 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 205 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61
+ALL4 206 | L2 f20; L3 f36
+ALL4 207 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58
+ALL4 208 | L2 f29; L3 f38
+ALL4 209 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 210 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59
+ALL4 211 | L2 f24; L3 f34
+ALL4 212 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 213 | L2 f20; L3 f41
+ALL4 214 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60
+ALL4 215 | L2 f21; L3 f43
+CYCLE 18 | neurons 69 | functions 53 | highest call level in the cycle 6 | the dictionary last changed at frame 205 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 216 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 217 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61
+ALL4 218 | L2 f20; L3 f36
+ALL4 219 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58
+ALL4 220 | L2 f29; L3 f38
+ALL4 221 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 222 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f62
+ALL4 223 | L2 f24; L3 f34
+ALL4 224 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 225 | L2 f20; L3 f41
+ALL4 226 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 227 | L2 f21; L3 f43
+CYCLE 19 | neurons 71 | functions 55 | highest call level in the cycle 7 | the dictionary last changed at frame 226 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 228 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 229 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f64
+ALL4 230 | L2 f20; L3 f36
+ALL4 231 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 232 | L2 f29; L3 f38
+ALL4 233 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 234 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f62
+ALL4 235 | L2 f24; L3 f34
+ALL4 236 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 237 | L2 f20; L3 f41
+ALL4 238 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 239 | L2 f21; L3 f43
+CYCLE 20 | neurons 73 | functions 56 | highest call level in the cycle 7 | the dictionary last changed at frame 238 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 240 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 241 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f64
+ALL4 242 | L2 f20; L3 f36
+ALL4 243 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 244 | L2 f29; L3 f38
+ALL4 245 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 246 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63
+ALL4 247 | L2 f24; L3 f34
+ALL4 248 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 249 | L2 f20; L3 f41
+ALL4 250 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 251 | L2 f21; L3 f43
+CYCLE 21 | neurons 72 | functions 55 | highest call level in the cycle 7 | the dictionary last changed at frame 243 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 252 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 253 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65
+ALL4 254 | L2 f20; L3 f36
+ALL4 255 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 256 | L2 f29; L3 f38
+ALL4 257 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 258 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63
+ALL4 259 | L2 f24; L3 f34
+ALL4 260 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 261 | L2 f20; L3 f41
+ALL4 262 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 263 | L2 f21; L3 f43
+CYCLE 22 | neurons 71 | functions 55 | highest call level in the cycle 7 | the dictionary last changed at frame 243 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 264 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 265 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65
+ALL4 266 | L2 f20; L3 f36
+ALL4 267 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 268 | L2 f29; L3 f38
+ALL4 269 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 270 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63
+ALL4 271 | L2 f24; L3 f34
+ALL4 272 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 273 | L2 f20; L3 f41
+ALL4 274 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 275 | L2 f21; L3 f43
+CYCLE 23 | neurons 71 | functions 55 | highest call level in the cycle 7 | the dictionary last changed at frame 243 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 276 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 277 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66
+ALL4 278 | L2 f20; L3 f36
+ALL4 279 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 280 | L2 f29; L3 f38
+ALL4 281 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 282 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67
+ALL4 283 | L2 f24; L3 f34
+ALL4 284 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 285 | L2 f20; L3 f41
+ALL4 286 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 287 | L2 f21; L3 f43
+CYCLE 24 | neurons 73 | functions 57 | highest call level in the cycle 8 | the dictionary last changed at frame 282 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 288 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 289 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66
+ALL4 290 | L2 f20; L3 f36
+ALL4 291 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 292 | L2 f29; L3 f38
+ALL4 293 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 294 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67
+ALL4 295 | L2 f24; L3 f34
+ALL4 296 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 297 | L2 f20; L3 f41
+ALL4 298 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 299 | L2 f21; L3 f43
+CYCLE 25 | neurons 73 | functions 57 | highest call level in the cycle 8 | the dictionary last changed at frame 282 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 300 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 301 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66
+ALL4 302 | L2 f20; L3 f36
+ALL4 303 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 304 | L2 f29; L3 f38
+ALL4 305 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 306 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 307 | L2 f24; L3 f34
+ALL4 308 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 309 | L2 f20; L3 f41
+ALL4 310 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 311 | L2 f21; L3 f43
+CYCLE 26 | neurons 74 | functions 58 | highest call level in the cycle 9 | the dictionary last changed at frame 306 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 312 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 313 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f69
+ALL4 314 | L2 f20; L3 f36
+ALL4 315 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 316 | L2 f29; L3 f38
+ALL4 317 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 318 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 319 | L2 f24; L3 f34
+ALL4 320 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 321 | L2 f20; L3 f41
+ALL4 322 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 323 | L2 f21; L3 f43
+CYCLE 27 | neurons 75 | functions 58 | highest call level in the cycle 9 | the dictionary last changed at frame 318 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 324 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 325 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 326 | L2 f20; L3 f36
+ALL4 327 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 328 | L2 f29; L3 f38
+ALL4 329 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 330 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 331 | L2 f24; L3 f34
+ALL4 332 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 333 | L2 f20; L3 f41
+ALL4 334 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 335 | L2 f21; L3 f43
+CYCLE 28 | neurons 75 | functions 58 | highest call level in the cycle 9 | the dictionary last changed at frame 318 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 336 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 337 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 338 | L2 f20; L3 f36
+ALL4 339 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 340 | L2 f29; L3 f38
+ALL4 341 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 342 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 343 | L2 f24; L3 f34
+ALL4 344 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 345 | L2 f20; L3 f41
+ALL4 346 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 347 | L2 f21; L3 f43
+CYCLE 29 | neurons 74 | functions 58 | highest call level in the cycle 9 | the dictionary last changed at frame 318 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 348 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 349 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 350 | L2 f20; L3 f36
+ALL4 351 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 352 | L2 f29; L3 f38
+ALL4 353 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 354 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 355 | L2 f24; L3 f34
+ALL4 356 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 357 | L2 f20; L3 f41
+ALL4 358 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 359 | L2 f21; L3 f43
+CYCLE 30 | neurons 74 | functions 58 | highest call level in the cycle 9 | the dictionary last changed at frame 318 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 360 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 361 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 362 | L2 f20; L3 f36
+ALL4 363 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 364 | L2 f29; L3 f38
+ALL4 365 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 366 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 367 | L2 f24; L3 f34
+ALL4 368 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 369 | L2 f20; L3 f41
+ALL4 370 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 371 | L2 f21; L3 f43
+CYCLE 31 | neurons 74 | functions 58 | highest call level in the cycle 9 | the dictionary last changed at frame 318 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 372 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 373 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 374 | L2 f20; L3 f36
+ALL4 375 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 376 | L2 f29; L3 f38
+ALL4 377 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 378 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 379 | L2 f24; L3 f34
+ALL4 380 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 381 | L2 f20; L3 f41
+ALL4 382 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 383 | L2 f21; L3 f43
+CYCLE 32 | neurons 74 | functions 58 | highest call level in the cycle 9 | the dictionary last changed at frame 318 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 384 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 385 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 386 | L2 f20; L3 f36
+ALL4 387 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 388 | L2 f29; L3 f38
+ALL4 389 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 390 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 391 | L2 f24; L3 f34
+ALL4 392 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 393 | L2 f20; L3 f41
+ALL4 394 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 395 | L2 f21; L3 f43
+CYCLE 33 | neurons 73 | functions 57 | highest call level in the cycle 9 | the dictionary last changed at frame 391 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 396 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 397 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 398 | L2 f20; L3 f36
+ALL4 399 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 400 | L2 f29; L3 f38
+ALL4 401 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 402 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 403 | L2 f24; L3 f34
+ALL4 404 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 405 | L2 f20; L3 f41
+ALL4 406 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 407 | L2 f21; L3 f43
+CYCLE 34 | neurons 73 | functions 57 | highest call level in the cycle 9 | the dictionary last changed at frame 391 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 408 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 409 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 410 | L2 f20; L3 f36
+ALL4 411 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 412 | L2 f29; L3 f38
+ALL4 413 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 414 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 415 | L2 f24; L3 f34
+ALL4 416 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 417 | L2 f20; L3 f41
+ALL4 418 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 419 | L2 f21; L3 f43
+CYCLE 35 | neurons 72 | functions 56 | highest call level in the cycle 9 | the dictionary last changed at frame 411 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 420 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 421 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 422 | L2 f20; L3 f36
+ALL4 423 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 424 | L2 f29; L3 f38
+ALL4 425 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 426 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 427 | L2 f24; L3 f34
+ALL4 428 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 429 | L2 f20; L3 f41
+ALL4 430 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 431 | L2 f21; L3 f43
+CYCLE 36 | neurons 72 | functions 56 | highest call level in the cycle 9 | the dictionary last changed at frame 411 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 432 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 433 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 434 | L2 f20; L3 f36
+ALL4 435 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 436 | L2 f29; L3 f38
+ALL4 437 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 438 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 439 | L2 f24; L3 f34
+ALL4 440 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 441 | L2 f20; L3 f41
+ALL4 442 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 443 | L2 f21; L3 f43
+CYCLE 37 | neurons 72 | functions 56 | highest call level in the cycle 9 | the dictionary last changed at frame 411 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 444 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 445 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 446 | L2 f20; L3 f36
+ALL4 447 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 448 | L2 f29; L3 f38
+ALL4 449 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 450 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 451 | L2 f24; L3 f34
+ALL4 452 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 453 | L2 f20; L3 f41
+ALL4 454 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 455 | L2 f21; L3 f43
+CYCLE 38 | neurons 71 | functions 55 | highest call level in the cycle 9 | the dictionary last changed at frame 453 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 456 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 457 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 458 | L2 f20; L3 f36
+ALL4 459 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 460 | L2 f29; L3 f38
+ALL4 461 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 462 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 463 | L2 f24; L3 f34
+ALL4 464 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 465 | L2 f20; L3 f41
+ALL4 466 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 467 | L2 f21; L3 f43
+CYCLE 39 | neurons 71 | functions 55 | highest call level in the cycle 9 | the dictionary last changed at frame 453 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 468 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 469 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 470 | L2 f20; L3 f36
+ALL4 471 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 472 | L2 f29; L3 f38
+ALL4 473 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 474 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 475 | L2 f24; L3 f34
+ALL4 476 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 477 | L2 f20; L3 f41
+ALL4 478 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 479 | L2 f21; L3 f43
+CYCLE 40 | neurons 71 | functions 55 | highest call level in the cycle 9 | the dictionary last changed at frame 453 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 480 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 481 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 482 | L2 f20; L3 f36
+ALL4 483 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 484 | L2 f29; L3 f38
+ALL4 485 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 486 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 487 | L2 f24; L3 f34
+ALL4 488 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 489 | L2 f20; L3 f41
+ALL4 490 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 491 | L2 f21; L3 f43
+CYCLE 41 | neurons 71 | functions 55 | highest call level in the cycle 9 | the dictionary last changed at frame 453 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 492 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 493 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 494 | L2 f20; L3 f36
+ALL4 495 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 496 | L2 f29; L3 f38
+ALL4 497 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 498 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 499 | L2 f24; L3 f34
+ALL4 500 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 501 | L2 f20; L3 f41
+ALL4 502 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 503 | L2 f21; L3 f43
+CYCLE 42 | neurons 71 | functions 55 | highest call level in the cycle 9 | the dictionary last changed at frame 453 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 504 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 505 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 506 | L2 f20; L3 f36
+ALL4 507 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 508 | L2 f29; L3 f38
+ALL4 509 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 510 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 511 | L2 f24; L3 f34
+ALL4 512 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 513 | L2 f20; L3 f41
+ALL4 514 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 515 | L2 f21; L3 f43
+CYCLE 43 | neurons 71 | functions 55 | highest call level in the cycle 9 | the dictionary last changed at frame 453 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 516 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 517 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 518 | L2 f20; L3 f36
+ALL4 519 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 520 | L2 f29; L3 f38
+ALL4 521 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 522 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 523 | L2 f24; L3 f34
+ALL4 524 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 525 | L2 f20; L3 f41
+ALL4 526 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 527 | L2 f21; L3 f43
+CYCLE 44 | neurons 70 | functions 54 | highest call level in the cycle 9 | the dictionary last changed at frame 525 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 528 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 529 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 530 | L2 f20; L3 f36
+ALL4 531 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 532 | L2 f29; L3 f38
+ALL4 533 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 534 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 535 | L2 f24; L3 f34
+ALL4 536 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 537 | L2 f20; L3 f41
+ALL4 538 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 539 | L2 f21; L3 f43
+CYCLE 45 | neurons 70 | functions 54 | highest call level in the cycle 9 | the dictionary last changed at frame 525 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 540 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 541 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 542 | L2 f20; L3 f36
+ALL4 543 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 544 | L2 f29; L3 f38
+ALL4 545 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 546 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 547 | L2 f24; L3 f34
+ALL4 548 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 549 | L2 f20; L3 f41
+ALL4 550 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 551 | L2 f21; L3 f43
+CYCLE 46 | neurons 70 | functions 54 | highest call level in the cycle 9 | the dictionary last changed at frame 525 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 552 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 553 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 554 | L2 f20; L3 f36
+ALL4 555 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 556 | L2 f29; L3 f38
+ALL4 557 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 558 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 559 | L2 f24; L3 f34
+ALL4 560 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 561 | L2 f20; L3 f41
+ALL4 562 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 563 | L2 f21; L3 f43
+CYCLE 47 | neurons 70 | functions 54 | highest call level in the cycle 9 | the dictionary last changed at frame 525 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 564 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 565 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 566 | L2 f20; L3 f36
+ALL4 567 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 568 | L2 f29; L3 f38
+ALL4 569 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 570 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 571 | L2 f24; L3 f34
+ALL4 572 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 573 | L2 f20; L3 f41
+ALL4 574 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 575 | L2 f21; L3 f43
+CYCLE 48 | neurons 70 | functions 54 | highest call level in the cycle 9 | the dictionary last changed at frame 525 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 576 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 577 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 578 | L2 f20; L3 f36
+ALL4 579 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 580 | L2 f29; L3 f38
+ALL4 581 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 582 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 583 | L2 f24; L3 f34
+ALL4 584 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 585 | L2 f20; L3 f41
+ALL4 586 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 587 | L2 f21; L3 f43
+CYCLE 49 | neurons 70 | functions 54 | highest call level in the cycle 9 | the dictionary last changed at frame 525 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 588 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 589 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 590 | L2 f20; L3 f36
+ALL4 591 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 592 | L2 f29; L3 f38
+ALL4 593 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 594 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 595 | L2 f24; L3 f34
+ALL4 596 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 597 | L2 f20; L3 f41
+ALL4 598 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 599 | L2 f21; L3 f43
+CYCLE 50 | neurons 70 | functions 54 | highest call level in the cycle 9 | the dictionary last changed at frame 525 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 600 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 601 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 602 | L2 f20; L3 f36
+ALL4 603 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 604 | L2 f29; L3 f38
+ALL4 605 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 606 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 607 | L2 f24; L3 f34
+ALL4 608 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 609 | L2 f20; L3 f41
+ALL4 610 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 611 | L2 f21; L3 f43
+CYCLE 51 | neurons 70 | functions 54 | highest call level in the cycle 9 | the dictionary last changed at frame 525 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 612 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 613 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 614 | L2 f20; L3 f36
+ALL4 615 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 616 | L2 f29; L3 f38
+ALL4 617 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 618 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 619 | L2 f24; L3 f34
+ALL4 620 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 621 | L2 f20; L3 f41
+ALL4 622 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 623 | L2 f21; L3 f43
+CYCLE 52 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 624 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 625 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 626 | L2 f20; L3 f36
+ALL4 627 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 628 | L2 f29; L3 f38
+ALL4 629 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 630 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 631 | L2 f24; L3 f34
+ALL4 632 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 633 | L2 f20; L3 f41
+ALL4 634 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 635 | L2 f21; L3 f43
+CYCLE 53 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 636 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 637 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 638 | L2 f20; L3 f36
+ALL4 639 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 640 | L2 f29; L3 f38
+ALL4 641 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 642 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 643 | L2 f24; L3 f34
+ALL4 644 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 645 | L2 f20; L3 f41
+ALL4 646 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 647 | L2 f21; L3 f43
+CYCLE 54 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 648 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 649 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 650 | L2 f20; L3 f36
+ALL4 651 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 652 | L2 f29; L3 f38
+ALL4 653 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 654 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 655 | L2 f24; L3 f34
+ALL4 656 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 657 | L2 f20; L3 f41
+ALL4 658 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 659 | L2 f21; L3 f43
+CYCLE 55 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 660 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 661 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 662 | L2 f20; L3 f36
+ALL4 663 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 664 | L2 f29; L3 f38
+ALL4 665 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 666 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 667 | L2 f24; L3 f34
+ALL4 668 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 669 | L2 f20; L3 f41
+ALL4 670 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 671 | L2 f21; L3 f43
+CYCLE 56 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 672 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 673 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 674 | L2 f20; L3 f36
+ALL4 675 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 676 | L2 f29; L3 f38
+ALL4 677 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 678 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 679 | L2 f24; L3 f34
+ALL4 680 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 681 | L2 f20; L3 f41
+ALL4 682 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 683 | L2 f21; L3 f43
+CYCLE 57 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 684 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 685 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 686 | L2 f20; L3 f36
+ALL4 687 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 688 | L2 f29; L3 f38
+ALL4 689 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 690 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 691 | L2 f24; L3 f34
+ALL4 692 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 693 | L2 f20; L3 f41
+ALL4 694 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 695 | L2 f21; L3 f43
+CYCLE 58 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 696 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 697 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 698 | L2 f20; L3 f36
+ALL4 699 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 700 | L2 f29; L3 f38
+ALL4 701 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 702 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 703 | L2 f24; L3 f34
+ALL4 704 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 705 | L2 f20; L3 f41
+ALL4 706 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 707 | L2 f21; L3 f43
+CYCLE 59 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 708 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 709 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 710 | L2 f20; L3 f36
+ALL4 711 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 712 | L2 f29; L3 f38
+ALL4 713 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 714 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 715 | L2 f24; L3 f34
+ALL4 716 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 717 | L2 f20; L3 f41
+ALL4 718 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 719 | L2 f21; L3 f43
+CYCLE 60 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 720 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 721 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 722 | L2 f20; L3 f36
+ALL4 723 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 724 | L2 f29; L3 f38
+ALL4 725 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 726 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 727 | L2 f24; L3 f34
+ALL4 728 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 729 | L2 f20; L3 f41
+ALL4 730 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 731 | L2 f21; L3 f43
+CYCLE 61 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 732 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 733 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 734 | L2 f20; L3 f36
+ALL4 735 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 736 | L2 f29; L3 f38
+ALL4 737 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 738 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 739 | L2 f24; L3 f34
+ALL4 740 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 741 | L2 f20; L3 f41
+ALL4 742 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 743 | L2 f21; L3 f43
+CYCLE 62 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 744 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 745 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 746 | L2 f20; L3 f36
+ALL4 747 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 748 | L2 f29; L3 f38
+ALL4 749 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 750 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 751 | L2 f24; L3 f34
+ALL4 752 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 753 | L2 f20; L3 f41
+ALL4 754 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 755 | L2 f21; L3 f43
+CYCLE 63 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 756 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 757 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 758 | L2 f20; L3 f36
+ALL4 759 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 760 | L2 f29; L3 f38
+ALL4 761 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 762 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 763 | L2 f24; L3 f34
+ALL4 764 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 765 | L2 f20; L3 f41
+ALL4 766 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 767 | L2 f21; L3 f43
+CYCLE 64 | neurons 69 | functions 53 | highest call level in the cycle 9 | the dictionary last changed at frame 619 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 768 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 769 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 770 | L2 f20; L3 f36
+ALL4 771 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 772 | L2 f29; L3 f38
+ALL4 773 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 774 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 775 | L2 f24; L3 f34
+ALL4 776 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 777 | L2 f20; L3 f41
+ALL4 778 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 779 | L2 f21; L3 f43
+CYCLE 65 | neurons 68 | functions 52 | highest call level in the cycle 9 | the dictionary last changed at frame 769 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 780 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 781 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 782 | L2 f20; L3 f36
+ALL4 783 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 784 | L2 f29; L3 f38
+ALL4 785 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 786 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 787 | L2 f24; L3 f34
+ALL4 788 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 789 | L2 f20; L3 f41
+ALL4 790 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 791 | L2 f21; L3 f43
+CYCLE 66 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 792 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 793 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 794 | L2 f20; L3 f36
+ALL4 795 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 796 | L2 f29; L3 f38
+ALL4 797 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 798 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 799 | L2 f24; L3 f34
+ALL4 800 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 801 | L2 f20; L3 f41
+ALL4 802 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 803 | L2 f21; L3 f43
+CYCLE 67 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 804 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 805 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 806 | L2 f20; L3 f36
+ALL4 807 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 808 | L2 f29; L3 f38
+ALL4 809 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 810 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 811 | L2 f24; L3 f34
+ALL4 812 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 813 | L2 f20; L3 f41
+ALL4 814 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 815 | L2 f21; L3 f43
+CYCLE 68 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 816 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 817 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 818 | L2 f20; L3 f36
+ALL4 819 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 820 | L2 f29; L3 f38
+ALL4 821 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 822 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 823 | L2 f24; L3 f34
+ALL4 824 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 825 | L2 f20; L3 f41
+ALL4 826 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 827 | L2 f21; L3 f43
+CYCLE 69 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 828 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 829 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 830 | L2 f20; L3 f36
+ALL4 831 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 832 | L2 f29; L3 f38
+ALL4 833 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 834 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 835 | L2 f24; L3 f34
+ALL4 836 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 837 | L2 f20; L3 f41
+ALL4 838 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 839 | L2 f21; L3 f43
+CYCLE 70 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 840 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 841 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 842 | L2 f20; L3 f36
+ALL4 843 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 844 | L2 f29; L3 f38
+ALL4 845 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 846 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 847 | L2 f24; L3 f34
+ALL4 848 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 849 | L2 f20; L3 f41
+ALL4 850 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 851 | L2 f21; L3 f43
+CYCLE 71 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 852 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 853 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 854 | L2 f20; L3 f36
+ALL4 855 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 856 | L2 f29; L3 f38
+ALL4 857 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 858 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 859 | L2 f24; L3 f34
+ALL4 860 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 861 | L2 f20; L3 f41
+ALL4 862 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 863 | L2 f21; L3 f43
+CYCLE 72 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 864 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 865 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 866 | L2 f20; L3 f36
+ALL4 867 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 868 | L2 f29; L3 f38
+ALL4 869 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 870 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 871 | L2 f24; L3 f34
+ALL4 872 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 873 | L2 f20; L3 f41
+ALL4 874 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 875 | L2 f21; L3 f43
+CYCLE 73 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 876 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 877 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 878 | L2 f20; L3 f36
+ALL4 879 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 880 | L2 f29; L3 f38
+ALL4 881 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 882 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 883 | L2 f24; L3 f34
+ALL4 884 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 885 | L2 f20; L3 f41
+ALL4 886 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 887 | L2 f21; L3 f43
+CYCLE 74 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 888 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 889 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 890 | L2 f20; L3 f36
+ALL4 891 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 892 | L2 f29; L3 f38
+ALL4 893 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 894 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 895 | L2 f24; L3 f34
+ALL4 896 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 897 | L2 f20; L3 f41
+ALL4 898 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 899 | L2 f21; L3 f43
+CYCLE 75 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 900 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 901 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 902 | L2 f20; L3 f36
+ALL4 903 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 904 | L2 f29; L3 f38
+ALL4 905 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 906 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 907 | L2 f24; L3 f34
+ALL4 908 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 909 | L2 f20; L3 f41
+ALL4 910 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 911 | L2 f21; L3 f43
+CYCLE 76 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 912 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 913 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 914 | L2 f20; L3 f36
+ALL4 915 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 916 | L2 f29; L3 f38
+ALL4 917 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 918 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 919 | L2 f24; L3 f34
+ALL4 920 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 921 | L2 f20; L3 f41
+ALL4 922 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 923 | L2 f21; L3 f43
+CYCLE 77 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 924 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 925 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 926 | L2 f20; L3 f36
+ALL4 927 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 928 | L2 f29; L3 f38
+ALL4 929 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 930 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 931 | L2 f24; L3 f34
+ALL4 932 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 933 | L2 f20; L3 f41
+ALL4 934 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 935 | L2 f21; L3 f43
+CYCLE 78 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 936 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 937 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 938 | L2 f20; L3 f36
+ALL4 939 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 940 | L2 f29; L3 f38
+ALL4 941 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 942 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 943 | L2 f24; L3 f34
+ALL4 944 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 945 | L2 f20; L3 f41
+ALL4 946 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 947 | L2 f21; L3 f43
+CYCLE 79 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 948 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 949 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 950 | L2 f20; L3 f36
+ALL4 951 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 952 | L2 f29; L3 f38
+ALL4 953 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 954 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 955 | L2 f24; L3 f34
+ALL4 956 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 957 | L2 f20; L3 f41
+ALL4 958 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 959 | L2 f21; L3 f43
+CYCLE 80 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 960 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 961 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 962 | L2 f20; L3 f36
+ALL4 963 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 964 | L2 f29; L3 f38
+ALL4 965 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 966 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 967 | L2 f24; L3 f34
+ALL4 968 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 969 | L2 f20; L3 f41
+ALL4 970 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 971 | L2 f21; L3 f43
+CYCLE 81 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 972 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 973 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 974 | L2 f20; L3 f36
+ALL4 975 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 976 | L2 f29; L3 f38
+ALL4 977 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 978 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 979 | L2 f24; L3 f34
+ALL4 980 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 981 | L2 f20; L3 f41
+ALL4 982 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 983 | L2 f21; L3 f43
+CYCLE 82 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 984 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 985 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 986 | L2 f20; L3 f36
+ALL4 987 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 988 | L2 f29; L3 f38
+ALL4 989 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 990 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 991 | L2 f24; L3 f34
+ALL4 992 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 993 | L2 f20; L3 f41
+ALL4 994 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 995 | L2 f21; L3 f43
+CYCLE 83 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 996 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 997 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 998 | L2 f20; L3 f36
+ALL4 999 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1000 | L2 f29; L3 f38
+ALL4 1001 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1002 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1003 | L2 f24; L3 f34
+ALL4 1004 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1005 | L2 f20; L3 f41
+ALL4 1006 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1007 | L2 f21; L3 f43
+CYCLE 84 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1008 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1009 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1010 | L2 f20; L3 f36
+ALL4 1011 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1012 | L2 f29; L3 f38
+ALL4 1013 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1014 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1015 | L2 f24; L3 f34
+ALL4 1016 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1017 | L2 f20; L3 f41
+ALL4 1018 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1019 | L2 f21; L3 f43
+CYCLE 85 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1020 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1021 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1022 | L2 f20; L3 f36
+ALL4 1023 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1024 | L2 f29; L3 f38
+ALL4 1025 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1026 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1027 | L2 f24; L3 f34
+ALL4 1028 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1029 | L2 f20; L3 f41
+ALL4 1030 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1031 | L2 f21; L3 f43
+CYCLE 86 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1032 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1033 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1034 | L2 f20; L3 f36
+ALL4 1035 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1036 | L2 f29; L3 f38
+ALL4 1037 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1038 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1039 | L2 f24; L3 f34
+ALL4 1040 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1041 | L2 f20; L3 f41
+ALL4 1042 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1043 | L2 f21; L3 f43
+CYCLE 87 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1044 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1045 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1046 | L2 f20; L3 f36
+ALL4 1047 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1048 | L2 f29; L3 f38
+ALL4 1049 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1050 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1051 | L2 f24; L3 f34
+ALL4 1052 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1053 | L2 f20; L3 f41
+ALL4 1054 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1055 | L2 f21; L3 f43
+CYCLE 88 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1056 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1057 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1058 | L2 f20; L3 f36
+ALL4 1059 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1060 | L2 f29; L3 f38
+ALL4 1061 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1062 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1063 | L2 f24; L3 f34
+ALL4 1064 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1065 | L2 f20; L3 f41
+ALL4 1066 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1067 | L2 f21; L3 f43
+CYCLE 89 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1068 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1069 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1070 | L2 f20; L3 f36
+ALL4 1071 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1072 | L2 f29; L3 f38
+ALL4 1073 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1074 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1075 | L2 f24; L3 f34
+ALL4 1076 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1077 | L2 f20; L3 f41
+ALL4 1078 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1079 | L2 f21; L3 f43
+CYCLE 90 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1080 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1081 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1082 | L2 f20; L3 f36
+ALL4 1083 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1084 | L2 f29; L3 f38
+ALL4 1085 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1086 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1087 | L2 f24; L3 f34
+ALL4 1088 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1089 | L2 f20; L3 f41
+ALL4 1090 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1091 | L2 f21; L3 f43
+CYCLE 91 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1092 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1093 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1094 | L2 f20; L3 f36
+ALL4 1095 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1096 | L2 f29; L3 f38
+ALL4 1097 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1098 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1099 | L2 f24; L3 f34
+ALL4 1100 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1101 | L2 f20; L3 f41
+ALL4 1102 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1103 | L2 f21; L3 f43
+CYCLE 92 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1104 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1105 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1106 | L2 f20; L3 f36
+ALL4 1107 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1108 | L2 f29; L3 f38
+ALL4 1109 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1110 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1111 | L2 f24; L3 f34
+ALL4 1112 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1113 | L2 f20; L3 f41
+ALL4 1114 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1115 | L2 f21; L3 f43
+CYCLE 93 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1116 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1117 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1118 | L2 f20; L3 f36
+ALL4 1119 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1120 | L2 f29; L3 f38
+ALL4 1121 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1122 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1123 | L2 f24; L3 f34
+ALL4 1124 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1125 | L2 f20; L3 f41
+ALL4 1126 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1127 | L2 f21; L3 f43
+CYCLE 94 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1128 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1129 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1130 | L2 f20; L3 f36
+ALL4 1131 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1132 | L2 f29; L3 f38
+ALL4 1133 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1134 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1135 | L2 f24; L3 f34
+ALL4 1136 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1137 | L2 f20; L3 f41
+ALL4 1138 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1139 | L2 f21; L3 f43
+CYCLE 95 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1140 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1141 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1142 | L2 f20; L3 f36
+ALL4 1143 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1144 | L2 f29; L3 f38
+ALL4 1145 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1146 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1147 | L2 f24; L3 f34
+ALL4 1148 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1149 | L2 f20; L3 f41
+ALL4 1150 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1151 | L2 f21; L3 f43
+CYCLE 96 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1152 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1153 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1154 | L2 f20; L3 f36
+ALL4 1155 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1156 | L2 f29; L3 f38
+ALL4 1157 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1158 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1159 | L2 f24; L3 f34
+ALL4 1160 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1161 | L2 f20; L3 f41
+ALL4 1162 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1163 | L2 f21; L3 f43
+CYCLE 97 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1164 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1165 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1166 | L2 f20; L3 f36
+ALL4 1167 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1168 | L2 f29; L3 f38
+ALL4 1169 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1170 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1171 | L2 f24; L3 f34
+ALL4 1172 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1173 | L2 f20; L3 f41
+ALL4 1174 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1175 | L2 f21; L3 f43
+CYCLE 98 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1176 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1177 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1178 | L2 f20; L3 f36
+ALL4 1179 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1180 | L2 f29; L3 f38
+ALL4 1181 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1182 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1183 | L2 f24; L3 f34
+ALL4 1184 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1185 | L2 f20; L3 f41
+ALL4 1186 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1187 | L2 f21; L3 f43
+CYCLE 99 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1188 | L2 f21; L3 f32; L4 f50; L5 f56
+ALL4 1189 | L2 f27; L3 f36; L4 f45; L5 f57; L6 f61; L7 f65; L8 f66; L9 f68
+ALL4 1190 | L2 f20; L3 f36
+ALL4 1191 | L2 f28; L3 f38; L4 f46; L5 f52; L6 f58; L7 f65
+ALL4 1192 | L2 f29; L3 f38
+ALL4 1193 | L2 f22; L3 f39; L4 f47; L5 f52
+ALL4 1194 | L2 f23; L3 f34; L4 f44; L5 f54; L6 f59; L7 f63; L8 f67; L9 f68
+ALL4 1195 | L2 f24; L3 f34
+ALL4 1196 | L2 f30; L3 f41; L4 f48; L5 f54
+ALL4 1197 | L2 f20; L3 f41
+ALL4 1198 | L2 f31; L3 f43; L4 f49; L5 f56; L6 f60; L7 f63
+ALL4 1199 | L2 f21; L3 f43
+CYCLE 100 | neurons 66 | functions 50 | highest call level in the cycle 9 | the dictionary last changed at frame 792 | right KGC 100.00%, GLD 100.00%, SPY 100.00%, Q 100.00%
+ALL4 1200 | L2 f21; L3 f32; L4 f50; L5 f56
+inference KGC: right 1177 of 1199 | every bar right from cycle 10
   KGC cycle  1: -WWWRWWRWRRW
-  KGC cycle  2: RRRWRRRRRRWR
+  KGC cycle  2: RRRWRRWRWRRW
   KGC cycle  3: RRRWRRRWRRWW
-  KGC cycle  4: RRRRRWRWRRWR
-  KGC cycle  5: RRRRRRRRRRWR
+  KGC cycle  4: RRRWRRRRRRWR
+  KGC cycle  5: RRRWRRRRRRWR
   KGC cycle  6: RRRRRRRRRRWR
-  KGC cycle  7: RRRRRRRRRRRR
+  KGC cycle  7: RRRRRRRRRRWR
   KGC cycle  8: RRRRRRRRRRRR
-  KGC cycle  9: RRRRRRRRRRRR
+  KGC cycle  9: RRRRRRRRRRWR
   KGC cycle 10: RRRRRRRRRRRR
   KGC cycle 11: RRRRRRRRRRRR
   KGC cycle 12: RRRRRRRRRRRR
@@ -1404,12 +1404,12 @@ inference KGC: right 1181 of 1199 | every bar right from cycle 7
   KGC cycle 98: RRRRRRRRRRRR
   KGC cycle 99: RRRRRRRRRRRR
   KGC cycle 100: RRRRRRRRRRRR
-inference GLD: right 1190 of 1199 | every bar right from cycle 5
+inference GLD: right 1183 of 1199 | every bar right from cycle 6
   GLD cycle  1: -RRRRRWRRWWR
-  GLD cycle  2: RRRRRRWRRWWR
-  GLD cycle  3: RRRRRRWWRRRR
-  GLD cycle  4: RRRWRRRRRRRR
-  GLD cycle  5: RRRRRRRRRRRR
+  GLD cycle  2: RRRWRRWRRWWR
+  GLD cycle  3: RRRWRRWWRWRR
+  GLD cycle  4: RRRRRRRWRWRR
+  GLD cycle  5: RRRWRRRWRWRR
   GLD cycle  6: RRRRRRRRRRRR
   GLD cycle  7: RRRRRRRRRRRR
   GLD cycle  8: RRRRRRRRRRRR
@@ -1505,16 +1505,16 @@ inference GLD: right 1190 of 1199 | every bar right from cycle 5
   GLD cycle 98: RRRRRRRRRRRR
   GLD cycle 99: RRRRRRRRRRRR
   GLD cycle 100: RRRRRRRRRRRR
-inference SPY: right 1171 of 1199 | every bar right from cycle 9
+inference SPY: right 1166 of 1199 | every bar right from cycle 10
   SPY cycle  1: -RWRWRWRWWWW
-  SPY cycle  2: RWWRWRRRWRWR
-  SPY cycle  3: RWWWWRRRWRWW
-  SPY cycle  4: RRWWWRRRWRRW
-  SPY cycle  5: RRRRRRRRWRRW
+  SPY cycle  2: RWWRWWWRWRWW
+  SPY cycle  3: RWRWWRRRWWRW
+  SPY cycle  4: RWRWWRRRWWRW
+  SPY cycle  5: RRRWRRRRWRRW
   SPY cycle  6: RRRRRRRRWRRR
-  SPY cycle  7: RRRRRRRRRRRR
-  SPY cycle  8: RRRRRRRRWRRR
-  SPY cycle  9: RRRRRRRRRRRR
+  SPY cycle  7: RRRRRRRRWRRR
+  SPY cycle  8: RRRRRRRRRRRR
+  SPY cycle  9: RRRRRRRRWRRR
   SPY cycle 10: RRRRRRRRRRRR
   SPY cycle 11: RRRRRRRRRRRR
   SPY cycle 12: RRRRRRRRRRRR
@@ -1606,16 +1606,16 @@ inference SPY: right 1171 of 1199 | every bar right from cycle 9
   SPY cycle 98: RRRRRRRRRRRR
   SPY cycle 99: RRRRRRRRRRRR
   SPY cycle 100: RRRRRRRRRRRR
-inference Q: right 1179 of 1199 | every bar right from cycle 8
+inference Q: right 1172 of 1199 | every bar right from cycle 10
   Q cycle  1: -RWWRRWWWRRW
-  Q cycle  2: RWWWRRRWRRRW
-  Q cycle  3: RWWRRRRRRRRW
+  Q cycle  2: RWWWRWRWWWRW
+  Q cycle  3: RWWWRWRRWRRW
   Q cycle  4: RWRRRRRRRRRW
   Q cycle  5: RWRRRRRRRRRW
   Q cycle  6: RWRRRRRRRRRR
   Q cycle  7: RWRRRRRRRRRR
   Q cycle  8: RRRRRRRRRRRR
-  Q cycle  9: RRRRRRRRRRRR
+  Q cycle  9: RWRRRRRRRRRR
   Q cycle 10: RRRRRRRRRRRR
   Q cycle 11: RRRRRRRRRRRR
   Q cycle 12: RRRRRRRRRRRR
@@ -1707,85 +1707,100 @@ inference Q: right 1179 of 1199 | every bar right from cycle 8
   Q cycle 98: RRRRRRRRRRRR
   Q cycle 99: RRRRRRRRRRRR
   Q cycle 100: RRRRRRRRRRRR
-recognition: 50 functions | the dictionary last changed at frame 1045
+recognition: 50 functions | the dictionary last changed at frame 792
 NEVERCALLED 0 of 50
-  combination calls per frame, per cycle: 1:000011202112 2:122222222211 3:222222212211 4:222222212211 5:222222212211 6:222222212211 7:222222212211 8:222222212211 9:222222212211 10:222222212211 11:222222212211 12:222222212211 13:222222212211 14:222222212211 15:222222212211 16:222222212211 17:222222212211 18:222222212211 19:222222212211 20:222222212211 21:222222212211 22:222222212211 23:222222212211 24:222222212211 25:222222212211 26:222222212211 27:222222212211 28:222222212211 29:222222212211 30:222222212211 31:222222212211 32:222222212211 33:222222212211 34:222222212211 35:222222212211 36:222222212211 37:222222212211 38:222222212211 39:222222212211 40:222222212211 41:222222212211 42:222222212211 43:222222212211 44:222222212211 45:222222212211 46:222222212211 47:222222212211 48:222222212211 49:222222212211 50:222222212211 51:222222212211 52:222222212211 53:222222212211 54:222222212211 55:222222212211 56:222222212211 57:222222212211 58:222222212211 59:222222212211 60:222222212211 61:222222212211 62:222222212211 63:222222212211 64:222222212211 65:222222212211 66:222222212211 67:222222212211 68:222222212211 69:222222212211 70:222222212211 71:222222212211 72:222222212211 73:222222212211 74:222222212211 75:222222212211 76:222222212211 77:222222212211 78:222222212211 79:222222212211 80:222222212211 81:222222212211 82:222222212211 83:222222212211 84:222222212211 85:222222212211 86:222222212211 87:222222212211 88:222222212211 89:222222212211 90:222222212211 91:222222212211 92:222222212211 93:222222212211 94:222222212211 95:222222212211 96:222222212211 97:222222212211 98:222222212211 99:222222212211 100:222222212211
-  dictionary: level 1 | association between bars | 12 | with a call in the last cycle 10
-  dictionary: level 2 | association between bars | 1 | with a call in the last cycle 1
-  dictionary: level 2 | over the combination calls | 11 | with a call in the last cycle 9
-  dictionary: level 3 | across the channels in time | 7 | with a call in the last cycle 6
-  dictionary: level 3 | over the combination calls | 3 | with a call in the last cycle 2
-  dictionary: level 4 | across the channels in time | 6 | with a call in the last cycle 5
-  dictionary: level 4 | over the combination calls | 1 | with a call in the last cycle 1
-  dictionary: level 5 | across the channels in time | 4 | with a call in the last cycle 3
-  dictionary: level 6 | across the channels in time | 3 | with a call in the last cycle 3
-  dictionary: level 7 | across the channels in time | 1 | with a call in the last cycle 1
-  dictionary: level 8 | across the channels in time | 1 | with a call in the last cycle 1
-  function f1 | level 1 | nodes KGC↓, SPY↓ | relations KGC↓ → SPY↓ at t0 | a call in the last cycle
-  function f3 | level 1 | nodes KGC↑, GLD↓ | relations KGC↑ → GLD↓ at t0 | a call in the last cycle
-  function f4 | level 1 | nodes SPY↓, Q↑ | relations SPY↓ → Q↑ at t0 | a call in the last cycle
-  function f5 | level 1 | nodes SPY↓, Q↓ | relations SPY↓ → Q↓ at t0 | a call in the last cycle
-  function f6 | level 1 | nodes KGC↓, GLD↓ | relations KGC↓ → GLD↓ at t0 | a call in the last cycle
+  combination calls per frame, per cycle: 1:000011202112 2:121212221211 3:112111211111 4:112111211111 5:112111211111 6:112111211111 7:112111211111 8:112111211111 9:112111211111 10:112111211111 11:112111211111 12:112111211111 13:112111211111 14:112111211111 15:112111211111 16:112111211111 17:112111211111 18:112111211111 19:112111211111 20:112111211111 21:112111211111 22:112111211111 23:112111211111 24:112111211111 25:112111211111 26:112111211111 27:112111211111 28:112111211111 29:112111211111 30:112111211111 31:112111211111 32:112111211111 33:112111211111 34:112111211111 35:112111211111 36:112111211111 37:112111211111 38:112111211111 39:112111211111 40:112111211111 41:112111211111 42:112111211111 43:112111211111 44:112111211111 45:112111211111 46:112111211111 47:112111211111 48:112111211111 49:112111211111 50:112111211111 51:112111211111 52:112111211111 53:112111211111 54:112111211111 55:112111211111 56:112111211111 57:112111211111 58:112111211111 59:112111211111 60:112111211111 61:112111211111 62:112111211111 63:112111211111 64:112111211111 65:112111211111 66:112111211111 67:112111211111 68:112111211111 69:112111211111 70:112111211111 71:112111211111 72:112111211111 73:112111211111 74:112111211111 75:112111211111 76:112111211111 77:112111211111 78:112111211111 79:112111211111 80:112111211111 81:112111211111 82:112111211111 83:112111211111 84:112111211111 85:112111211111 86:112111211111 87:112111211111 88:112111211111 89:112111211111 90:112111211111 91:112111211111 92:112111211111 93:112111211111 94:112111211111 95:112111211111 96:112111211111 97:112111211111 98:112111211111 99:112111211111 100:112111211111
+  dictionary: level 1 | association between bars | 11 | with a call in the last cycle 6
+  dictionary: level 2 | over the combination calls | 10 | with a call in the last cycle 10
+  dictionary: level 3 | across the channels in time | 8 | with a call in the last cycle 7
+  dictionary: level 3 | over the combination calls | 1 | with a call in the last cycle 0
+  dictionary: level 4 | across the channels in time | 7 | with a call in the last cycle 7
+  dictionary: level 5 | across the channels in time | 4 | with a call in the last cycle 4
+  dictionary: level 6 | across the channels in time | 4 | with a call in the last cycle 4
+  dictionary: level 7 | across the channels in time | 2 | with a call in the last cycle 2
+  dictionary: level 8 | across the channels in time | 2 | with a call in the last cycle 2
+  dictionary: level 9 | across the channels in time | 1 | with a call in the last cycle 1
+  function f1 | level 1 | nodes KGC↓, SPY↓, Q↑ | relations KGC↓ → SPY↓ at t0; KGC↓ → Q↑ at t0; SPY↓ → Q↑ at t0 | a cycle | a call in the last cycle
+  function f3 | level 1 | nodes GLD↓, SPY↓ | relations GLD↓ → SPY↓ at t0
+  function f5 | level 1 | nodes SPY↓, Q↓, KGC↑ | relations SPY↓ → Q↓ at t0; SPY↓ → KGC↑ at t0; Q↓ → KGC↑ at t0 | a cycle | a call in the last cycle
+  function f6 | level 1 | nodes KGC↓, GLD↓ | relations KGC↓ → GLD↓ at t0
   function f7 | level 1 | nodes KGC↑, SPY↑ | relations KGC↑ → SPY↑ at t0
-  function f9 | level 1 | nodes GLD↑, Q↓, SPY↑ | relations GLD↑ → Q↓ at t0; GLD↑ → SPY↑ at t0 | a call in the last cycle
-  function f10 | level 1 | nodes GLD↓, Q↓ | relations GLD↓ → Q↓ at t0 | a call in the last cycle
-  function f11 | level 1 | nodes SPY↑, Q↑ | relations SPY↑ → Q↑ at t0 | a call in the last cycle
-  function f13 | level 1 | nodes GLD↓, Q↑ | relations GLD↓ → Q↑ at t0 | a call in the last cycle
-  function f14 | level 1 | nodes SPY↑, Q↓ | relations SPY↑ → Q↓ at t0 | a call in the last cycle
-  function f15 | level 1 | nodes KGC↓, SPY↑ | relations KGC↓ → SPY↑ at t0
-  function f12 | level 2 | nodes call(f3), call(f1) | relations call(f3) → call(f1) at t-1
-  function f16 | level 2 | nodes call(f3), call(f5) | relations call(f3) → call(f5) at t0 | a call in the last cycle
-  function f18 | level 2 | nodes GLD↑, Q↑, call(f1) | relations GLD↑ → Q↑ at t0; GLD↑ → call(f1) at t0; Q↑ → call(f1) at t0 | a cycle | a call in the last cycle
-  function f19 | level 2 | nodes call(f1), KGC↑ | relations call(f1) → KGC↑ at t-1
-  function f20 | level 2 | nodes call(f3), call(f4) | relations call(f3) → call(f4) at t0 | a call in the last cycle
-  function f22 | level 2 | nodes KGC↑, call(f9) | relations KGC↑ → call(f9) at t0 | a call in the last cycle
-  function f23 | level 2 | nodes call(f1), call(f10) | relations call(f1) → call(f10) at t0 | a call in the last cycle
-  function f24 | level 2 | nodes call(f3), call(f11) | relations call(f3) → call(f11) at t0 | a call in the last cycle
-  function f25 | level 2 | nodes call(f1), call(f13) | relations call(f1) → call(f13) at t0 | a call in the last cycle
-  function f26 | level 2 | nodes call(f3), call(f14) | relations call(f3) → call(f14) at t0 | a call in the last cycle
-  function f27 | level 2 | nodes KGC↓, call(f9) | relations KGC↓ → call(f9) at t0 | a call in the last cycle
-  function f28 | level 2 | nodes call(f6), call(f11) | relations call(f6) → call(f11) at t0 | a call in the last cycle
-  function f21 | level 3 | nodes call(f16), KGC↓ | relations call(f16) → KGC↓ at t-1
-  function f29 | level 3 | nodes call(f1), call(f18) | relations call(f1) → call(f18) at t0
-  function f30 | level 3 | nodes call(f22) | relations call(f22) → call(f22) at t-1 | a cycle | a call in the last cycle
-  function f32 | level 3 | nodes call(f24), call(f23), call(f16) | relations call(f24) → call(f23) at t-1; call(f23) → call(f16) at t-1 | a call in the last cycle
-  function f34 | level 3 | nodes call(f26), call(f25), call(f24) | relations call(f26) → call(f25) at t-1; call(f25) → call(f24) at t-1 | a call in the last cycle
-  function f36 | level 3 | nodes call(f27), call(f20), call(f26) | relations call(f27) → call(f20) at t-1; call(f20) → call(f26) at t-1 | a call in the last cycle
-  function f38 | level 3 | nodes call(f28), call(f16), call(f27) | relations call(f28) → call(f16) at t-1; call(f16) → call(f27) at t-1 | a call in the last cycle
-  function f39 | level 3 | nodes call(f22), call(f28) | relations call(f22) → call(f28) at t-1 | a call in the last cycle
-  function f40 | level 3 | nodes call(f1), call(f22) | relations call(f1) → call(f22) at t-1 | a call in the last cycle
-  function f41 | level 3 | nodes call(f16), call(f1) | relations call(f16) → call(f1) at t-1 | a call in the last cycle
-  function f42 | level 4 | nodes call(f30), call(f39) | relations call(f30) → call(f39) at t-1 | a call in the last cycle
-  function f43 | level 4 | nodes call(f18), call(f40) | relations call(f18) → call(f40) at t0 | a call in the last cycle
-  function f44 | level 4 | nodes call(f32), call(f41) | relations call(f32) → call(f41) at t-1
-  function f45 | level 4 | nodes call(f34), call(f32) | relations call(f34) → call(f32) at t-1 | a call in the last cycle
-  function f46 | level 4 | nodes call(f36), call(f34) | relations call(f36) → call(f34) at t-1 | a call in the last cycle
-  function f47 | level 4 | nodes call(f38), call(f36) | relations call(f38) → call(f36) at t-1 | a call in the last cycle
-  function f48 | level 4 | nodes call(f39), call(f38) | relations call(f39) → call(f38) at t-1 | a call in the last cycle
-  function f50 | level 5 | nodes call(f16), call(f43), call(f30) | relations call(f16) → call(f43) at t-1; call(f43) → call(f30) at t-1 | a call in the last cycle
-  function f52 | level 5 | nodes call(f45), call(f44) | relations call(f45) → call(f44) at t-2
-  function f54 | level 5 | nodes call(f48), call(f47), call(f46), call(f45) | relations call(f48) → call(f47) at t-2; call(f47) → call(f46) at t-2; call(f46) → call(f45) at t-2 | a call in the last cycle
-  function f55 | level 5 | nodes call(f42), call(f48) | relations call(f42) → call(f48) at t-1 | a call in the last cycle
-  function f56 | level 6 | nodes call(f50), call(f42) | relations call(f50) → call(f42) at t-1 | a call in the last cycle
-  function f57 | level 6 | nodes call(f41), call(f50) | relations call(f41) → call(f50) at t0 | a call in the last cycle
-  function f60 | level 6 | nodes call(f55), call(f54) | relations call(f55) → call(f54) at t-1 | a call in the last cycle
-  function f59 | level 7 | nodes call(f57), call(f56), call(f55) | relations call(f57) → call(f56) at t-1; call(f56) → call(f55) at t-1 | a call in the last cycle
-  function f61 | level 8 | nodes call(f59), call(f60) | relations call(f59) → call(f60) at t-1 | a call in the last cycle
-  calls on the apex at the last frame: 16 | reaching frames 1195-1200: 8
-  apex: call of f54 | level 5 | frames {1187} | channels 4
-  apex: call of f60 | level 6 | frames {1187, 1188} | channels 4
-  apex: call of f61 | level 7 | frames {1187, 1188, 1189} | channels 4
-  apex: call of f57 | level 4 | frames {1187, 1188, 1189, 1190} | channels 4
-  apex: call of f59 | level 5 | frames {1187, 1188, 1189, 1190} | channels 4
-  apex: call of f32 | level 3 | frames {1190, 1191, 1192} | channels 4
-  apex: call of f45 | level 4 | frames {1190, 1191, 1192, 1193} | channels 4
-  apex: call of f34 | level 3 | frames {1192, 1193, 1194} | channels 4
-  apex: call of f36 | level 3 | frames {1194, 1195, 1196} | channels 4
-  apex: call of f38 | level 3 | frames {1196, 1197, 1198} | channels 4
-  apex: call of f54 | level 5 | frames {1190, 1191, 1192, 1193, 1194, 1195, 1196, 1197, 1198, 1199} | channels 4
-  apex: call of f22 | level 2 | frames {1200} | channels 4
-  apex: call of f30 | level 3 | frames {1199, 1200} | channels 4
-  apex: call of f42 | level 4 | frames {1198, 1199, 1200} | channels 4
-  apex: call of f55 | level 5 | frames {1196, 1197, 1198, 1199, 1200} | channels 4
-  apex: call of f60 | level 6 | frames {1190, 1191, 1192, 1193, 1194, 1195, 1196, 1197, 1198, 1199, 1200} | channels 4
+  function f9 | level 1 | nodes GLD↑, Q↓, SPY↑ | relations GLD↑ → Q↓ at t0; GLD↑ → SPY↑ at t0; Q↓ → SPY↑ at t0 | a cycle | a call in the last cycle
+  function f11 | level 1 | nodes GLD↓, Q↑ | relations GLD↓ → Q↑ at t0
+  function f12 | level 1 | nodes GLD↓, SPY↑, Q↑ | relations GLD↓ → SPY↑ at t0; SPY↑ → Q↑ at t0 | a call in the last cycle
+  function f13 | level 1 | nodes KGC↑, GLD↓ | relations KGC↑ → GLD↓ at t0 | a call in the last cycle
+  function f14 | level 1 | nodes KGC↓, SPY↑ | relations KGC↓ → SPY↑ at t0
+  function f17 | level 1 | nodes GLD↓, Q↓ | relations GLD↓ → Q↓ at t0 | a call in the last cycle
+  function f20 | level 2 | nodes GLD↓, call(f5) | relations GLD↓ → call(f5) at t0 | a call in the last cycle
+  function f21 | level 2 | nodes KGC↑, call(f9) | relations KGC↑ → call(f9) at t0 | a call in the last cycle
+  function f22 | level 2 | nodes GLD↓, call(f1) | relations GLD↓ → call(f1) at t0 | a call in the last cycle
+  function f23 | level 2 | nodes GLD↓, call(f5), SPY↑ | relations GLD↓ → call(f5) at t0; SPY↑ → call(f5) at t0 | a call in the last cycle
+  function f24 | level 2 | nodes call(f1), call(f13) | relations call(f1) → call(f13) at t0 | a call in the last cycle
+  function f27 | level 2 | nodes GLD↑, call(f1) | relations GLD↑ → call(f1) at t0 | a call in the last cycle
+  function f28 | level 2 | nodes call(f1), call(f17) | relations call(f1) → call(f17) at t0 | a call in the last cycle
+  function f29 | level 2 | nodes KGC↑, call(f12) | relations KGC↑ → call(f12) at t0 | a call in the last cycle
+  function f30 | level 2 | nodes KGC↓, call(f9) | relations KGC↓ → call(f9) at t0 | a call in the last cycle
+  function f31 | level 2 | nodes KGC↓, call(f12) | relations KGC↓ → call(f12) at t0 | a call in the last cycle
+  function f25 | level 3 | nodes call(f20), KGC↓, call(f9) | relations call(f20) → KGC↓ at t-1; call(f20) → call(f9) at t-1
+  function f26 | level 3 | nodes KGC↓, call(f20) | relations KGC↓ → call(f20) at t-1
+  function f32 | level 3 | nodes call(f21) | relations call(f21) → call(f21) at t-1 | a cycle | a call in the last cycle
+  function f34 | level 3 | nodes call(f24), call(f23), call(f22) | relations call(f24) → call(f23) at t-1; call(f23) → call(f22) at t-1 | a call in the last cycle
+  function f36 | level 3 | nodes call(f20), call(f27), call(f21) | relations call(f20) → call(f27) at t-1; call(f27) → call(f21) at t-1 | a call in the last cycle
+  function f38 | level 3 | nodes call(f29), call(f28), call(f20) | relations call(f29) → call(f28) at t-1; call(f28) → call(f20) at t-1 | a call in the last cycle
+  function f39 | level 3 | nodes call(f22), call(f29) | relations call(f22) → call(f29) at t-1 | a call in the last cycle
+  function f41 | level 3 | nodes call(f20), call(f30), call(f24) | relations call(f20) → call(f30) at t-1; call(f30) → call(f24) at t-1 | a call in the last cycle
+  function f43 | level 3 | nodes call(f21), call(f31), call(f20) | relations call(f21) → call(f31) at t-1; call(f31) → call(f20) at t-1 | a call in the last cycle
+  function f44 | level 4 | nodes call(f34), call(f39) | relations call(f34) → call(f39) at t-1 | a call in the last cycle
+  function f45 | level 4 | nodes call(f36), call(f32) | relations call(f36) → call(f32) at t-1 | a call in the last cycle
+  function f46 | level 4 | nodes call(f38), call(f36) | relations call(f38) → call(f36) at t-1 | a call in the last cycle
+  function f47 | level 4 | nodes call(f39), call(f38) | relations call(f39) → call(f38) at t-1 | a call in the last cycle
+  function f48 | level 4 | nodes call(f41), call(f34) | relations call(f41) → call(f34) at t-1 | a call in the last cycle
+  function f49 | level 4 | nodes call(f43), call(f41) | relations call(f43) → call(f41) at t-1 | a call in the last cycle
+  function f50 | level 4 | nodes call(f32), call(f43) | relations call(f32) → call(f43) at t-1 | a call in the last cycle
+  function f52 | level 5 | nodes call(f47), call(f46), call(f45) | relations call(f47) → call(f46) at t-2; call(f46) → call(f45) at t-2 | a call in the last cycle
+  function f54 | level 5 | nodes call(f48), call(f44), call(f47) | relations call(f48) → call(f44) at t-2; call(f44) → call(f47) at t-1 | a call in the last cycle
+  function f56 | level 5 | nodes call(f50), call(f49), call(f48) | relations call(f50) → call(f49) at t-2; call(f49) → call(f48) at t-2 | a call in the last cycle
+  function f57 | level 5 | nodes call(f45), call(f50) | relations call(f45) → call(f50) at t-1 | a call in the last cycle
+  function f58 | level 6 | nodes call(f52), call(f57) | relations call(f52) → call(f57) at t-2 | a call in the last cycle
+  function f59 | level 6 | nodes call(f54), call(f52) | relations call(f54) → call(f52) at t-1 | a call in the last cycle
+  function f60 | level 6 | nodes call(f56), call(f54) | relations call(f56) → call(f54) at t-2 | a call in the last cycle
+  function f61 | level 6 | nodes call(f57), call(f56) | relations call(f57) → call(f56) at t-1 | a call in the last cycle
+  function f63 | level 7 | nodes call(f60), call(f59), call(f58) | relations call(f60) → call(f59) at t-4; call(f59) → call(f58) at t-3 | a call in the last cycle
+  function f65 | level 7 | nodes call(f58), call(f61), call(f60) | relations call(f58) → call(f61) at t-2; call(f61) → call(f60) at t-3 | a call in the last cycle
+  function f66 | level 8 | nodes call(f65), call(f63) | relations call(f65) → call(f63) at t-3 | a call in the last cycle
+  function f67 | level 8 | nodes call(f63), call(f65) | relations call(f63) → call(f65) at t-3 | a call in the last cycle
+  function f68 | level 9 | nodes call(f67), call(f66) | relations call(f67) → call(f66) at t-5; call(f66) → call(f67) at t-7 | a cycle | a call in the last cycle
+  calls on the apex at the last frame: 32 | reaching frames 1195-1200: 10
+  apex: call of f34 | level 3 | frames {1170, 1171} | channels 4
+  apex: call of f54 | level 5 | frames {1170, 1171, 1172} | channels 4
+  apex: call of f41 | level 3 | frames {1171, 1172, 1173} | channels 4
+  apex: call of f63 | level 7 | frames {1170, 1171, 1172, 1173, 1174} | channels 4
+  apex: call of f43 | level 3 | frames {1173, 1174, 1175} | channels 4
+  apex: call of f56 | level 5 | frames {1170, 1171, 1172, 1173, 1174, 1175, 1176} | channels 4
+  apex: call of f36 | level 3 | frames {1176, 1177, 1178} | channels 4
+  apex: call of f65 | level 7 | frames {1170, 1171, 1172, 1173, 1174, 1175, 1176, 1177, 1178, 1179} | channels 4
+  apex: call of f38 | level 3 | frames {1178, 1179, 1180} | channels 4
+  apex: call of f52 | level 5 | frames {1175, 1176, 1177, 1178, 1179, 1180, 1181} | channels 4
+  apex: call of f34 | level 3 | frames {1181, 1182, 1183} | channels 4
+  apex: call of f54 | level 5 | frames {1178, 1179, 1180, 1181, 1182, 1183, 1184} | channels 4
+  apex: call of f41 | level 3 | frames {1183, 1184, 1185} | channels 4
+  apex: call of f63 | level 7 | frames {1173, 1174, 1175, 1176, 1177, 1178, 1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186} | channels 4
+  apex: call of f43 | level 3 | frames {1185, 1186, 1187} | channels 4
+  apex: call of f56 | level 5 | frames {1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188} | channels 4
+  apex: call of f36 | level 3 | frames {1188, 1189, 1190} | channels 4
+  apex: call of f65 | level 7 | frames {1178, 1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191} | channels 4
+  apex: call of f38 | level 3 | frames {1190, 1191, 1192} | channels 4
+  apex: call of f52 | level 5 | frames {1187, 1188, 1189, 1190, 1191, 1192, 1193} | channels 4
+  apex: call of f67 | level 8 | frames {1178, 1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191, 1192, 1193, 1194} | channels 4
+  apex: call of f68 | level 9 | frames {1170, 1171, 1172, 1173, 1174, 1175, 1176, 1177, 1178, 1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191, 1192, 1193, 1194} | channels 4
+  apex: call of f34 | level 3 | frames {1193, 1194, 1195} | channels 4
+  apex: call of f54 | level 5 | frames {1190, 1191, 1192, 1193, 1194, 1195, 1196} | channels 4
+  apex: call of f41 | level 3 | frames {1195, 1196, 1197} | channels 4
+  apex: call of f60 | level 6 | frames {1190, 1191, 1192, 1193, 1194, 1195, 1196, 1197, 1198} | channels 4
+  apex: call of f63 | level 7 | frames {1185, 1186, 1187, 1188, 1189, 1190, 1191, 1192, 1193, 1194, 1195, 1196, 1197, 1198} | channels 4
+  apex: call of f43 | level 3 | frames {1197, 1198, 1199} | channels 4
+  apex: call of f21 | level 2 | frames {1200} | channels 4
+  apex: call of f32 | level 3 | frames {1199, 1200} | channels 4
+  apex: call of f50 | level 4 | frames {1197, 1198, 1199, 1200} | channels 4
+  apex: call of f56 | level 5 | frames {1193, 1194, 1195, 1196, 1197, 1198, 1199, 1200} | channels 4
 

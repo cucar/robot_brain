@@ -46,8 +46,15 @@ pub struct Inference {
 #[derive(Clone, Debug)]
 pub struct Act {
     pub neuron: NeuronId,
-    /// Its pose (D8): its neuron's id for a base activation, the interneuron in the call's phase for a call.
+    /// What a relation names it by: its neuron.
     pub sym: Sym,
+    /// Its phase where it is a call (D8, D53): the node its fit started at, the node it ended at, and its laps.
+    /// The phase is the activation's own, and no relation names it.
+    pub phase: Option<Phase>,
+    /// Its phase in numbers (D53): the node its stretch begins at, the node it ends at, each by its number in its
+    /// function, and its laps.
+    /// A base activation has no phase: its numbers are zero.
+    pub numbers: Pos,
     pub kind: Kind,
     pub axes: Axes,
     pub pos: Pos,
@@ -173,7 +180,10 @@ impl Brain {
             if r == me || under.contains(&r) || !seen.insert(r) { return; }
             let Some(x) = self.find_act(r) else { return };
             if !self.cfg.policy.past[a.kind as usize][x.kind as usize] { return; }
-            out.push(Nb { act: r, sym: x.sym, off: offset_between(a, x) });
+            let off = offset_between(a, x);
+            // with the relations inside the frame off, nothing in its own frame is a neighbor
+            if !self.cfg.inside_frame && off[0] == 0 { return; }
+            out.push(Nb { act: r, sym: x.sym, off, numbers: x.numbers });
         };
         if a.covers.is_empty() {
             for f in self.thalamus.frames.iter() {

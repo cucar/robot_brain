@@ -29,6 +29,19 @@ impl Fit {
     pub fn acts(&self) -> impl Iterator<Item = (ActRef, usize)> + '_ { self.landed.iter().chain(self.calls.iter()).copied() }
 }
 
+/// A relation offered to a function (R50): the node of the function it would attach at, the neuron at its far end,
+/// the offset and the differences from that node to the far end, and whether the node's activation is the one that
+/// returned the board relation.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Offer {
+    pub func: FuncId,
+    pub node: Sym,
+    pub far: NeuronId,
+    pub off: Offset,
+    pub diff: Offset,
+    pub by_near: bool,
+}
+
 /// A relation a neuron returned at this level (R21): the activation that returned it, the other end, the
 /// offset from the one to the other, its strength, and its one form.
 #[derive(Clone, Copy, Debug)]
@@ -68,7 +81,7 @@ impl Brain {
     /// one of the fit's own function, which then takes the lap), whether it is that lap, the activation the
     /// relation was read to, and whether it was read through another function's call. Bare before through, the
     /// older first (R24).
-    pub(crate) fn step_through(&self, func: FuncId, from: ActRef, delta: Offset, want: Sym, used: &FxHashSet<ActRef>) -> Option<(ActRef, bool, ActRef, Option<ActRef>)> {
+    pub(crate) fn step_through(&self, func: FuncId, from: ActRef, delta: Offset, want: Sym, want_diff: Offset, used: &FxHashSet<ActRef>) -> Option<(ActRef, bool, ActRef, Option<ActRef>)> {
         let a = self.find_act(from)?;
         let fno = self.frame_no;
         let target = add(&a.pos, &delta);
@@ -86,7 +99,8 @@ impl Brain {
         for o in &others {
             if used.contains(o) || self.covered_rel.contains(&edge(from, *o)) { continue; }
             let Some(w) = self.find_act(*o) else { continue };
-            if w.sym != want || !self.is_landable(w) { continue; }
+            // the relation lands where the phases of its two ends differ by its numbers (D53)
+            if w.sym != self.thalamus.dict.find_neuron_of(want) || a.numbers.minus(&w.numbers) != want_diff || !self.is_landable(w) { continue; }
             // where the call of the lap before stands on that activation, its phase starting there, it takes the lap
             // (D53); nothing is read through a call (D5)
             let mut lap: Option<ActRef> = None;
@@ -94,7 +108,7 @@ impl Brain {
                 if used.contains(&c) { continue; }
                 let Some(ca) = self.find_act(c) else { continue };
                 if ca.gone || ca.covered_at.is_some() || !self.stands(ca, fno) || ca.pos != w.pos { continue; }
-                if ca.fired_by.as_ref().map_or(true, |fb| fb.func != func) || self.thalamus.dict.find_start(ca.sym) != Some(want) { continue; }
+                if ca.fired_by.as_ref().map_or(true, |fb| fb.func != func) || ca.phase.map(|p| p.from) != Some(want) { continue; }
                 if lap.map_or(true, |l| c > l) { lap = Some(c); }
             }
             return Some(match lap { Some(c) => (c, true, *o, None), None => (*o, false, *o, None) });
@@ -115,7 +129,7 @@ impl Brain {
         used.insert(entry);
         // it starts on the node's own pose, or on a call whose phase starts at the node, which it lands
         // on whole and reads the function's relations from (D54, D31)
-        let on_call = self.find_act(entry).map_or(false, |a| a.sym != f.nodes[root]);
+        let on_call = self.find_act(entry).map_or(false, |a| a.sym != self.thalamus.dict.find_neuron_of(f.nodes[root]));
         let mut landed = if on_call { vec![] } else { vec![(entry, root)] };
         let mut calls = if on_call { vec![(entry, root)] } else { vec![] };
         let mut edges = Vec::new();
@@ -134,8 +148,14 @@ impl Brain {
         // come, and the fit leaves them out with anything reached only through them, charging nothing for them
         let later: Vec<bool> = lay.position.iter().map(|p| lay.closing.is_none() && p[0] > 0).collect();
         // the step: what the node stands on, whether a call, and the activation the relation was read to
-        let go = |this: &Brain, au: ActRef, off: Offset, want: Sym, used: &FxHashSet<ActRef>| -> Option<(ActRef, bool, ActRef)> {
-            let (w, lap, to, via) = this.step_through(f.id, au, off, want, used)?;
+        // the diff of a relation read from node `u` at offset `off`: as the function holds it, or turned round
+        let diff_of = |ri: usize, u: usize, off: &Offset| -> Offset {
+            let r = &f.rels[ri];
+            let forward = if r.a == r.b { r.off == *off } else { f.nodes[u] == r.a };
+            if forward { r.diff } else { neg(&r.diff) }
+        };
+        let go = |this: &Brain, au: ActRef, off: Offset, want: Sym, want_diff: Offset, used: &FxHashSet<ActRef>| -> Option<(ActRef, bool, ActRef)> {
+            let (w, lap, to, via) = this.step_through(f.id, au, off, want, want_diff, used)?;
             if let Some(c) = via { thru_calls.borrow_mut().push(c); }
             Some((w, lap, to))
         };
@@ -143,7 +163,7 @@ impl Brain {
             if beyond[u] || (at[u].is_some() && via_call[u]) { inside[ri] = true; if at[v].is_none() { beyond[v] = true; } return None; }
             if later[v] { inside[ri] = true; if at[v].is_none() { beyond[v] = true; } return None; }
             let au = at[u]?;
-            let (w, call, to) = go(this, au, off, f.nodes[v], used)?;
+            let (w, call, to) = go(this, au, off, f.nodes[v], diff_of(ri, u, &off), used)?;
             came[ri] = true;
             edges.push((au, to));
             used.insert(w);
@@ -166,7 +186,7 @@ impl Brain {
                 assert!(laps <= MAX_LAPS, "a fit read more than {} laps", MAX_LAPS);
                 let Some(au) = at[ua] else { break };
                 if via_call[ua] { break; }
-                let Some((w, call, to)) = go(self, au, off, f.nodes[ub], &used) else { break };
+                let Some((w, call, to)) = go(self, au, off, f.nodes[ub], diff_of(ri, ua, &off), &used) else { break };
                 came[ri] = true;
                 edges.push((au, to));
                 used.insert(w);
@@ -222,7 +242,7 @@ impl Brain {
             // than that node are still to come and the fit leaves them out; a cycle's fit ends where it stops landing
             for (i, a) in fr.acts.iter().enumerate() {
                 // the node admits its own pose, or a call whose phase starts at it (D54)
-                let admits = a.sym == *node;
+                let admits = a.sym == self.thalamus.dict.find_neuron_of(*node);
                 if !admits || !a.on_apex() || a.gone { continue; }
                 let fit = self.fit(f, root, ActRef { frame: fno, index: i as u32 });
                 if fit.edges.is_empty() { continue; }
@@ -285,6 +305,19 @@ impl Brain {
     /// is recorded for the next batch to the neurons and read as zero until then.
     fn ask(&self, q: CountQuery) -> (u32, u32) {
         assert!(self.counting, "counts are asked only while grouping");
+        // a row holds neurons: each node of a function is asked as its neuron
+        let n = |s: Sym| self.thalamus.dict.find_neuron_of(s);
+        let q = match q {
+            CountQuery::Ends { own, far, off, diff } => CountQuery::Ends { own: n(own), far: n(far), off, diff },
+            CountQuery::Holding { own, far, off, diff } => CountQuery::Holding { own: n(own), far: n(far), off, diff },
+            CountQuery::Rows { own } => CountQuery::Rows { own: n(own) },
+            CountQuery::Answer { own, far, off, diff, cond } => {
+                let mut cond: Vec<(Sym, Offset, Offset)> = cond.into_iter().map(|(f, o, d)| (n(f), o, d)).collect();
+                cond.sort();
+                CountQuery::Answer { own: n(own), far: n(far), off, diff, cond }
+            }
+            CountQuery::Alone { own, far, off, diff, offs } => CountQuery::Alone { own: n(own), far: n(far), off, diff, offs },
+        };
         let n = self.thalamus.dict.find_neuron_of(q.read_pose());
         if (n as usize) >= self.thalamus.registry.len() { return (0, 0); }
         if let Some(a) = self.counts.borrow().get(&q) { return *a; }
@@ -310,9 +343,9 @@ impl Brain {
 
     /// The pose a relation is read from where it has no node to be counted at (D47, R50): an end whose
     /// rows hold it; where both do, the one with more activations behind it. None where no rows hold it.
-    fn find_holding_end(&self, r: &Rel) -> Option<(Sym, Sym, Offset)> {
+    fn find_holding_end(&self, r: &Rel) -> Option<(Sym, Sym, Offset, Offset)> {
         r.ends().into_iter()
-            .filter(|c| self.ask(CountQuery::Holding { own: c.0, far: c.1, off: c.2 }).0 > 0)
+            .filter(|c| self.ask(CountQuery::Holding { own: c.0, far: c.1, off: c.2, diff: c.3 }).0 > 0)
             .map(|c| (c, self.ask(CountQuery::Rows { own: c.0 }).0))
             .max_by_key(|x| x.1).map(|x| x.0)
     }
@@ -324,14 +357,14 @@ impl Brain {
     pub(crate) fn count_with_without(&self, rels: &[Rel], r: &Rel, at: Option<Sym>) -> (u32, u32) {
         // at the node it attached at (R50), where it has one; else at an end whose rows hold it
         let end = at.and_then(|n| r.ends().into_iter().find(|c| c.0 == n)).or_else(|| self.find_holding_end(r));
-        let Some((n, far, off)) = end else { return (0, 0) };
-        let mut cond: Vec<(Sym, Offset)> = Vec::new();
+        let Some((n, far, off, diff)) = end else { return (0, 0) };
+        let mut cond: Vec<(Sym, Offset, Offset)> = Vec::new();
         for s in rels {
             if s == r { continue; }
-            for (m, f2, o2) in s.ends() { if m == n { cond.push((f2, o2)); } }
+            for (m, f2, o2, d2) in s.ends() { if m == n { cond.push((f2, o2, d2)); } }
         }
         cond.sort();
-        self.ask(CountQuery::Answer { own: n, far, off, cond })
+        self.ask(CountQuery::Answer { own: n, far, off, diff, cond })
     }
 
     /// A relation's worth in a set read for `own` (D57): `with − without − 1`; with its nearness,
@@ -374,23 +407,76 @@ impl Brain {
 
     // ───────────────────────────── grouping (R50, R54, R18) ─────────────────────────────
 
+    /// The phase in numbers of the activation standing as a node (D53): the activation itself where it is that node, and
+    /// where it is a call read as the node its phase starts at, the activation it covered there.
+    pub(crate) fn read_numbers_as(&self, a: &Act, node: Sym) -> Pos {
+        let node = self.thalamus.dict.find_neuron_of(node);
+        if a.sym == node { return a.numbers; }
+        a.covers.iter().filter_map(|c| self.find_act(*c)).find(|c| c.sym == node && c.pos == a.pos).map_or(a.numbers, |c| c.numbers)
+    }
+
     /// The relations a board relation would be to a function at an activation it shares with the function's fit or
     /// call (R50): from the node there to the other end; a call read as each node of the function its expansion puts
     /// where the shared activation sees, at that node's offset (R50, R28), and as itself where it puts none.
-    fn list_candidates(&self, f: &Func, shared: ActRef, as_node: Sym, origin_pos: &Pos, other: ActRef) -> Vec<Rel> {
+    fn list_candidates(&self, f: &Func, shared: ActRef, as_node: Sym, origin_pos: &Pos, other: ActRef) -> Vec<(Rel, Sym, Offset, Offset)> {
         let (Some(sa), Some(oa)) = (self.find_act(shared), self.find_act(other)) else { return vec![] };
         let off = offset_between(sa, oa);
+        // the numbers of the node there, less the other end's (D53)
+        let diff = self.read_numbers_as(sa, as_node).minus(&oa.numbers);
         let mut reads: Vec<(Sym, Offset)> = Vec::new();
         reads.push((oa.sym, off));
-        reads.into_iter().filter_map(|(read, q)| self.make_candidate(f, as_node, origin_pos, oa.pos, read, q)).collect()
+        reads.into_iter().filter_map(|(read, q)| self.make_candidate(f, as_node, origin_pos, oa.pos, read, q, diff).map(|rel| (rel, read, q, diff))).collect()
+    }
+
+    /// The node of a function that the far end of a relation from one of its nodes is (D15): the node of that neuron
+    /// whose phase, read through the differences the function's relations hold, is the far end's phase. An activation
+    /// of a neuron in another phase is another node.
+    /// Inside the frame the node must also stand where the far end stands, as the function's relations lay it out.
+    pub(crate) fn find_same_node(&self, f: &Func, at: Sym, far: NeuronId, off: &Offset, diff: &Offset) -> Option<Sym> {
+        let i = f.find_node(at)?;
+        let numbers = f.lay_out_numbers(i);
+        let lay = f.lay_out();
+        // two activations of one neuron in one phase at two positions of a frame are two activations, so two nodes
+        let stands_there = |j: usize| off[0] != 0 || lay.position[j].minus(&lay.position[i]) == *off;
+        f.nodes.iter().enumerate().find(|(j, s)| self.thalamus.dict.find_neuron_of(**s) == far && numbers[*j].map_or(false, |x| x.plus(diff).is_zero()) && stands_there(*j)).map(|(_, s)| *s)
+    }
+
+    /// The number a new node of a neuron takes in a function (D15): the lowest no node of that neuron in it has, the
+    /// neuron itself being number 0.
+    pub(crate) fn find_free_node_number(&self, f: &Func, n: NeuronId) -> u32 {
+        let dict = &self.thalamus.dict;
+        (0u32..).find(|k| !f.nodes.iter().any(|s| dict.find_neuron_of(*s) == n && dict.read_node_number(*s).unwrap_or(0) == *k)).unwrap()
+    }
+
+    /// A relation from a node of a function to a neuron, as the function would hold it (D15, R50): between that node
+    /// and the node the far end is, or a new node of its neuron. Returns it with the node it attaches at and whether
+    /// the far end is a node the function has. None where the new node's symbol is not allotted.
+    pub(crate) fn read_offer(&self, f: &Func, rel: &Rel, o: &Offer) -> Option<(Rel, Sym, bool)> {
+        f.find_node(o.node)?;
+        let same = self.find_same_node(f, o.node, o.far, &o.off, &o.diff);
+        let far = match same {
+            Some(s) => s,
+            None => {
+                let k = self.find_free_node_number(f, o.far);
+                self.thalamus.dict.find_node_sym(o.far, k)?
+            }
+        };
+        // the same way round as the board has the relation
+        let kept = rel.off == o.off && rel.diff == o.diff;
+        let local = if kept { Rel { a: o.node, b: far, off: o.off, diff: o.diff } } else { Rel { a: far, b: o.node, off: neg(&o.off), diff: neg(&o.diff) } };
+        // where both ends are nodes of the function, it attaches at the end whose activation returned it (R50)
+        let attach = if same.is_some() && !o.by_near { far } else { o.node };
+        Some((local, attach, same.is_some()))
     }
 
     /// One relation from node `as_node` to `read` at `off` as a candidate of a function (R50), the far end standing
     /// at `far_pos`. None where it is no candidate.
-    fn make_candidate(&self, f: &Func, as_node: Sym, origin_pos: &Pos, far_pos: Pos, read: Sym, off: Offset) -> Option<Rel> {
-        let rel = canon(as_node, read, off);
-        if f.holds(&rel) { return None; }
-        if f.find_node(read).is_some() {
+    fn make_candidate(&self, f: &Func, as_node: Sym, origin_pos: &Pos, far_pos: Pos, read: Sym, off: Offset, diff: Offset) -> Option<Rel> {
+        let rel = canon(self.thalamus.dict.find_neuron_of(as_node), read, off, diff);
+        if self.thalamus.dict.find_holder(&rel) == Some(f.id) { return None; }
+        // a relation of a pose to itself is a candidate of no function: it is a cycle alone (R50, D15)
+        if rel.a == rel.b && diff.is_zero() { return None; }
+        if self.find_same_node(f, as_node, read, &off, &diff).is_some() {
             // it would close the cycle, where the function has none
             if f.has_cycle() { return None; }
         } else {
@@ -426,7 +512,7 @@ impl Brain {
                     if br.strength < 2 { continue; }
                     let k = edge(near, br.other);
                     if out.get(&k).map_or(false, |x| x.strength >= br.strength) { continue; }
-                    out.insert(k, Fresh { near, far: br.other, strength: br.strength, rel: canon(a.sym, b.sym, br.off) });
+                    out.insert(k, Fresh { near, far: br.other, strength: br.strength, rel: canon(a.sym, b.sym, br.off, a.numbers.minus(&b.numbers)) });
                 }
             }
         }
@@ -477,7 +563,7 @@ impl Brain {
                 if a.kind != Kind::Inter || !a.on_apex() || !self.stands(a, fno) { continue; }
                 let Some(fb) = &a.fired_by else { continue };
                 let Some(f) = self.thalamus.dict.get(fb.func) else { continue };
-                let Some(n) = self.thalamus.dict.find_start(a.sym) else { continue };
+                let Some(n) = a.phase.map(|p| p.from) else { continue };
                 let Some(node) = f.find_node(n) else { continue };
                 let start = f.nodes[node];
                 let lay = f.lay_out();
@@ -519,15 +605,39 @@ impl Brain {
                         if !seen.insert((fit.func, (p, q), shared)) { continue; }
                         let (Some(pa), Some(qa)) = (self.find_act(p), self.find_act(q)) else { continue };
                         let off = offset_between(pa, qa);
-                        offered19.push((Fresh { near: p, far: q, strength: 2, rel: canon(pa.sym, qa.sym, off) }, fit.func, shared, as_node, opos));
+                        offered19.push((Fresh { near: p, far: q, strength: 2, rel: canon(pa.sym, qa.sym, off, pa.numbers.minus(&qa.numbers)) }, fit.func, shared, as_node, opos));
+                    }
+                }
+                // a relation that left the board when a call of this function covered its end: at the activation the
+                // fit landed on there, as that node, the other end as itself (R50)
+                for &(l, node) in &fit.landed {
+                    let Some(la) = self.find_act(l) else { continue };
+                    if la.covered_at.is_none() { continue; }
+                    if !la.coverers.iter().filter_map(|c| self.find_act(*c)).any(|ca| ca.fired_by.as_ref().map_or(false, |fb| fb.func == fit.func)) { continue; }
+                    let mut others: Vec<ActRef> = la.rels.iter().map(|br| br.other).collect();
+                    if let Some(hs) = self.rel_holders.get(&l) { others.extend(hs.iter().copied()); }
+                    others.sort();
+                    others.dedup();
+                    for o in others {
+                        let e = edge(l, o);
+                        if !self.lifted.contains(&e) || self.refused.contains(&e) { continue; }
+                        let Some(oa) = self.find_act(o) else { continue };
+                        if oa.gone || !self.stands(oa, fno) { continue; }
+                        // the other end stood on the board when this election began: no call of this election, and
+                        // covered, if at all, by one
+                        if self.call_fit.contains_key(&o) { continue; }
+                        if oa.covered_at.is_some() && !oa.coverers.iter().any(|c| self.call_fit.contains_key(c)) { continue; }
+                        if !seen.insert((fit.func, e, l)) { continue; }
+                        let off = offset_between(la, oa);
+                        offered19.push((Fresh { near: l, far: o, strength: 2, rel: canon(la.sym, oa.sym, off, la.numbers.minus(&oa.numbers)) }, fit.func, l, f.nodes[node], opos));
                     }
                 }
             }
         }
         
         // the candidates (R50), read once every strength they ask is answered
-        let cands: FxHashMap<Rel, Vec<(FuncId, Sym)>> = self.settle(|m| {
-            let mut cands: FxHashMap<Rel, Vec<(FuncId, Sym)>> = FxHashMap::default();
+        let cands: FxHashMap<Rel, Vec<Offer>> = self.settle(|m| {
+            let mut cands: FxHashMap<Rel, Vec<Offer>> = FxHashMap::default();
             for (e, only) in offered.iter() {
                 let e = *e;
                 if m.half.map_or(false, |k| (e.rel.off[0] == 0) != k) { continue; }
@@ -540,17 +650,12 @@ impl Brain {
                         if only.map_or(false, |o| o != fid) { continue; }
                         let Some(f) = m.thalamus.dict.get(fid) else { continue };
                         if taken.get(&fid).map_or(false, |t| t.contains(&edge(act, other))) { continue; }
-                        for rel in m.list_candidates(f, act, as_node, &opos, other) {
+                        for (rel, far, off, diff) in m.list_candidates(f, act, as_node, &opos, other) {
                             if m.half.map_or(false, |k| (rel.off[0] == 0) != k) { continue; }
                             // a candidate has strength 2 or more, read through calls (R50, D47)
                             if m.count_strength(&rel) < 2.0 { continue; }
-                            // where both its ends are nodes of the function, it attaches at the end whose activation
-                            // returned it, never at a node read through a call (R50)
-                            let attach = if f.find_node(rel.a).is_some() && f.find_node(rel.b).is_some() {
-                                [e.near, e.far].iter().filter_map(|r| m.find_act(*r)).map(|a| a.sym).find(|s| *s == rel.a || *s == rel.b).unwrap_or(as_node)
-                            } else { as_node };
                             let v = cands.entry(rel).or_default();
-                            if !v.iter().any(|x| x.0 == fid) { v.push((fid, attach)); }
+                            if !v.iter().any(|x| x.func == fid) { v.push(Offer { func: fid, node: as_node, far, off, diff, by_near: act == e.near }); }
                         }
                     }
                 }
@@ -561,24 +666,29 @@ impl Brain {
                 let other = if e.near == shared { e.far } else { e.near };
                 let Some(f) = m.thalamus.dict.get(fid) else { continue };
                 if taken.get(&fid).map_or(false, |t| t.contains(&edge(shared, other))) { continue; }
-                for rel in m.list_candidates(f, shared, as_node, &opos, other) {
+                for (rel, far, off, diff) in m.list_candidates(f, shared, as_node, &opos, other) {
                     if m.half.map_or(false, |k| (rel.off[0] == 0) != k) { continue; }
                     if m.count_strength(&rel) < 2.0 { continue; }
-                    let attach = if f.find_node(rel.a).is_some() && f.find_node(rel.b).is_some() {
-                        [e.near, e.far].iter().filter_map(|r| m.find_act(*r)).map(|a| a.sym).find(|s| *s == rel.a || *s == rel.b).unwrap_or(as_node)
-                    } else { as_node };
                     let v = cands.entry(rel).or_default();
-                    if !v.iter().any(|x| x.0 == fid) { v.push((fid, attach)); }
+                    if !v.iter().any(|x| x.func == fid) { v.push(Offer { func: fid, node: as_node, far, off, diff, by_near: e.near == shared }); }
                 }
             }
             cands
         });
         // one that closes a cycle before one that adds a node (R50)
-        let closes = |m: &Brain, rel: &Rel, fs: &[(FuncId, Sym)]| fs.iter().filter_map(|x| m.thalamus.dict.get(x.0)).any(|f| f.find_node(rel.a).is_some() && f.find_node(rel.b).is_some());
+        let closes = |m: &Brain, _rel: &Rel, fs: &[Offer]| fs.iter().any(|o| m.thalamus.dict.get(o.func).map_or(false, |f| m.find_same_node(f, o.node, o.far, &o.off, &o.diff).is_some()));
         let mut keys: Vec<(bool, Rel)> = cands.iter().map(|(r, fs)| (!closes(self, r, fs), *r)).collect();
         keys.sort();
         let mut joined: FxHashSet<Rel> = FxHashSet::default();
         for (_, rel) in keys {
+            // a new node of a neuron the function already has a node of takes a symbol of its own (D15)
+            for o in cands[&rel].clone() {
+                let k = match self.thalamus.dict.get(o.func) {
+                    Some(f) if self.find_same_node(f, o.node, o.far, &o.off, &o.diff).is_none() => self.find_free_node_number(f, o.far),
+                    _ => 0,
+                };
+                if k > 0 { self.thalamus.dict.make_node(o.far, k); }
+            }
             // the best function for it and its contribution where it stands, read once every count they ask is answered
             let weighed = self.settle(|m| {
                 let fs = cands[&rel].clone();
@@ -586,25 +696,31 @@ impl Brain {
                 // in a function of one relation, a tie joins, since it leaves fewer functions (R54)
                 let holder = m.thalamus.dict.find_holder(&rel).and_then(|g| m.thalamus.dict.get(g));
                 let lone = holder.map_or(true, |g| g.rels.len() == 1);
-                let mut best: Option<(f64, f64, u64, FuncId, Sym)> = None;
-                for (fid, attach) in fs {
+                let mut best: Option<(f64, f64, u64, FuncId, Sym, Rel)> = None;
+                for o in fs {
+                    let fid = o.func;
                     let Some(f) = m.thalamus.dict.get(fid) else { continue };
-                    if f.holds(&rel) { continue; }
+                    if m.thalamus.dict.find_holder(&rel) == Some(fid) { continue; }
+                    // the relation as this function would hold it, between its own nodes
+                    let Some((local, attach, closing)) = m.read_offer(f, &rel, &o) else { continue };
+                    if f.holds(&local) { continue; }
+                    // a relation that crosses channels joins no function that is inside one channel: it stays on the board
+                    if let Some(c) = m.find_channel_of_func(f) { if m.find_channel_of_rel(&rel) != Some(c) { continue; } }
                     // a function holds one kind, inside the frame or in time (D15, R50)
                     if f.rels.iter().any(|r| (r.off[0] == 0) != (rel.off[0] == 0)) { continue; }
                     // read against the function as it now stands: it touches a node, and closes no second cycle
-                    let (ka, kb) = (f.find_node(rel.a).is_some(), f.find_node(rel.b).is_some());
-                    if !(ka || kb) || (ka && kb && f.has_cycle()) { continue; }
+                    let (ka, kb) = (true, closing);
+                    if ka && kb && f.has_cycle() { continue; }
                     // a cycle is a function of its own (D15, R50): a relation of a pose to itself joins no function, while one
                     // neuron in two phases is two nodes and a relation between them is a candidate like any other; no
                     // relation joins a cycle; a relation closes a cycle only where every relation is then on the cycle
-                    if rel.a == rel.b { continue; }
+                    if local.a == local.b { continue; }
                     if f.has_cycle() { continue; }
                     // a candidate that closes the cycle (R50): across frames any return closes it; inside the frame only
                     // the way back itself, from the node it attaches at to the other end, as the function's relations lay
                     // those nodes out, in every component, so it reaches the very activation the fit has there
                     if ka && kb && rel.off[0] == 0 {
-                        let (u, v, seen) = if attach == rel.b { (rel.b, rel.a, neg(&rel.off)) } else { (rel.a, rel.b, rel.off) };
+                        let (u, v, seen) = if attach == local.b { (local.b, local.a, neg(&local.off)) } else { (local.a, local.b, local.off) };
                         let lay = f.lay_out();
                         let (iu, iv) = (f.find_node(u).unwrap(), f.find_node(v).unwrap());
                         let back = lay.position[iv].minus(&lay.position[iu]);
@@ -612,48 +728,54 @@ impl Brain {
                     }
                     if ka && kb {
                         let mut deg: FxHashMap<Sym, u32> = FxHashMap::default();
-                        for r in f.rels.iter().chain(std::iter::once(&rel)) { *deg.entry(r.a).or_default() += 1; *deg.entry(r.b).or_default() += 1; }
+                        for r in f.rels.iter().chain(std::iter::once(&local)) { *deg.entry(r.a).or_default() += 1; *deg.entry(r.b).or_default() += 1; }
                         if deg.values().any(|d| *d != 2) { continue; }
                     }
                     let w = {
                         let mut with = f.rels.clone();
-                        with.push(rel);
-                        let before = Func::find_meeting(&f.rels, &f.at, attach);
-                        let mut at = before.clone();
-                        at.push(Some(attach));
-                        // a function of one relation read at the node the candidate attaches at, over the
-                        // same rows, where no cycle is involved
-                        let lone_before = if f.rels.len() == 1 && Self::list_cycle_rels(f.read_root(), &with).is_empty() {
-                            m.count_alone(&f.rels[0], attach, &with).map(|x| x - 1.0)
-                        } else { None };
-                        let wb = lone_before.unwrap_or_else(|| m.measure_worth(f.read_root(), &f.rels, &before));
-                        let wa = m.measure_worth(f.read_root(), &with, &at);
-                        wa - wb
+                        with.push(local);
+                        if Self::list_cycle_rels(f.read_root(), &with).is_empty() {
+                            // a candidate joins on its with and its without alone, read at the node it attaches at:
+                            // one relation saved at each occasion it held with the function, a failure at each it
+                            // did not, and its one relation in the dictionary (R50, D57)
+                            m.measure_worth_in(&with, &local, Some(attach), None).0
+                        } else {
+                            // a candidate that closes a cycle: the function's worth with it less without it, each
+                            // relation of the cycle counted at every occurrence (D57, D54)
+                            let before = Func::find_meeting(&f.rels, &f.at, attach);
+                            let mut at = before.clone();
+                            at.push(Some(attach));
+                            let wb = m.measure_worth(f.read_root(), &f.rels, &before);
+                            let wa = m.measure_worth(f.read_root(), &with, &at);
+                            wa - wb
+                        }
                     };
                     let mut rels = f.rels.clone();
-                    rels.push(rel);
-                    let near = m.measure_worth_in(&rels, &rel, Some(attach), None).1;
-                    let better = match best { None => true, Some((bw, bn, bj, _, _)) => w > bw || (w == bw && (near > bn || (near == bn && f.joined < bj))) };
-                    if better { best = Some((w, near, f.joined, fid, attach)); }
+                    rels.push(local);
+                    let near = m.measure_worth_in(&rels, &local, Some(attach), None).1;
+                    let better = match best { None => true, Some((bw, bn, bj, _, _, _)) => w > bw || (w == bw && (near > bn || (near == bn && f.joined < bj))) };
+                    if better { best = Some((w, near, f.joined, fid, attach, local)); }
                 }
-                let Some((w, _, _, fid, attach)) = best else { return None };
+                let Some((w, _, _, fid, attach, local)) = best else { return None };
+                // the relation as the function that holds it has it, between that function's nodes
+                let held: Option<Rel> = holder.and_then(|g| g.rels.iter().find(|x| m.thalamus.dict.read_global(x) == rel).copied());
                 // a relation not at an end of the function it is in does not leave it, to join or otherwise
-                if let Some(g) = holder { if !Self::is_at_an_end(g, &rel) { return None; } }
+                if let (Some(g), Some(h)) = (holder, held) { if !Self::is_at_an_end(g, &h) { return None; } }
                 // alone, read at the node it would attach at, over the rows of the function it is compared with (R50)
                 let here20 = if lone {
                     m.thalamus.dict.get(fid).and_then(|f| {
                         let mut with = f.rels.clone();
-                        with.push(rel);
+                        with.push(local);
                         // the candidate that closes a cycle is read alone at no node
                         if !Self::list_cycle_rels(f.read_root(), &with).is_empty() { return None; }
-                        m.count_alone(&rel, attach, &with).map(|x| x - 2.0)
+                        m.count_alone(&local, attach, &with).map(|x| x - 2.0)
                     })
                 } else { None };
                 let own = match holder {
                     _ if here20.is_some() => here20.unwrap(),
                     _ if lone => m.count_strength(&rel) - 2.0,
                     // its contribution where it stands, read as leaving reads it, at the node it attached at (R54, R50)
-                    Some(g) => m.measure_contribution_at_node(g, &rel),
+                    Some(g) => m.measure_contribution_at_node(g, &held.unwrap_or(rel)),
                     None => m.count_strength(&rel) - 2.0,
                 };
                 // a function's last relation is weighed against everything that leaves with it: the function and its
@@ -663,14 +785,51 @@ impl Brain {
                 // a candidate no function holds joins where its gain is above zero, and nothing else is asked of it: it is
                 // not weighed against a function of its own, which it does not have (R50, R54)
                 let here = if holder.is_none() { 0.0 } else { here };
-                Some((w, fid, attach, here))
+                // a relation a function holds (R54): what everything costs with it where it is against what everything
+                // costs with it moved, both functions in both costs; the relations in the dictionary are the same
+                // either way, so the costs differ by what is saved
+                let both: Option<(f64, f64)> = match (holder, held) {
+                    // inside the frame a relation counts in a function only where that function's call lands (D57), and
+                    // both costs are counted in calls. Every activation of an interneuron is a call of its function, so
+                    // the interneuron's history counts them. Where it is, that is the calls its function has taken.
+                    // Moved, it is the calls the other function has taken, and no more of them than where that
+                    // function's relations at the node held with it, less where they held without it
+                    // a function of one relation lands wherever its relation stands, so its relation's own history
+                    // counts its calls, and it is weighed as in time
+                    (Some(g), Some(_)) if !lone && rel.off[0] == 0 && !g.has_cycle() => {
+                        let count_calls = |x: &Func| x.inter.map_or(0, |n| m.ask(CountQuery::Rows { own: n as Sym }).0) as f64;
+                        let there = m.thalamus.dict.get(fid).map_or(0.0, |f| count_calls(f));
+                        Some((count_calls(g), there.min(w + 1.0)))
+                    }
+                    (Some(g), Some(h)) if !g.has_cycle() => m.thalamus.dict.get(fid).map(|f| {
+                        // what a function saves: its relations' with less their without
+                        let saved = |x: &Func| m.measure_worth(x.read_root(), &x.rels, &x.at) + x.rels.len() as f64;
+                        let there = saved(f);
+                        // the function it is in, with it and left without it, its other relations counted as they were;
+                        // its last relation takes the function with it, its entry and its subtree (R38)
+                        let (here, left, kept) = if lone {
+                            (own + 2.0, 0.0, sub.iter().map(|x| x.1).sum::<f64>() - 1.0)
+                        } else {
+                            let at_h = g.rels.iter().zip(&g.at).find(|(x, _)| **x == h).and_then(|(_, a)| *a);
+                            let (wi, wo) = m.count_with_without(&g.rels, &h, at_h);
+                            let here = saved(g);
+                            (here, here - (wi as f64 - wo as f64), 0.0)
+                        };
+                        // in time an activation is covered once two relations of it are, so both functions' calls land,
+                        // and a cost has what both save (D24)
+                        (there + here + kept, there + w + 1.0 + left)
+                    }),
+                    _ => None,
+                };
+                Some((w, fid, attach, here, local, both))
             });
-            let Some((w, fid, attach, here)) = weighed else { continue };
-            if !(w > here) { continue; }
+            let Some((w, fid, attach, here, local, both)) = weighed else { continue };
+            let pays = match both { Some((stays, moved)) => moved > stays, None => w > here };
+            if !pays { continue; }
             let from = self.thalamus.dict.find_holder(&rel);
             if let Some(g) = from { self.leave(g, &rel, &mut changed); }
             if self.thalamus.dict.get(fid).is_none() { continue; }
-            self.thalamus.dict.join(fid, rel, attach);
+            self.thalamus.dict.join(fid, local, attach);
             self.forget_expansions(fid);
             joined.insert(rel);
             if !changed.contains(&fid) { changed.push(fid); }
@@ -780,10 +939,11 @@ impl Brain {
             let Some(fb) = &ca.fired_by else { continue };
             let Some(f) = self.find_function(fb.func) else { continue };
             if !f.has_cycle() { continue; }
-            let Some(p) = self.thalamus.dict.find_pose(ca.sym) else { continue };
+            let Some(p) = ca.phase else { continue };
             let Some(at) = f.find_node(p.from) else { continue };
-            if f.find_node(oa.sym).is_none() { continue; }
-            if f.holds(&canon(oa.sym, f.nodes[at], offset_between(oa, ca))) { return true; }
+            if self.thalamus.dict.find_node_by_neuron(f, oa.sym).is_none() { continue; }
+            let lap = canon(oa.sym, self.thalamus.dict.find_neuron_of(f.nodes[at]), offset_between(oa, ca), oa.numbers.minus(&self.read_numbers_as(ca, f.nodes[at])));
+            if self.thalamus.dict.find_holder(&lap) == Some(f.id) { return true; }
         }
         false
     }
@@ -798,8 +958,8 @@ impl Brain {
     /// whose row takes it only at the connect step.
     pub(crate) fn count_ends(&self, r: &Rel) -> (u32, u32) {
         let neg = r.off.negated();
-        let (ca, na) = self.ask(CountQuery::Ends { own: r.a, far: r.b, off: r.off });
-        let (cb, nb) = self.ask(CountQuery::Ends { own: r.b, far: r.a, off: neg });
+        let (ca, na) = self.ask(CountQuery::Ends { own: r.a, far: r.b, off: r.off, diff: r.diff });
+        let (cb, nb) = self.ask(CountQuery::Ends { own: r.b, far: r.a, off: neg, diff: r.diff.negated() });
         (ca + nb, cb + na)
     }
 
@@ -856,12 +1016,12 @@ impl Brain {
     /// on which every relation of the set at it has held or failed, counting those that hold this one. None where
     /// the node is no end of it.
     pub(crate) fn count_alone(&self, r: &Rel, at: Sym, set: &[Rel]) -> Option<f64> {
-        let (n, far, off) = r.ends().into_iter().find(|c| c.0 == at)?;
+        let (n, far, off, diff) = r.ends().into_iter().find(|c| c.0 == at)?;
         let mut offs: Vec<Offset> = vec![off];
-        for x in set { for (m, _, o2) in x.ends() { if m == n { offs.push(o2); } } }
+        for x in set { for (m, _, o2, _) in x.ends() { if m == n { offs.push(o2); } } }
         offs.sort();
         offs.dedup();
-        Some(self.ask(CountQuery::Alone { own: n, far, off, offs }).0 as f64)
+        Some(self.ask(CountQuery::Alone { own: n, far, off, diff, offs }).0 as f64)
     }
 
     /// The groups of a set of relations that hold together, each as the indexes of its relations.
@@ -899,6 +1059,10 @@ impl Brain {
     /// A relation leaves a function (R18, R54): what the origin no longer reaches leaves with it and starts a
     /// function of its own where it recurs; a function left with none leaves the dictionary.
     fn leave(&mut self, fid: FuncId, r: &Rel, changed: &mut Vec<FuncId>) {
+        // the relation as the function has it, between its own nodes
+        let key = self.thalamus.dict.read_global(r);
+        let Some(r) = self.thalamus.dict.get(fid).and_then(|f| f.rels.iter().find(|x| *x == r).or_else(|| f.rels.iter().find(|x| self.thalamus.dict.read_global(x) == key)).copied()) else { return };
+        let r = &r;
         // an end relation that takes the origin with it leaves the latest of the other nodes as the origin
         {
             if let Some(f) = self.thalamus.dict.get(fid) {

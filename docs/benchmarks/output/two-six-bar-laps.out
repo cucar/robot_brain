@@ -9,8 +9,8 @@ CYCLE 5 | neurons 19 | functions 11 | highest call level in the cycle 2 | the di
 CYCLE 6 | neurons 17 | functions 8 | highest call level in the cycle 2 | the dictionary last changed at frame 35 | right A 100.00%, B 100.00%
 CYCLE 7 | neurons 16 | functions 8 | highest call level in the cycle 2 | the dictionary last changed at frame 38 | right A 100.00%, B 83.33%
 CYCLE 8 | neurons 16 | functions 8 | highest call level in the cycle 2 | the dictionary last changed at frame 38 | right A 100.00%, B 83.33%
-CYCLE 9 | neurons 18 | functions 10 | highest call level in the cycle 3 | the dictionary last changed at frame 54 | right A 100.00%, B 100.00%
-CYCLE 10 | neurons 19 | functions 11 | highest call level in the cycle 3 | the dictionary last changed at frame 55 | right A 100.00%, B 100.00%
+CYCLE 9 | neurons 17 | functions 9 | highest call level in the cycle 3 | the dictionary last changed at frame 54 | right A 100.00%, B 100.00%
+CYCLE 10 | neurons 19 | functions 11 | highest call level in the cycle 3 | the dictionary last changed at frame 58 | right A 100.00%, B 100.00%
 CYCLE 11 | neurons 18 | functions 10 | highest call level in the cycle 3 | the dictionary last changed at frame 61 | right A 100.00%, B 100.00%
 CYCLE 12 | neurons 18 | functions 10 | highest call level in the cycle 3 | the dictionary last changed at frame 61 | right A 100.00%, B 100.00%
 CYCLE 13 | neurons 19 | functions 11 | highest call level in the cycle 4 | the dictionary last changed at frame 78 | right A 100.00%, B 100.00%
@@ -115,22 +115,22 @@ NEVERCALLED 0 of 13
   function f6 | level 2 | nodes call(f2), call(f1) | relations call(f2) → call(f1) at t-1 | a call in the last cycle
   function f8 | level 2 | nodes call(f2), call(f3), call(f1) | relations call(f2) → call(f3) at t-1; call(f3) → call(f1) at t-1; call(f1) → call(f2) at t-1 | a cycle | a call in the last cycle
   function f10 | level 2 | nodes call(f1), call(f4), call(f2) | relations call(f1) → call(f4) at t-1; call(f4) → call(f2) at t-1 | a call in the last cycle
-  function f11 | level 3 | nodes call(f10), call(f8) | relations call(f10) → call(f8) at t-1 | a call in the last cycle
-  function f13 | level 3 | nodes call(f8), call(f6), call(f10) | relations call(f8) → call(f6) at t-1; call(f6) → call(f10) at t-1 | a call in the last cycle
-  function f14 | level 4 | nodes call(f13), call(f11) | relations call(f13) → call(f11) at t-2 | a call in the last cycle
-  function f15 | level 4 | nodes call(f11), call(f13) | relations call(f11) → call(f13) at t-3 | a call in the last cycle
+  function f12 | level 3 | nodes call(f8), call(f6), call(f10) | relations call(f8) → call(f6) at t-1; call(f6) → call(f10) at t-1 | a call in the last cycle
+  function f13 | level 3 | nodes call(f10), call(f8) | relations call(f10) → call(f8) at t-1 | a call in the last cycle
+  function f14 | level 4 | nodes call(f12), call(f13) | relations call(f12) → call(f13) at t-2 | a call in the last cycle
+  function f15 | level 4 | nodes call(f13), call(f12) | relations call(f13) → call(f12) at t-3 | a call in the last cycle
   function f16 | level 5 | nodes call(f15), call(f14) | relations call(f15) → call(f14) at t-4; call(f14) → call(f15) at t-2 | a cycle | a call in the last cycle
   calls on the apex at the last frame: 12 | reaching frames 175-180: 8
   apex: call of f10 | level 2 | frames {166, 167} | channels 2
-  apex: call of f13 | level 3 | frames {166, 167, 168, 169} | channels 2
+  apex: call of f12 | level 3 | frames {166, 167, 168, 169} | channels 2
   apex: call of f8 | level 2 | frames {168, 169, 170, 171} | channels 2
   apex: call of f10 | level 2 | frames {171, 172, 173} | channels 2
-  apex: call of f13 | level 3 | frames {171, 172, 173, 174, 175} | channels 2
+  apex: call of f12 | level 3 | frames {171, 172, 173, 174, 175} | channels 2
   apex: call of f8 | level 2 | frames {174, 175, 176, 177} | channels 2
   apex: call of f10 | level 2 | frames {177, 178, 179} | channels 2
   apex: call of f2 | level 1 | frames {180} | channels 2
   apex: call of f6 | level 2 | frames {179, 180} | channels 2
-  apex: call of f13 | level 3 | frames {177, 178, 179, 180} | channels 2
+  apex: call of f12 | level 3 | frames {177, 178, 179, 180} | channels 2
   apex: call of f14 | level 4 | frames {174, 175, 176, 177, 178, 179, 180} | channels 2
   apex: call of f16 | level 5 | frames {166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180} | channels 2
 

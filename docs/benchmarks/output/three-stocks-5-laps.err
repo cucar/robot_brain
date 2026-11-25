@@ -1,2 +1,7 @@
+CHURN lap 1 | stood at the start 0 | still the same 0 (0.00%) | changed 0 | gone 0 | started in the lap 951 | removed in the lap 345 | stand at the end 606
+CHURN lap 2 | stood at the start 606 | still the same 407 (67.16%) | changed 26 | gone 173 | started in the lap 697 | removed in the lap 377 | stand at the end 926
+CHURN lap 3 | stood at the start 926 | still the same 772 (83.37%) | changed 32 | gone 122 | started in the lap 744 | removed in the lap 308 | stand at the end 1362
+CHURN lap 4 | stood at the start 1362 | still the same 1208 (88.69%) | changed 23 | gone 131 | started in the lap 1048 | removed in the lap 308 | stand at the end 2102
+CHURN lap 5 | stood at the start 2102 | still the same 1627 (77.40%) | changed 92 | gone 383 | started in the lap 1355 | removed in the lap 556 | stand at the end 2901
 
-⏱️  Total Execution Time: 6m
+⏱️  Total Execution Time: 2m

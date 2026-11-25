@@ -17,26 +17,28 @@ pub struct Rel {
     pub a: Sym,
     pub b: Sym,
     pub off: Offset,
+    /// The first's phase in numbers less the second's (D53): the differences of start, end and laps.
+    pub diff: Offset,
 }
 
 fn neg(o: &Offset) -> Offset { o.negated() }
 
 /// The one form of the relation from `n` to `m` standing at `off` from it (D34).
-pub fn canon(n: Sym, m: Sym, off: Offset) -> Rel {
+pub fn canon(n: Sym, m: Sym, off: Offset, diff: Offset) -> Rel {
     let first = (0..off.len()).map(|d| off[d]).find(|x| *x != 0);
     let keep = if off[0] != 0 { off[0] < 0 } else {
         match first { Some(x) => x > 0, None => n <= m }
     };
-    if keep { Rel { a: n, b: m, off } } else { Rel { a: m, b: n, off: neg(&off) } }
+    if keep { Rel { a: n, b: m, off, diff } } else { Rel { a: m, b: n, off: neg(&off), diff: neg(&diff) } }
 }
 
 impl Rel {
     /// Each end of this relation as its own rows hold it, with the neighbor and offset there (D47, D34): both,
     /// since the earlier end's row takes what followed it (D18); a relation from a node to itself is one relation,
     /// read from the node toward the next it reaches.
-    pub fn ends(&self) -> Vec<(Sym, Sym, Offset)> {
-        if self.a == self.b { return vec![(self.a, self.b, self.off)]; }
-        vec![(self.a, self.b, self.off), (self.b, self.a, neg(&self.off))]
+    pub fn ends(&self) -> Vec<(Sym, Sym, Offset, Offset)> {
+        if self.a == self.b { return vec![(self.a, self.b, self.off, self.diff)]; }
+        vec![(self.a, self.b, self.off, self.diff), (self.b, self.a, neg(&self.off), neg(&self.diff))]
     }
 }
 
@@ -104,12 +106,27 @@ impl Func {
     }
 
     /// The nodes of its cycle in the order a lap reads them back from node `root` (D53, D54), the root first.
-    pub fn order_back(&self, root: usize) -> Vec<usize> {
+    pub fn order_back(&self, root: usize) -> Vec<usize> { self.place_back(root).into_iter().map(|(i, _)| i).collect() }
+
+    /// The nodes of its cycle as one lap reads them back from node `root` (D53, D54): the root first, at no offset,
+    /// and each node after it at its offset from the root, within that one lap.
+    pub fn place_back(&self, root: usize) -> Vec<(usize, Pos)> {
         let Some(l) = self.find_lap() else { return vec![] };
         let lay = self.lay_out_from(root);
-        let mut v = self.list_cycle_nodes();
-        v.sort_by_key(|&i| ((0..lay.position[i].len().max(l.len())).map(|d| lay.position[i][d] as i64 * l[d] as i64).sum::<i64>(), i != root, i));
-        v
+        let along = |p: &Pos| (0..p.len().max(l.len())).map(|d| p[d] as i64 * l[d] as i64).sum::<i64>();
+        let whole = along(&l);
+        // the layout stands the node after the root one step ahead of it; read back, that node is a lap less one step
+        // behind, so each node is brought to where the lap reaches it, between the root and one lap back
+        let mut v: Vec<(usize, Pos, i64)> = self.list_cycle_nodes().into_iter().map(|i| {
+            let p = lay.position[i];
+            if whole == 0 { return (i, p, 0); }
+            let laps_off = along(&p).div_euclid(whole) as i32;
+            let q = Pos::make(p.len().max(l.len()), |d| p[d] - laps_off * l[d]);
+            let far = along(&q);
+            (i, q, far)
+        }).collect();
+        v.sort_by_key(|&(i, _, far)| (far, i != root, i));
+        v.into_iter().map(|(i, q, _)| (i, q)).collect()
     }
 
     /// How many nodes of its cycle a call in a phase from node `from` to node `to` round `laps` stands for (D53).
@@ -118,6 +135,41 @@ impl Func {
         let c = order.len();
         let rank = order.iter().position(|x| *x == to).unwrap_or(c.saturating_sub(1));
         laps as usize * c + rank + 1
+    }
+
+    /// Each node's number (D53): its rank in the order the function is read, the earliest node 1.
+    pub fn number_nodes(&self) -> Vec<i32> {
+        let lay = self.lay_out();
+        let mut order: Vec<usize> = (0..self.nodes.len()).collect();
+        order.sort_by(|a, b| {
+            let (p, q) = (&lay.position[*a], &lay.position[*b]);
+            if later(p, q) { std::cmp::Ordering::Greater } else if later(q, p) { std::cmp::Ordering::Less } else { a.cmp(b) }
+        });
+        let mut numbers = vec![0; self.nodes.len()];
+        for (rank, i) in order.iter().enumerate() { numbers[*i] = rank as i32 + 1; }
+        numbers
+    }
+
+    /// Each node's phase in numbers less the root's, read through the differences its relations hold (D53); none for
+    /// a node no relation reaches.
+    pub fn lay_out_numbers(&self, root: usize) -> Vec<Option<Pos>> {
+        let mut numbers: Vec<Option<Pos>> = vec![None; self.nodes.len()];
+        numbers[root] = Some(Pos::zero());
+        let mut queue = vec![root];
+        let mut qi = 0;
+        while qi < queue.len() {
+            let u = queue[qi];
+            qi += 1;
+            for r in &self.rels {
+                let (Some(ua), Some(ub)) = (self.find_node(r.a), self.find_node(r.b)) else { continue };
+                // a relation holds its first end's numbers less its second's
+                let (v, step) = if ua == u { (ub, neg(&r.diff)) } else if ub == u { (ua, r.diff) } else { continue };
+                if numbers[v].is_some() { continue; }
+                numbers[v] = Some(numbers[u].unwrap().plus(&step));
+                queue.push(v);
+            }
+        }
+        numbers
     }
 
     /// The nodes of its cycle, where it has one.
@@ -224,7 +276,10 @@ impl Func {
     }
 }
 
-pub fn describe_rel(r: &Rel) -> String { format!("{}→{}{:?}", sym_name(r.a), sym_name(r.b), r.off) }
+pub fn describe_rel(r: &Rel) -> String { format!("{}→{}{:?}{}", sym_name(r.a), sym_name(r.b), r.off, describe_diff(&r.diff)) }
+
+/// The differences of a relation as the trace prints them: nothing where the two phases have the same numbers.
+pub fn describe_diff(diff: &Offset) -> String { if diff.is_zero() { String::new() } else { format!("diff{:?}", diff) } }
 
 /// A pose as the trace prints it: `#n` for a base neuron, `#n<from..to xlaps>` for a call in a phase.
 pub fn sym_name(s: Sym) -> String { if s < SYM_CALL { format!("#{}", s) } else { format!("s{}", s - SYM_CALL) } }
@@ -278,7 +333,24 @@ impl Dictionary {
         let ids: Vec<FuncId> = self.funcs.keys().copied().collect();
         for id in ids { self.note_reach(id); }
     }
-    pub fn find_holder(&self, r: &Rel) -> Option<FuncId> { self.by_rel.get(r).copied() }
+    /// The function that holds a relation (R50), whichever nodes of its two neurons the function has it between.
+    pub fn find_holder(&self, r: &Rel) -> Option<FuncId> { self.by_rel.get(&self.read_global(r)).copied() }
+    /// A relation between two neurons as the board has it (D34): each end by its neuron, whichever node of a function
+    /// it stands at there.
+    pub fn read_global(&self, r: &Rel) -> Rel { canon(self.find_neuron_of(r.a), self.find_neuron_of(r.b), r.off, r.diff) }
+    /// The symbol of a function's node of a neuron (D15): the neuron itself for its first node, a symbol of its own
+    /// for each further one.
+    pub fn make_node(&mut self, n: NeuronId, k: u32) -> Sym {
+        if k == 0 { n } else { self.make_sym(n, Phase { from: n, to: n, laps: NODE_MARK + k }) }
+    }
+    /// The same, reading only symbols already allotted.
+    pub fn find_node_sym(&self, n: NeuronId, k: u32) -> Option<Sym> {
+        if k == 0 { Some(n) } else { self.find_sym(n, Phase { from: n, to: n, laps: NODE_MARK + k }) }
+    }
+    /// Which node of its neuron a symbol is, where it is a further one.
+    pub fn read_node_number(&self, s: Sym) -> Option<u32> {
+        if s < SYM_CALL { None } else { self.find_pose_entry(s).filter(|x| x.1.laps >= NODE_MARK).map(|x| x.1.laps - NODE_MARK) }
+    }
     pub fn list_of_inter(&self, n: NeuronId) -> &[FuncId] { self.by_inter.get(&n).map_or(&[], |v| v.as_slice()) }
     /// The functions whose nodes name a neuron, in any phase (R38, the subtree).
     pub fn list_naming(&self, n: NeuronId) -> Vec<FuncId> {
@@ -310,7 +382,7 @@ impl Dictionary {
         if i < self.syms.len() { Some(self.syms[i]) } else { self.frozen_syms.get(i - self.syms.len()).copied() }
     }
     /// The phase a call's pose names; none for a base neuron, which has one phase.
-    pub fn find_pose(&self, s: Sym) -> Option<Phase> { if s < SYM_CALL { None } else { self.find_pose_entry(s).map(|x| x.1) } }
+    pub fn find_pose(&self, s: Sym) -> Option<Phase> { if s < SYM_CALL { None } else { self.find_pose_entry(s).map(|x| x.1).filter(|p| p.laps < NODE_MARK) } }
     /// The node a call's phase starts at (D54), a pose: a fit lands that node on the call.
     pub fn find_start(&self, s: Sym) -> Option<Sym> { self.find_pose(s).map(|p| p.from) }
     /// Whether a call's phase starts at a node (D54): the node is the phase's start, a pose.
@@ -358,6 +430,7 @@ impl Dictionary {
     }
     /// A pose with its neuron and phase, for the trace.
     pub fn describe_sym(&self, s: Sym) -> String {
+        if let Some(k) = self.read_node_number(s) { return format!("#{}'{}", self.find_neuron_of(s), k); }
         match self.find_pose(s) {
             None => format!("#{}", s),
             Some(p) => format!("#{}<{}..{}x{}>", self.find_neuron_of(s), self.describe_sym(p.from), self.describe_sym(p.to), p.laps),
@@ -371,7 +444,12 @@ impl Dictionary {
 
     /// A new function of one relation, its origin the relation's first neuron (R50, D15).
     pub fn start(&mut self, r: Rel) -> FuncId {
-        let nodes = if r.a == r.b { vec![r.a] } else { vec![r.a, r.b] };
+        let r = self.read_global(&r);
+        // one neuron at both ends in one phase is one node, a cycle; in two phases it is two nodes (D15)
+        let (r, nodes) = if r.a != r.b { (r, vec![r.a, r.b]) } else if r.diff.is_zero() { (r, vec![r.a]) } else {
+            let other = self.make_node(r.a, 1);
+            (Rel { b: other, ..r }, vec![r.a, other])
+        };
         self.insert(Func { id: 0, nodes, rels: vec![r], at: vec![None], inter: None, joined: 0 })
     }
 
@@ -381,7 +459,8 @@ impl Dictionary {
         f.id = id;
         f.joined = self.next_join;
         self.next_join += 1;
-        for r in &f.rels { self.by_rel.insert(*r, id); }
+        let keys: Vec<Rel> = f.rels.iter().map(|r| self.read_global(r)).collect();
+        for r in keys { self.by_rel.insert(r, id); }
         if let Some(n) = f.inter { self.by_inter.entry(n).or_default().push(id); }
         let nodes = f.nodes.clone();
         self.funcs.insert(id, f);
@@ -394,6 +473,7 @@ impl Dictionary {
     /// where it is. It is counted at that node, and so is each relation of the function it meets there that had
     /// met none before.
     pub fn join(&mut self, id: FuncId, r: Rel, at: Sym) {
+        let key = self.read_global(&r);
         let Some(f) = self.funcs.get_mut(&id) else { return };
         let before = f.nodes.clone();
         if !f.nodes.contains(&r.a) { f.nodes.push(r.a); }
@@ -402,7 +482,7 @@ impl Dictionary {
         f.rels.push(r);
         f.at.push(Some(at));
         let after = f.nodes.clone();
-        self.by_rel.insert(r, id);
+        self.by_rel.insert(key, id);
         self.reindex(id, &before, &after);
         self.note_reach(id);
     }
@@ -411,10 +491,14 @@ impl Dictionary {
     /// leaves with it, and those relations are returned. A function left with none leaves the dictionary, and is
     /// returned.
     pub fn leave(&mut self, id: FuncId, r: &Rel) -> (Vec<Rel>, Option<Func>) {
+        let key = self.read_global(r);
+        // the relation as the function has it, between its own nodes
+        let Some(r) = self.funcs.get(&id).and_then(|f| f.rels.iter().find(|x| *x == r).or_else(|| f.rels.iter().find(|x| self.read_global(x) == key)).copied()) else { return (vec![], None) };
+        let r = &r;
         let Some(f) = self.funcs.get_mut(&id) else { return (vec![], None) };
         let before = f.nodes.clone();
         f.keep(|x| x != r);
-        self.by_rel.remove(r);
+        self.by_rel.remove(&key);
         // what the origin still reaches
         let mut reach = vec![f.nodes[0]];
         loop {
@@ -430,6 +514,7 @@ impl Dictionary {
         f.nodes.retain(|n| reach.contains(n));
         let after = f.nodes.clone();
         let empty = f.rels.is_empty();
+        let cut: Vec<Rel> = cut.iter().map(|x| self.read_global(x)).collect();
         for x in &cut { self.by_rel.remove(x); }
         self.reindex(id, &before, &after);
         if empty { return (cut, self.remove(id)); }
@@ -452,7 +537,7 @@ impl Dictionary {
         let f = self.funcs.remove(&id)?;
         self.note_reach(id);
         self.reindex(id, &f.nodes, &[]);
-        for r in &f.rels { if self.by_rel.get(r) == Some(&id) { self.by_rel.remove(r); } }
+        for r in &f.rels { let key = self.read_global(r); if self.by_rel.get(&key) == Some(&id) { self.by_rel.remove(&key); } }
         if let Some(n) = f.inter { if let Some(v) = self.by_inter.get_mut(&n) { v.retain(|x| *x != id); } }
         Some(f)
     }
@@ -467,7 +552,7 @@ impl Dictionary {
     }
 
     pub fn describe(&self, f: &Func) -> String {
-        let rels: Vec<String> = f.rels.iter().map(|r| format!("{}→{}{:?}", self.describe_sym(r.a), self.describe_sym(r.b), r.off.to_vec(self.dims.max(r.off.len())))).collect();
+        let rels: Vec<String> = f.rels.iter().map(|r| format!("{}→{}{:?}{}", self.describe_sym(r.a), self.describe_sym(r.b), r.off.to_vec(self.dims.max(r.off.len())), describe_diff(&r.diff))).collect();
         let mut s = match f.find_origin() { Some(o) => format!("f{} origin {} [{}]", f.id, self.describe_sym(o), rels.join(" ")), None => format!("f{} no origin [{}]", f.id, rels.join(" ")) };
         if f.has_cycle() { s.push_str(" cycle"); }
         if let Some(i) = f.inter { s.push_str(&format!(" -> #{}", i)); }

@@ -99,8 +99,8 @@ impl Brain {
         let a = self.find_act(h)?;
         let sym = self.find_act(nb)?.sym;
         let row_records = self.read_records(h).into_iter().filter(|r| r.frame == h.frame).collect();
-        let inter = self.find_act(nb)?.neuron;
-        Some((a.neuron, LiftTask { row: h, row_records, call_records: self.read_records(nb), call: Nb { act: nb, sym, off: o }, inter }))
+        let (inter, numbers) = { let c = self.find_act(nb)?; (c.neuron, c.numbers) };
+        Some((a.neuron, LiftTask { row: h, row_records, call_records: self.read_records(nb), call: Nb { act: nb, sym, off: o, numbers }, inter }))
     }
 
     /// Hand the lifts collected since the last flush to the neurons in one batch (D10, D55); a lift whose row is not

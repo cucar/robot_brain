@@ -35,12 +35,12 @@ impl Brain {
     }
 
     /// List what stood strong on the apex of an earlier frame when that frame's connections were written (R31).
-    fn list_stood(&self, frame: FrameNumber) -> Vec<(Sym, Kind, Axes, Pos)> {
+    fn list_stood(&self, frame: FrameNumber) -> Vec<((NeuronId, Option<Phase>, Pos), Kind, Axes, Pos)> {
         let Some(fr) = self.thalamus.frames.iter().find(|x| x.no == frame) else { return Vec::new() };
         // on the apex then: fired by that frame, and covered in a later frame or not at all
         fr.acts.iter().filter(|b| b.strong && !b.gone && b.neuron != NeuronId::MAX && b.opened_at <= frame && b.covered_at.map_or(true, |c| c > 0))
             .filter(|b| (0..3).any(|h| self.cfg.policy.future[h][b.kind as usize]))
-            .map(|b| (b.sym, b.kind, b.axes, b.pos)).collect()
+            .map(|b| ((b.neuron, b.phase, b.numbers), b.kind, b.axes, b.pos)).collect()
     }
 
     /// The connect call on every open activation past age 0 (§7.1, R31, R33): its row takes what stands on this
@@ -52,15 +52,16 @@ impl Brain {
         if self.frozen { return; }
         let fno = self.frame_no;
         let span_default = self.max_reach_t.max(1) as u32;
-        let apex: Vec<(ActRef, Sym, NeuronId, Kind, Axes, Pos, bool)> = self.thalamus.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter().enumerate().map(move |(i, b)| (f.no, i, b)))
-            .filter(|(_, _, b)| b.on_apex() && b.neuron != NeuronId::MAX).map(|(no, i, b)| (ActRef { frame: no, index: i as u32 }, b.sym, b.neuron, b.kind, b.axes, b.pos, b.strong)).collect();
+        let apex: Vec<(ActRef, Sym, NeuronId, Kind, Axes, Pos, bool, Pos, Option<Phase>)> = self.thalamus.frames.iter().filter(|f| f.no == fno).flat_map(|f| f.acts.iter().enumerate().map(move |(i, b)| (f.no, i, b)))
+            .filter(|(_, _, b)| b.on_apex() && b.neuron != NeuronId::MAX).map(|(no, i, b)| (ActRef { frame: no, index: i as u32 }, b.sym, b.neuron, b.kind, b.axes, b.pos, b.strong, b.numbers, b.phase)).collect();
         let rewards: Vec<Reward> = self.thalamus.frames.iter().find(|f| f.no == fno).map(|f| f.rewards.clone()).unwrap_or_default();
         // what stood strong on the apex of each earlier frame a reward that names no channels pays, as it stood at
         // that frame: what the activations open then connected to (R31, R33)
         let far = rewards.iter().filter(|rw| rw.channels.is_empty()).map(|rw| if rw.frames == 0 { span_default } else { rw.frames }).max().unwrap_or(0);
-        let stood: Vec<Vec<(Sym, Kind, Axes, Pos)>> = (1..far).map(|d| self.list_stood(fno - d as i64)).collect();
-        let mut writes: Vec<(NeuronId, Sym, Sym, Offset, f64)> = Vec::new();
-        let mut shares: Vec<(NeuronId, Sym, Sym, Offset, f64)> = Vec::new();
+        let stood: Vec<Vec<((NeuronId, Option<Phase>, Pos), Kind, Axes, Pos)>> = (1..far).map(|d| self.list_stood(fno - d as i64)).collect();
+        // each connection names its two ends by neuron and phase, turned into poses once the board has been read (D25)
+        let mut writes: Vec<(NeuronId, (NeuronId, Option<Phase>, Pos), (NeuronId, Option<Phase>, Pos), Offset, f64)> = Vec::new();
+        let mut shares: Vec<(NeuronId, (NeuronId, Option<Phase>, Pos), (NeuronId, Option<Phase>, Pos), Offset, f64)> = Vec::new();
         let mut followed: Vec<(NeuronId, ActRef, Vec<Nb>)> = Vec::new();
         for f in self.thalamus.frames.iter() {
             for (i, a) in f.acts.iter().enumerate() {
@@ -71,10 +72,10 @@ impl Brain {
                 // the row takes what followed (D18)
                 let me = ActRef { frame: f.no, index: i as u32 };
                 let mut nbs = Vec::new();
-                for (br, bs, _, bk, baxes, bpos, _) in &apex {
+                for (br, bs, _, bk, baxes, bpos, _, bnumbers, _) in &apex {
                     if !self.cfg.policy.past[a.kind as usize][*bk as usize] { continue; }
                     let Some(o) = self.make_connection_offset(a, *baxes, bpos, age) else { continue };
-                    nbs.push(Nb { act: *br, sym: *bs, off: o });
+                    nbs.push(Nb { act: *br, sym: *bs, off: o, numbers: *bnumbers });
                 }
                 if !nbs.is_empty() { followed.push((a.neuron, me, nbs)); }
                 let covered_before = a.covered_at.map_or(false, |c| c < age);
@@ -88,14 +89,14 @@ impl Brain {
                         // a call that grew by a lap is the same call: it connects to nothing of itself (D53)
                         if c.pos[0] as i64 != fno || c.neuron == a.neuron { continue; }
                         if c.strong && c.pos != a.pos && self.cfg.policy.future[a.kind as usize][c.kind as usize] {
-                            if let Some(o) = self.make_connection_offset(a, c.axes, &c.pos, age) { writes.push((a.neuron, a.sym, c.sym, o, self.share_reward(&rewards, c.neuron))); }
+                            if let Some(o) = self.make_connection_offset(a, c.axes, &c.pos, age) { writes.push((a.neuron, (a.neuron, a.phase, a.numbers), (c.neuron, c.phase, c.numbers), o, self.share_reward(&rewards, c.neuron))); }
                         }
                     }
                 } else {
-                    for (_, bs, bn, bk, baxes, bpos, strong) in &apex {
+                    for (_, _, bn, bk, baxes, bpos, strong, bnumbers, bphase) in &apex {
                         if !strong || !self.cfg.policy.future[a.kind as usize][*bk as usize] { continue; }
                         let Some(o) = self.make_connection_offset(a, *baxes, bpos, age) else { continue };
-                        writes.push((a.neuron, a.sym, *bs, o, self.share_reward(&rewards, *bn)));
+                        writes.push((a.neuron, (a.neuron, a.phase, a.numbers), (*bn, *bphase, *bnumbers), o, self.share_reward(&rewards, *bn)));
                     }
                 }
                 // shares for earlier frames (R33): at distance d, into the connections at offset age − d
@@ -111,7 +112,7 @@ impl Brain {
                             for (bs, bk, baxes, bpos) in then {
                                 if !self.cfg.policy.future[a.kind as usize][*bk as usize] { continue; }
                                 let Some(o) = self.make_connection_offset(a, *baxes, bpos, age - d) else { continue };
-                                shares.push((a.neuron, a.sym, *bs, o, share));
+                                shares.push((a.neuron, (a.neuron, a.phase, a.numbers), *bs, o, share));
                             }
                             continue;
                         }
@@ -122,7 +123,7 @@ impl Brain {
                             let Some(b) = self.find_act(*ar) else { continue };
                             if !self.cfg.policy.future[a.kind as usize][b.kind as usize] { continue; }
                             let Some(o) = self.make_connection_offset(a, b.axes, &b.pos, age - d) else { continue };
-                            shares.push((a.neuron, a.sym, b.sym, o, share));
+                            shares.push((a.neuron, (a.neuron, a.phase, a.numbers), (b.neuron, b.phase, b.numbers), o, share));
                         }
                     }
                 }
@@ -131,9 +132,9 @@ impl Brain {
         // a call's connections are keyed by its phase less its laps, and a call a connection names is named the same way (D25)
         let (writes, shares) = {
             let mut w2 = Vec::with_capacity(writes.len());
-            for (h, o, t, off, s) in writes { let (o, t) = (self.thalamus.dict.drop_laps(o), self.thalamus.dict.drop_laps(t)); w2.push((h, o, t, off, s)); }
+            for (h, o, t, off, s) in writes { let (o, t) = (self.name_pose(o.0, o.1, &o.2), self.name_pose(t.0, t.1, &t.2)); w2.push((h, o, t, off, s)); }
             let mut s2 = Vec::with_capacity(shares.len());
-            for (h, o, t, off, s) in shares { let (o, t) = (self.thalamus.dict.drop_laps(o), self.thalamus.dict.drop_laps(t)); s2.push((h, o, t, off, s)); }
+            for (h, o, t, off, s) in shares { let (o, t) = (self.name_pose(o.0, o.1, &o.2), self.name_pose(t.0, t.1, &t.2)); s2.push((h, o, t, off, s)); }
             (w2, s2)
         };
         // each holder's part of the call: what followed its rows, then its writes and then its shares, in order
@@ -188,7 +189,9 @@ impl Brain {
         for f in self.thalamus.frames.iter() {
             for (i, a) in f.acts.iter().enumerate() {
                 if a.opened_at != fno || a.gone || a.neuron == NeuronId::MAX { continue; }
-                let mine = self.thalamus.dict.read_without_laps(a.sym);
+                // its connections are under its pose, its phase less its laps: where that pose was never named, it has none
+                let mine = match a.phase { Some(p) => self.thalamus.dict.find_sym(a.neuron, Phase { laps: 0, ..p }), None => Some(a.sym) };
+                let Some(mine) = mine else { continue };
                 reads.push((f.no, i, a.neuron, mine));
             }
         }

@@ -23,8 +23,8 @@ neuron sees the edges around each of its own activations and reports them with h
 machine groups the edges into **functions**, graphs over neurons that keep recurring, names each with an
 interneuron, and from then on the name stands where the graph recurs. A function in time is recognized as it
 unfolds, over the nodes that have come, and its call is one activation of the interneuron in a **phase**: which
-node the fit ran from and to, and how many laps. A neuron in a phase is a **pose**, and a relation is between
-two poses. The call stands for what it covers, and the relations of it that no call covers are **lifted** to
+node the fit ran from and to, and how many laps. A neuron in a phase is a **pose**. A relation is between two
+neurons, and holds the offset between them and how their two phases differ. The call stands for what it covers, and the relations of it that no call covers are **lifted** to
 the call; what always followed it is a function at the level above, over its call.
 Where a function is general it leaves a **variable**, a node whose neuron changes from one occurrence to the
 next and is filled by what stands there. The interneurons are nodes like any other, so the next level groups
@@ -261,17 +261,22 @@ that fires through it (D8), and expansion ends on base symbols read back through
 > fit read (D37, D53). A phase is the node the fit started at, the node it ended at, and its **laps**, how many
 > times it went round. Only an advancing cycle has laps (D15): in the phase of a closed shape, or of a function
 > with no cycle, the laps are 0. A fit reads a cycle one way, the way its relations' offsets advance (D15), so the phase
-> names no direction. The phase names its two nodes by their neurons: a node is a pose (D15), so the neuron and
-> its phase say which node. So a phase is two nodes and a number. A ring of calls, each ending at the call
-> before it, keeps the same names lap after lap. Everything the fit landed on has already happened (D54). A
-> pose is a name: a relation to the activation names its pose (D34), and nothing in it costs (D13).
+> names no direction. The phase names its two nodes, each a node of the function (D15). So a phase is two nodes
+> and a number. A ring of calls, each ending at the call
+> before it, keeps the same names lap after lap. Everything the fit landed on has already happened (D54).
+>
+> **A phase is held in numbers.** The node the stretch begins at and the node it ends at, each by its number
+> in the function, the earliest node 1 (D15), and the laps. A base activation has no phase, and its numbers are
+> zero. **The phase is the activation's own.** A relation to the activation names its neuron, and holds how
+> the activation's phase differs from the phase at the relation's other end (D34). Nothing in a phase costs
+> (D13).
 >
 > | | is |
 > |---|---|
 > | phase | the node the fit started at, the node it ended at, and the laps |
 > | pose | a neuron in a phase |
 > | activation | a pose at a position |
-> | relation | two poses and the offset between them (D34) |
+> | relation | two neurons, the offset between them, and the difference of their two phases (D34) |
 
 > **D9 — Activation window.** An activation at position `f` in time has two spans. It **stands on the board**
 > through `f + S`. `S` is the **board span**: the longest reach in time among the neurons the machine holds
@@ -458,12 +463,15 @@ what was done together.
 > **An activation bound in a variable is a neighbor like any other** (D10): the neuron that stood, at its own
 > position. Which variable it stood in is the call's business, not the neighbor's.
 
-> **D34 — Relation.** Two poses and the offset between them, one component per activation dimension the two
-> share (D1, D6): the same shape as a connection (D25). A pose is a neuron in a phase (D8). There is one kind of relation in the
+> **D34 — Relation.** Two neurons, the offset between them, one component per activation dimension the two
+> share (D1, D6), and the **difference** of the phases of the two activations it stands between (D8): the
+> first's start, end and laps, less the second's. A connection names each of its two ends in its own phase
+> (D25); a relation holds only how the two phases differ. There is one kind of relation in the
 > design: what a neuron returns is a relation, what a function holds is a relation, and they are the same
 > object. Two nodes that differ in several dimensions are in one relation, with a component in each. In a
 > neuron's relation index, one end is the neuron's own activation and the other a neighbor. In a function, both
-> ends are its nodes, and a relation from a pose to itself joins one node to itself. It is one relation, read
+> ends are its nodes, and a relation from a pose to itself, one neuron at both ends and no difference, joins
+> one node to itself. It is one relation, read
 > in the one direction its offset gives: the row that holds the same neighbor at the opposite offset is the
 > other end's reading of the same relation, not a second one (D47, R50).
 >
@@ -480,11 +488,14 @@ what was done together.
 > apart where an activation is covered, and the first covered relation of an activation decides which kind
 > covers it (D24). A function holds one kind (D15). The frame runs up all its levels before time runs at any (R26).
 >
-> **A call's phase is part of its name.** A relation to an interneuron names it in the phase its activation
-> fired in (D8, D53): which node the fit ran from and to, each by its neuron, and how many laps. A base neuron
-> has one phase, so at the base a relation is two neurons and an offset. Two calls of one interneuron in
-> different phases are two poses. They are different ends for a relation, as two neurons are, and two in one
-> phase at one offset are one relation. A pose is a name, and costs nothing (D13).
+> **The phase is the activation's, and the relation holds the difference.** A relation to an interneuron
+> names the interneuron. The phase is the activation's own (D8, D53): the node its stretch begins at, the node
+> it ends at, and its laps, in numbers. The relation holds how the two phases differ: start less start, end
+> less end, laps less laps. A base activation's numbers are zero, so between two base neurons the difference
+> is zero, and a relation is two neurons and an offset. Two activations of one neuron beside two of another,
+> at one offset, are one relation where their phases differ by the same numbers, whatever the phases
+> themselves are. Where they differ by other numbers they are two relations. The difference is part of the
+> relation, and costs nothing (D13).
 >
 > **A relation has one form, and in time it runs backward.** Where the offset has a component in time, the
 > relation runs from the later neuron to the earlier one, at a negative offset there: that is how the neuron
@@ -509,7 +520,8 @@ what was done together.
 
 > **D55 — Graph.** What a run leaves: a set of **nodes**, each an activation of a neuron (D8), and a set of
 > **edges**, each a relation between two nodes (D34). A node carries its pose, and nothing
-> else. An edge carries an offset, one component per dimension (D6). Two nodes are joined by at most one edge. A
+> else. An edge carries an offset, one component per dimension (D6), and the difference of its two nodes'
+> phases (D34). Two nodes are joined by at most one edge. A
 > node's position in the world is not in the graph: it is wherever the edges put it relative to the nodes it is
 > joined to, and two nodes joined by no path stand in no particular relation.
 >
@@ -551,8 +563,9 @@ what was done together.
 > board.
 >
 > **Lifting.** When a node is covered, each relation of its own that no call covers leaves the board. A
-> relation to the call that landed on the node stands there instead. It has the same other end, and the call's
-> pose where the covered node's pose was (D8). The relation is **lifted** to the call. Inside the frame, the
+> relation to the call that landed on the node stands there instead. It has the same other end, and the call
+> where the covered node was: the call's neuron, and the difference to the call's phase (D8, D34). The
+> relation is **lifted** to the call. Inside the frame, the
 > row at its other end takes the call (D18). The other end is what stands there on the board: an activation
 > no call has landed on, as itself, or, where that end was covered first, the call the relation already stood
 > lifted to there.
@@ -577,9 +590,9 @@ what was done together.
 > are lifted between `A` and `B`, one relation stands there for all of them. A refused relation is never
 > lifted (D24).
 >
-> **A lifted relation is a relation like any other.** It is two poses and the offset between their positions
-> (D34). It is not the relation that left the board. That one named the covered node's pose, and this one
-> names the call's. A function fits only relations that stand on the board (D31). So a function built with the
+> **A lifted relation is a relation like any other.** It is two neurons, the offset between their positions
+> and the difference of their phases (D34). It is not the relation that left the board. That one named the
+> covered node, and this one names the call. A function fits only relations that stand on the board (D31). So a function built with the
 > relation that left has nothing to fit there, and it gets no call. A function built with the relation that
 > stands instead fits there. This is the same at every level.
 >
@@ -603,10 +616,17 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 ## 3.6 Functions
 
 > **D15 — Function.** A graph over neurons that recurs: a set of relations (D34), each joining two **nodes**,
-> with **one node per pose**: a node is a pose (D8), or an open node, a variable (D38), and a
-> relation names its two nodes by naming its two poses (D34). A base neuron has one phase, so
-> at the base a node is a neuron. An interneuron in two phases is two nodes, so one function may hold it twice.
-> In one phase it is one node, so a cycle closes on it. A function is **connected**: every node is reached from every other along
+> each node a neuron, or an open node, a variable (D38). **One neuron may be several nodes of a function.** Two
+> activations of it whose phases differ are two nodes: the relation between them holds a difference that is
+> not zero (D34). Inside the frame, two activations of it in one phase at two positions are two nodes as
+> well. In time, a neuron that comes again in the same phase is the same node, so a cycle closes on it. A
+> function tells the nodes of one neuron apart by a number: the first is the neuron itself, and each further
+> one takes the lowest number no node of that neuron in the function has. Which node of that neuron the far
+> end of a relation is, is read through the differences the function's relations hold: the node whose phase,
+> read so from the relation's near end, is the far end's phase, and inside the frame the one that stands
+> where the far end stands. Where there is none, the far end is a new node. **The nodes of a function are
+> numbered in the order the function is read**, the earliest node 1, and a phase names its two nodes by
+> those numbers (D8). A function is **connected**: every node is reached from every other along
 > its relations. It is the center the machine keeps for the relations it has grouped (R50): it exists from its
 > first relation, with or without an interneuron, and has one interneuron once a fit of it has been accepted
 > (R16, D48).
@@ -636,8 +656,8 @@ once each. The board is the graph of the frame as it stands, with the calls stan
 > closes the cycle. The frame has passed, so what comes round is the pose, and any relation back to it closes.
 > Inside the frame, a relation back to a pose the function has closes the cycle only where it reaches the
 > activation the fit landed on at that node. There its offset is the one the function's relations compose to
-> between its two nodes (D34). At any other offset it reaches another activation of that pose, and it closes
-> nothing. A relation of a pose to itself closes one alone, in time and inside the frame. A relation between
+> between its two nodes (D34). At any other offset it reaches another activation of that pose, which is
+> another node, and it closes nothing. A relation of a pose to itself closes one alone, in time and inside the frame. A relation between
 > one neuron in two phases does not: it joins two nodes (D8). A function that is a cycle
 > holds the relations of the cycle and no other. No relation joins it, and a relation closes a cycle only
 > where every relation of the function is then on the cycle (R50). So a function is a cycle and nothing else,
@@ -737,7 +757,7 @@ never fit alone, and promotes no interneuron: what stands in it stays on the ape
 > allocated the first time a fit of the function is accepted and a neuron is free (R16). It has an id and no
 > dimension and no channel. **It fires once per accepted fit, in a phase** (D37): at the position of the latest
 > activation the fit landed on, in the frame the fit is accepted, at age 0. The phase is read off the fit: the
-> node the fit started at, the node it ended at, each by its neuron (D8), and how many laps it went round
+> node the fit started at, the node it ended at, each a node of the function (D15), and how many laps it went round
 > (D54). The call stands for
 > everything the fit landed on, the relations of it that no call covers are lifted to it (D55, D10), and it
 > sees what it saw (D4). Where an arriving activation reads a relation that is the call's own function going round its cycle,
@@ -758,7 +778,7 @@ free, no interneuron is granted (R16, R24).
 >
 > | Thing | Field | What it holds | Costs |
 > |---|---|---|---|
-> | a function | relations | its relations, each a neuron relation as the neurons return it: two poses and an offset (D34), and which of its two ends it attached to the function at, where its worth is read, none for a relation of a cycle (D57); together they name its nodes, one per pose | one per relation; nothing per node or attachment |
+> | a function | relations | its relations, each a neuron relation as the neurons return it: two neurons, an offset and the difference of their phases (D34), each end at one of the function's nodes of that neuron (D15), and which of its two ends it attached to the function at, where its worth is read, none for a relation of a cycle (D57); together they name its nodes | one per relation; nothing per node or attachment |
 > | | entry | that the function is in the dictionary | one |
 > | | origin | which of its nodes is the origin, its latest (D15); none where the function is a cycle | nothing: the node list begins with it |
 > | | open nodes | which of its nodes are variables, each a class by id or a parameter (D38) | nothing |
@@ -995,7 +1015,7 @@ occurs is what the worth measures (D57).
 > one activation of its interneuron, and each fit is priced as it falls (D22).
 >
 > **A fit is read at the present, over what has happened.** It enters at a node of the function, on an
-> activation at the frame being recognized that the node admits, its own pose,
+> activation at the frame being recognized that the node admits, one of its own neuron,
 > and reads the function's relations from there (D31). **A function in time is fit as it unfolds, as a cycle
 > is.** It is entered at any of its nodes that fires in the present frame. The nodes later than that node are
 > still to come. The fit leaves them out, with anything reached only through them. Nothing is charged for
@@ -1299,9 +1319,11 @@ What is general across neighbors, a position where different neurons stand, is n
 no neuron records it. The machine makes it (R52).
 
 > **D47 — Relation index.** What a neuron counts over its history (D18): every relation from its own activation
-> that its rows hold, each with its **strength**, the number of rows that hold it. A row holds every neighbor
-> as what stood on the board when the row was written (D18). So a relation to a neuron is counted in the rows that hold that neuron at that offset,
-> whatever calls had landed on it. It is updated
+> that its rows hold, each with its **strength**, the number of rows that hold it. A row holds its own
+> activation's phase and every neighbor in its phase, as what stood on the board when the row was written
+> (D18). **A row holds a relation where the neighbor stands at the offset and the two phases differ by the
+> relation's difference** (D34). So a relation to a neuron is counted in the rows that hold that neuron at
+> that offset with that difference, whatever calls had landed on it. It is updated
 > when a row is admitted, when a row takes what followed (D18), when a row takes a lifted call (D18, D55), and
 > when a row is evicted, and at no other time.
 > Handed a set
@@ -1554,13 +1576,13 @@ argument.
 > phase says how far it has got (D54).
 >
 > **A function is fit only on relations that stand on the board.** Where a relation of it has been lifted, the
-> relation that stands there instead names another pose (D55). So the function has nothing to fit there, and
+> relation that stands there instead names the call (D55). So the function has nothing to fit there, and
 > it gets no call. That alone does not remove it from the dictionary (R18, R54). It is fit again wherever its
 > own relations stand on the board.
 >
 > **The fitting rule.** A fit is anchored at the node it enters at. In time the nodes later than that node
 > are left out, and nothing is charged for them (D54). The machine lands that node on an activation
-> at the present frame the node admits, its own pose,
+> at the present frame the node admits, one of its own neuron,
 > or one admitted at it where the node is a variable (D54), and extends the match relation by
 > relation from there: each next relation of the function that shares a node with
 > one already landed is matched to a board relation that shares that end and reads as it says. A parameter's value
@@ -1581,9 +1603,12 @@ argument.
 > before while its activations still stand (D9), that the fit did not land on, and that the fit touches in
 > one of two ways. The first election left it on the board, and it shares a neuron with an activation the fit
 > landed on or with the call. Or a call covers it, and the fit touches that call: the fit landed on an
-> activation that call also landed on, and the relation shares that activation. So a relation another function
+> activation that call also landed on, and the relation shares that activation. Or it left the board when a
+> call of the function itself covered one of its ends, and its other end stood on the board when that
+> election began: it is offered at the activation the fit landed on there, as that node, its other end as
+> itself. So a relation another function
 > holds is offered where the fit landed on an activation that function's call also landed on, and whether it
-> moves is decided by its gain here against its contribution there (R54). Where the fit landed on a call as a
+> moves is decided by what everything costs with it here against what everything costs with it there (R54). Where the fit landed on a call as a
 > node, the relations under that call are no candidates: a function that names a call is offered nothing from
 > under it, and its relation to the call stays a relation to the call. A relation under a call the fit does not
 > touch is no candidate. Its
@@ -1601,7 +1626,9 @@ argument.
 > its offset is the one the function's relations compose to between its two nodes, so that it reaches the
 > activation the fit landed on there. In time it is a candidate at any offset. And a relation of a pose to itself is a
 > candidate of no function, since it is a cycle alone: it starts a function of its own. A relation between one
-> neuron in two phases is between two nodes, and it is a candidate like any other (D8).
+> neuron in two phases is between two nodes, and it is a candidate like any other (D8). A relation that
+> crosses channels joins no function that is inside one channel, one whose every node stands over the same
+> single channel: it stays on the board.
 >
 > **What the neurons count.** The machine hands each neuron every function it stands in, which the index
 > gives by neuron (D36), fit at this level or not, with the candidates of the ones that fit. A
@@ -1622,9 +1649,9 @@ argument.
 > of its two ends' counts (R21), until a second relation joins, and from then on at the node that relation
 > joined at. A relation
 > alone is read at the node it would attach at in the function it is compared with, over the same rows, so
-> joining and leaving are one comparison at one neuron, and a function's worth with a candidate and its worth
-> without it are read at the same nodes, so a function of one relation is read, in both, at the node the
-> candidate would attach at; a relation no function is a candidate of is read as a returned relation is, at
+> joining and leaving are one comparison at one neuron: a candidate's `with` and `without` are read at the
+> node it would attach at, as a relation's are read at the node it is attached at; a relation no function is
+> a candidate of is read as a returned relation is, at
 > the larger of its two ends' counts (R21). A relation of a
 > pose to itself is read in one direction, from an activation toward the one its offset reaches (D34): a row
 > holds it where that neighbor stands, whether or not the same neighbor stands at the opposite offset, so the
@@ -1649,7 +1676,8 @@ argument.
 > and whether or not that call's function is still in the dictionary. And a relation lifted inside the frame
 > is in the rows of both its ends, so each end counts it. The count reads those rows and nothing
 > else: it never expands a call. A relation to a call
-> is counted the same way, in the rows that hold that call in that phase at that offset (D34).
+> is counted the same way, in the rows that hold that call at that offset, its phase differing from the
+> row's own by the relation's difference (D34).
 >
 > **Distance and worth.** A candidate's distance to a function is `1 − with / (with + without)`: zero where it
 > stood at every occasion the function did, one where it never did. Its worth in the function is
@@ -1657,11 +1685,21 @@ argument.
 > not, and its one relation in the dictionary. Where a candidate closes a cycle, it and every relation of the
 > cycle from then on are counted at every occurrence,
 > their strength less one: the cycle's call covers them wherever they hold, and a lap's end is not a failure
-> (D57, D54). A candidate joins the function where its
-> gain is highest, the function's worth with it less without it. A candidate no function holds joins where
-> that gain is above zero, and nothing else is asked of it. It is not weighed against a function of its own:
-> it has none, and the rows where it is missing already count against it. A candidate a function holds joins
-> where that gain is higher than its contribution in the function it is in (R54). Among the candidates of one function
+> (D57, D54). A candidate's gain in a function is what everything costs without it in the function, less
+> what everything costs with it there (D13). The function and the candidate are in both costs, and neither is
+> weighed alone. Without it, the function's relations are in the dictionary, the function lands where it
+> lands, and the candidate costs what it costs where it stands: one on the board at each occasion it holds,
+> and nothing at an occasion the function that holds it lands on it. With it, the dictionary holds one
+> relation more. At each occasion the function lands and the candidate holds, the candidate costs nothing. At
+> each occasion the function lands and the candidate is missing, the function still lands, with one failure,
+> and its other relations are saved there as before. So for a candidate no function holds, the gain is its
+> `with` less its `without` less one, read at the node it would attach at. Where a candidate closes a cycle,
+> its gain is the function's worth with it less without it. A candidate joins the function where its gain is
+> highest. A candidate no function holds
+> joins where that gain is above zero, and nothing else is asked of it. It is not weighed against a function of its own:
+> it has none, and the rows where it is missing already count against it. A candidate a function holds moves
+> where everything costs less with it in this function than with it in the function it is in, the two
+> functions priced together in both costs (R54). Among the candidates of one function
 > that pay, one that leads back to a node the function has, closing its cycle, joins before one that would add
 > a node (D15). Where two functions tie, it joins the one it is nearest to (D57, R54). A relation in a
 > function of more than one relation leaves it where it does not pay there: where its own worth in the
@@ -1683,7 +1721,12 @@ argument.
 > **Functions start one at a time, and only from a relation that still stands.** A relation **stands** where
 > at least one instance of it on the board is covered by no call and is not lifted, refused or blocked (D24,
 > D55). Starting comes last in its half of the level, after the fits of the functions that exist and after the
-> moves (R26). Of the relations that may start a function and stand, the one with the most instances standing
+> moves (R26). A relation inside one channel starts before one that crosses channels. A relation is inside
+> one channel where its two ends stand over the same single channel: a base neuron stands over its own
+> channel, and an interneuron over the channels of everything its functions name. A relation that crosses
+> channels starts only where no call inside one channel has landed on either of its ends. Where one has, it
+> waits on the board, and is lifted when that end is covered (D55). Among the relations that may start a
+> function and stand, the one with the most instances standing
 > starts first, and on a tie the one whose standing instance is oldest. Its function is fit, and the election
 > takes its fits (R24). Covering, lifting, refusing and blocking follow as each fit is taken. Then the machine
 > looks again at what stands, and starts the next. It stops when no relation that may start a function stands.
@@ -1720,10 +1763,26 @@ argument.
 
 > **R54 — Moving.** A function changes by relations moving, one at a time, and by nothing else. Each
 > move is the same decision, whether the dictionary's worth rises (D57), read from the neurons the
-> functions stand in (R50). A relation's **gain** in a function is that function's worth with it less without
-> it; its **contribution** where it stands is the same for the function it is in, and alone its strength less
-> two, its relation and its entry. A relation no function holds contributes nothing where it stands, so it
-> joins where its gain is above zero. A relation in a function of more than one relation stays while its own
+> functions stand in (R50). A relation's **gain** in a function is what everything costs without it in that
+> function less what everything costs with it there, the function and the relation in both costs (R50). For a
+> relation no function holds that is its `with` less its `without` less one at the node it would attach at,
+> and where it closes a cycle the function's worth with it less without it. Its **contribution** where it
+> stands is the worth of the function it is in with it less
+> without it, and alone its strength less two, its relation and its entry. A relation no function holds contributes nothing where it stands, so it
+> joins where its gain is above zero. A relation a function holds moves to another function where everything
+> costs less with it there than with it where it is. Both functions are in both costs, priced together, and
+> neither is read apart: the cost with the relation where it is, and the cost with it moved, the function it
+> left priced without it. A call lands on relations, and a cost is the relations no call lands on. Inside the
+> frame a relation counts in a function only where that function's call lands (D57), and both costs are
+> counted in calls. Every activation of an interneuron is a call of its function, so the interneuron's
+> history counts them (D18). The cost with the relation where it is has the calls its function has taken.
+> The cost with it moved has the calls the other function has taken, and no more of them than the occasions
+> the relation held with that function's relations at the node, less the occasions they held without it. The
+> relation moves where the second is more than the first. A function that holds one relation lands wherever
+> its relation stands, so its relation's own history counts its calls, and it is weighed as in time. In time, an activation is covered once two relations
+> of it are (D24), so the calls of both functions land, and each cost has what both functions save over the
+> histories, the other relations of each counted as they were. Where the relation is its function's last, the
+> cost with it moved has no entry for that function and nothing of its subtree (R38). A relation in a function of more than one relation stays while its own
 > worth there is above zero, and leaves where it is not. Neither is weighed against a function of its own
 > that it does not have. Where the relation is its function's last, its contribution there is that
 > function's worth and the worth of every function in its subtree, since all of them leave with it (R38).
@@ -1735,11 +1794,11 @@ argument.
 >
 > | Move | When |
 > |---|---|
-> | a relation joins | no function holds it and its gain in the function is above zero; or a function holds it and its gain is higher than its contribution there; and in either case higher than its gain in any other function it is a candidate of, the nearest on a tie (R50) |
+> | a relation joins | no function holds it and its gain in the function is above zero; or a function holds it and everything costs less with it in this function than with it there, the two functions priced together; and in either case its gain is higher than in any other function it is a candidate of, the nearest on a tie (R50) |
 > | a relation leaves its function | the function holds more than one relation and no cycle, and the relation's own worth there, its `with` less its `without` less one at its node, is not above zero; it is then held by no function |
 > | a relation leaves a cycle for a function of its own | its worth alone is higher than its contribution to the cycle, and higher than its gain in any function it is a candidate of |
 > | a relation leaves for nothing | the neurons return it with strength below 2, or below 3 where it is its function's only relation, over every row that holds it (R18) |
-> | two functions merge | a relation of one is a candidate of the other and joins it, and the rest follow one at a time, each where its gain is higher; the last gains the entry its function no longer pays, and is weighed against the worth of every function that leaves with it (R38) |
+> | two functions merge | a relation of one is a candidate of the other and joins it, and the rest follow one at a time, each where everything costs less with it there; the last gains the entry its function no longer pays, and is weighed against the worth of every function that leaves with it (R38) |
 
 > **Nothing moves on a tie.** The machine does nothing that does not help: a move is made where the
 > dictionary's worth rises and nowhere else. Two relations that save the same edges in one function as in two
@@ -2017,7 +2076,7 @@ lost is given nothing.
 > **R43 — Reuse.** An accepted fit fires its function's own interneuron where it has one. Where it has none,
 > the machine looks the function up in the interneuron index, by what its interneuron would stand for (D36).
 > Where one already stands for that, the function is added to it, and that interneuron fires. Otherwise the
-> machine allocates one. **An interneuron never holds two functions whose nodes are the same poses**: the
+> machine allocates one. **An interneuron never holds two functions whose nodes are the same**: the
 > two expand to one stretch, and when the second comes the older gives way, its relations leaving with it
 > (R54, R18). So the two neurons a phase names pick out one function of the interneuron, and a call in that phase
 > expands through it (R28).
@@ -2107,8 +2166,8 @@ and nothing scales with the run. What is cached, and how, is the implementation'
 
 Two things that are cycles, and one that is not, told apart, because the design holds them apart.
 
-**Within a function, a cycle is the pattern repeating.** A function has one node per pose, so in time a relation back to
-a node already in it closes the cycle. Inside the frame it closes the cycle only where it reaches the
+**Within a function, a cycle is the pattern repeating.** In time a neuron that comes again in the same phase is the
+same node (D15), so a relation back to a node already in the function closes the cycle. Inside the frame it closes the cycle only where it reaches the
 activation the fit landed on at that node (D15). The function is then that cycle and nothing else; the function says that the pattern comes
 round: `x` to `y` at 1 and `y` to `x` at 1 is `x y x y …` for as long as it runs (D15). A fit at either letter reads back
 round the cycle while the relation that closes it lands; where the call of the lap before stands there, that

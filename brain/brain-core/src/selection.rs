@@ -148,7 +148,7 @@ impl Brain {
         f.acts.iter().any(|a| {
             if a.gone { return false; }
             let same = (0..a.pos.len().max(q.len())).all(|d| !a.axes.has(d) || a.pos[d] == q[d]);
-            same && (a.sym == n || self.thalamus.dict.starts_at(a.sym, n))
+            same && (a.sym == self.thalamus.dict.find_neuron_of(n) || a.phase.map_or(false, |p| p.from == n))
         })
     }
 

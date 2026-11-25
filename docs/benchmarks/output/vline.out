@@ -8,53 +8,52 @@ vline:
     BBBBB
   vline showing  1: said - | levels 3 | on the apex 6 | functions 3 | dictionary changed
   vline showing  2: said 0 | levels 3 | on the apex 5 | functions 4 | dictionary changed
-  vline showing  3: said 0 | levels 3 | on the apex 4 | functions 4 | dictionary same
-  vline showing  4: said 0 | levels 4 | on the apex 3 | functions 5 | dictionary changed
-  vline showing  5: said 0 | levels 4 | on the apex 2 | functions 6 | dictionary changed
-  vline showing  6: said 0 | levels 4 | on the apex 2 | functions 6 | dictionary same
-  vline showing  7: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary changed
-  vline showing  8: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing  9: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 10: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 11: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 12: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 13: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 14: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 15: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 16: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 17: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 18: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 19: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 20: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 21: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 22: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 23: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 24: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 25: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 26: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 27: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 28: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 29: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
-  vline showing 30: said 0 | levels 5 | on the apex 1 | functions 7 | dictionary same
+  vline showing  3: said 0 | levels 3 | on the apex 3 | functions 4 | dictionary changed
+  vline showing  4: said 0 | levels 3 | on the apex 3 | functions 4 | dictionary same
+  vline showing  5: said 0 | levels 3 | on the apex 3 | functions 4 | dictionary same
+  vline showing  6: said 0 | levels 4 | on the apex 2 | functions 5 | dictionary changed
+  vline showing  7: said 0 | levels 4 | on the apex 2 | functions 5 | dictionary changed
+  vline showing  8: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing  9: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 10: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 11: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 12: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 13: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 14: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 15: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 16: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 17: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 18: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 19: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 20: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 21: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 22: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 23: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 24: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 25: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 26: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 27: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 28: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 29: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
+  vline showing 30: said 0 | levels 4 | on the apex 1 | functions 5 | dictionary same
   on the apex: 1 calls, 0 bare pixels
-    level 4: 1 calls
-      #15<#17<#12<#0..#0x6>..#14<#12<#0..#0x6>..#13<#1..#1x4>x0>x0>..#16<#0..#15<#12<#0..#0x6>..#12<#0..#0x6>x1>x0>x0> at (0, 0) | the call #15 of f3,f6 (from #17<#12<#0..#0x6>..#14<#12<#0..#0x6>..#13<#1..#1x4>x0>x0> to #16<#0..#15<#12<#0..#0x6>..#12<#0..#0x6>x1>x0>, 0 laps) | f6 | covers [#17<#12<#0..#0x6>..#14<#12<#0..#0x6>..#13<#1..#1x4>x0>x0>@0,0 #16<#0..#15<#12<#0..#0x6>..#12<#0..#0x6>x1>x0>@2,6] | stands for 35 pixels
+    level 3: 1 calls
+      #16<#12..#268435459x0> at (0, 0) | the call #16 of f4 | f4 | covers [#12<#0..#0x6>@0,0 #14<#12..#268435459x0>@1,0 #12<#0..#0x6>@4,0] | stands for 35 pixels
     relations between what stands on the apex: 0
-NEVERCALLED vline 0 of 7
+NEVERCALLED vline 0 of 5
   vline: the dictionary last changed at showing 7 (unchanged over the last 23 showings)
-  dictionary: 7 functions
+  dictionary: 5 functions
     f0: a cycle, no origin, interneuron #12
       black sees black at (+0, +1)   [#0→#0[0, 0, 1]]
     f1: a cycle, no origin, interneuron #13
       white sees white at (+0, +1)   [#1→#1[0, 0, 1]]
-    f2: origin the call #12 of f0 (from black to black, 6 laps), interneuron #14
-      the call #12 of f0 (from black to black, 6 laps) sees black at (+1, +0)   [#12<#0..#0x6>→#0[0, 1, 0]]
-      the call #12 of f0 (from black to black, 6 laps) sees the call #13 of f1 (from white to white, 4 laps) at (+1, +1)   [#12<#0..#0x6>→#13<#1..#1x4>[0, 1, 1]]
+    f2: origin the call #12 of f0, interneuron #14
+      the call #12 of f0 sees black at (+1, +0)   [#12→#0[0, 1, 0]]
+      the call #12 of f0 sees black at (+1, +6)   [#12→#0'1[0, 1, 6]]
+      the call #12 of f0 sees the call #13 of f1 at (+1, +1)   [#12→#13[0, 1, 1]]
+      the call #13 of f1 sees the call #268435459 of no function now at (+1, -1)   [#13→#12'1[0, 1, -1]]
     f3: a cycle, no origin, interneuron #15
-      the call #12 of f0 (from black to black, 6 laps) sees the call #12 of f0 (from black to black, 6 laps) at (+1, +0)   [#12<#0..#0x6>→#12<#0..#0x6>[0, 1, 0]]
-    f4: origin black, interneuron #16
-      black sees the call #15 of f3,f6 (from #12<#0..#0x6> to #12<#0..#0x6>, 1 laps) at (+1, -6)   [#0→#15<#12<#0..#0x6>..#12<#0..#0x6>x1>[0, 1, -6]]
-    f5: origin the call #12 of f0 (from black to black, 6 laps), interneuron #17
-      the call #12 of f0 (from black to black, 6 laps) sees the call #14 of f2 (from #12<#0..#0x6> to #13<#1..#1x4>, 0 laps) at (+1, +0)   [#12<#0..#0x6>→#14<#12<#0..#0x6>..#13<#1..#1x4>x0>[0, 1, 0]]
-    f6: origin the call #17 of f5 (from #12<#0..#0x6> to #14<#12<#0..#0x6>..#13<#1..#1x4>x0>, 0 laps), interneuron #15
-      the call #17 of f5 (from #12<#0..#0x6> to #14<#12<#0..#0x6>..#13<#1..#1x4>x0>, 0 laps) sees the call #16 of f4 (from black to #15<#12<#0..#0x6>..#12<#0..#0x6>x1>, 0 laps) at (+2, +6)   [#17<#12<#0..#0x6>..#14<#12<#0..#0x6>..#13<#1..#1x4>x0>x0>→#16<#0..#15<#12<#0..#0x6>..#12<#0..#0x6>x1>x0>[0, 2, 6]]
+      the call #12 of f0 sees the call #12 of f0 at (+1, +0)   [#12→#12[0, 1, 0]]
+    f4: origin the call #12 of f0, interneuron #16
+      the call #12 of f0 sees the call #14 of f2 at (+1, +0)   [#12→#14[0, 1, 0]]
+      the call #14 of f2 sees the call #268435459 of no function now at (+3, +0)   [#14→#12'1[0, 3, 0]]

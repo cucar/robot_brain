@@ -35,6 +35,8 @@ pub struct BrainOptions {
     pub columns: Option<u32>,
     /// Fixed for the life of the brain (default true); a brain built with it off is loaded from a backup to be tested.
     pub learning: Option<bool>,
+    /// Whether relations inside the frame are read (default true).
+    pub inside_frame: Option<bool>,
 }
 
 /// One neuron dimension of a channel: its name and how many values it takes.
@@ -133,12 +135,14 @@ pub struct NeuronOut {
     pub alive: bool,
 }
 
-/// A relation of the dictionary: two poses and the offset from the first to the second (time first).
+/// A relation of the dictionary: two neurons, the offset from the first to the second (time first), and the
+/// differences of start, end and laps between their phases.
 #[napi(object)]
 pub struct RelationOut {
     pub from: u32,
     pub to: u32,
     pub offset: Vec<i32>,
+    pub diff: Vec<i32>,
 }
 
 /// A function of the dictionary.
@@ -184,6 +188,12 @@ pub struct ActivationOut {
     pub index: u32,
     pub neuron: u32,
     pub pose: u32,
+    /// Its phase where it is a call: the node it started at, the node it ended at, and its laps.
+    pub phase: Option<PoseOut>,
+    /// The activation as it is written: its neuron, and its phase where it is a call.
+    pub pose_text: String,
+    /// Its phase in numbers: the number of the node its stretch begins at, of the node it ends at, and its laps.
+    pub numbers: Vec<i32>,
     pub kind: String,
     pub frame: i64,
     pub time: i64,
@@ -274,7 +284,7 @@ fn make_offset(values: &[i32]) -> Offset {
     Pos::from_slice(values)
 }
 
-fn describe_relation(r: &Rel, dims: usize) -> RelationOut { RelationOut { from: r.a, to: r.b, offset: r.off.to_vec(dims.max(r.off.len())) } }
+fn describe_relation(r: &Rel, dims: usize) -> RelationOut { RelationOut { from: r.a, to: r.b, offset: r.off.to_vec(dims.max(r.off.len())), diff: r.diff.to_vec(dims.max(r.diff.len())) } }
 
 fn describe_ref(r: &ActRef) -> ActRefOut { ActRefOut { frame: r.frame, index: r.index } }
 
@@ -284,6 +294,9 @@ fn describe_activation(frame: i64, index: usize, a: &Act, with_relations: bool, 
         index: index as u32,
         neuron: a.neuron,
         pose: a.sym,
+        phase: a.phase.map(|p| PoseOut { neuron: a.neuron, from: p.from, to: p.to, laps: p.laps }),
+        pose_text: match a.phase { Some(p) => format!("#{}<#{}..#{}x{}>", a.neuron, p.from, p.to, p.laps), None => format!("#{}", a.neuron) },
+        numbers: a.numbers.to_vec(3),
         kind: describe_kind(a.kind),
         frame,
         time: a.pos[0] as i64,
@@ -327,12 +340,13 @@ impl JsBrain {
     /// Create a brain from its options.
     #[napi(constructor)]
     pub fn new(options: Option<BrainOptions>) -> Result<Self> {
-        let options = options.unwrap_or(BrainOptions { h: None, policy: None, action_policy: None, regions: None, columns: None, learning: None });
+        let options = options.unwrap_or(BrainOptions { h: None, policy: None, action_policy: None, regions: None, columns: None, learning: None, inside_frame: None });
         let policy = make_policy(&options)?;
         let h = options.h.unwrap_or(256) as usize;
         let regions = options.regions.unwrap_or(1) as usize;
         let columns = options.columns.unwrap_or(1) as usize;
-        let brain = CoreBrain::new(h, policy, regions, columns, options.learning.unwrap_or(true));
+        let mut brain = CoreBrain::new(h, policy, regions, columns, options.learning.unwrap_or(true));
+        brain.set_inside_frame(options.inside_frame.unwrap_or(true));
         Ok(JsBrain { inner: RefCell::new(brain) })
     }
 
@@ -410,7 +424,12 @@ impl JsBrain {
     pub fn read_neurons(&self, ids: Vec<u32>) -> Result<Vec<NeuronOut>> {
         let brain = self.inner.borrow();
         let registry = brain.get_registry();
-        ids.iter().map(|&id| registry.get(id).map(|f| describe_neuron(id, f)).ok_or_else(|| to_error(format!("no neuron {}", id)))).collect()
+        // a second node of one neuron in a function is named by a symbol of its own: it is read as its neuron
+        let dict = brain.get_dictionary();
+        ids.iter().map(|&id| {
+            let n = dict.find_neuron_of(id);
+            registry.get(n).map(|f| describe_neuron(n, f)).ok_or_else(|| to_error(format!("no neuron {}", id)))
+        }).collect()
     }
 
     /// Describe the named neurons: kind, rows and connections, the functions each is the interneuron of, and its
@@ -493,12 +512,12 @@ impl JsBrain {
 
     /// A relation as the dictionary holds it: from `from` to `to` at the offset, or turned round where the dictionary keeps it the other way.
     #[napi]
-    pub fn canon_relation(&self, from: u32, to: u32, offset: Vec<i32>) -> RelationOut { describe_relation(&canon(from, to, make_offset(&offset)), self.inner.borrow().get_dictionary().dims) }
+    pub fn canon_relation(&self, from: u32, to: u32, offset: Vec<i32>, diff: Option<Vec<i32>>) -> RelationOut { describe_relation(&canon(from, to, make_offset(&offset), make_offset(&diff.unwrap_or_default())), self.inner.borrow().get_dictionary().dims) }
 
     /// The function that holds a relation, as the dictionary holds it; none where no function holds it.
     #[napi]
     pub fn find_holder(&self, relation: RelationOut) -> Option<u32> {
-        let rel = Rel { a: relation.from, b: relation.to, off: make_offset(&relation.offset) };
+        let rel = Rel { a: relation.from, b: relation.to, off: make_offset(&relation.offset), diff: make_offset(&relation.diff) };
         self.inner.borrow().get_dictionary().find_holder(&rel).map(|f| f as u32)
     }
 

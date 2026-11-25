@@ -75,8 +75,9 @@ class BrainReader {
 	 * A pose in words: a pixel's colour, or a call with its functions and its phase.
 	 */
 	nameSym(sym) {
-		const pose = this.brain.readPose(sym);
+		const pose = this.brain.readPose(sym) ?? (this.readNeuron(sym).kind === 'inter' ? { neuron: sym } : null);
 		if (!pose) return this.readNeuron(sym).bucket === 1 ? 'white' : 'black';
+		if (pose.from === undefined) return `the call #${pose.neuron} of ${this.brain.listFunctionsOf(pose.neuron).map(f => `f${f}`).join(',') || 'no function now'}`;
 		const functions = this.brain.listFunctionsOf(pose.neuron).map(f => `f${f}`);
 		const owner = functions.length === 0 ? 'no function now' : functions.join(',');
 		return `the call #${pose.neuron} of ${owner} (from ${this.nameEnd(pose.from)} to ${this.nameEnd(pose.to)}, ${pose.laps} laps)`;
@@ -116,7 +117,7 @@ class BrainReader {
 	 */
 	nameActivation(a) {
 		const [x, y] = a.position;
-		if (a.kind === 'inter') return `${this.brain.describePose(a.pose)}@${x},${y}`;
+		if (a.kind === 'inter') return `${a.poseText}@${x},${y}`;
 		return `${this.readNeuron(a.neuron).bucket === 1 ? 'W' : 'B'}@${x},${y}`;
 	}
 }
@@ -194,7 +195,7 @@ function printCallsByLevel(calls, reader, board) {
 function describeCall(a, reader, board) {
 	const [x, y] = a.position;
 	const covers = a.covers.map(ref => board.findActivation(ref)).filter(Boolean).map(c => reader.nameActivation(c)).join(' ');
-	return `${reader.brain.describePose(a.pose)} at (${x}, ${y}) | ${reader.nameSym(a.pose)} | f${a.firedBy ?? 0} | covers [${covers}] | stands for ${board.countPixels(a)} pixels`;
+	return `${a.poseText} at (${x}, ${y}) | ${reader.nameSym(a.pose)} | f${a.firedBy ?? 0} | covers [${covers}] | stands for ${board.countPixels(a)} pixels`;
 }
 
 /**
@@ -210,7 +211,7 @@ function printApexRelations(standing, reader, board) {
 			const pair = [reader.nameActivation(a), reader.nameActivation(b)];
 			if (seen.has(pair.join('\u0000'))) continue;
 			seen.add(pair.join('\u0000'));
-			const relation = reader.brain.canonRelation(a.pose, b.pose, held.offset);
+			const relation = reader.brain.canonRelation(a.neuron, b.neuron, held.offset, a.numbers.map((v, i) => v - b.numbers[i]));
 			const holder = reader.brain.findHolder(relation);
 			lines.push(`      ${pair[0]} – ${pair[1]} : ${reader.describeRelationInWords(relation)} | as held: ${reader.describeRelation(relation)} | returned at strength ${formatFloat(held.strength)} | held by ${holder == null ? 'no function' : `f${holder}`}`);
 		}

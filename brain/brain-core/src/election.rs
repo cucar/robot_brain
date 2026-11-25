@@ -266,7 +266,7 @@ impl Brain {
             let mut len = 0usize;
             for (r, node) in fit.acts() {
                 if !order.contains(&node) { continue; }
-                let own = self.find_act(r).and_then(|a| if a.kind == Kind::Inter && a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { self.thalamus.dict.find_pose(a.sym) } else { None });
+                let own = self.find_act(r).and_then(|a| if a.kind == Kind::Inter && a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { a.phase } else { None });
                 len += match own {
                     Some(p) => match (f.find_node(p.from), f.find_node(p.to)) { (Some(a), Some(b)) => f.stretch(a, b, p.laps), _ => 1 },
                     None => 1,
@@ -279,25 +279,31 @@ impl Brain {
             let mut laps = fit.laps;
             for (c, _) in &fit.calls {
                 if let Some(a) = self.find_act(*c) {
-                    if a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { laps += self.thalamus.dict.find_pose(a.sym).map_or(0, |p| p.laps); }
+                    if a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { laps += a.phase.map_or(0, |p| p.laps); }
                 }
             }
             // where it took an earlier call of its own, the same call, its phase reaches as far back as that call's did (D54, D53)
             let mut to = f.nodes[earliest.1];
             {
                 for (c, _) in &fit.calls {
-                    if let Some(a) = self.find_act(*c) { if a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { if let Some(p) = self.thalamus.dict.find_pose(a.sym) { to = p.to; } } }
+                    if let Some(a) = self.find_act(*c) { if a.fired_by.as_ref().map_or(false, |fb| fb.func == f.id) { if let Some(p) = a.phase { to = p.to; } } }
                 }
             }
             Phase { from: f.nodes[latest.1], to, laps }
         };
-        let sym = self.thalamus.dict.make_sym(neuron, phase);
+        // a relation names the call by its interneuron; its phase is its own (D53)
+        let sym: Sym = neuron;
         let covers: Vec<ActRef> = all.iter().map(|x| x.0).collect();
         let strong = covers.iter().filter_map(|r| self.find_act(*r)).any(|a| a.strong);
         let height = 1 + covers.iter().filter_map(|r| self.find_act(*r)).map(|a| a.height).max().unwrap_or(0);
         // what it stands for in space is the union of what it covers, and it sees one beyond that (D4)
         let (mut lo, mut hi) = (origin.pos, origin.pos);
         for c in covers.iter().filter_map(|r| self.find_act(*r)) { lo = lo.least(&c.lo); hi = hi.most(&c.hi); }
+        // its phase in numbers (D53): the node its stretch begins at, the node it ends at, each by its number in the
+        // function, and its laps
+        let ranks = f.number_nodes();
+        let number_of = |node: Sym| f.find_node(node).map_or(0, |i| ranks[i]);
+        let numbers = Pos::make(3, |d| match d { 0 => number_of(phase.to), 1 => number_of(phase.from), _ => phase.laps as i32 });
         // its reach goes back one lap: through its own earlier calls, to the one that stood at the node it stands at
         // now, where what it stands for comes back to itself (D4)
         let stands_at = f.nodes[latest.1];
@@ -313,14 +319,14 @@ impl Brain {
                 continue;
             }
             // an earlier call of its own: the lap began where it stood at this node, and goes on through what it covered otherwise
-            if self.thalamus.dict.find_pose(c.sym).map_or(true, |p| p.from == stands_at) { continue; }
+            if c.phase.map_or(true, |p| p.from == stands_at) { continue; }
             seen_lo = seen_lo.least(&c.pos);
             seen_hi = seen_hi.most(&c.pos);
             walk.extend(c.covers.iter().copied());
         }
         let reach = Pos::make(origin.axes.count(), |d| if origin.axes.has(d) { (origin.pos[d] - seen_lo[d]).max(seen_hi[d] - origin.pos[d]) + 1 } else { 0 });
         let act = Act {
-            neuron, sym, kind: Kind::Inter, axes: origin.axes, pos: origin.pos, strong, reach, lo, hi,
+            neuron, sym, phase: Some(phase), numbers, kind: Kind::Inter, axes: origin.axes, pos: origin.pos, strong, reach, lo, hi,
             covered_at: None, coverers: Vec::new(), covers: covers.clone(),
             fired_by: Some(FiredBy { func: f.id, failed: fit.failed.clone() }),
             rels: Vec::new(), inferences: Vec::new(), opened_at: fno, level: level + 1, height, gone: false,

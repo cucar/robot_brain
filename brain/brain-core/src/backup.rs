@@ -189,12 +189,18 @@ fn read_edge(s: &str) -> Result<(ActRef, ActRef), String> {
     Ok((ActRef { frame: parse(p[0])?, index: parse(p[1])? }, ActRef { frame: parse(p[2])?, index: parse(p[3])? }))
 }
 
-fn write_rel(r: &Rel) -> String { format!("{}:{}:{}", r.a, r.b, write_pos(&r.off)) }
+/// A phase in numbers, written so it can stand inside a list item.
+fn write_numbers(p: &Pos) -> String { write_pos(p).replace(':', "/") }
+
+fn read_numbers(s: &str) -> Result<Pos, String> { read_pos(&s.replace('/', ":")) }
+
+fn write_rel(r: &Rel) -> String { format!("{}:{}:{}:{}", r.a, r.b, write_numbers(&r.diff), write_pos(&r.off)) }
 
 fn read_rel(s: &str) -> Result<Rel, String> {
     let (a, rest) = s.split_once(':').ok_or_else(|| bad(s))?;
-    let (b, off) = rest.split_once(':').ok_or_else(|| bad(s))?;
-    Ok(Rel { a: parse(a)?, b: parse(b)?, off: read_pos(off)? })
+    let (b, rest) = rest.split_once(':').ok_or_else(|| bad(s))?;
+    let (diff, off) = rest.split_once(':').ok_or_else(|| bad(s))?;
+    Ok(Rel { a: parse(a)?, b: parse(b)?, off: read_pos(off)?, diff: read_numbers(diff)? })
 }
 
 fn write_func(f: &Func) -> Vec<String> {
@@ -295,7 +301,8 @@ impl Brain {
         }))?;
         write_table(folder, "rows.csv", ids.iter().zip(&held).flat_map(|(&id, (_, _, rows, _))| rows.iter().map(move |r| vec![
             id.to_string(), r.act.frame.to_string(), r.act.index.to_string(), r.own.to_string(),
-            write_list(&r.nbs, |nb| format!("{}:{}:{}", write_act(&nb.act), nb.sym, write_pos(&nb.off))),
+            write_list(&r.nbs, |nb| format!("{}:{}:{}:{}", write_act(&nb.act), nb.sym, write_numbers(&nb.numbers), write_pos(&nb.off))),
+            write_pos(&r.numbers),
         ])))?;
         write_table(folder, "connections.csv", ids.iter().zip(&held).flat_map(|(&id, (_, _, _, conns))| conns.iter().map(move |((own, t, off), c)| vec![
             id.to_string(), own.to_string(), t.to_string(), write_pos(off), c.strength.to_string(), c.earnings.to_string(),
@@ -351,11 +358,11 @@ impl Brain {
         for r in read_table(folder, "rows.csv")? {
             let id: usize = parse(&r[0])?;
             let nbs = read_list(&r[4], |x| {
-                let p: Vec<&str> = x.splitn(4, ':').collect();
-                if p.len() != 4 { return Err(bad(x)); }
-                Ok(Nb { act: ActRef { frame: parse(p[0])?, index: parse(p[1])? }, sym: parse(p[2])?, off: read_pos(p[3])? })
+                let p: Vec<&str> = x.splitn(5, ':').collect();
+                if p.len() != 5 { return Err(bad(x)); }
+                Ok(Nb { act: ActRef { frame: parse(p[0])?, index: parse(p[1])? }, sym: parse(p[2])?, numbers: read_numbers(p[3])?, off: read_pos(p[4])? })
             })?;
-            let row = Row { act: ActRef { frame: parse(&r[1])?, index: parse(&r[2])? }, own: parse(&r[3])?, nbs };
+            let row = Row { act: ActRef { frame: parse(&r[1])?, index: parse(&r[2])? }, own: parse(&r[3])?, numbers: read_pos(&r[5])?, nbs };
             neurons.get_mut(id).ok_or_else(|| bad("rows.csv: neuron"))?.3.push(row);
         }
         for r in read_table(folder, "connections.csv")? {
@@ -384,7 +391,7 @@ impl Brain {
         }
         for r in read_table(folder, "functions.csv")? {
             let f = read_func(&r)?;
-            for rel in &f.rels { dict.by_rel.insert(*rel, f.id); }
+            for rel in &f.rels { let key = dict.read_global(rel); dict.by_rel.insert(key, f.id); }
             dict.funcs.insert(f.id, f);
         }
         dict.note_reaches();
@@ -428,6 +435,7 @@ impl Brain {
             write_list(&a.rels, |br| format!("{}:{}:{}", write_act(&br.other), br.strength, write_pos(&br.off))),
             write_list(&a.inferences, |i| format!("{}:{}:{}:{}:{}", i.target, i.strength, i.estimate, write_bool(i.struck), write_pos(&i.offset))),
             a.opened_at.to_string(), a.level.to_string(), a.height.to_string(), write_bool(a.gone),
+            write_pos(&a.numbers), write_opt(a.phase, |p| format!("{}:{}:{}", p.from, p.to, p.laps)),
         ])))?;
         write_table(folder, "pending_weak.csv", self.pending_weak.iter().map(|(n, p)| vec![n.to_string(), write_pos(p)]))?;
         let sets: [(&str, &FxHashSet<(ActRef, ActRef)>); 4] = [("covered_rel", &self.covered_rel), ("lifted", &self.lifted), ("refused", &self.refused), ("form_pre", &self.form_pre)];
@@ -481,6 +489,8 @@ impl Brain {
                 reach: read_pos(&r[7])?, lo: read_pos(&r[8])?, hi: read_pos(&r[9])?, covered_at: read_opt(&r[10], parse)?, coverers: read_list(&r[11], read_act)?,
                 covers: read_list(&r[12], read_act)?, fired_by, rels, inferences,
                 opened_at: parse(&r[17])?, level: parse(&r[18])?, height: parse(&r[19])?, gone: read_bool(&r[20])?,
+                numbers: read_pos(&r[21])?,
+                phase: read_opt(&r[22], |x| { let p: Vec<&str> = x.split(':').collect(); if p.len() != 3 { return Err(bad(x)); } Ok(Phase { from: parse(p[0])?, to: parse(p[1])?, laps: parse(p[2])? }) })?,
             };
             frames.iter_mut().find(|f| f.no == no).ok_or_else(|| bad("acts.csv: frame"))?.acts.push(act);
         }

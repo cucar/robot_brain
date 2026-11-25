@@ -160,7 +160,7 @@ class TapJob extends Job {
 	 * An apex activation: a call by its pose, a base neuron by its name; a guessed one marked ?.
 	 */
 	nameApexActivation(a) {
-		const name = a.kind === 'inter' ? this.brain.describePose(a.pose) : this.nameNeuron(a.neuron);
+		const name = a.kind === 'inter' ? a.poseText : this.nameNeuron(a.neuron);
 		return a.strong ? name : `${name}?`;
 	}
 

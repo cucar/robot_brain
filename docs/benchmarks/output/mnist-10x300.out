@@ -1,630 +1,680 @@
 mnist: 14x14, black and white pixels, 10 training images x 300 episodes (all taught), test 0, H=2048
-EPISODE 1 | dictionary changed | functions 36 | right 1/10 | calls on the apex per image 19.4
-  episode  1: added 36 retired 0 | right 1/10 (spoke 9) | max levels 4 | neurons 48 functions 36 |  | digit:said 5:- 0:5 4:0 1:5 9:5 2:0 1:9 3:2 1:1 4:9
-EPISODE 2 | dictionary changed | functions 59 | right 6/10 | calls on the apex per image 15.4
-  episode  2: added 23 retired 0 | right 6/10 (spoke 10) | max levels 4 | neurons 68 functions 59 |  | digit:said 5:2 0:4 4:4 1:4 9:5 2:2 1:1 3:3 1:1 4:4
-EPISODE 3 | dictionary changed | functions 99 | right 9/10 | calls on the apex per image 10.9
-  episode  3: added 40 retired 0 | right 9/10 (spoke 10) | max levels 4 | neurons 99 functions 99 |  | digit:said 5:5 0:0 4:4 1:1 9:0 2:2 1:1 3:3 1:1 4:4
-EPISODE 4 | dictionary changed | functions 123 | right 10/10 | calls on the apex per image 8.5
-  episode  4: added 24 retired 0 | right 10/10 (spoke 10) | max levels 5 | neurons 113 functions 123 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 5 | dictionary changed | functions 139 | right 10/10 | calls on the apex per image 6.6
-  episode  5: added 16 retired 0 | right 10/10 (spoke 10) | max levels 5 | neurons 123 functions 139 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 6 | dictionary changed | functions 155 | right 10/10 | calls on the apex per image 4.9
-  episode  6: added 19 retired 3 | right 10/10 (spoke 10) | max levels 5 | neurons 134 functions 155 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 7 | dictionary changed | functions 165 | right 10/10 | calls on the apex per image 4.3
-  episode  7: added 10 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 139 functions 165 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 8 | dictionary changed | functions 175 | right 10/10 | calls on the apex per image 3.5
-  episode  8: added 11 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 146 functions 175 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 9 | dictionary changed | functions 187 | right 10/10 | calls on the apex per image 3.2
-  episode  9: added 13 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 155 functions 187 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 10 | dictionary changed | functions 190 | right 10/10 | calls on the apex per image 2.7
-  episode 10: added 4 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 158 functions 190 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 11 | dictionary changed | functions 194 | right 10/10 | calls on the apex per image 2.6
-  episode 11: added 4 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 162 functions 194 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 12 | dictionary changed | functions 198 | right 10/10 | calls on the apex per image 2.6
-  episode 12: added 4 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 165 functions 198 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 13 | dictionary changed | functions 203 | right 10/10 | calls on the apex per image 2.4
-  episode 13: added 5 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 168 functions 203 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 14 | dictionary changed | functions 206 | right 10/10 | calls on the apex per image 1.9
-  episode 14: added 4 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 172 functions 206 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 15 | dictionary changed | functions 207 | right 10/10 | calls on the apex per image 1.9
-  episode 15: added 2 retired 1 | right 10/10 (spoke 10) | max levels 7 | neurons 173 functions 207 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 16 | dictionary changed | functions 211 | right 10/10 | calls on the apex per image 1.9
-  episode 16: added 4 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 177 functions 211 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 17 | dictionary changed | functions 212 | right 10/10 | calls on the apex per image 2.0
-  episode 17: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 178 functions 212 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 18 | dictionary changed | functions 214 | right 10/10 | calls on the apex per image 1.7
-  episode 18: added 2 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 180 functions 214 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 19 | dictionary changed | functions 215 | right 10/10 | calls on the apex per image 1.5
-  episode 19: added 2 retired 1 | right 10/10 (spoke 10) | max levels 7 | neurons 181 functions 215 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 20 | dictionary changed | functions 216 | right 10/10 | calls on the apex per image 1.7
-  episode 20: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 182 functions 216 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 21 | dictionary changed | functions 217 | right 10/10 | calls on the apex per image 1.4
-  episode 21: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 183 functions 217 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 22 | dictionary changed | functions 218 | right 10/10 | calls on the apex per image 1.4
-  episode 22: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 23 | dictionary changed | functions 217 | right 10/10 | calls on the apex per image 1.3
-  episode 23: added 1 retired 1 | right 10/10 (spoke 10) | max levels 7 | neurons 183 functions 217 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 24 | dictionary same | functions 217 | right 10/10 | calls on the apex per image 1.2
-  episode 24: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 183 functions 217 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 25 | dictionary changed | functions 217 | right 10/10 | calls on the apex per image 1.2
-  episode 25: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 183 functions 217 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 26 | dictionary changed | functions 218 | right 10/10 | calls on the apex per image 1.2
-  episode 26: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 27 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.2
-  episode 27: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 28 | dictionary changed | functions 219 | right 10/10 | calls on the apex per image 1.1
-  episode 28: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 185 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 29 | dictionary changed | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 29: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 30 | dictionary changed | functions 220 | right 10/10 | calls on the apex per image 1.4
-  episode 30: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 31 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 31: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 32 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 32: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 33 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 33: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 34 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 34: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 35 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 35: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 36 | dictionary changed | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 36: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 37 | dictionary changed | functions 220 | right 10/10 | calls on the apex per image 1.3
-  episode 37: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 38 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 38: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 39 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 39: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 40 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 40: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 41 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 41: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 42 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 42: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 43 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 43: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 44 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 44: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 45 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 45: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 46 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 46: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 47 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 47: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 48 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 48: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 49 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 49: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 50 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 50: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 51 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 51: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 52 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 52: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 53 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 53: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 54 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 54: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 55 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 55: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 56 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 56: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 57 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 57: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 58 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 58: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 59 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 59: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 60 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 60: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 61 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 61: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 62 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 62: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 63 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 63: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 64 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 64: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 65 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 65: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 66 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 66: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 67 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 67: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 68 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 68: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 69 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 69: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 70 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 70: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 71 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 71: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 72 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 72: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 73 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 73: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 74 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 74: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 75 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 75: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 76 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 76: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 77 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 77: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 78 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 78: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 79 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 79: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 80 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 80: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 81 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 81: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 82 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 82: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 83 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 83: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 84 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 84: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 85 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 85: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 86 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 86: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 87 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 87: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 88 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 88: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 89 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 89: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 90 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 90: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 91 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 91: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 92 | dictionary changed | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 92: added 0 retired 2 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 93 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 93: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 94 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 94: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 95 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 95: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 96 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 96: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 97 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 97: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 98 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 98: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 99 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 99: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 100 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 100: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 101 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 101: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 102 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 102: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 103 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 103: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 104 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 104: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 105 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 105: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 106 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 106: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 107 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 107: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 108 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 108: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 109 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 109: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 110 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 110: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 111 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 111: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 112 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 112: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 113 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 113: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 114 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 114: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 115 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 115: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 116 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 116: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 117 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 117: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 118 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 118: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 119 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 119: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 120 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 120: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 121 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 121: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 122 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 122: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 123 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 123: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 124 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 124: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 125 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 125: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 126 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 126: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 127 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 127: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 128 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 128: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 129 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 129: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 130 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 130: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 131 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 131: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 132 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 132: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 133 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 133: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 134 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 134: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 135 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 135: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 136 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 136: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 137 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 137: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 138 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 138: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 139 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 139: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 140 | dictionary same | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 140: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 141 | dictionary changed | functions 218 | right 10/10 | calls on the apex per image 1.1
-  episode 141: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 142 | dictionary changed | functions 219 | right 10/10 | calls on the apex per image 1.5
-  episode 142: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 143 | dictionary changed | functions 220 | right 10/10 | calls on the apex per image 1.4
-  episode 143: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 144 | dictionary changed | functions 221 | right 10/10 | calls on the apex per image 1.3
-  episode 144: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 185 functions 221 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 145 | dictionary changed | functions 222 | right 10/10 | calls on the apex per image 1.2
-  episode 145: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 146 | dictionary changed | functions 222 | right 10/10 | calls on the apex per image 1.2
-  episode 146: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 147 | dictionary changed | functions 223 | right 10/10 | calls on the apex per image 1.1
-  episode 147: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 187 functions 223 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 148 | dictionary changed | functions 223 | right 10/10 | calls on the apex per image 1.1
-  episode 148: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 187 functions 223 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 149 | dictionary same | functions 223 | right 10/10 | calls on the apex per image 1.2
-  episode 149: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 187 functions 223 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 150 | dictionary same | functions 223 | right 10/10 | calls on the apex per image 1.2
-  episode 150: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 187 functions 223 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 151 | dictionary changed | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 151: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 152 | dictionary changed | functions 224 | right 10/10 | calls on the apex per image 1.3
-  episode 152: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 153 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 153: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 154 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 154: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 155 | dictionary changed | functions 224 | right 10/10 | calls on the apex per image 1.3
-  episode 155: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 156 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 156: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 157 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 157: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 158 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 158: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 159 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 159: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 160 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 160: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 161 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 161: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 162 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 162: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 163 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 163: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 164 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 164: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 165 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 165: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 166 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 166: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 167 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 167: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 168 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 168: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 169 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 169: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 170 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 170: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 171 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 171: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 172 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 172: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 173 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 173: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 174 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 174: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 175 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 175: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 176 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 176: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 177 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 177: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 178 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 178: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 179 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 179: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 180 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 180: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 181 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 181: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 182 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 182: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 183 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 183: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 184 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 184: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 185 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 185: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 186 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 186: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 187 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 187: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 188 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 188: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 189 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 189: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 190 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 190: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 191 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 191: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 192 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 192: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 193 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 193: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 194 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 194: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 195 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 195: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 196 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 196: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 197 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 197: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 198 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 198: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 199 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 199: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 200 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 200: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 201 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 201: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 202 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 202: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 203 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 203: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 204 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 204: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 205 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 205: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 206 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 206: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 207 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 207: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 208 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 208: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 209 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 209: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 210 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 210: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 211 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 211: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 212 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 212: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 213 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 213: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 214 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 214: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 215 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 215: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 216 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 216: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 217 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 217: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 218 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 218: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 219 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 219: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 220 | dictionary same | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 220: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 221 | dictionary changed | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 221: added 0 retired 1 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 222 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 222: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 223 | dictionary changed | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 223: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 224 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.4
-  episode 224: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 225 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.4
-  episode 225: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 226 | dictionary changed | functions 223 | right 10/10 | calls on the apex per image 1.3
-  episode 226: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 187 functions 223 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 227 | dictionary changed | functions 223 | right 10/10 | calls on the apex per image 1.2
-  episode 227: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 187 functions 223 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 228 | dictionary changed | functions 224 | right 10/10 | calls on the apex per image 1.1
-  episode 228: added 1 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 188 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 229 | dictionary changed | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 229: added 0 retired 1 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 230 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 230: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 231 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 231: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 232 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 232: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 233 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 233: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 234 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 234: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 235 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 235: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 236 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 236: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 237 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 237: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 238 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 238: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 239 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 239: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 240 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 240: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 241 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 241: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 242 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 242: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 243 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 243: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 244 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 244: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 245 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 245: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 246 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 246: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 247 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 247: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 248 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 248: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 249 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 249: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 250 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 250: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 251 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 251: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 252 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 252: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 253 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 253: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 254 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 254: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 255 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 255: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 256 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 256: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 257 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 257: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 258 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 258: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 259 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 259: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 260 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 260: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 261 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 261: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 262 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 262: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 263 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 263: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 264 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 264: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 265 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 265: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 266 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 266: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 267 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 267: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 268 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 268: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 269 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 269: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 270 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 270: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 271 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 271: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 272 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 272: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 273 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 273: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 274 | dictionary changed | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 274: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 275 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 275: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 276 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 276: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 277 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 277: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 278 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 278: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 279 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 279: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 280 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 280: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 281 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 281: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 282 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 282: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 283 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 283: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 284 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 284: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 285 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 285: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 286 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 286: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 287 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 287: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 288 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 288: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 289 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 289: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 290 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 290: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 291 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 291: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 292 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
-  episode 292: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 186 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 293 | dictionary changed | functions 221 | right 10/10 | calls on the apex per image 1.1
-  episode 293: added 0 retired 1 | right 10/10 (spoke 10) | max levels 7 | neurons 185 functions 221 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 294 | dictionary changed | functions 220 | right 10/10 | calls on the apex per image 1.1
-  episode 294: added 0 retired 1 | right 10/10 (spoke 10) | max levels 7 | neurons 184 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 295 | dictionary changed | functions 219 | right 10/10 | calls on the apex per image 1.1
-  episode 295: added 0 retired 1 | right 10/10 (spoke 10) | max levels 7 | neurons 183 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 296 | dictionary same | functions 219 | right 10/10 | calls on the apex per image 1.1
-  episode 296: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 183 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 297 | dictionary same | functions 219 | right 10/10 | calls on the apex per image 1.1
-  episode 297: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 183 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 298 | dictionary same | functions 219 | right 10/10 | calls on the apex per image 1.1
-  episode 298: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 183 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-EPISODE 299 | dictionary same | functions 219 | right 10/10 | calls on the apex per image 1.1
-  episode 299: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 183 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-LASTEP image 0 (digit 5) | calls on the apex 1 | bare pixels on the apex 0 | levels 7
-LASTEP image 1 (digit 0) | calls on the apex 1 | bare pixels on the apex 0 | levels 6
+EPISODE 1 | dictionary changed | functions 30 | right 1/10 | calls on the apex per image 16.1
+  episode  1: added 30 retired 0 | right 1/10 (spoke 9) | max levels 4 | neurons 42 functions 30 |  | digit:said 5:- 0:5 4:0 1:5 9:5 2:5 1:4 3:5 1:1 4:9
+EPISODE 2 | dictionary changed | functions 56 | right 7/10 | calls on the apex per image 12.6
+  episode  2: added 26 retired 0 | right 7/10 (spoke 10) | max levels 4 | neurons 68 functions 56 |  | digit:said 5:5 0:4 4:1 1:4 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 3 | dictionary changed | functions 85 | right 10/10 | calls on the apex per image 10.1
+  episode  3: added 29 retired 0 | right 10/10 (spoke 10) | max levels 5 | neurons 97 functions 85 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 4 | dictionary changed | functions 111 | right 10/10 | calls on the apex per image 8.0
+  episode  4: added 26 retired 0 | right 10/10 (spoke 10) | max levels 5 | neurons 123 functions 111 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 5 | dictionary changed | functions 121 | right 10/10 | calls on the apex per image 6.5
+  episode  5: added 12 retired 2 | right 10/10 (spoke 10) | max levels 5 | neurons 133 functions 121 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 6 | dictionary changed | functions 137 | right 9/10 | calls on the apex per image 6.5
+  episode  6: added 16 retired 0 | right 9/10 (spoke 10) | max levels 5 | neurons 149 functions 137 |  | digit:said 5:5 0:4 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 7 | dictionary changed | functions 164 | right 4/10 | calls on the apex per image 11.0
+  episode  7: added 28 retired 1 | right 4/10 (spoke 10) | max levels 5 | neurons 176 functions 164 |  | digit:said 5:4 0:4 4:4 1:5 9:5 2:2 1:5 3:5 1:1 4:4
+EPISODE 8 | dictionary changed | functions 176 | right 10/10 | calls on the apex per image 10.4
+  episode  8: added 13 retired 1 | right 10/10 (spoke 10) | max levels 5 | neurons 188 functions 176 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 9 | dictionary changed | functions 208 | right 10/10 | calls on the apex per image 7.4
+  episode  9: added 32 retired 0 | right 10/10 (spoke 10) | max levels 5 | neurons 220 functions 208 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 10 | dictionary changed | functions 216 | right 10/10 | calls on the apex per image 6.2
+  episode 10: added 9 retired 1 | right 10/10 (spoke 10) | max levels 5 | neurons 228 functions 216 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 11 | dictionary changed | functions 225 | right 9/10 | calls on the apex per image 4.8
+  episode 11: added 10 retired 1 | right 9/10 (spoke 10) | max levels 5 | neurons 237 functions 225 |  | digit:said 5:5 0:0 4:4 1:1 9:5 2:2 1:1 3:3 1:1 4:4
+EPISODE 12 | dictionary changed | functions 230 | right 10/10 | calls on the apex per image 4.2
+  episode 12: added 8 retired 3 | right 10/10 (spoke 10) | max levels 5 | neurons 242 functions 230 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 13 | dictionary changed | functions 238 | right 10/10 | calls on the apex per image 3.4
+  episode 13: added 9 retired 1 | right 10/10 (spoke 10) | max levels 5 | neurons 250 functions 238 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 14 | dictionary changed | functions 243 | right 7/10 | calls on the apex per image 3.6
+  episode 14: added 5 retired 0 | right 7/10 (spoke 10) | max levels 6 | neurons 255 functions 243 |  | digit:said 5:5 0:0 4:4 1:4 9:9 2:5 1:1 3:4 1:1 4:4
+EPISODE 15 | dictionary changed | functions 244 | right 10/10 | calls on the apex per image 3.2
+  episode 15: added 2 retired 1 | right 10/10 (spoke 10) | max levels 5 | neurons 256 functions 244 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 16 | dictionary changed | functions 249 | right 10/10 | calls on the apex per image 2.7
+  episode 16: added 5 retired 0 | right 10/10 (spoke 10) | max levels 5 | neurons 261 functions 249 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 17 | dictionary changed | functions 255 | right 10/10 | calls on the apex per image 2.4
+  episode 17: added 6 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 267 functions 255 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 18 | dictionary changed | functions 255 | right 10/10 | calls on the apex per image 2.1
+  episode 18: added 1 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 267 functions 255 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 19 | dictionary changed | functions 254 | right 10/10 | calls on the apex per image 1.7
+  episode 19: added 2 retired 3 | right 10/10 (spoke 10) | max levels 5 | neurons 266 functions 254 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 20 | dictionary changed | functions 252 | right 10/10 | calls on the apex per image 2.2
+  episode 20: added 0 retired 2 | right 10/10 (spoke 10) | max levels 5 | neurons 264 functions 252 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 21 | dictionary changed | functions 253 | right 10/10 | calls on the apex per image 2.0
+  episode 21: added 2 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 265 functions 253 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 22 | dictionary changed | functions 253 | right 10/10 | calls on the apex per image 1.8
+  episode 22: added 1 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 265 functions 253 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 23 | dictionary changed | functions 255 | right 10/10 | calls on the apex per image 1.9
+  episode 23: added 2 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 267 functions 255 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 24 | dictionary changed | functions 243 | right 10/10 | calls on the apex per image 1.8
+  episode 24: added 0 retired 4 | right 10/10 (spoke 10) | max levels 6 | neurons 255 functions 243 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 25 | dictionary changed | functions 245 | right 10/10 | calls on the apex per image 1.5
+  episode 25: added 3 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 257 functions 245 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 26 | dictionary changed | functions 245 | right 10/10 | calls on the apex per image 1.4
+  episode 26: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 257 functions 245 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 27 | dictionary changed | functions 246 | right 10/10 | calls on the apex per image 1.5
+  episode 27: added 1 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 28 | dictionary changed | functions 246 | right 10/10 | calls on the apex per image 1.5
+  episode 28: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 29 | dictionary changed | functions 247 | right 10/10 | calls on the apex per image 1.3
+  episode 29: added 1 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 259 functions 247 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 30 | dictionary changed | functions 246 | right 10/10 | calls on the apex per image 1.2
+  episode 30: added 1 retired 2 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 31 | dictionary changed | functions 245 | right 10/10 | calls on the apex per image 1.1
+  episode 31: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 257 functions 245 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 32 | dictionary same | functions 245 | right 10/10 | calls on the apex per image 1.1
+  episode 32: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 257 functions 245 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 33 | dictionary same | functions 245 | right 10/10 | calls on the apex per image 1.1
+  episode 33: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 257 functions 245 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 34 | dictionary changed | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 34: added 1 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 35 | dictionary changed | functions 245 | right 10/10 | calls on the apex per image 1.0
+  episode 35: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 257 functions 245 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 36 | dictionary same | functions 245 | right 10/10 | calls on the apex per image 1.0
+  episode 36: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 257 functions 245 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 37 | dictionary changed | functions 245 | right 10/10 | calls on the apex per image 1.0
+  episode 37: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 257 functions 245 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 38 | dictionary changed | functions 245 | right 10/10 | calls on the apex per image 1.1
+  episode 38: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 257 functions 245 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 39 | dictionary changed | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 39: added 1 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 40 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 40: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 41 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 41: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 42 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 42: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 43 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 43: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 44 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 44: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 45 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 45: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 46 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 46: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 47 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 47: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 48 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 48: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 49 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 49: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 50 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 50: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 51 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 51: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 52 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 52: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 53 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 53: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 54 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 54: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 55 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 55: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 56 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 56: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 57 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 57: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 58 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 58: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 59 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 59: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 60 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 60: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 61 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 61: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 62 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 62: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 63 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 63: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 64 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 64: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 65 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 65: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 66 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 66: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 67 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 67: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 68 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 68: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 69 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 69: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 70 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 70: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 71 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 71: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 72 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 72: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 73 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 73: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 74 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 74: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 75 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 75: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 76 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 76: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 77 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 77: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 78 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 78: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 79 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 79: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 80 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 80: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 81 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 81: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 82 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 82: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 83 | dictionary same | functions 246 | right 10/10 | calls on the apex per image 1.0
+  episode 83: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 258 functions 246 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 84 | dictionary changed | functions 244 | right 10/10 | calls on the apex per image 1.0
+  episode 84: added 0 retired 2 | right 10/10 (spoke 10) | max levels 6 | neurons 256 functions 244 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 85 | dictionary changed | functions 244 | right 10/10 | calls on the apex per image 1.0
+  episode 85: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 256 functions 244 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 86 | dictionary changed | functions 243 | right 10/10 | calls on the apex per image 1.0
+  episode 86: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 255 functions 243 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 87 | dictionary changed | functions 243 | right 10/10 | calls on the apex per image 1.0
+  episode 87: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 255 functions 243 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 88 | dictionary changed | functions 241 | right 10/10 | calls on the apex per image 1.0
+  episode 88: added 0 retired 2 | right 10/10 (spoke 10) | max levels 6 | neurons 253 functions 241 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 89 | dictionary changed | functions 241 | right 10/10 | calls on the apex per image 1.3
+  episode 89: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 253 functions 241 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 90 | dictionary changed | functions 235 | right 10/10 | calls on the apex per image 1.3
+  episode 90: added 0 retired 4 | right 10/10 (spoke 10) | max levels 6 | neurons 247 functions 235 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 91 | dictionary changed | functions 234 | right 10/10 | calls on the apex per image 1.2
+  episode 91: added 1 retired 2 | right 10/10 (spoke 10) | max levels 6 | neurons 246 functions 234 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 92 | dictionary changed | functions 231 | right 10/10 | calls on the apex per image 1.1
+  episode 92: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 243 functions 231 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 93 | dictionary changed | functions 230 | right 10/10 | calls on the apex per image 1.3
+  episode 93: added 1 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 242 functions 230 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 94 | dictionary changed | functions 227 | right 10/10 | calls on the apex per image 1.3
+  episode 94: added 0 retired 3 | right 10/10 (spoke 10) | max levels 6 | neurons 239 functions 227 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 95 | dictionary changed | functions 227 | right 10/10 | calls on the apex per image 1.2
+  episode 95: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 239 functions 227 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 96 | dictionary changed | functions 224 | right 10/10 | calls on the apex per image 1.2
+  episode 96: added 0 retired 3 | right 10/10 (spoke 10) | max levels 6 | neurons 236 functions 224 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 97 | dictionary changed | functions 222 | right 10/10 | calls on the apex per image 1.1
+  episode 97: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 234 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 98 | dictionary changed | functions 222 | right 10/10 | calls on the apex per image 1.1
+  episode 98: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 234 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 99 | dictionary same | functions 222 | right 10/10 | calls on the apex per image 1.1
+  episode 99: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 234 functions 222 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 100 | dictionary changed | functions 221 | right 10/10 | calls on the apex per image 1.1
+  episode 100: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 233 functions 221 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 101 | dictionary changed | functions 219 | right 10/10 | calls on the apex per image 1.0
+  episode 101: added 1 retired 2 | right 10/10 (spoke 10) | max levels 6 | neurons 231 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 102 | dictionary same | functions 219 | right 10/10 | calls on the apex per image 1.0
+  episode 102: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 231 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 103 | dictionary changed | functions 219 | right 10/10 | calls on the apex per image 1.0
+  episode 103: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 231 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 104 | dictionary changed | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 104: added 1 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 105 | dictionary changed | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 105: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 106 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 106: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 107 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 107: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 108 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 108: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 109 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 109: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 110 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 110: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 111 | dictionary changed | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 111: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 112 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 112: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 113 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 113: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 114 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 114: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 115 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 115: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 116 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 116: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 117 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 117: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 118 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 118: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 119 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 119: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 120 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 120: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 121 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 121: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 122 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 122: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 123 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 123: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 124 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 124: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 125 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 125: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 126 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 126: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 127 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 127: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 128 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 128: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 129 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 129: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 130 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 130: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 131 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 131: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 132 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 132: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 133 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 133: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 134 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 134: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 135 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 135: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 136 | dictionary same | functions 220 | right 10/10 | calls on the apex per image 1.0
+  episode 136: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 232 functions 220 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 137 | dictionary changed | functions 219 | right 10/10 | calls on the apex per image 1.0
+  episode 137: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 231 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 138 | dictionary same | functions 219 | right 10/10 | calls on the apex per image 1.0
+  episode 138: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 231 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 139 | dictionary changed | functions 218 | right 10/10 | calls on the apex per image 1.0
+  episode 139: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 230 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 140 | dictionary changed | functions 218 | right 10/10 | calls on the apex per image 1.0
+  episode 140: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 230 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 141 | dictionary changed | functions 218 | right 10/10 | calls on the apex per image 1.0
+  episode 141: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 230 functions 218 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 142 | dictionary changed | functions 216 | right 10/10 | calls on the apex per image 1.0
+  episode 142: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 228 functions 216 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 143 | dictionary same | functions 216 | right 10/10 | calls on the apex per image 1.0
+  episode 143: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 228 functions 216 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 144 | dictionary same | functions 216 | right 10/10 | calls on the apex per image 1.0
+  episode 144: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 228 functions 216 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 145 | dictionary same | functions 216 | right 10/10 | calls on the apex per image 1.0
+  episode 145: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 228 functions 216 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 146 | dictionary same | functions 216 | right 10/10 | calls on the apex per image 1.0
+  episode 146: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 228 functions 216 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 147 | dictionary same | functions 216 | right 10/10 | calls on the apex per image 1.0
+  episode 147: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 228 functions 216 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 148 | dictionary same | functions 216 | right 10/10 | calls on the apex per image 1.0
+  episode 148: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 228 functions 216 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 149 | dictionary same | functions 216 | right 10/10 | calls on the apex per image 1.0
+  episode 149: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 228 functions 216 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 150 | dictionary same | functions 216 | right 10/10 | calls on the apex per image 1.0
+  episode 150: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 228 functions 216 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 151 | dictionary changed | functions 215 | right 10/10 | calls on the apex per image 1.0
+  episode 151: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 227 functions 215 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 152 | dictionary changed | functions 214 | right 10/10 | calls on the apex per image 1.0
+  episode 152: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 226 functions 214 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 153 | dictionary changed | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 153: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 154 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 154: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 155 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 155: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 156 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 156: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 157 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 157: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 158 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 158: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 159 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 159: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 160 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 160: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 161 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 161: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 162 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 162: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 163 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 163: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 164 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 164: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 165 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 165: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 166 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 166: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 167 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 167: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 168 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 168: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 169 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 169: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 170 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 170: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 171 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 171: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 172 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 172: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 173 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 173: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 174 | dictionary changed | functions 212 | right 10/10 | calls on the apex per image 1.0
+  episode 174: added 0 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 224 functions 212 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 175 | dictionary changed | functions 212 | right 10/10 | calls on the apex per image 1.0
+  episode 175: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 224 functions 212 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 176 | dictionary changed | functions 212 | right 10/10 | calls on the apex per image 1.2
+  episode 176: added 1 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 224 functions 212 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 177 | dictionary changed | functions 212 | right 10/10 | calls on the apex per image 1.2
+  episode 177: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 224 functions 212 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 178 | dictionary changed | functions 212 | right 10/10 | calls on the apex per image 1.1
+  episode 178: added 1 retired 1 | right 10/10 (spoke 10) | max levels 6 | neurons 224 functions 212 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 179 | dictionary same | functions 212 | right 10/10 | calls on the apex per image 1.1
+  episode 179: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 224 functions 212 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 180 | dictionary changed | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 180: added 1 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 181 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 181: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 182 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 182: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 183 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 183: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 184 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 184: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 185 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 185: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 186 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 186: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 187 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 187: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 188 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 188: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 189 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 189: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 190 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 190: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 191 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 191: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 192 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 192: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 193 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 193: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 194 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 194: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 195 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 195: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 196 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 196: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 197 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 197: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 198 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 198: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 199 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 199: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 200 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 200: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 201 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 201: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 202 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 202: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 203 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 203: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 204 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 204: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 205 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 205: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 206 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 206: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 207 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 207: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 208 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 208: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 209 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 209: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 210 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 210: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 211 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 211: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 212 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 212: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 213 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 213: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 214 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 214: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 215 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 215: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 216 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 216: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 217 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 217: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 218 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 218: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 219 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 219: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 220 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 220: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 221 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 221: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 222 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 222: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 223 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 223: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 224 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 224: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 225 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 225: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 226 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 226: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 227 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 227: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 228 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 228: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 229 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 229: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 230 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 230: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 231 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 231: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 232 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 232: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 233 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 233: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 234 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 234: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 235 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 235: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 236 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 236: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 237 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 237: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 238 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 238: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 239 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 239: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 240 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 240: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 241 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 241: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 242 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 242: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 243 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 243: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 244 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 244: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 245 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 245: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 246 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 246: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 247 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 247: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 248 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 248: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 249 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 249: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 250 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 250: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 251 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 251: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 252 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 252: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 253 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 253: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 254 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 254: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 255 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 255: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 256 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 256: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 257 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 257: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 258 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 258: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 259 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 259: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 260 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 260: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 261 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 261: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 262 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 262: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 263 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 263: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 264 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 264: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 265 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 265: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 266 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 266: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 267 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 267: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 268 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 268: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 269 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 269: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 270 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 270: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 271 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 271: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 272 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 272: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 273 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 273: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 274 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 274: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 275 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 275: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 276 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 276: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 277 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 277: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 278 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 278: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 279 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 279: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 280 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 280: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 281 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 281: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 282 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 282: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 283 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 283: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 284 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 284: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 285 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 285: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 286 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 286: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 287 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 287: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 288 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 288: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 289 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 289: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 290 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 290: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 291 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 291: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 292 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 292: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 293 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 293: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 294 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 294: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+EPISODE 295 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 295: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+CHANGE episode 296 image 3 | started 0 | left 0 | changed 1
+    ~ f95 f95 origin #12 [#12→#25[0, 8, 1]diff[0, 0, 7] #12→#25'1[0, 6, 4]diff[0, 0, 4] #12'1→#25[0, 8, -1]diff[0, 0, 6] #12'2→#25[0, 8, 0]diff[0, 0, 6] #12'1→#25'2[0, 5, 4]diff[0, 0, 4] #12'5→#25'1[0, 6, -1]diff[0, 0, 1] #12'6→#25'1[0, 6, 0]diff[0, 0, 1] #12'7→#25'1[0, 6, 1]diff[0, 0, 2] #12'8→#25'2[0, 5, -1]diff[0, 0, 1] #12'8→#25'3[0, 4, 1]diff[0, 0, 2] #12'9→#25'3[0, 4, 2]diff[0, 0, 2] #12'8→#14[0, 5, 1]diff[0, -1, 4] #25'3→#0[0, 2, 0]diff[1, 1, 2] #25'1→#146[0, 1, 1]diff[0, 0, 1] #25'1→#146'1[0, 2, 0] #25'1→#146'2[0, 3, -2]diff[0, 0, -2] #25'1→#146'3[0, 4, -3]diff[0, 0, -3] #25'1→#146'4[0, 5, -4]diff[0, 0, -4] #12'3→#0[0, 6, -1]diff[1, 1, 13]] -> #107
+CHANGE episode 296 image 5 | started 0 | left 0 | changed 2
+    ~ f18 f18 origin #1 [#1→#12[0, 1, 0]diff[-1, -1, -1] #12→#0[0, 2, -1]diff[1, 1, 1] #12→#12'1[0, 2, 1]diff[0, 0, -6] #12→#13[0, 2, 0] #13'1→#12[0, 0, 1] #13'2→#12[0, 1, -1]diff[0, 0, 1] #12'1→#12'2[0, 2, -1]diff[0, 0, 5] #12'1→#28[0, 4, -2]diff[0, 0, 6] #12'2→#17[0, 1, -6]diff[0, 0, -3] #12'3→#28[0, 0, 1]diff[0, 0, 2] #28→#12'4[0, 1, 0]diff[0, 0, -1] #28→#12'5[0, 2, 1] #12'6→#17[0, 3, -2]diff[0, 0, -3] #13'5→#17[0, 2, 0]diff[0, 0, -4] #13'5→#0'1[0, 1, 1]diff[1, 1, 1] #13'6→#12'6[0, 1, 1] #13'6→#1'1[0, 0, 1]diff[1, 1, 2] #13'1→#13'4[0, 1, -1]diff[0, 0, -2] #12'2→#146[0, 3, -6]diff[0, 0, -3] #12'1→#146'1[0, 6, -7]diff[0, 0, 1] #12'1→#146'2[0, 7, -7]diff[0, 0, 1] #17→#146'3[0, 1, 0]diff[0, 0, 1] #0→#13'3[0, 1, 0]diff[-1, -1, -1]] -> #30
+    ~ f95 f95 origin #12 [#12→#25[0, 8, 1]diff[0, 0, 7] #12→#25'1[0, 6, 4]diff[0, 0, 4] #12'1→#25[0, 8, -1]diff[0, 0, 6] #12'2→#25[0, 8, 0]diff[0, 0, 6] #12'1→#25'2[0, 5, 4]diff[0, 0, 4] #12'5→#25'1[0, 6, -1]diff[0, 0, 1] #12'6→#25'1[0, 6, 0]diff[0, 0, 1] #12'7→#25'1[0, 6, 1]diff[0, 0, 2] #12'8→#25'2[0, 5, -1]diff[0, 0, 1] #12'8→#25'3[0, 4, 1]diff[0, 0, 2] #12'9→#25'3[0, 4, 2]diff[0, 0, 2] #12'8→#14[0, 5, 1]diff[0, -1, 4] #25'3→#0[0, 2, 0]diff[1, 1, 2] #25'1→#146[0, 1, 1]diff[0, 0, 1] #25'1→#146'1[0, 2, 0] #25'1→#146'2[0, 3, -2]diff[0, 0, -2] #25'1→#146'3[0, 4, -3]diff[0, 0, -3] #25'1→#146'4[0, 5, -4]diff[0, 0, -4]] -> #107
+CHANGE episode 296 image 7 | started 0 | left 0 | changed 2
+    ~ f18 f18 origin #1 [#1→#12[0, 1, 0]diff[-1, -1, -1] #12→#0[0, 2, -1]diff[1, 1, 1] #12→#12'1[0, 2, 1]diff[0, 0, -6] #12→#13[0, 2, 0] #13'1→#12[0, 0, 1] #13'2→#12[0, 1, -1]diff[0, 0, 1] #12'1→#12'2[0, 2, -1]diff[0, 0, 5] #12'1→#28[0, 4, -2]diff[0, 0, 6] #12'2→#17[0, 1, -6]diff[0, 0, -3] #12'3→#28[0, 0, 1]diff[0, 0, 2] #28→#12'4[0, 1, 0]diff[0, 0, -1] #28→#12'5[0, 2, 1] #12'6→#17[0, 3, -2]diff[0, 0, -3] #13'5→#17[0, 2, 0]diff[0, 0, -4] #13'5→#0'1[0, 1, 1]diff[1, 1, 1] #13'6→#12'6[0, 1, 1] #13'6→#1'1[0, 0, 1]diff[1, 1, 2] #13'1→#13'4[0, 1, -1]diff[0, 0, -2] #12'2→#146[0, 3, -6]diff[0, 0, -3] #12'1→#146'1[0, 6, -7]diff[0, 0, 1] #12'1→#146'2[0, 7, -7]diff[0, 0, 1] #17→#146'3[0, 1, 0]diff[0, 0, 1]] -> #30
+    ~ f23 f23 origin #12 [#12→#13[0, 7, 0]diff[0, 0, 4] #13→#13'1[0, 2, -1]diff[0, 0, 1] #13'2→#13[0, 3, -1]diff[0, 0, 2] #12→#12'3[0, 0, 1]diff[0, 0, 3] #12'4→#13'2[0, 4, -1]diff[0, 0, 3] #13'2→#17'1[0, 4, 1]diff[0, 0, 2] #12'5→#17'1[0, 8, -1]diff[0, 0, 5] #13'3→#17'1[0, 5, -3]diff[0, 0, 2] #1→#13'3[0, 0, 1]diff[-1, -1, -4] #12'5→#12'6[0, 0, 1]diff[0, 0, 5] #12'5→#12'7[0, 4, 1]diff[0, 0, 5] #12'8→#13'3[0, 3, -1]diff[0, 0, 9] #12'9→#13'3[0, 3, 0]diff[0, 0, -2] #13'3→#1'1[0, 4, -1]diff[1, 1, 4] #12'8→#12'10[0, 8, -1]diff[0, 0, 12] #12'8→#146[0, 10, -6]diff[0, 0, 8] #12'8→#146'1[0, 11, -9]diff[0, 0, 5] #12'8→#146'2[0, 12, -9]diff[0, 0, 5] #12'8→#146'3[0, 13, -9]diff[0, 0, 5] #17'1→#0[0, 1, -1]diff[1, 1, 2] #17'1→#0'1[0, 1, 2]diff[1, 1, 2] #0→#17[0, 0, 1]diff[-1, -1, -1]] -> #35
+CHANGE episode 296 image 9 | started 0 | left 0 | changed 1
+    ~ f23 f23 origin #12 [#12→#13[0, 7, 0]diff[0, 0, 4] #13→#13'1[0, 2, -1]diff[0, 0, 1] #13'2→#13[0, 3, -1]diff[0, 0, 2] #12→#12'3[0, 0, 1]diff[0, 0, 3] #12'4→#13'2[0, 4, -1]diff[0, 0, 3] #13'2→#17'1[0, 4, 1]diff[0, 0, 2] #12'5→#17'1[0, 8, -1]diff[0, 0, 5] #13'3→#17'1[0, 5, -3]diff[0, 0, 2] #1→#13'3[0, 0, 1]diff[-1, -1, -4] #12'5→#12'6[0, 0, 1]diff[0, 0, 5] #12'5→#12'7[0, 4, 1]diff[0, 0, 5] #12'8→#13'3[0, 3, -1]diff[0, 0, 9] #12'9→#13'3[0, 3, 0]diff[0, 0, -2] #13'3→#1'1[0, 4, -1]diff[1, 1, 4] #12'8→#12'10[0, 8, -1]diff[0, 0, 12] #12'8→#146[0, 10, -6]diff[0, 0, 8] #12'8→#146'1[0, 11, -9]diff[0, 0, 5] #12'8→#146'2[0, 12, -9]diff[0, 0, 5] #12'8→#146'3[0, 13, -9]diff[0, 0, 5] #17'1→#0[0, 1, -1]diff[1, 1, 2] #17'1→#0'1[0, 1, 2]diff[1, 1, 2]] -> #35
+EPISODE 296 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 296: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+CHANGE episode 297 image 3 | started 0 | left 0 | changed 1
+    ~ f95 f95 origin #12 [#12→#25[0, 8, 1]diff[0, 0, 7] #12→#25'1[0, 6, 4]diff[0, 0, 4] #12'1→#25[0, 8, -1]diff[0, 0, 6] #12'2→#25[0, 8, 0]diff[0, 0, 6] #12'1→#25'2[0, 5, 4]diff[0, 0, 4] #12'5→#25'1[0, 6, -1]diff[0, 0, 1] #12'6→#25'1[0, 6, 0]diff[0, 0, 1] #12'7→#25'1[0, 6, 1]diff[0, 0, 2] #12'8→#25'2[0, 5, -1]diff[0, 0, 1] #12'8→#25'3[0, 4, 1]diff[0, 0, 2] #12'9→#25'3[0, 4, 2]diff[0, 0, 2] #12'8→#14[0, 5, 1]diff[0, -1, 4] #25'3→#0[0, 2, 0]diff[1, 1, 2] #25'1→#146[0, 1, 1]diff[0, 0, 1] #25'1→#146'1[0, 2, 0] #25'1→#146'2[0, 3, -2]diff[0, 0, -2] #25'1→#146'3[0, 4, -3]diff[0, 0, -3] #25'1→#146'4[0, 5, -4]diff[0, 0, -4] #12'3→#0[0, 6, -1]diff[1, 1, 13]] -> #107
+CHANGE episode 297 image 5 | started 0 | left 0 | changed 2
+    ~ f18 f18 origin #1 [#1→#12[0, 1, 0]diff[-1, -1, -1] #12→#0[0, 2, -1]diff[1, 1, 1] #12→#12'1[0, 2, 1]diff[0, 0, -6] #12→#13[0, 2, 0] #13'1→#12[0, 0, 1] #13'2→#12[0, 1, -1]diff[0, 0, 1] #12'1→#12'2[0, 2, -1]diff[0, 0, 5] #12'1→#28[0, 4, -2]diff[0, 0, 6] #12'2→#17[0, 1, -6]diff[0, 0, -3] #12'3→#28[0, 0, 1]diff[0, 0, 2] #28→#12'4[0, 1, 0]diff[0, 0, -1] #28→#12'5[0, 2, 1] #12'6→#17[0, 3, -2]diff[0, 0, -3] #13'5→#17[0, 2, 0]diff[0, 0, -4] #13'5→#0'1[0, 1, 1]diff[1, 1, 1] #13'6→#12'6[0, 1, 1] #13'6→#1'1[0, 0, 1]diff[1, 1, 2] #13'1→#13'4[0, 1, -1]diff[0, 0, -2] #12'2→#146[0, 3, -6]diff[0, 0, -3] #12'1→#146'1[0, 6, -7]diff[0, 0, 1] #12'1→#146'2[0, 7, -7]diff[0, 0, 1] #17→#146'3[0, 1, 0]diff[0, 0, 1] #0→#13'3[0, 1, 0]diff[-1, -1, -1]] -> #30
+    ~ f95 f95 origin #12 [#12→#25[0, 8, 1]diff[0, 0, 7] #12→#25'1[0, 6, 4]diff[0, 0, 4] #12'1→#25[0, 8, -1]diff[0, 0, 6] #12'2→#25[0, 8, 0]diff[0, 0, 6] #12'1→#25'2[0, 5, 4]diff[0, 0, 4] #12'5→#25'1[0, 6, -1]diff[0, 0, 1] #12'6→#25'1[0, 6, 0]diff[0, 0, 1] #12'7→#25'1[0, 6, 1]diff[0, 0, 2] #12'8→#25'2[0, 5, -1]diff[0, 0, 1] #12'8→#25'3[0, 4, 1]diff[0, 0, 2] #12'9→#25'3[0, 4, 2]diff[0, 0, 2] #12'8→#14[0, 5, 1]diff[0, -1, 4] #25'3→#0[0, 2, 0]diff[1, 1, 2] #25'1→#146[0, 1, 1]diff[0, 0, 1] #25'1→#146'1[0, 2, 0] #25'1→#146'2[0, 3, -2]diff[0, 0, -2] #25'1→#146'3[0, 4, -3]diff[0, 0, -3] #25'1→#146'4[0, 5, -4]diff[0, 0, -4]] -> #107
+CHANGE episode 297 image 7 | started 0 | left 0 | changed 2
+    ~ f18 f18 origin #1 [#1→#12[0, 1, 0]diff[-1, -1, -1] #12→#0[0, 2, -1]diff[1, 1, 1] #12→#12'1[0, 2, 1]diff[0, 0, -6] #12→#13[0, 2, 0] #13'1→#12[0, 0, 1] #13'2→#12[0, 1, -1]diff[0, 0, 1] #12'1→#12'2[0, 2, -1]diff[0, 0, 5] #12'1→#28[0, 4, -2]diff[0, 0, 6] #12'2→#17[0, 1, -6]diff[0, 0, -3] #12'3→#28[0, 0, 1]diff[0, 0, 2] #28→#12'4[0, 1, 0]diff[0, 0, -1] #28→#12'5[0, 2, 1] #12'6→#17[0, 3, -2]diff[0, 0, -3] #13'5→#17[0, 2, 0]diff[0, 0, -4] #13'5→#0'1[0, 1, 1]diff[1, 1, 1] #13'6→#12'6[0, 1, 1] #13'6→#1'1[0, 0, 1]diff[1, 1, 2] #13'1→#13'4[0, 1, -1]diff[0, 0, -2] #12'2→#146[0, 3, -6]diff[0, 0, -3] #12'1→#146'1[0, 6, -7]diff[0, 0, 1] #12'1→#146'2[0, 7, -7]diff[0, 0, 1] #17→#146'3[0, 1, 0]diff[0, 0, 1]] -> #30
+    ~ f23 f23 origin #12 [#12→#13[0, 7, 0]diff[0, 0, 4] #13→#13'1[0, 2, -1]diff[0, 0, 1] #13'2→#13[0, 3, -1]diff[0, 0, 2] #12→#12'3[0, 0, 1]diff[0, 0, 3] #12'4→#13'2[0, 4, -1]diff[0, 0, 3] #13'2→#17'1[0, 4, 1]diff[0, 0, 2] #12'5→#17'1[0, 8, -1]diff[0, 0, 5] #13'3→#17'1[0, 5, -3]diff[0, 0, 2] #1→#13'3[0, 0, 1]diff[-1, -1, -4] #12'5→#12'6[0, 0, 1]diff[0, 0, 5] #12'5→#12'7[0, 4, 1]diff[0, 0, 5] #12'8→#13'3[0, 3, -1]diff[0, 0, 9] #12'9→#13'3[0, 3, 0]diff[0, 0, -2] #13'3→#1'1[0, 4, -1]diff[1, 1, 4] #12'8→#12'10[0, 8, -1]diff[0, 0, 12] #12'8→#146[0, 10, -6]diff[0, 0, 8] #12'8→#146'1[0, 11, -9]diff[0, 0, 5] #12'8→#146'2[0, 12, -9]diff[0, 0, 5] #12'8→#146'3[0, 13, -9]diff[0, 0, 5] #17'1→#0[0, 1, -1]diff[1, 1, 2] #17'1→#0'1[0, 1, 2]diff[1, 1, 2] #0→#17[0, 0, 1]diff[-1, -1, -1]] -> #35
+CHANGE episode 297 image 9 | started 0 | left 0 | changed 1
+    ~ f23 f23 origin #12 [#12→#13[0, 7, 0]diff[0, 0, 4] #13→#13'1[0, 2, -1]diff[0, 0, 1] #13'2→#13[0, 3, -1]diff[0, 0, 2] #12→#12'3[0, 0, 1]diff[0, 0, 3] #12'4→#13'2[0, 4, -1]diff[0, 0, 3] #13'2→#17'1[0, 4, 1]diff[0, 0, 2] #12'5→#17'1[0, 8, -1]diff[0, 0, 5] #13'3→#17'1[0, 5, -3]diff[0, 0, 2] #1→#13'3[0, 0, 1]diff[-1, -1, -4] #12'5→#12'6[0, 0, 1]diff[0, 0, 5] #12'5→#12'7[0, 4, 1]diff[0, 0, 5] #12'8→#13'3[0, 3, -1]diff[0, 0, 9] #12'9→#13'3[0, 3, 0]diff[0, 0, -2] #13'3→#1'1[0, 4, -1]diff[1, 1, 4] #12'8→#12'10[0, 8, -1]diff[0, 0, 12] #12'8→#146[0, 10, -6]diff[0, 0, 8] #12'8→#146'1[0, 11, -9]diff[0, 0, 5] #12'8→#146'2[0, 12, -9]diff[0, 0, 5] #12'8→#146'3[0, 13, -9]diff[0, 0, 5] #17'1→#0[0, 1, -1]diff[1, 1, 2] #17'1→#0'1[0, 1, 2]diff[1, 1, 2]] -> #35
+EPISODE 297 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 297: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+CHANGE episode 298 image 3 | started 0 | left 0 | changed 1
+    ~ f95 f95 origin #12 [#12→#25[0, 8, 1]diff[0, 0, 7] #12→#25'1[0, 6, 4]diff[0, 0, 4] #12'1→#25[0, 8, -1]diff[0, 0, 6] #12'2→#25[0, 8, 0]diff[0, 0, 6] #12'1→#25'2[0, 5, 4]diff[0, 0, 4] #12'5→#25'1[0, 6, -1]diff[0, 0, 1] #12'6→#25'1[0, 6, 0]diff[0, 0, 1] #12'7→#25'1[0, 6, 1]diff[0, 0, 2] #12'8→#25'2[0, 5, -1]diff[0, 0, 1] #12'8→#25'3[0, 4, 1]diff[0, 0, 2] #12'9→#25'3[0, 4, 2]diff[0, 0, 2] #12'8→#14[0, 5, 1]diff[0, -1, 4] #25'3→#0[0, 2, 0]diff[1, 1, 2] #25'1→#146[0, 1, 1]diff[0, 0, 1] #25'1→#146'1[0, 2, 0] #25'1→#146'2[0, 3, -2]diff[0, 0, -2] #25'1→#146'3[0, 4, -3]diff[0, 0, -3] #25'1→#146'4[0, 5, -4]diff[0, 0, -4] #12'3→#0[0, 6, -1]diff[1, 1, 13]] -> #107
+CHANGE episode 298 image 5 | started 0 | left 0 | changed 2
+    ~ f18 f18 origin #1 [#1→#12[0, 1, 0]diff[-1, -1, -1] #12→#0[0, 2, -1]diff[1, 1, 1] #12→#12'1[0, 2, 1]diff[0, 0, -6] #12→#13[0, 2, 0] #13'1→#12[0, 0, 1] #13'2→#12[0, 1, -1]diff[0, 0, 1] #12'1→#12'2[0, 2, -1]diff[0, 0, 5] #12'1→#28[0, 4, -2]diff[0, 0, 6] #12'2→#17[0, 1, -6]diff[0, 0, -3] #12'3→#28[0, 0, 1]diff[0, 0, 2] #28→#12'4[0, 1, 0]diff[0, 0, -1] #28→#12'5[0, 2, 1] #12'6→#17[0, 3, -2]diff[0, 0, -3] #13'5→#17[0, 2, 0]diff[0, 0, -4] #13'5→#0'1[0, 1, 1]diff[1, 1, 1] #13'6→#12'6[0, 1, 1] #13'6→#1'1[0, 0, 1]diff[1, 1, 2] #13'1→#13'4[0, 1, -1]diff[0, 0, -2] #12'2→#146[0, 3, -6]diff[0, 0, -3] #12'1→#146'1[0, 6, -7]diff[0, 0, 1] #12'1→#146'2[0, 7, -7]diff[0, 0, 1] #17→#146'3[0, 1, 0]diff[0, 0, 1] #0→#13'3[0, 1, 0]diff[-1, -1, -1]] -> #30
+    ~ f95 f95 origin #12 [#12→#25[0, 8, 1]diff[0, 0, 7] #12→#25'1[0, 6, 4]diff[0, 0, 4] #12'1→#25[0, 8, -1]diff[0, 0, 6] #12'2→#25[0, 8, 0]diff[0, 0, 6] #12'1→#25'2[0, 5, 4]diff[0, 0, 4] #12'5→#25'1[0, 6, -1]diff[0, 0, 1] #12'6→#25'1[0, 6, 0]diff[0, 0, 1] #12'7→#25'1[0, 6, 1]diff[0, 0, 2] #12'8→#25'2[0, 5, -1]diff[0, 0, 1] #12'8→#25'3[0, 4, 1]diff[0, 0, 2] #12'9→#25'3[0, 4, 2]diff[0, 0, 2] #12'8→#14[0, 5, 1]diff[0, -1, 4] #25'3→#0[0, 2, 0]diff[1, 1, 2] #25'1→#146[0, 1, 1]diff[0, 0, 1] #25'1→#146'1[0, 2, 0] #25'1→#146'2[0, 3, -2]diff[0, 0, -2] #25'1→#146'3[0, 4, -3]diff[0, 0, -3] #25'1→#146'4[0, 5, -4]diff[0, 0, -4]] -> #107
+CHANGE episode 298 image 7 | started 0 | left 0 | changed 2
+    ~ f18 f18 origin #1 [#1→#12[0, 1, 0]diff[-1, -1, -1] #12→#0[0, 2, -1]diff[1, 1, 1] #12→#12'1[0, 2, 1]diff[0, 0, -6] #12→#13[0, 2, 0] #13'1→#12[0, 0, 1] #13'2→#12[0, 1, -1]diff[0, 0, 1] #12'1→#12'2[0, 2, -1]diff[0, 0, 5] #12'1→#28[0, 4, -2]diff[0, 0, 6] #12'2→#17[0, 1, -6]diff[0, 0, -3] #12'3→#28[0, 0, 1]diff[0, 0, 2] #28→#12'4[0, 1, 0]diff[0, 0, -1] #28→#12'5[0, 2, 1] #12'6→#17[0, 3, -2]diff[0, 0, -3] #13'5→#17[0, 2, 0]diff[0, 0, -4] #13'5→#0'1[0, 1, 1]diff[1, 1, 1] #13'6→#12'6[0, 1, 1] #13'6→#1'1[0, 0, 1]diff[1, 1, 2] #13'1→#13'4[0, 1, -1]diff[0, 0, -2] #12'2→#146[0, 3, -6]diff[0, 0, -3] #12'1→#146'1[0, 6, -7]diff[0, 0, 1] #12'1→#146'2[0, 7, -7]diff[0, 0, 1] #17→#146'3[0, 1, 0]diff[0, 0, 1]] -> #30
+    ~ f23 f23 origin #12 [#12→#13[0, 7, 0]diff[0, 0, 4] #13→#13'1[0, 2, -1]diff[0, 0, 1] #13'2→#13[0, 3, -1]diff[0, 0, 2] #12→#12'3[0, 0, 1]diff[0, 0, 3] #12'4→#13'2[0, 4, -1]diff[0, 0, 3] #13'2→#17'1[0, 4, 1]diff[0, 0, 2] #12'5→#17'1[0, 8, -1]diff[0, 0, 5] #13'3→#17'1[0, 5, -3]diff[0, 0, 2] #1→#13'3[0, 0, 1]diff[-1, -1, -4] #12'5→#12'6[0, 0, 1]diff[0, 0, 5] #12'5→#12'7[0, 4, 1]diff[0, 0, 5] #12'8→#13'3[0, 3, -1]diff[0, 0, 9] #12'9→#13'3[0, 3, 0]diff[0, 0, -2] #13'3→#1'1[0, 4, -1]diff[1, 1, 4] #12'8→#12'10[0, 8, -1]diff[0, 0, 12] #12'8→#146[0, 10, -6]diff[0, 0, 8] #12'8→#146'1[0, 11, -9]diff[0, 0, 5] #12'8→#146'2[0, 12, -9]diff[0, 0, 5] #12'8→#146'3[0, 13, -9]diff[0, 0, 5] #17'1→#0[0, 1, -1]diff[1, 1, 2] #17'1→#0'1[0, 1, 2]diff[1, 1, 2] #0→#17[0, 0, 1]diff[-1, -1, -1]] -> #35
+CHANGE episode 298 image 9 | started 0 | left 0 | changed 1
+    ~ f23 f23 origin #12 [#12→#13[0, 7, 0]diff[0, 0, 4] #13→#13'1[0, 2, -1]diff[0, 0, 1] #13'2→#13[0, 3, -1]diff[0, 0, 2] #12→#12'3[0, 0, 1]diff[0, 0, 3] #12'4→#13'2[0, 4, -1]diff[0, 0, 3] #13'2→#17'1[0, 4, 1]diff[0, 0, 2] #12'5→#17'1[0, 8, -1]diff[0, 0, 5] #13'3→#17'1[0, 5, -3]diff[0, 0, 2] #1→#13'3[0, 0, 1]diff[-1, -1, -4] #12'5→#12'6[0, 0, 1]diff[0, 0, 5] #12'5→#12'7[0, 4, 1]diff[0, 0, 5] #12'8→#13'3[0, 3, -1]diff[0, 0, 9] #12'9→#13'3[0, 3, 0]diff[0, 0, -2] #13'3→#1'1[0, 4, -1]diff[1, 1, 4] #12'8→#12'10[0, 8, -1]diff[0, 0, 12] #12'8→#146[0, 10, -6]diff[0, 0, 8] #12'8→#146'1[0, 11, -9]diff[0, 0, 5] #12'8→#146'2[0, 12, -9]diff[0, 0, 5] #12'8→#146'3[0, 13, -9]diff[0, 0, 5] #17'1→#0[0, 1, -1]diff[1, 1, 2] #17'1→#0'1[0, 1, 2]diff[1, 1, 2]] -> #35
+EPISODE 298 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 298: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+CHANGE episode 299 image 3 | started 0 | left 0 | changed 1
+    ~ f95 f95 origin #12 [#12→#25[0, 8, 1]diff[0, 0, 7] #12→#25'1[0, 6, 4]diff[0, 0, 4] #12'1→#25[0, 8, -1]diff[0, 0, 6] #12'2→#25[0, 8, 0]diff[0, 0, 6] #12'1→#25'2[0, 5, 4]diff[0, 0, 4] #12'5→#25'1[0, 6, -1]diff[0, 0, 1] #12'6→#25'1[0, 6, 0]diff[0, 0, 1] #12'7→#25'1[0, 6, 1]diff[0, 0, 2] #12'8→#25'2[0, 5, -1]diff[0, 0, 1] #12'8→#25'3[0, 4, 1]diff[0, 0, 2] #12'9→#25'3[0, 4, 2]diff[0, 0, 2] #12'8→#14[0, 5, 1]diff[0, -1, 4] #25'3→#0[0, 2, 0]diff[1, 1, 2] #25'1→#146[0, 1, 1]diff[0, 0, 1] #25'1→#146'1[0, 2, 0] #25'1→#146'2[0, 3, -2]diff[0, 0, -2] #25'1→#146'3[0, 4, -3]diff[0, 0, -3] #25'1→#146'4[0, 5, -4]diff[0, 0, -4] #12'3→#0[0, 6, -1]diff[1, 1, 13]] -> #107
+CHANGE episode 299 image 5 | started 0 | left 0 | changed 2
+    ~ f18 f18 origin #1 [#1→#12[0, 1, 0]diff[-1, -1, -1] #12→#0[0, 2, -1]diff[1, 1, 1] #12→#12'1[0, 2, 1]diff[0, 0, -6] #12→#13[0, 2, 0] #13'1→#12[0, 0, 1] #13'2→#12[0, 1, -1]diff[0, 0, 1] #12'1→#12'2[0, 2, -1]diff[0, 0, 5] #12'1→#28[0, 4, -2]diff[0, 0, 6] #12'2→#17[0, 1, -6]diff[0, 0, -3] #12'3→#28[0, 0, 1]diff[0, 0, 2] #28→#12'4[0, 1, 0]diff[0, 0, -1] #28→#12'5[0, 2, 1] #12'6→#17[0, 3, -2]diff[0, 0, -3] #13'5→#17[0, 2, 0]diff[0, 0, -4] #13'5→#0'1[0, 1, 1]diff[1, 1, 1] #13'6→#12'6[0, 1, 1] #13'6→#1'1[0, 0, 1]diff[1, 1, 2] #13'1→#13'4[0, 1, -1]diff[0, 0, -2] #12'2→#146[0, 3, -6]diff[0, 0, -3] #12'1→#146'1[0, 6, -7]diff[0, 0, 1] #12'1→#146'2[0, 7, -7]diff[0, 0, 1] #17→#146'3[0, 1, 0]diff[0, 0, 1] #0→#13'3[0, 1, 0]diff[-1, -1, -1]] -> #30
+    ~ f95 f95 origin #12 [#12→#25[0, 8, 1]diff[0, 0, 7] #12→#25'1[0, 6, 4]diff[0, 0, 4] #12'1→#25[0, 8, -1]diff[0, 0, 6] #12'2→#25[0, 8, 0]diff[0, 0, 6] #12'1→#25'2[0, 5, 4]diff[0, 0, 4] #12'5→#25'1[0, 6, -1]diff[0, 0, 1] #12'6→#25'1[0, 6, 0]diff[0, 0, 1] #12'7→#25'1[0, 6, 1]diff[0, 0, 2] #12'8→#25'2[0, 5, -1]diff[0, 0, 1] #12'8→#25'3[0, 4, 1]diff[0, 0, 2] #12'9→#25'3[0, 4, 2]diff[0, 0, 2] #12'8→#14[0, 5, 1]diff[0, -1, 4] #25'3→#0[0, 2, 0]diff[1, 1, 2] #25'1→#146[0, 1, 1]diff[0, 0, 1] #25'1→#146'1[0, 2, 0] #25'1→#146'2[0, 3, -2]diff[0, 0, -2] #25'1→#146'3[0, 4, -3]diff[0, 0, -3] #25'1→#146'4[0, 5, -4]diff[0, 0, -4]] -> #107
+CHANGE episode 299 image 7 | started 0 | left 0 | changed 2
+    ~ f18 f18 origin #1 [#1→#12[0, 1, 0]diff[-1, -1, -1] #12→#0[0, 2, -1]diff[1, 1, 1] #12→#12'1[0, 2, 1]diff[0, 0, -6] #12→#13[0, 2, 0] #13'1→#12[0, 0, 1] #13'2→#12[0, 1, -1]diff[0, 0, 1] #12'1→#12'2[0, 2, -1]diff[0, 0, 5] #12'1→#28[0, 4, -2]diff[0, 0, 6] #12'2→#17[0, 1, -6]diff[0, 0, -3] #12'3→#28[0, 0, 1]diff[0, 0, 2] #28→#12'4[0, 1, 0]diff[0, 0, -1] #28→#12'5[0, 2, 1] #12'6→#17[0, 3, -2]diff[0, 0, -3] #13'5→#17[0, 2, 0]diff[0, 0, -4] #13'5→#0'1[0, 1, 1]diff[1, 1, 1] #13'6→#12'6[0, 1, 1] #13'6→#1'1[0, 0, 1]diff[1, 1, 2] #13'1→#13'4[0, 1, -1]diff[0, 0, -2] #12'2→#146[0, 3, -6]diff[0, 0, -3] #12'1→#146'1[0, 6, -7]diff[0, 0, 1] #12'1→#146'2[0, 7, -7]diff[0, 0, 1] #17→#146'3[0, 1, 0]diff[0, 0, 1]] -> #30
+    ~ f23 f23 origin #12 [#12→#13[0, 7, 0]diff[0, 0, 4] #13→#13'1[0, 2, -1]diff[0, 0, 1] #13'2→#13[0, 3, -1]diff[0, 0, 2] #12→#12'3[0, 0, 1]diff[0, 0, 3] #12'4→#13'2[0, 4, -1]diff[0, 0, 3] #13'2→#17'1[0, 4, 1]diff[0, 0, 2] #12'5→#17'1[0, 8, -1]diff[0, 0, 5] #13'3→#17'1[0, 5, -3]diff[0, 0, 2] #1→#13'3[0, 0, 1]diff[-1, -1, -4] #12'5→#12'6[0, 0, 1]diff[0, 0, 5] #12'5→#12'7[0, 4, 1]diff[0, 0, 5] #12'8→#13'3[0, 3, -1]diff[0, 0, 9] #12'9→#13'3[0, 3, 0]diff[0, 0, -2] #13'3→#1'1[0, 4, -1]diff[1, 1, 4] #12'8→#12'10[0, 8, -1]diff[0, 0, 12] #12'8→#146[0, 10, -6]diff[0, 0, 8] #12'8→#146'1[0, 11, -9]diff[0, 0, 5] #12'8→#146'2[0, 12, -9]diff[0, 0, 5] #12'8→#146'3[0, 13, -9]diff[0, 0, 5] #17'1→#0[0, 1, -1]diff[1, 1, 2] #17'1→#0'1[0, 1, 2]diff[1, 1, 2] #0→#17[0, 0, 1]diff[-1, -1, -1]] -> #35
+CHANGE episode 299 image 9 | started 0 | left 0 | changed 1
+    ~ f23 f23 origin #12 [#12→#13[0, 7, 0]diff[0, 0, 4] #13→#13'1[0, 2, -1]diff[0, 0, 1] #13'2→#13[0, 3, -1]diff[0, 0, 2] #12→#12'3[0, 0, 1]diff[0, 0, 3] #12'4→#13'2[0, 4, -1]diff[0, 0, 3] #13'2→#17'1[0, 4, 1]diff[0, 0, 2] #12'5→#17'1[0, 8, -1]diff[0, 0, 5] #13'3→#17'1[0, 5, -3]diff[0, 0, 2] #1→#13'3[0, 0, 1]diff[-1, -1, -4] #12'5→#12'6[0, 0, 1]diff[0, 0, 5] #12'5→#12'7[0, 4, 1]diff[0, 0, 5] #12'8→#13'3[0, 3, -1]diff[0, 0, 9] #12'9→#13'3[0, 3, 0]diff[0, 0, -2] #13'3→#1'1[0, 4, -1]diff[1, 1, 4] #12'8→#12'10[0, 8, -1]diff[0, 0, 12] #12'8→#146[0, 10, -6]diff[0, 0, 8] #12'8→#146'1[0, 11, -9]diff[0, 0, 5] #12'8→#146'2[0, 12, -9]diff[0, 0, 5] #12'8→#146'3[0, 13, -9]diff[0, 0, 5] #17'1→#0[0, 1, -1]diff[1, 1, 2] #17'1→#0'1[0, 1, 2]diff[1, 1, 2]] -> #35
+EPISODE 299 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 299: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+LASTEP image 0 (digit 5) | calls on the apex 1 | bare pixels on the apex 0 | levels 4
+LASTEP image 1 (digit 0) | calls on the apex 1 | bare pixels on the apex 0 | levels 4
 LASTEP image 2 (digit 4) | calls on the apex 1 | bare pixels on the apex 0 | levels 5
-LASTEP image 3 (digit 1) | calls on the apex 2 | bare pixels on the apex 0 | levels 5
-LASTEP image 4 (digit 9) | calls on the apex 1 | bare pixels on the apex 0 | levels 6
-LASTEP image 5 (digit 2) | calls on the apex 1 | bare pixels on the apex 0 | levels 6
+LASTEP image 3 (digit 1) | calls on the apex 1 | bare pixels on the apex 0 | levels 6
+CHANGE episode 300 image 3 | started 0 | left 0 | changed 1
+    ~ f95 f95 origin #12 [#12→#25[0, 8, 1]diff[0, 0, 7] #12→#25'1[0, 6, 4]diff[0, 0, 4] #12'1→#25[0, 8, -1]diff[0, 0, 6] #12'2→#25[0, 8, 0]diff[0, 0, 6] #12'1→#25'2[0, 5, 4]diff[0, 0, 4] #12'5→#25'1[0, 6, -1]diff[0, 0, 1] #12'6→#25'1[0, 6, 0]diff[0, 0, 1] #12'7→#25'1[0, 6, 1]diff[0, 0, 2] #12'8→#25'2[0, 5, -1]diff[0, 0, 1] #12'8→#25'3[0, 4, 1]diff[0, 0, 2] #12'9→#25'3[0, 4, 2]diff[0, 0, 2] #12'8→#14[0, 5, 1]diff[0, -1, 4] #25'3→#0[0, 2, 0]diff[1, 1, 2] #25'1→#146[0, 1, 1]diff[0, 0, 1] #25'1→#146'1[0, 2, 0] #25'1→#146'2[0, 3, -2]diff[0, 0, -2] #25'1→#146'3[0, 4, -3]diff[0, 0, -3] #25'1→#146'4[0, 5, -4]diff[0, 0, -4] #12'3→#0[0, 6, -1]diff[1, 1, 13]] -> #107
+LASTEP image 4 (digit 9) | calls on the apex 1 | bare pixels on the apex 0 | levels 4
+LASTEP image 5 (digit 2) | calls on the apex 1 | bare pixels on the apex 0 | levels 5
+CHANGE episode 300 image 5 | started 0 | left 0 | changed 2
+    ~ f18 f18 origin #1 [#1→#12[0, 1, 0]diff[-1, -1, -1] #12→#0[0, 2, -1]diff[1, 1, 1] #12→#12'1[0, 2, 1]diff[0, 0, -6] #12→#13[0, 2, 0] #13'1→#12[0, 0, 1] #13'2→#12[0, 1, -1]diff[0, 0, 1] #12'1→#12'2[0, 2, -1]diff[0, 0, 5] #12'1→#28[0, 4, -2]diff[0, 0, 6] #12'2→#17[0, 1, -6]diff[0, 0, -3] #12'3→#28[0, 0, 1]diff[0, 0, 2] #28→#12'4[0, 1, 0]diff[0, 0, -1] #28→#12'5[0, 2, 1] #12'6→#17[0, 3, -2]diff[0, 0, -3] #13'5→#17[0, 2, 0]diff[0, 0, -4] #13'5→#0'1[0, 1, 1]diff[1, 1, 1] #13'6→#12'6[0, 1, 1] #13'6→#1'1[0, 0, 1]diff[1, 1, 2] #13'1→#13'4[0, 1, -1]diff[0, 0, -2] #12'2→#146[0, 3, -6]diff[0, 0, -3] #12'1→#146'1[0, 6, -7]diff[0, 0, 1] #12'1→#146'2[0, 7, -7]diff[0, 0, 1] #17→#146'3[0, 1, 0]diff[0, 0, 1] #0→#13'3[0, 1, 0]diff[-1, -1, -1]] -> #30
+    ~ f95 f95 origin #12 [#12→#25[0, 8, 1]diff[0, 0, 7] #12→#25'1[0, 6, 4]diff[0, 0, 4] #12'1→#25[0, 8, -1]diff[0, 0, 6] #12'2→#25[0, 8, 0]diff[0, 0, 6] #12'1→#25'2[0, 5, 4]diff[0, 0, 4] #12'5→#25'1[0, 6, -1]diff[0, 0, 1] #12'6→#25'1[0, 6, 0]diff[0, 0, 1] #12'7→#25'1[0, 6, 1]diff[0, 0, 2] #12'8→#25'2[0, 5, -1]diff[0, 0, 1] #12'8→#25'3[0, 4, 1]diff[0, 0, 2] #12'9→#25'3[0, 4, 2]diff[0, 0, 2] #12'8→#14[0, 5, 1]diff[0, -1, 4] #25'3→#0[0, 2, 0]diff[1, 1, 2] #25'1→#146[0, 1, 1]diff[0, 0, 1] #25'1→#146'1[0, 2, 0] #25'1→#146'2[0, 3, -2]diff[0, 0, -2] #25'1→#146'3[0, 4, -3]diff[0, 0, -3] #25'1→#146'4[0, 5, -4]diff[0, 0, -4]] -> #107
 LASTEP image 6 (digit 1) | calls on the apex 1 | bare pixels on the apex 0 | levels 6
-LASTEP image 7 (digit 3) | calls on the apex 1 | bare pixels on the apex 0 | levels 6
-LASTEP image 8 (digit 1) | calls on the apex 1 | bare pixels on the apex 0 | levels 5
-LASTEP image 9 (digit 4) | calls on the apex 1 | bare pixels on the apex 0 | levels 6
-EPISODE 300 | dictionary same | functions 219 | right 10/10 | calls on the apex per image 1.1
-  episode 300: added 0 retired 0 | right 10/10 (spoke 10) | max levels 7 | neurons 183 functions 219 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
-NEVERCALLED 0 of 219
-  train: 3000 images | spoke 2999 | right 2986 (99.5% of all, 99.6% of spoken) | lessons 3000 | apex/image 1.4 | neurons 183 functions 219
-  dictionary by (relations, nodes, cycle, has interneuron): {(1, 1, true, true): 14, (1, 2, false, true): 135, (2, 3, false, true): 25, (3, 3, true, true): 18, (3, 4, false, true): 15, (4, 5, false, true): 5, (5, 6, false, true): 2, (6, 7, false, true): 1, (7, 8, false, true): 1, (9, 10, false, true): 1, (10, 11, false, true): 1, (11, 12, false, true): 1}
-    f99 origin #12<#0..#0x6> [#12<#0..#0x6>→#36<#1..#1x3>[0, 6, -1] #12<#0..#0x6>→#29<#12<#0..#0x7>..#12<#0..#0x6>x0>[0, 0, 1] #12<#0..#0x6>→#30<#12<#0..#0x6>..#12<#0..#0x6>x1>[0, 7, -2] #29<#12<#0..#0x7>..#12<#0..#0x6>x0>→#48<#12<#0..#0x4>..#13<#1..#1x3>x0>[0, 0, 2] #36<#1..#1x3>→#13<#1..#1x1>[0, 1, 3] #36<#1..#1x3>→#21<#12<#0..#0x6>..#12<#0..#0x4>x0>[0, 1, 5] #36<#1..#1x3>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 4, 2] #49<#12<#0..#0x2>..#13<#1..#1x3>x0>→#21<#12<#0..#0x6>..#12<#0..#0x4>x0>[0, 7, 0] #13<#1..#1x1>→#100<#36<#1..#1x1>..#12<#0..#0x4>x0>[0, 1, -2] #68<#13<#1..#1x6>..#12<#0..#0x2>x0>→#30<#12<#0..#0x6>..#12<#0..#0x6>x1>[0, 3, 2] #68<#13<#1..#1x6>..#12<#0..#0x2>x0>→#16<#1..#12<#0..#0x4>x0>[0, 4, 1]] -> #99
-    f64 origin #12<#0..#0x9> [#12<#0..#0x9>→#18<#1..#1x3>[0, 2, 1] #12<#0..#0x9>→#18<#1..#1x2>[0, 10, 0] #12<#0..#0x9>→#24<#12<#0..#0x1>..#12<#0..#0x1>x3>[0, 0, 1] #12<#0..#0x9>→#30<#12<#0..#0x6>..#12<#0..#0x6>x1>[0, 3, 1] #18<#1..#1x3>→#74<#12<#0..#0x5>..#18<#1..#1x5>x0>[0, 1, 2] #18<#1..#1x2>→#19<#12<#0..#0x2>..#12<#0..#0x2>x2>[0, 1, 0] #18<#1..#1x2>→#22<#12<#0..#0x3>..#12<#0..#0x3>x5>[0, 0, 3] #23<#12<#0..#0x8>..#12<#0..#0x8>x3>→#18<#1..#1x3>[0, 2, -4] #15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#22<#12<#0..#0x3>..#12<#0..#0x3>x5>[0, 10, -6] #74<#12<#0..#0x5>..#18<#1..#1x5>x0>→#25<#13<#1..#1x2>..#0x0>[0, 2, 1]] -> #73
-    f62 origin #18<#1..#1x1> [#18<#1..#1x1>→#13<#1..#1x5>[0, 0, 2] #13<#1..#1x5>→#20<#13<#1..#1x1>..#12<#0..#0x3>x0>[0, 5, -1] #13<#1..#1x5>→#21<#12<#0..#0x6>..#12<#0..#0x4>x0>[0, 4, 1] #20<#13<#1..#1x1>..#12<#0..#0x3>x0>→#101<#1..#18<#1..#1x4>x0>[0, 1, -1] #51<#12<#0..#0x2>..#0x0>→#101<#1..#18<#1..#1x4>x0>[0, 2, 3] #101<#1..#18<#1..#1x4>x0>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 1, -6] #22<#12<#0..#0x3>..#12<#0..#0x3>x1>→#19<#12<#0..#0x2>..#12<#0..#0x2>x4>[0, 1, 2] #16<#1..#12<#0..#0x4>x0>→#101<#1..#18<#1..#1x4>x0>[0, 5, 1] #13<#1..#1x5>→#46<#12<#0..#0x4>..#12<#0..#0x3>x0>[0, 1, -2]] -> #71
-    f109 origin #19<#12<#0..#0x2>..#12<#0..#0x2>x3> [#19<#12<#0..#0x2>..#12<#0..#0x2>x3>→#52<#12<#0..#0x3>..#13<#1..#1x2>x0>[0, 0, 4] #19<#12<#0..#0x2>..#12<#0..#0x2>x3>→#102<#32<#1..#1x5>..#32<#1..#1x1>x0>[0, 3, 0] #52<#12<#0..#0x3>..#13<#1..#1x2>x0>→#12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#21<#12<#0..#0x6>..#12<#0..#0x4>x0>x0>[0, 0, 1] #52<#12<#0..#0x3>..#13<#1..#1x2>x0>→#13<#1..#1x5>[0, 3, -1] #179<#19<#12<#0..#0x2>..#12<#0..#0x2>x3>..#13<#1..#1x5>x0>→#12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#21<#12<#0..#0x6>..#12<#0..#0x4>x0>x0>[0, 0, 5] #179<#19<#12<#0..#0x2>..#12<#0..#0x2>x3>..#13<#1..#1x5>x0>→#103<#16<#1..#12<#0..#0x4>x0>..#101<#1..#18<#1..#1x4>x0>x0>[0, 4, 0] #52<#12<#0..#0x3>..#13<#1..#1x2>x0>→#15<#12<#0..#0x13>..#12<#0..#0x13>x1>[0, 0, 1]] -> #105
-    f84 origin #13<#1..#1x5> [#13<#1..#1x5>→#13<#1..#1x1>[0, 4, 1] #13<#1..#1x5>→#19<#12<#0..#0x2>..#12<#0..#0x2>x2>[0, 6, 0] #13<#1..#1x5>→#37<#1..#12<#0..#0x2>x0>[0, 0, 1] #44<#12<#0..#0x4>..#12<#0..#0x3>x0>→#19<#12<#0..#0x2>..#12<#0..#0x2>x2>[0, 2, -4] #44<#12<#0..#0x4>..#12<#0..#0x3>x0>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 1, 1] #43<#12<#0..#0x5>..#12<#0..#0x4>x0>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 2, -3]] -> #90
-    f53 origin #12<#0..#0x8> [#12<#0..#0x8>→#13<#1..#1x1>[0, 9, 0] #12<#0..#0x8>→#42<#12<#0..#0x6>..#13<#1..#1x2>x0>[0, 0, 1] #13<#1..#1x1>→#19<#12<#0..#0x2>..#12<#0..#0x2>x2>[0, 2, -2] #37<#1..#12<#0..#0x2>x0>→#13<#1..#1x1>[0, 4, 1] #13<#1..#1x1>→#44<#12<#0..#0x4>..#12<#0..#0x3>x0>[0, 0, 2]] -> #62
-    f95 origin #12<#0..#0x2> [#12<#0..#0x2>→#33<#12<#0..#0x5>..#12<#0..#0x5>x1>[0, 0, 1] #12<#0..#0x2>→#96<#32<#1..#1x3>..#13<#1..#1x1>x0>[0, 3, 0] #33<#12<#0..#0x5>..#12<#0..#0x5>x1>→#95<#14<#1..#0x0>..#32<#1..#1x3>x0>[0, 6, -1] #33<#12<#0..#0x5>..#12<#0..#0x5>x1>→#12<#15<#12<#0..#0x13>..#12<#0..#0x13>x1>..#64<#12<#0..#0x7>..#12<#0..#0x6>x0>x0>[0, 0, 3] #33<#12<#0..#0x5>..#12<#0..#0x5>x1>→#156<#66<#12<#0..#0x4>..#32<#1..#1x3>x0>..#26<#12<#0..#0x4>..#12<#0..#0x4>x1>x0>[0, 0, 2]] -> #98
-    f29 origin #12<#0..#0x7> [#12<#0..#0x7>→#1[0, 7, 1] #12<#0..#0x7>→#19<#12<#0..#0x2>..#12<#0..#0x2>x1>[0, 0, 1] #12<#0..#0x7>→#37<#1..#12<#0..#0x2>x0>[0, 3, 1] #12<#0..#0x7>→#89<#13<#1..#1x4>..#1x0>[0, 3, 2]] -> #41
-    f98 origin #33<#12<#0..#0x5>..#12<#0..#0x5>x1> [#33<#12<#0..#0x5>..#12<#0..#0x5>x1>→#37<#1..#12<#0..#0x2>x0>[0, 6, 0] #33<#12<#0..#0x5>..#12<#0..#0x5>x1>→#46<#12<#0..#0x4>..#12<#0..#0x3>x0>[0, 0, 2] #33<#12<#0..#0x5>..#12<#0..#0x5>x1>→#56<#12<#0..#0x1>..#12<#0..#0x1>x1>[0, 6, 2] #33<#12<#0..#0x5>..#12<#0..#0x5>x1>→#96<#32<#1..#1x3>..#13<#1..#1x1>x0>[0, 3, 4]] -> #12
-    f106 origin #32<#1..#1x5> [#32<#1..#1x5>→#32<#1..#1x3>[0, 3, -2] #32<#1..#1x5>→#12<#0..#0x4>[0, 2, -1] #32<#1..#1x5>→#32<#1..#1x1>[0, 5, -3] #32<#1..#1x5>→#18<#1..#1x1>[0, 0, 1]] -> #102
-    f110 origin #15<#12<#0..#0x13>..#12<#0..#0x13>x1> [#15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#29<#12<#0..#0x7>..#12<#0..#0x6>x0>[0, 0, 2] #15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#22<#12<#0..#0x3>..#12<#0..#0x3>x1>[0, 10, 2] #29<#12<#0..#0x7>..#12<#0..#0x6>x0>→#102<#32<#1..#1x5>..#32<#1..#1x1>x0>[0, 3, 5] #15<#12<#0..#0x13>..#12<#0..#0x13>x1>→#71<#13<#1..#1x5>..#19<#12<#0..#0x2>..#12<#0..#0x2>x4>x0>[0, 3, 10]] -> #12
-    f144 origin #73<#12<#0..#0x9>..#18<#1..#1x2>x0> [#73<#12<#0..#0x9>..#18<#1..#1x2>x0>→#24<#12<#0..#0x1>..#12<#0..#0x1>x3>[0, 0, 1] #73<#12<#0..#0x9>..#18<#1..#1x2>x0>→#74<#12<#0..#0x5>..#18<#1..#1x5>x0>[0, 3, 3] #24<#12<#0..#0x1>..#12<#0..#0x1>x3>→#76<#23<#12<#0..#0x8>..#12<#0..#0x8>x3>..#25<#13<#1..#1x2>..#0x0>x0>[0, 0, 4] #73<#12<#0..#0x9>..#18<#1..#1x2>x0>→#12<#30<#12<#0..#0x6>..#12<#0..#0x6>x1>..#22<#12<#0..#0x3>..#12<#0..#0x3>x5>x0>[0, 3, 1]] -> #12
-  test: 0 images | spoke 0 | right 0 (0.0%) | apex/image 0.0 | neurons 183 functions 219
+LASTEP image 7 (digit 3) | calls on the apex 1 | bare pixels on the apex 0 | levels 5
+CHANGE episode 300 image 7 | started 0 | left 0 | changed 2
+    ~ f18 f18 origin #1 [#1→#12[0, 1, 0]diff[-1, -1, -1] #12→#0[0, 2, -1]diff[1, 1, 1] #12→#12'1[0, 2, 1]diff[0, 0, -6] #12→#13[0, 2, 0] #13'1→#12[0, 0, 1] #13'2→#12[0, 1, -1]diff[0, 0, 1] #12'1→#12'2[0, 2, -1]diff[0, 0, 5] #12'1→#28[0, 4, -2]diff[0, 0, 6] #12'2→#17[0, 1, -6]diff[0, 0, -3] #12'3→#28[0, 0, 1]diff[0, 0, 2] #28→#12'4[0, 1, 0]diff[0, 0, -1] #28→#12'5[0, 2, 1] #12'6→#17[0, 3, -2]diff[0, 0, -3] #13'5→#17[0, 2, 0]diff[0, 0, -4] #13'5→#0'1[0, 1, 1]diff[1, 1, 1] #13'6→#12'6[0, 1, 1] #13'6→#1'1[0, 0, 1]diff[1, 1, 2] #13'1→#13'4[0, 1, -1]diff[0, 0, -2] #12'2→#146[0, 3, -6]diff[0, 0, -3] #12'1→#146'1[0, 6, -7]diff[0, 0, 1] #12'1→#146'2[0, 7, -7]diff[0, 0, 1] #17→#146'3[0, 1, 0]diff[0, 0, 1]] -> #30
+    ~ f23 f23 origin #12 [#12→#13[0, 7, 0]diff[0, 0, 4] #13→#13'1[0, 2, -1]diff[0, 0, 1] #13'2→#13[0, 3, -1]diff[0, 0, 2] #12→#12'3[0, 0, 1]diff[0, 0, 3] #12'4→#13'2[0, 4, -1]diff[0, 0, 3] #13'2→#17'1[0, 4, 1]diff[0, 0, 2] #12'5→#17'1[0, 8, -1]diff[0, 0, 5] #13'3→#17'1[0, 5, -3]diff[0, 0, 2] #1→#13'3[0, 0, 1]diff[-1, -1, -4] #12'5→#12'6[0, 0, 1]diff[0, 0, 5] #12'5→#12'7[0, 4, 1]diff[0, 0, 5] #12'8→#13'3[0, 3, -1]diff[0, 0, 9] #12'9→#13'3[0, 3, 0]diff[0, 0, -2] #13'3→#1'1[0, 4, -1]diff[1, 1, 4] #12'8→#12'10[0, 8, -1]diff[0, 0, 12] #12'8→#146[0, 10, -6]diff[0, 0, 8] #12'8→#146'1[0, 11, -9]diff[0, 0, 5] #12'8→#146'2[0, 12, -9]diff[0, 0, 5] #12'8→#146'3[0, 13, -9]diff[0, 0, 5] #17'1→#0[0, 1, -1]diff[1, 1, 2] #17'1→#0'1[0, 1, 2]diff[1, 1, 2] #0→#17[0, 0, 1]diff[-1, -1, -1]] -> #35
+LASTEP image 8 (digit 1) | calls on the apex 1 | bare pixels on the apex 0 | levels 4
+LASTEP image 9 (digit 4) | calls on the apex 1 | bare pixels on the apex 0 | levels 5
+CHANGE episode 300 image 9 | started 0 | left 0 | changed 1
+    ~ f23 f23 origin #12 [#12→#13[0, 7, 0]diff[0, 0, 4] #13→#13'1[0, 2, -1]diff[0, 0, 1] #13'2→#13[0, 3, -1]diff[0, 0, 2] #12→#12'3[0, 0, 1]diff[0, 0, 3] #12'4→#13'2[0, 4, -1]diff[0, 0, 3] #13'2→#17'1[0, 4, 1]diff[0, 0, 2] #12'5→#17'1[0, 8, -1]diff[0, 0, 5] #13'3→#17'1[0, 5, -3]diff[0, 0, 2] #1→#13'3[0, 0, 1]diff[-1, -1, -4] #12'5→#12'6[0, 0, 1]diff[0, 0, 5] #12'5→#12'7[0, 4, 1]diff[0, 0, 5] #12'8→#13'3[0, 3, -1]diff[0, 0, 9] #12'9→#13'3[0, 3, 0]diff[0, 0, -2] #13'3→#1'1[0, 4, -1]diff[1, 1, 4] #12'8→#12'10[0, 8, -1]diff[0, 0, 12] #12'8→#146[0, 10, -6]diff[0, 0, 8] #12'8→#146'1[0, 11, -9]diff[0, 0, 5] #12'8→#146'2[0, 12, -9]diff[0, 0, 5] #12'8→#146'3[0, 13, -9]diff[0, 0, 5] #17'1→#0[0, 1, -1]diff[1, 1, 2] #17'1→#0'1[0, 1, 2]diff[1, 1, 2]] -> #35
+EPISODE 300 | dictionary same | functions 213 | right 10/10 | calls on the apex per image 1.0
+  episode 300: added 0 retired 0 | right 10/10 (spoke 10) | max levels 6 | neurons 225 functions 213 |  | digit:said 5:5 0:0 4:4 1:1 9:9 2:2 1:1 3:3 1:1 4:4
+NEVERCALLED 0 of 213
+  train: 3000 images | spoke 2999 | right 2977 (99.2% of all, 99.3% of spoken) | lessons 3000 | apex/image 1.4 | neurons 225 functions 213
+  dictionary by (relations, nodes, cycle, has interneuron): {(1, 1, true, true): 14, (1, 2, false, true): 124, (2, 3, false, true): 17, (3, 3, true, true): 16, (3, 4, false, true): 4, (4, 5, false, true): 10, (5, 6, false, true): 7, (6, 7, false, true): 4, (7, 8, false, true): 6, (10, 11, false, true): 1, (11, 12, false, true): 3, (14, 15, false, true): 1, (16, 17, false, true): 1, (18, 19, false, true): 1, (19, 20, false, true): 1, (21, 22, false, true): 1, (22, 23, false, true): 1, (25, 26, false, true): 1}
+    f205 origin #146 [#146→#1[0, 1, 4]diff[1, 1, 3] #1→#13[0, 1, -1]diff[-1, -1, -1] #1→#123[0, 1, 0]diff[-1, -2] #12→#1[0, 1, -1]diff[1, 1, 2] #146→#25[0, 0, 4] #12→#25'1[0, 2, 2]diff[0, 0, -1] #12→#25'2[0, 3, 0]diff[0, 0, -2] #25→#0[0, 3, -2]diff[1, 1, 3] #25→#68[0, 2, -3]diff[0, -1, 3] #25→#146'1[0, 1, -4]diff[0, 0, 1] #25→#146'2[0, 4, -4] #0'1→#68[0, 0, 1]diff[-1, -2] #12'1→#25'1[0, 2, 0]diff[0, 0, -2] #12'2→#25'1[0, 2, 1]diff[0, 0, -1] #25'2→#0'2[0, 2, -4]diff[1, 1, 4] #25'2→#0'3[0, 2, 0]diff[1, 1, 4] #25'2→#12'3[0, 1, 1]diff[0, 0, 3] #25'2→#12'4[0, 2, -5]diff[0, 0, 3] #25'2→#25'3[0, 2, -3]diff[0, 0, 1] #25'2→#146'3[0, 3, -2] #25'2→#146'4[0, 4, -3]diff[0, 0, -1] #25'2→#146'5[0, 5, -5]diff[0, 0, -3] #12'4→#25'4[0, 2, -1] #12'5→#146'3[0, 3, -4]diff[0, 0, -2] #25'4→#146'6[0, 2, -1]diff[0, 0, -8]] -> #217
+    f18 origin #1 [#1→#12[0, 1, 0]diff[-1, -1, -1] #12→#0[0, 2, -1]diff[1, 1, 1] #12→#12'1[0, 2, 1]diff[0, 0, -6] #12→#13[0, 2, 0] #13'1→#12[0, 0, 1] #13'2→#12[0, 1, -1]diff[0, 0, 1] #12'1→#12'2[0, 2, -1]diff[0, 0, 5] #12'1→#28[0, 4, -2]diff[0, 0, 6] #12'2→#17[0, 1, -6]diff[0, 0, -3] #12'3→#28[0, 0, 1]diff[0, 0, 2] #28→#12'4[0, 1, 0]diff[0, 0, -1] #28→#12'5[0, 2, 1] #12'6→#17[0, 3, -2]diff[0, 0, -3] #13'5→#17[0, 2, 0]diff[0, 0, -4] #13'5→#0'1[0, 1, 1]diff[1, 1, 1] #13'6→#12'6[0, 1, 1] #13'6→#1'1[0, 0, 1]diff[1, 1, 2] #13'1→#13'4[0, 1, -1]diff[0, 0, -2] #12'2→#146[0, 3, -6]diff[0, 0, -3] #12'1→#146'1[0, 6, -7]diff[0, 0, 1] #12'1→#146'2[0, 7, -7]diff[0, 0, 1] #17→#146'3[0, 1, 0]diff[0, 0, 1]] -> #30
+    f23 origin #12 [#12→#13[0, 7, 0]diff[0, 0, 4] #13→#13'1[0, 2, -1]diff[0, 0, 1] #13'2→#13[0, 3, -1]diff[0, 0, 2] #12→#12'3[0, 0, 1]diff[0, 0, 3] #12'4→#13'2[0, 4, -1]diff[0, 0, 3] #13'2→#17'1[0, 4, 1]diff[0, 0, 2] #12'5→#17'1[0, 8, -1]diff[0, 0, 5] #13'3→#17'1[0, 5, -3]diff[0, 0, 2] #1→#13'3[0, 0, 1]diff[-1, -1, -4] #12'5→#12'6[0, 0, 1]diff[0, 0, 5] #12'5→#12'7[0, 4, 1]diff[0, 0, 5] #12'8→#13'3[0, 3, -1]diff[0, 0, 9] #12'9→#13'3[0, 3, 0]diff[0, 0, -2] #13'3→#1'1[0, 4, -1]diff[1, 1, 4] #12'8→#12'10[0, 8, -1]diff[0, 0, 12] #12'8→#146[0, 10, -6]diff[0, 0, 8] #12'8→#146'1[0, 11, -9]diff[0, 0, 5] #12'8→#146'2[0, 12, -9]diff[0, 0, 5] #12'8→#146'3[0, 13, -9]diff[0, 0, 5] #17'1→#0[0, 1, -1]diff[1, 1, 2] #17'1→#0'1[0, 1, 2]diff[1, 1, 2]] -> #35
+    f145 origin #25 [#25→#1[0, 5, -3]diff[1, 1, 5] #25'1→#1[0, 2, -1]diff[1, 1, 3] #25→#14[0, 6, -4]diff[0, -1, 5] #14→#17[0, 1, 1]diff[0, 1, -4] #14→#146[0, 2, -1]diff[0, 1, -9] #12→#146[0, 4, -9]diff[0, 0, -6] #25→#14'1[0, 1, 0]diff[0, -1, 5] #25'2→#17[0, 2, -5]diff[0, 0, -3] #25→#155[0, 1, 1]diff[0, 0, 2] #37→#17[0, 1, -5]diff[0, 2, -4] #155'1→#14[0, 5, -6]diff[0, -1, 6] #155'2→#17[0, 3, -5]diff[0, 0, -2] #155'3→#17[0, 4, -5]diff[0, 0, -1] #155'4→#17[0, 5, -5] #12→#0[0, 2, -1]diff[1, 1, 3] #13→#25'2[0, 5, -1]diff[0, 0, 4] #17'1→#14'1[0, 1, -1]diff[0, -1, 1] #13→#0'1[0, 0, 1]diff[1, 1, 5] #13→#13'1[0, 1, 1]diff[0, 0, 3]] -> #157
+    f95 origin #12 [#12→#25[0, 8, 1]diff[0, 0, 7] #12→#25'1[0, 6, 4]diff[0, 0, 4] #12'1→#25[0, 8, -1]diff[0, 0, 6] #12'2→#25[0, 8, 0]diff[0, 0, 6] #12'1→#25'2[0, 5, 4]diff[0, 0, 4] #12'5→#25'1[0, 6, -1]diff[0, 0, 1] #12'6→#25'1[0, 6, 0]diff[0, 0, 1] #12'7→#25'1[0, 6, 1]diff[0, 0, 2] #12'8→#25'2[0, 5, -1]diff[0, 0, 1] #12'8→#25'3[0, 4, 1]diff[0, 0, 2] #12'9→#25'3[0, 4, 2]diff[0, 0, 2] #12'8→#14[0, 5, 1]diff[0, -1, 4] #25'3→#0[0, 2, 0]diff[1, 1, 2] #25'1→#146[0, 1, 1]diff[0, 0, 1] #25'1→#146'1[0, 2, 0] #25'1→#146'2[0, 3, -2]diff[0, 0, -2] #25'1→#146'3[0, 4, -3]diff[0, 0, -3] #25'1→#146'4[0, 5, -4]diff[0, 0, -4]] -> #107
+    f195 origin #123 [#123→#13[0, 0, 1]diff[0, 1, -3] #13→#0[0, 2, -1]diff[1, 1, 3] #13→#37[0, 2, -2]diff[0, -2, 3] #13→#146[0, 0, 1]diff[0, 0, -1] #13→#146'1[0, 1, 1]diff[0, 0, -1] #13→#146'2[0, 2, 1]diff[0, 0, -1] #13→#146'3[0, 3, 1]diff[0, 0, -1] #37→#0'1[0, 2, 0]diff[1, 3] #37→#13'1[0, 1, -1]diff[0, 2, -3] #37→#17[0, 2, 1]diff[0, 2, -6] #13'1→#17'1[0, 2, 1]diff[0, 0, 1] #13'1→#146'4[0, 4, 0]diff[0, 0, -5] #17→#146'5[0, 1, 2]diff[0, 0, 3] #1→#146'4[0, 1, -1]diff[-1, -1, -8] #146'5→#1'1[0, 0, 4]diff[1, 1, 3] #17'1→#146'6[0, 1, 1]diff[0, 0, -4]] -> #207
+    f64 origin #12 [#12→#17[0, 10, 0]diff[0, 0, 7] #12→#17'1[0, 2, 1]diff[0, 0, 6] #12→#49[0, 2, 1]diff[0, -1, 9] #17'2→#17[0, 1, -3]diff[0, 0, 3] #12'8→#17'1[0, 2, -4]diff[0, 0, 5] #12'13→#17'2[0, 9, -6]diff[0, 0, 8] #12'14→#17'2[0, 9, -5]diff[0, 0, 3] #12'15→#17'2[0, 9, -4]diff[0, 0, 3] #12'16→#17'2[0, 9, -3]diff[0, 0, 3] #12'8→#12'18[0, 3, -1]diff[0, 0, 7] #49→#21[0, 3, 3]diff[0, -1] #151→#49[0, 2, 0]diff[0, -1, 1] #15'2→#21[0, 5, -5]diff[0, -2, 1] #15'1→#21[0, 2, 3]diff[0, -2, 1]] -> #76
+    f173 origin #12 [#12→#13[0, 5, 1]diff[0, 0, 5] #12→#18[0, 0, 1]diff[0, -1, 8] #13→#0[0, 1, 1]diff[1, 1, 3] #18→#30[0, 3, 2]diff[-2, -17] #30→#13'1[0, 4, -1]diff[2, 18, -1] #85→#30[0, 3, 0]diff[-2, -17] #210→#30[0, 3, 2]diff[-2, -17] #15→#30[0, 3, -2]diff[-2, -18, 2] #15'1→#30[0, 3, 0]diff[-2, -18, 1] #30→#151[0, 9, -6]diff[2, 18, -1] #30→#186[0, 7, -6]diff[2, 17]] -> #185
+    f182 origin #151 [#151→#146[0, 3, 0]diff[0, 0, -5] #151→#154[0, 3, 8]diff[0, 0, 1] #15→#154[0, 3, -1] #146→#153[0, 1, 0]diff[0, -1, 7] #154→#46[0, 4, 0]diff[0, -1, 1] #154→#152[0, 4, -3]diff[0, -1, 1] #146→#177[0, 1, 2]diff[0, -2, 7] #153→#123[0, 3, 1] #153→#151'1[0, 7, 0]diff[0, 1, -2] #177→#179[0, 2, 0]diff[-1] #179→#193[0, 2, 2]diff[1]] -> #194
+    f253 origin #15 [#15→#153[0, 4, 3]diff[0, -2, 2] #15→#146[0, 3, 3]diff[0, 0, -5] #15→#151[0, 0, 3] #153→#151'1[0, 7, 0]diff[0, 2, -2] #153→#177[0, 0, 2] #153→#179[0, 2, 2]diff[-1] #153→#193[0, 4, 4] #15'1→#193[0, 8, -5]diff[0, -2, 1] #46→#193[0, 1, -4]diff[0, -1] #146→#154[0, 0, 8]diff[0, 0, 6] #152→#193[0, 1, -1]diff[0, -1]] -> #265
+    f37 origin #17 [#17→#12[0, 1, 2]diff[0, 0, -2] #12→#0[0, 5, 1]diff[1, 1, 5] #12→#13[0, 2, 1]diff[0, 0, 3] #12→#17'1[0, 6, 0] #12'1→#13[0, 2, 0]diff[0, 0, -1] #12'2→#17'1[0, 6, 1]diff[0, 0, 1] #17'1→#146[0, 1, 0] #12'2→#17'2[0, 7, -2]diff[0, 0, 4] #17→#12'3[0, 1, 0]diff[0, 0, -3] #17'2→#146'1[0, 1, 0]diff[0, 0, -6]] -> #49
+    f57 origin #13 [#13→#1[0, 2, 1]diff[1, 1, 2] #1→#28[0, 0, 1]diff[-1, -1, -3] #13'1→#28[0, 1, -4] #28→#12'3[0, 3, 4]diff[0, 0, -1] #28→#12'4[0, 4, 2] #28→#12'5[0, 4, 3] #28→#13'2[0, 1, 3]diff[0, 0, 2]] -> #69
+  test: 0 images | spoke 0 | right 0 (0.0%) | apex/image 0.0 | neurons 225 functions 213
   confusion (row = digit, column = said):
     0 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     1 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

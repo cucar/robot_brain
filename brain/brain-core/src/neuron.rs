@@ -13,9 +13,9 @@ use crate::types::*;
 
 pub use crate::board::ActRef;
 
-/// A relation as one neuron records it from its own activation (D47, D34): its own pose, the neighbor's pose, and
-/// the offset.
-pub type RelKey = (Sym, Sym, Offset);
+/// A relation as one neuron records it from its own activation (D47, D34): its own neuron, the neighbor's neuron,
+/// the offset, and its own phase in numbers less the neighbor's.
+pub type RelKey = (Sym, Sym, Offset, Offset);
 
 /// One neighbor of a row (D26): the activation that stands there, its pose, and its exact offset from the row's
 /// activation (D6).
@@ -24,6 +24,8 @@ pub struct Nb {
     pub act: ActRef,
     pub sym: Sym,
     pub off: Offset,
+    /// The neighbor's phase in numbers when the row took it (D53).
+    pub numbers: Pos,
 }
 
 /// One row of the history (D18): an activation, its pose, and the neighborhood it observed, with what followed it
@@ -32,6 +34,8 @@ pub struct Nb {
 pub struct Row {
     pub act: ActRef,
     pub own: Sym,
+    /// Its activation's phase in numbers when it fired (D53).
+    pub numbers: Pos,
     pub nbs: Vec<Nb>,
 }
 
@@ -40,6 +44,7 @@ pub struct Row {
 pub struct RowInput {
     pub act: ActRef,
     pub own: Sym,
+    pub numbers: Pos,
     pub nbs: Vec<Nb>,
 }
 
@@ -103,11 +108,11 @@ pub struct ConnectionWrite {
 /// `Alone`: the rows that decided every offset of `offs` and hold the relation.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum CountQuery {
-    Ends { own: Sym, far: Sym, off: Offset },
-    Holding { own: Sym, far: Sym, off: Offset },
+    Ends { own: Sym, far: Sym, off: Offset, diff: Offset },
+    Holding { own: Sym, far: Sym, off: Offset, diff: Offset },
     Rows { own: Sym },
-    Answer { own: Sym, far: Sym, off: Offset, cond: Vec<(Sym, Offset)> },
-    Alone { own: Sym, far: Sym, off: Offset, offs: Vec<Offset> },
+    Answer { own: Sym, far: Sym, off: Offset, diff: Offset, cond: Vec<(Sym, Offset, Offset)> },
+    Alone { own: Sym, far: Sym, off: Offset, diff: Offset, offs: Vec<Offset> },
 }
 
 impl CountQuery {
@@ -126,27 +131,28 @@ impl CountQuery {
 /// from the frame after the one the offset reaches (R50, D18).
 pub fn count_rows(history: &VecDeque<Row>, index: &FxHashMap<RelKey, u32>, now_frame: FrameNumber, now_index: &FxHashMap<RelKey, u32>, frame: FrameNumber, q: &CountQuery) -> (u32, u32) {
     let decided = |row: &Row, off: &Offset| off[0] <= 0 || row.act.frame + (off[0] as i64) < frame;
-    let holds = |row: &Row, far: Sym, off: &Offset| row.nbs.iter().any(|nb| nb.sym == far && nb.off == *off);
+    // a row holds a relation where the neighbor stands at the offset and the two phases differ by the relation's numbers
+    let holds = |row: &Row, far: Sym, off: &Offset, diff: &Offset| row.nbs.iter().any(|nb| nb.sym == far && nb.off == *off && row.numbers.minus(&nb.numbers) == *diff);
     let own = q.read_pose();
     let rows = history.iter().filter(|r| r.own == own);
     match q {
-        CountQuery::Ends { own, far, off } => {
-            let k = (*own, *far, *off);
+        CountQuery::Ends { own, far, off, diff } => {
+            let k = (*own, *far, *off, *diff);
             let now = if off[0] < 0 && now_frame == frame { now_index.get(&k).copied().unwrap_or(0) } else { 0 };
             (index.get(&k).copied().unwrap_or(0), now)
         }
-        CountQuery::Holding { far, off, .. } => (rows.filter(|r| decided(r, off) && holds(r, *far, off)).count() as u32, 0),
+        CountQuery::Holding { far, off, diff, .. } => (rows.filter(|r| decided(r, off) && holds(r, *far, off, diff)).count() as u32, 0),
         CountQuery::Rows { .. } => (rows.count() as u32, 0),
-        CountQuery::Answer { far, off, cond, .. } => {
+        CountQuery::Answer { far, off, diff, cond, .. } => {
             let (mut with, mut without) = (0, 0);
             for row in rows {
-                if !decided(row, off) || !cond.iter().all(|(_, o2)| decided(row, o2)) { continue; }
-                if !cond.iter().all(|(f2, o2)| holds(row, *f2, o2)) { continue; }
-                if holds(row, *far, off) { with += 1; } else if !cond.is_empty() { without += 1; }
+                if !decided(row, off) || !cond.iter().all(|(_, o2, _)| decided(row, o2)) { continue; }
+                if !cond.iter().all(|(f2, o2, d2)| holds(row, *f2, o2, d2)) { continue; }
+                if holds(row, *far, off, diff) { with += 1; } else if !cond.is_empty() { without += 1; }
             }
             (with, without)
         }
-        CountQuery::Alone { far, off, offs, .. } => (rows.filter(|r| offs.iter().all(|o| decided(r, o)) && holds(r, *far, off)).count() as u32, 0),
+        CountQuery::Alone { far, off, diff, offs, .. } => (rows.filter(|r| offs.iter().all(|o| decided(r, o)) && holds(r, *far, off, diff)).count() as u32, 0),
     }
 }
 
@@ -183,7 +189,7 @@ pub struct Neuron {
 
 /// The relations a row holds, each once.
 fn read_keys(row: &Row) -> Vec<RelKey> {
-    let mut k: Vec<RelKey> = row.nbs.iter().map(|nb| (row.own, nb.sym, nb.off)).collect();
+    let mut k: Vec<RelKey> = row.nbs.iter().map(|nb| (row.own, nb.sym, nb.off, row.numbers.minus(&nb.numbers))).collect();
     k.sort_unstable();
     k.dedup();
     k
@@ -261,15 +267,15 @@ impl Neuron {
             let old = self.pop_row();
             self.remove_keys(&read_keys(&old), old.act.frame);
         }
-        let mut admitted: Vec<(ActRef, Sym, Vec<Nb>)> = Vec::new();
+        let mut admitted: Vec<(ActRef, Sym, Pos, Vec<Nb>)> = Vec::new();
         for inp in task.rows.into_iter().take(incoming) {
-            let row = Row { act: inp.act, own: inp.own, nbs: inp.nbs };
+            let row = Row { act: inp.act, own: inp.own, numbers: inp.numbers, nbs: inp.nbs };
             self.add_keys(&read_keys(&row), row.act.frame);
-            admitted.push((row.act, row.own, row.nbs.clone()));
+            admitted.push((row.act, row.own, row.numbers, row.nbs.clone()));
             self.push_row(row);
         }
         let returns = admitted.into_iter()
-            .map(|(act, own, nbs)| ActReturn { act, rels: nbs.iter().map(|nb| (*nb, self.strength(&(own, nb.sym, nb.off)))).collect() })
+            .map(|(act, own, numbers, nbs)| ActReturn { act, rels: nbs.iter().map(|nb| (*nb, self.strength(&(own, nb.sym, nb.off, numbers.minus(&nb.numbers))))).collect() })
             .collect();
         for lift in &task.lifts { self.take_lift(lift); }
         returns
@@ -286,14 +292,14 @@ impl Neuron {
         for old in self.history.iter().take(evict) { for k in read_keys(old) { *delta.entry(k).or_insert(0) -= 1; } }
         let rows: Vec<RowInput> = task.rows.into_iter().take(incoming).collect();
         for inp in &rows {
-            let mut k: Vec<RelKey> = inp.nbs.iter().map(|nb| (inp.own, nb.sym, nb.off)).collect();
+            let mut k: Vec<RelKey> = inp.nbs.iter().map(|nb| (inp.own, nb.sym, nb.off, inp.numbers.minus(&nb.numbers))).collect();
             k.sort_unstable();
             k.dedup();
             for k in k { *delta.entry(k).or_insert(0) += 1; }
         }
         let at = |k: &RelKey| (self.strength(k) as i64 + delta.get(k).copied().unwrap_or(0)).max(0) as u32;
         rows.into_iter()
-            .map(|inp| ActReturn { act: inp.act, rels: inp.nbs.iter().map(|nb| (*nb, at(&(inp.own, nb.sym, nb.off)))).collect() })
+            .map(|inp| ActReturn { act: inp.act, rels: inp.nbs.iter().map(|nb| (*nb, at(&(inp.own, nb.sym, nb.off, inp.numbers.minus(&nb.numbers))))).collect() })
             .collect()
     }
 
@@ -329,8 +335,8 @@ impl Neuron {
         let mut came: Vec<RelKey> = Vec::new();
         for nb in nbs {
             if row.nbs.iter().any(|x| x.act == nb.act) { continue; }
-            let key = (row.own, nb.sym, nb.off);
-            if !row.nbs.iter().any(|x| x.sym == nb.sym && x.off == nb.off) && !came.contains(&key) { came.push(key); }
+            let key = (row.own, nb.sym, nb.off, row.numbers.minus(&nb.numbers));
+            if !row.nbs.iter().any(|x| x.sym == nb.sym && x.off == nb.off && x.numbers == nb.numbers) && !came.contains(&key) { came.push(key); }
             row.nbs.push(*nb);
         }
         let fr = row.act.frame;

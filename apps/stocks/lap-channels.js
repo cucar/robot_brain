@@ -493,6 +493,30 @@ export class LapChannelsJob extends Job {
 			profit = ` | net profit $${formatFixed(value, 2)}, ROI ${formatFixed(value / this.trader.initialCapital * 100, 2)}% (${this.trader.trades} trades)`;
 		}
 		console.log(`CYCLE ${lap + 1} | neurons ${this.brain.countLivingNeurons()} | functions ${this.brain.countFunctions()} | highest call level in the cycle ${top} | the dictionary last changed at frame ${this.lastChange} | right ${shares.join(', ')}${profit}`);
+		this.printChurn(lap);
+	}
+
+	/**
+	 * The churn of the dictionary over a lap, on stderr: of the functions that stood at the lap's start, how many
+	 * still stand with the same relations, how many stand changed and how many are gone; and how many functions
+	 * were started and removed during the lap.
+	 * A function is told by its number, and numbers are given in order, so the highest number says how many started.
+	 */
+	printChurn(lap) {
+		const now = new Map(this.brain.getDictionary().map(f => [f.id, f.description]));
+		const highest = Math.max(-1, ...now.keys());
+		const before = this.churnBefore ?? { functions: new Map(), highest: -1 };
+		let unchanged = 0, changed = 0, gone = 0;
+		for (const [id, description] of before.functions) {
+			if (!now.has(id)) gone++;
+			else if (now.get(id) === description) unchanged++;
+			else changed++;
+		}
+		const started = highest - before.highest;
+		const removed = started - (now.size - before.functions.size);
+		const stood = before.functions.size;
+		console.error(`CHURN lap ${lap + 1} | stood at the start ${stood} | still the same ${unchanged} (${formatPercent(unchanged, stood)}%) | changed ${changed} | gone ${gone} | started in the lap ${started} | removed in the lap ${removed} | stand at the end ${now.size}`);
+		this.churnBefore = { functions: now, highest };
 	}
 
 	/**
@@ -653,7 +677,8 @@ class DictionaryReport {
 	 * The call a pose names, or null where it names a base neuron.
 	 */
 	readPose(sym) {
-		if (!this.poses.has(sym)) this.poses.set(sym, this.brain.readPose(sym));
+		// a relation names a call by its interneuron
+		if (!this.poses.has(sym)) this.poses.set(sym, this.brain.readPose(sym) ?? (this.neurons.read(sym).kind === 'inter' ? { neuron: sym } : null));
 		return this.poses.get(sym);
 	}
 

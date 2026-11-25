@@ -53,6 +53,7 @@ export class Job {
 			regions: this.options.regions ?? 1,
 			columns: this.options.columns ?? 1,
 			learning,
+			insideFrame: this.options.insideFrame ?? true,
 		});
 	}
 

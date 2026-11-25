@@ -1,12 +1,12 @@
-  image 100/1000 | last 100: spoke 99 right 18 (18.2% of spoken) , functions added 309 retired 20 | neurons 297 functions 289 | apex/image 16.5 |  so far
-  image 200/1000 | last 100: spoke 100 right 47 (47.0% of spoken) , functions added 265 retired 22 | neurons 527 functions 532 | apex/image 15.0 |  so far
-  image 300/1000 | last 100: spoke 100 right 54 (54.0% of spoken) , functions added 251 retired 44 | neurons 714 functions 739 | apex/image 14.3 |  so far
-  image 400/1000 | last 100: spoke 100 right 50 (50.0% of spoken) , functions added 231 retired 53 | neurons 874 functions 917 | apex/image 13.7 |  so far
-  image 500/1000 | last 100: spoke 100 right 45 (45.0% of spoken) , functions added 247 retired 45 | neurons 1054 functions 1119 | apex/image 13.4 |  so far
-  image 600/1000 | last 100: spoke 100 right 41 (41.0% of spoken) , functions added 256 retired 47 | neurons 1239 functions 1327 | apex/image 13.1 |  so far
-  image 700/1000 | last 100: spoke 100 right 42 (42.0% of spoken) , functions added 226 retired 48 | neurons 1403 functions 1504 | apex/image 12.9 |  so far
-  image 800/1000 | last 100: spoke 100 right 50 (50.0% of spoken) , functions added 238 retired 42 | neurons 1582 functions 1698 | apex/image 12.7 |  so far
-  image 900/1000 | last 100: spoke 100 right 42 (42.0% of spoken) , functions added 230 retired 56 | neurons 1741 functions 1872 | apex/image 12.6 |  so far
-  image 1000/1000 | last 100: spoke 100 right 44 (44.0% of spoken) , functions added 244 retired 47 | neurons 1917 functions 2069 | apex/image 12.4 |  so far
+  image 100/1000 | last 100: spoke 99 right 15 (15.2% of spoken) , functions added 326 retired 20 | neurons 318 functions 306 | apex/image 14.5 |  so far
+  image 200/1000 | last 100: spoke 100 right 39 (39.0% of spoken) , functions added 257 retired 37 | neurons 538 functions 526 | apex/image 13.4 |  so far
+  image 300/1000 | last 100: spoke 100 right 39 (39.0% of spoken) , functions added 239 retired 41 | neurons 736 functions 724 | apex/image 13.0 |  so far
+  image 400/1000 | last 100: spoke 100 right 40 (40.0% of spoken) , functions added 202 retired 35 | neurons 903 functions 891 | apex/image 12.4 |  so far
+  image 500/1000 | last 100: spoke 100 right 48 (48.0% of spoken) , functions added 204 retired 26 | neurons 1081 functions 1069 | apex/image 12.2 |  so far
+  image 600/1000 | last 100: spoke 100 right 34 (34.0% of spoken) , functions added 202 retired 26 | neurons 1255 functions 1243 | apex/image 12.0 |  so far
+  image 700/1000 | last 100: spoke 100 right 38 (38.0% of spoken) , functions added 173 retired 35 | neurons 1392 functions 1380 | apex/image 11.8 |  so far
+  image 800/1000 | last 100: spoke 100 right 40 (40.0% of spoken) , functions added 189 retired 35 | neurons 1546 functions 1534 | apex/image 11.6 |  so far
+  image 900/1000 | last 100: spoke 100 right 44 (44.0% of spoken) , functions added 188 retired 37 | neurons 1697 functions 1685 | apex/image 11.5 |  so far
+  image 1000/1000 | last 100: spoke 100 right 46 (46.0% of spoken) , functions added 183 retired 35 | neurons 1845 functions 1833 | apex/image 11.4 |  so far
 
 ⏱️  Total Execution Time:

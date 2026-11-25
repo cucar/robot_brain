@@ -49,7 +49,7 @@ f 48 teach 4  cue -    ran -    | apex [] | outputs nothing
 f 49 teach 5  cue go   ran -    | apex [go] | outputs tap
 f 50 teach 5  cue go   ran tap  | apex [go tap #4<#0..#0x1>] | outputs tap
 f 51 teach 5  cue go   ran tap  | apex [go tap #4<#0..#0x2>] | outputs tap
-f 52 teach 5  cue stop ran tap  | apex [stop tap #5<#1..#0x0> #6<#5<#1..#0x0>..#4<#0..#0x2>x0>] | outputs done
+f 52 teach 5  cue stop ran tap  | apex [stop tap #5<#1..#0x0> #6<#5..#4x0>] | outputs done
 f 53 teach 5  cue -    ran done | apex [done] | outputs nothing
 f 54 teach 5  cue -    ran -    | apex [] | outputs nothing
 f 55 teach 5  cue -    ran -    | apex [] | outputs nothing
@@ -61,7 +61,7 @@ f 60 teach 5  cue -    ran -    | apex [] | outputs nothing
 f 61 teach 6  cue go   ran -    | apex [go] | outputs tap
 f 62 teach 6  cue go   ran tap  | apex [go tap #4<#0..#0x1>] | outputs tap
 f 63 teach 6  cue go   ran tap  | apex [go tap #4<#0..#0x2>] | outputs tap
-f 64 teach 6  cue stop ran tap  | apex [stop tap #5<#1..#0x0> #6<#5<#1..#0x0>..#4<#0..#0x2>x0>] | outputs done
+f 64 teach 6  cue stop ran tap  | apex [stop tap #5<#1..#0x0> #6<#5..#4x0>] | outputs done
 f 65 teach 6  cue -    ran done | apex [done] | outputs nothing
 f 66 teach 6  cue -    ran -    | apex [] | outputs nothing
 f 67 teach 6  cue -    ran -    | apex [] | outputs nothing
@@ -73,7 +73,7 @@ f 72 teach 6  cue -    ran -    | apex [] | outputs nothing
 f 73 test 1   cue go   ran -    | apex [go] | outputs tap
 f 74 test 1   cue go   ran tap  | apex [go tap #4<#0..#0x1>] | outputs tap
 f 75 test 1   cue go   ran tap  | apex [go tap #4<#0..#0x2>] | outputs tap
-f 76 test 1   cue stop ran tap  | apex [stop tap #5<#1..#0x0> #6<#5<#1..#0x0>..#4<#0..#0x2>x0>] | outputs done
+f 76 test 1   cue stop ran tap  | apex [stop tap #5<#1..#0x0> #6<#5..#4x0>] | outputs done
 f 77 test 1   cue -    ran done | apex [done] | outputs nothing
 f 78 test 1   cue -    ran -    | apex [] | outputs nothing
 f 79 test 1   cue -    ran -    | apex [] | outputs nothing
@@ -152,7 +152,7 @@ guessed activations that stood: []
 dictionary: 3 functions
   f0 no origin [#0→#0[-1]] cycle -> #4
   f1 origin #1 [#1→#0[-1]] -> #5
-  f2 origin #5<#1..#0x0> [#5<#1..#0x0>→#4<#0..#0x2>[-1]] -> #6
+  f2 origin #5 [#5→#4[-1]diff[0, 1, -2]] -> #6
 neurons and their connections:
 #0 Event dim0 b0 H=28 conns=1
     #0 -> #2 @[1] s=12 est=+1.00
@@ -168,5 +168,5 @@ neurons and their connections:
   is f1 origin #1 [#1→#0[-1]] -> #5
     #5<#1..#0x0> -> #3 @[1] s=7 est=+1.00
 #6 inter H=3 conns=1
-  is f2 origin #5<#1..#0x0> [#5<#1..#0x0>→#4<#0..#0x2>[-1]] -> #6
-    #6<#5<#1..#0x0>..#4<#0..#0x2>x0> -> #3 @[1] s=3 est=+1.00
+  is f2 origin #5 [#5→#4[-1]diff[0, 1, -2]] -> #6
+    #6<#5..#4x0> -> #3 @[1] s=3 est=+1.00
