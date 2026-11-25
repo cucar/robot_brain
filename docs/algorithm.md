@@ -1319,11 +1319,11 @@ What is general across neighbors, a position where different neurons stand, is n
 no neuron records it. The machine makes it (R52).
 
 > **D47 — Relation index.** What a neuron counts over its history (D18): every relation from its own activation
-> that its rows hold, each with its **strength**, the number of rows that hold it. A row holds its own
-> activation's phase and every neighbor in its phase, as what stood on the board when the row was written
-> (D18). **A row holds a relation where the neighbor stands at the offset and the two phases differ by the
-> relation's difference** (D34). So a relation to a neuron is counted in the rows that hold that neuron at
-> that offset with that difference, whatever calls had landed on it. It is updated
+> that its rows hold, each with its **strength**, the number of rows that hold it. A row holds the phase its
+> activation fired in and its neighborhood, every neighbor in its phase, as what stood on the board when the
+> row was written (D18). **A neighborhood holds a relation where the neighbor stands at the offset and the
+> two phases differ by the relation's difference** (D34). So a relation to a neuron is counted in the
+> neighborhoods that hold that neuron at that offset with that difference, whatever calls had landed on it. It is updated
 > when a row is admitted, when a row takes what followed (D18), when a row takes a lifted call (D18, D55), and
 > when a row is evicted, and at no other time.
 > Handed a set
@@ -1676,8 +1676,8 @@ argument.
 > and whether or not that call's function is still in the dictionary. And a relation lifted inside the frame
 > is in the rows of both its ends, so each end counts it. The count reads those rows and nothing
 > else: it never expands a call. A relation to a call
-> is counted the same way, in the rows that hold that call at that offset, its phase differing from the
-> row's own by the relation's difference (D34).
+> is counted the same way, in the neighborhoods that hold that call at that offset, its phase differing from
+> the activation's own by the relation's difference (D34).
 >
 > **Distance and worth.** A candidate's distance to a function is `1 − with / (with + without)`: zero where it
 > stood at every occasion the function did, one where it never did. Its worth in the function is
